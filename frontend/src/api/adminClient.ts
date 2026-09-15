@@ -14,85 +14,34 @@ export const adminApi = {
       params: { email, password }
     })
   },
-
   getDashboard() {
-    return axios.get<DashboardStats>(`${API_URL}/admin/dashboard`, {
-      headers: getAuthHeader()
-    })
+    return axios.get<DashboardStats>(`${API_URL}/admin/dashboard`, { headers: getAuthHeader() })
   },
-
   getAppointments(status?: string, limit = 50) {
-    return axios.get(`${API_URL}/admin/appointments`, {
-      headers: getAuthHeader(),
-      params: { status, limit }
-    })
+    return axios.get(`${API_URL}/admin/appointments`, { headers: getAuthHeader(), params: { status, limit } })
   },
-
-  confirmAppointment(appointmentId: number) {
-    return axios.patch(
-      `${API_URL}/admin/appointments/${appointmentId}/confirm`,
-      null,
-      { headers: getAuthHeader() }
-    )
+  confirmAppointment(id: number) {
+    return axios.patch(`${API_URL}/admin/appointments/${id}/confirm`, null, { headers: getAuthHeader() })
   },
-
-  cancelAppointment(appointmentId: number, reason?: string) {
-    return axios.patch(
-      `${API_URL}/admin/appointments/${appointmentId}/cancel`,
-      null,
-      { headers: getAuthHeader(), params: { reason } }
-    )
+  cancelAppointment(id: number, reason?: string) {
+    return axios.patch(`${API_URL}/admin/appointments/${id}/cancel`, null, { headers: getAuthHeader(), params: { reason } })
   },
-
-  createService(data: {
-    name: string
-    description?: string
-    duration_minutes: number
-    price: number
-  }) {
-    return axios.post(`${API_URL}/admin/services`, data, {
-      headers: getAuthHeader()
-    })
+  createService(data: { name: string; description?: string; duration_minutes: number; price: number }) {
+    return axios.post(`${API_URL}/admin/services`, data, { headers: getAuthHeader() })
   },
-
-  updateService(serviceId: number, data: Partial<{
-    name: string
-    description: string
-    duration_minutes: number
-    price: number
-  }>) {
-    return axios.patch(
-      `${API_URL}/admin/services/${serviceId}`,
-      data,
-      { headers: getAuthHeader() }
-    )
+  updateService(id: number, data: any) {
+    return axios.patch(`${API_URL}/admin/services/${id}`, data, { headers: getAuthHeader() })
   },
-
-  deleteService(serviceId: number) {
-    return axios.delete(`${API_URL}/admin/services/${serviceId}`, {
-      headers: getAuthHeader()
-    })
+  deleteService(id: number) {
+    return axios.delete(`${API_URL}/admin/services/${id}`, { headers: getAuthHeader() })
   },
-
   getWorkingHours() {
-    return axios.get(`${API_URL}/admin/working-hours`, {
-      headers: getAuthHeader()
-    })
+    return axios.get(`${API_URL}/admin/working-hours`, { headers: getAuthHeader() })
   },
-
-  createWorkingHour(data: {
-    day_of_week: number
-    start_time: string
-    end_time: string
-  }) {
-    return axios.post(`${API_URL}/admin/working-hours`, data, {
-      headers: getAuthHeader()
-    })
+  createWorkingHour(data: { day_of_week: number; start_time: string; end_time: string }) {
+    return axios.post(`${API_URL}/admin/working-hours`, data, { headers: getAuthHeader() })
   },
-
-  deleteWorkingHour(hourId: number) {
-    return axios.delete(`${API_URL}/admin/working-hours/${hourId}`, {
-      headers: getAuthHeader()
-    })
+  deleteWorkingHour(id: number) {
+    return axios.delete(`${API_URL}/admin/working-hours/${id}`, { headers: getAuthHeader() })
   }
 }

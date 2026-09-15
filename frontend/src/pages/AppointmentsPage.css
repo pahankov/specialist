@@ -1,104 +1,17 @@
-.filters-bar {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
-}
-
-.filter-btn {
-  padding: 8px 16px;
-  border: 2px solid #e0e0e0;
-  border-radius: 20px;
-  background: white;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
-  transition: all 0.2s;
-}
-
-.filter-btn:hover {
-  border-color: #667eea;
-  color: #667eea;
-}
-
-.filter-btn.active {
-  background: #667eea;
-  border-color: #667eea;
-  color: white;
-}
-
-.appointments-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.appointments-table th,
-.appointments-table td {
-  padding: 12px 16px;
-  text-align: left;
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.appointments-table th {
-  font-weight: 600;
-  color: #666;
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.appointments-table td {
-  font-size: 14px;
-  color: #333;
-}
-
-.status-badge {
-  display: inline-block;
-  padding: 4px 12px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
+.filters-bar { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.filter-btn { padding: 8px 16px; border: 2px solid #e0e0e0; border-radius: 20px; background: white; cursor: pointer; font-size: 13px; font-weight: 500; }
+.filter-btn:hover { border-color: #667eea; color: #667eea; }
+.filter-btn.active { background: #667eea; border-color: #667eea; color: white; }
+.appointments-table { width: 100%; border-collapse: collapse; }
+.appointments-table th, .appointments-table td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #f0f0f0; }
+.appointments-table th { font-weight: 600; color: #666; font-size: 13px; text-transform: uppercase; }
+.status-badge { display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; }
 .status-pending { background: #fef3c7; color: #92400e; }
 .status-confirmed { background: #d1fae5; color: #065f46; }
 .status-cancelled { background: #fee2e2; color: #991b1b; }
 .status-completed { background: #dbeafe; color: #1e40af; }
-
-.actions-cell {
-  display: flex;
-  gap: 8px;
-}
-
-.btn-sm {
-  padding: 6px 12px;
-  font-size: 12px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: 500;
-  transition: all 0.2s;
-}
-
-.btn-confirm {
-  background: #d1fae5;
-  color: #065f46;
-}
-
-.btn-confirm:hover {
-  background: #a7f3d0;
-}
-
-.btn-cancel {
-  background: #fee2e2;
-  color: #991b1b;
-}
-
-.btn-cancel:hover {
-  background: #fecaca;
-}
-
-.text-muted {
-  color: #999;
-  font-size: 13px;
-}
+.actions-cell { display: flex; gap: 8px; }
+.btn-sm { padding: 6px 12px; font-size: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: 500; }
+.btn-confirm { background: #d1fae5; color: #065f46; }
+.btn-cancel { background: #fee2e2; color: #991b1b; }
+.text-muted { color: #999; font-size: 13px; }
