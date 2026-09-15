@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.4.0] - 2026-09-15
+
+### ✨ Added
+
+#### Admin Panel (Backend)
+- **JWT authentication middleware** — `dependencies.py` с `get_current_master()`
+- **Admin API endpoints** (`/admin/`):
+  - `GET /admin/dashboard` — статистика (записи, клиенты, услуги, доход)
+  - `GET /admin/appointments` — список записей с фильтрацией
+  - `PATCH /admin/appointments/{id}/confirm` — подтверждение записи
+  - `PATCH /admin/appointments/{id}/cancel` — отмена записи
+  - `POST /admin/services` — создание услуги
+  - `PATCH /admin/services/{id}` — обновление услуги
+  - `DELETE /admin/services/{id}` — удаление услуги
+  - `GET /admin/working-hours` — расписание
+  - `POST /admin/working-hours` — добавить рабочий день
+  - `DELETE /admin/working-hours/{id}` — удалить рабочий день
+
+#### Admin Panel (Frontend)
+- **LoginPage** — форма входа с email/password
+- **AdminLayout** — sidebar навигация с protected routes
+- **DashboardPage** — статистика: карточки, статусы, ближайшие записи
+- **AppointmentsPage** — список записей, фильтрация, подтверждение/отмена
+- **ServicesPage** — CRUD услуг через UI (создание, редактирование, удаление)
+- **SchedulePage** — управление рабочим расписанием
+
+#### Auth
+- Protected routes с проверкой JWT токена в localStorage
+- Автоматический редирект на `/admin/login` при отсутствии токена
+
+### 🔄 Changed
+- `main.py` — добавлен admin router
+
+---
+
 ## [0.3.0] - 2026-09-15
 
 ### ✨ Added

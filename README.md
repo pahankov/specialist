@@ -78,6 +78,20 @@ sugar-booking/
 | `PATCH` | `/api/v1/masters/{id}` | Обновить мастера |
 | `DELETE` | `/api/v1/masters/{id}` | Удалить мастера |
 
+### Admin (JWT required)
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| `GET` | `/admin/dashboard` | Статистика (записи, клиенты, доход) |
+| `GET` | `/admin/appointments` | Список записей |
+| `PATCH` | `/admin/appointments/{id}/confirm` | Подтвердить запись |
+| `PATCH` | `/admin/appointments/{id}/cancel` | Отменить запись |
+| `POST` | `/admin/services` | Создать услугу |
+| `PATCH` | `/admin/services/{id}` | Обновить услугу |
+| `DELETE` | `/admin/services/{id}` | Удалить услугу |
+| `GET` | `/admin/working-hours` | Расписание |
+| `POST` | `/admin/working-hours` | Добавить рабочий день |
+| `DELETE` | `/admin/working-hours/{id}` | Удалить рабочий день |
+
 ### Services
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
@@ -141,6 +155,16 @@ pytest tests/ -v --cov=app                # С покрытием
 | Тесты | pytest, pytest-asyncio, httpx |
 | Production DB | PostgreSQL 16 |
 | Production cache | Redis 7 |
+
+## 🔐 Админ-панель
+
+Вход: `/admin/login` — используйте email и пароль зарегистрированного мастера.
+
+Функции:
+- **Дашборд** — статистика записей, клиентов, услуг, доход
+- **Записи** — фильтрация по статусу, подтверждение, отмена
+- **Услуги** — создание, редактирование, удаление
+- **Расписание** — управление рабочими часами
 
 ## 📝 Лицензия
 
