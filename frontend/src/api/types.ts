@@ -72,3 +72,34 @@ export interface BlockedSlot {
   reason?: string
   created_at: string
 }
+
+export interface LoginResponse {
+  access_token: string
+  token_type: string
+}
+
+export interface DashboardStats {
+  total_appointments: number
+  status_counts: Record<string, number>
+  total_clients: number
+  total_services: number
+  total_revenue: number
+  recent_appointments: Array<{
+    id: number
+    client_id: number
+    appointment_date: string
+    status: string
+    service_id: number
+  }>
+  upcoming_appointments: Array<{
+    id: number
+    appointment_date: string
+    status: string
+  }>
+}
+
+export interface AppointmentWithClient extends Appointment {
+  client_name?: string
+  client_phone?: string
+  service_name?: string
+}

@@ -30,7 +30,7 @@ async def health_check():
     return {"status": "ok", "app": settings.APP_NAME}
 
 # Import and include routers
-from app.api import auth, masters, services, appointments, clients, working_hours
+from app.api import auth, masters, services, appointments, clients, working_hours, admin
 
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(masters.router, prefix="/api/v1/masters", tags=["masters"])
@@ -38,3 +38,4 @@ app.include_router(services.router, prefix="/api/v1/services", tags=["services"]
 app.include_router(working_hours.router, prefix="/api/v1/working-hours", tags=["working-hours"])
 app.include_router(appointments.router, prefix="/api/v1/appointments", tags=["appointments"])
 app.include_router(clients.router, prefix="/api/v1/clients", tags=["clients"])
+app.include_router(admin.router)
