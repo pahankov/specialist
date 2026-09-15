@@ -1,144 +1,147 @@
-# Sugar Booking - Appointment Booking System
+# Sugar Booking — Система записи на шугаринг
 
-Приложение для записи клиентов к мастеру шугаринга через мессенджеры (MAX, Telegram, VK).
+Приложение для записи клиентов к мастеру шугаринга через веб-интерфейс.
 
 ## 🚀 Быстрый старт
 
 ### Требования
-- Docker & Docker Compose
-- Python 3.12+ (для локальной разработки без Docker)
-- Node.js 20+ (для локальной разработки фронтенда)
 
-### Установка и запуск
+- **Python** 3.11+
+- **Node.js** 20+
+- **pip** (для управления зависимостями)
 
-#### С Docker (рекомендуется)
-
-```bash
-cd sugar-booking
-docker-compose up -d
-```
-
-Приложение будет доступно:
-- **API**: http://localhost:8000
-- **API Docs (Swagger)**: http://localhost:8000/docs
-- **Frontend**: http://localhost:3000
-
-#### Локальная разработка
+### Запуск
 
 **Backend:**
-```bash
+```powershell
 cd backend
-python -m venv venv
-source venv/bin/activate  # или venv\Scripts\activate на Windows
-pip install -r requirements.txt
-
-# Создайте config.env из примера
-echo 'DATABASE_URL=postgresql://postgres:postgres@localhost:5432/sugar_booking' > config.env
-echo 'REDIS_URL=redis://localhost:6379/0' >> config.env
-
-# Запустите PostgreSQL и Redis (если не используется Docker)
-uvicorn app.main:app --reload
+$env:PYTHONPATH='.'
+python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 **Frontend:**
-```bash
+```powershell
 cd frontend
-npm install
 npm run dev
 ```
 
-## 📋 Структура проекта
+### Доступ
+
+| Сервис | URL |
+|--------|-----|
+| Frontend | http://localhost:3000 |
+| API Docs (Swagger) | http://localhost:8000/docs |
+| Health Check | http://localhost:8000/health |
+
+## 📦 Структура проекта
 
 ```
 sugar-booking/
 ├── backend/
 │   ├── app/
-│   │   ├── api/              # REST endpoints
-│   │   ├── models/           # SQLAlchemy models
-│   │   ├── schemas/          # Pydantic schemas
-│   │   ├── services/         # Business logic
-│   │   ├── workers/          # Background tasks
-│   │   ├── config.py         # Settings
-│   │   ├── database.py       # DB connection
-│   │   └── main.py           # FastAPI app
-│   ├── requirements.txt
-│   └── Dockerfile
+│   │   ├── api/              # REST endpoints (auth, masters, services, appointments, clients, working_hours)
+│   │   ├── models/           # SQLAlchemy ORM models
+│   │   ├── schemas/          # Pydantic schemas (request/response validation)
+│   │   ├── config.py         # Настройки (SQLite, JWT)
+│   │   ├── database.py       # Подключение к БД (aiosqlite)
+│   │   └── main.py           # FastAPI приложение
+│   ├── tests/                # pytest тесты
+│   ├── requirements.txt      # Зависимости Python
+│   └── pyproject.toml        # Конфиг pytest
 ├── frontend/
 │   ├── src/
-│   │   ├── pages/            # React pages
-│   │   ├── components/       # React components
-│   │   ├── api/              # API client
-│   │   ├── App.tsx
-│   │   └── main.tsx
+│   │   ├── api/              # API клиент (axios)
+│   │   ├── pages/            # React страницы (HomePage, BookingPage)
+│   │   ├── App.tsx           # Роутинг
+│   │   └── main.tsx          # Точка входа
 │   ├── package.json
-│   └── Dockerfile
-├── docker-compose.yml
-└── README.md
+│   └── vite.config.ts
+├── docker-compose.yml        # Docker-конфиг (PostgreSQL + Redis, для production)
+├── run_backend.bat           # Батник для запуска backend (Windows)
+└── run_frontend.bat          # Батник для запуска frontend (Windows)
 ```
 
 ## 🔌 API Endpoints
 
+### Auth
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| `POST` | `/api/v1/auth/register` | Регистрация мастера |
+| `POST` | `/api/v1/auth/login` | Вход (JWT токен) |
+
 ### Masters
-- `GET /api/v1/masters/` - Список мастеров
-- `GET /api/v1/masters/{id}` - Мастер по ID
-- `POST /api/v1/masters/` - Создать мастера
-- `PATCH /api/v1/masters/{id}` - Обновить мастера
-- `DELETE /api/v1/masters/{id}` - Удалить мастера
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| `GET` | `/api/v1/masters/` | Список мастеров |
+| `GET` | `/api/v1/masters/{id}` | Мастер по ID |
+| `POST` | `/api/v1/masters/` | Создать мастера |
+| `PATCH` | `/api/v1/masters/{id}` | Обновить мастера |
+| `DELETE` | `/api/v1/masters/{id}` | Удалить мастера |
 
 ### Services
-- `GET /api/v1/services/` - Список услуг
-- `POST /api/v1/services/` - Создать услугу
-- `PATCH /api/v1/services/{id}` - Обновить услугу
-- `DELETE /api/v1/services/{id}` - Удалить услугу
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| `GET` | `/api/v1/services/` | Список услуг |
+| `GET` | `/api/v1/services/{id}` | Услуга по ID |
+| `POST` | `/api/v1/services/` | Создать услугу |
+| `DELETE` | `/api/v1/services/{id}` | Удалить услугу |
 
 ### Appointments
-- `GET /api/v1/appointments/` - Список записей
-- `POST /api/v1/appointments/` - Создать запись
-- `POST /api/v1/appointments/{id}/cancel` - Отменить запись
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| `GET` | `/api/v1/appointments/` | Список записей |
+| `POST` | `/api/v1/appointments/` | Создать запись |
+| `POST` | `/api/v1/appointments/public` | Публичная запись (без авторизации) |
+| `GET` | `/api/v1/appointments/available-days` | Доступные дни |
+| `GET` | `/api/v1/appointments/available-slots` | Доступные слоты |
 
-### Reviews
-- `GET /api/v1/reviews/` - Список отзывов
-- `POST /api/v1/reviews/` - Оставить отзыв
-- `PATCH /api/v1/reviews/{id}` - Обновить отзыв
+### Clients
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| `GET` | `/api/v1/clients/` | Список клиентов |
 
 ### Working Hours
-- `GET /api/v1/working-hours/` - Рабочее расписание
-- `POST /api/v1/working-hours/` - Добавить часы работы
-- `DELETE /api/v1/working-hours/{id}` - Удалить часы
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| `GET` | `/api/v1/working-hours/` | Расписание |
+| `POST` | `/api/v1/working-hours/` | Добавить расписание |
+| `DELETE` | `/api/v1/working-hours/{id}` | Удалить расписание |
 
-### Blocked Slots
-- `GET /api/v1/blocked-slots/` - Заблокированные слоты
-- `POST /api/v1/blocked-slots/` - Заблокировать время
-- `DELETE /api/v1/blocked-slots/{id}` - Разблокировать время
+## 🧪 Тесты
+
+```powershell
+cd backend
+$env:PYTHONPATH='.'
+pytest tests/ -v                          # Все тесты
+pytest tests/test_auth.py -v              # Только auth
+pytest tests/ -v --cov=app                # С покрытием
+```
 
 ## 🗄️ База данных
 
-Схема включает таблицы:
-- `masters` - мастера
-- `services` - услуги
-- `appointments` - записи
-- `reviews` - отзывы
-- `working_hours` - расписание
-- `blocked_slots` - блокировки
-- `notifications` - напоминания
-- `chat_messages` - сообщения
+**Локальная разработка:** SQLite (aiosqlite) — таблицы создаются автоматически при старте.
 
-## 📝 Следующие шаги
+**Production:** PostgreSQL 16 (через Docker Compose).
 
-- [ ] Интеграция с Telegram Bot API
-- [ ] Интеграция с VK API
-- [ ] Интеграция с MAX API
-- [ ] Система аутентификации мастера
-- [ ] Админ-панель для мастера
-- [ ] Система напоминаний и уведомлений
-- [ ] Проверка доступности слотов
-- [ ] Tests (unit & integration)
-- [ ] CI/CD pipeline
+## 📚 Документация
 
-## 🤝 Контрибьютинг
+- [`ARCHITECTURE.md`](./ARCHITECTURE.md) — архитектура системы
+- [`SETUP.md`](./SETUP.md) — подробная настройка
+- [`QUICK_START.md`](./QUICK_START.md) — быстрый старт и примеры API
+- [`CHANGELOG.md`](./CHANGELOG.md) — история изменений
 
-Любые улучшения приветствуются!
+## 🛠 Стек технологий
 
-## 📄 Лицензия
+| Компонент | Технология |
+|-----------|-----------|
+| Backend | FastAPI 0.115, SQLAlchemy 2.0 (async), aiosqlite |
+| Auth | JWT (python-jose), bcrypt (passlib) |
+| Frontend | React 18, TypeScript 5, Vite 6 |
+| HTTP | Axios |
+| Тесты | pytest, pytest-asyncio, httpx |
+| Production DB | PostgreSQL 16 |
+| Production cache | Redis 7 |
+
+## 📝 Лицензия
 
 MIT

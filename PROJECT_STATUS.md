@@ -4,27 +4,23 @@
 
 ### Backend (FastAPI)
 - ✅ Project structure with modular architecture
-- ✅ Database configuration (PostgreSQL async)
-- ✅ SQLAlchemy models (8 entities):
+- ✅ Database configuration (SQLite async, PostgreSQL ready)
+- ✅ SQLAlchemy models (5 entities):
   - Master
   - Service
   - Appointment
-  - Review
+  - Client
   - WorkingHour
-  - BlockedSlot
-  - Notification
-  - ChatMessage
-- ✅ Pydantic schemas for validation (8 schema files)
+- ✅ Pydantic schemas for validation (request/response)
 - ✅ API routers (6 routers):
-  - `/masters` - Master management
-  - `/services` - Service management
-  - `/appointments` - Appointment booking & management
-  - `/reviews` - Review submission & management
-  - `/working-hours` - Schedule configuration
-  - `/blocked-slots` - Vacation/blocked time
+  - `/auth` — registration, login (JWT)
+  - `/masters` — CRUD operations
+  - `/services` — CRUD operations
+  - `/appointments` — booking, available slots
+  - `/clients` — client management
+  - `/working-hours` — schedule configuration
 - ✅ Main FastAPI app with CORS, lifespan management
 - ✅ Docker setup for backend
-- ✅ Requirements.txt with all dependencies
 
 ### Frontend (React + TypeScript)
 - ✅ Project structure with Vite
@@ -36,168 +32,121 @@
   - BookingPage: Full booking workflow
 - ✅ Responsive CSS styling
 - ✅ PWA meta tags in index.html
-- ✅ Docker setup for frontend
-- ✅ Package.json with all dependencies
 
-### DevOps
-- ✅ Docker Compose configuration
-  - PostgreSQL 16
-  - Redis 7
-  - Backend service
-  - Frontend service
-- ✅ Health checks
-- ✅ Volume management
+### Testing
+- ✅ pytest + pytest-asyncio + httpx
+- ✅ In-memory SQLite for isolated tests
+- ✅ 18 tests passing:
+  - 8 auth tests (register, login, duplicate, validation)
+  - 10 masters CRUD tests (GET, POST, PATCH, DELETE)
 
 ### Documentation
-- ✅ README.md with quick start guide
-- ✅ SETUP.md with detailed setup instructions
-- ✅ API_EXAMPLES.md with curl examples
-- ✅ ARCHITECTURE.md with system design
-- ✅ PROJECT_STATUS.md (this file)
+- ✅ README.md — overview and quick start
+- ✅ QUICK_START.md — API examples and troubleshooting
+- ✅ ARCHITECTURE.md — system design
+- ✅ SETUP.md — configuration instructions
+- ✅ CHANGELOG.md — version history
 
 ## 📋 File Count
-- Total files: 55
-- Backend files: 22
-- Frontend files: 18
-- Config files: 6
-- Documentation files: 5
-- Docker files: 3
 
-## 🚀 Next Steps (Priority Order)
+- Total files: ~65
+- Backend source: ~30 files
+- Frontend source: ~15 files
+- Tests: 3 files (conftest, test_auth, test_masters)
+- Documentation: 5 markdown files
+- Config: 5 files
 
-### Critical (MVP)
-1. **Database Migrations**
-   - Set up Alembic for schema versioning
-   - Create initial migration
-   - Test with PostgreSQL
+## 🚀 Next Steps
 
-2. **Slot Availability Logic**
-   - Calculate free slots based on:
-     - Master's working hours
-     - Existing appointments
-     - Blocked slots
-     - Service duration
-   - Implement availability check in appointments API
+### Phase 1 — Admin Dashboard (Current)
+1. **Master login UI** — страница входа на фронтенде
+2. **Admin dashboard** — дашборд с записями, статистикой
+3. **Appointment management** — подтверждение, отмена, редактирование
+4. **Service management UI** — CRUD через интерфейс
+5. **Schedule management** — рабочие часы через UI
 
-3. **Testing**
-   - Unit tests for API endpoints (pytest)
-   - Integration tests with test database
-   - Frontend component tests
+### Phase 2 — Messenger Integration
+1. **Telegram Bot** — уведомления о записях, управление
+2. **VK Mini App** — запись через VK
+3. **Notification system** — email/push напоминания
 
-4. **Master Authentication**
-   - Login endpoint (email/password)
-   - JWT token generation
-   - Protected admin routes
-
-5. **Notifications System**
-   - Reminder scheduling (24h, 1h before)
-   - Background worker (Celery or Redis Queue)
-   - Notification sending logic
-
-### High Priority (Phase 1 Complete)
-6. **Messenger Integration**
-   - Telegram Bot setup
-   - VK API integration
-   - MAX API integration
-   - DeepLink generation for PWA
-
-7. **Admin Dashboard**
-   - Master panel for viewing appointments
-   - Schedule management UI
-   - Blocked time management
-   - Review moderation
-
-8. **Error Handling**
-   - Global exception handlers
-   - User-friendly error messages
-   - Logging system
-
-### Medium Priority
-9. **Performance Optimization**
-   - Database query optimization
-   - Caching strategy
-   - API response pagination
-
-10. **Security Hardening**
-    - Rate limiting
-    - Input sanitization
-    - CORS configuration for production
-    - Password policy
+### Phase 3 — Production Ready
+1. **PostgreSQL migration** — Alembic миграции
+2. **CI/CD** — GitHub Actions (tests + build)
+3. **Additional tests** — services, appointments, clients
+4. **Frontend tests** — Vitest component tests
+5. **Production deployment** — Nginx, HTTPS
 
 ## 💡 Architecture Highlights
 
-✨ **Strengths**:
+**Strengths:**
 - Fully async backend for high performance
 - Type-safe frontend with TypeScript
 - Modular and scalable design
-- Clear separation of concerns
-- Ready for multi-master expansion
-- Docker-ready for easy deployment
 - Comprehensive API documentation (Swagger)
+- Working test suite with 18 tests
+- SQLite for easy local development
 
-⚠️ **Current Limitations**:
-- No authentication yet (single master mode)
-- Slot availability not implemented
+**Current Limitations:**
+- No admin UI yet
+- No messenger integration
 - No real notification sending
-- No messenger bot integration yet
-- Admin UI not built
+- No payment integration
+- No review system UI
 
 ## 📊 Code Statistics
 
 ```
 Backend:
-- Models: ~150 lines
-- Schemas: ~250 lines
-- Routes: ~350 lines
-- Config: ~50 lines
-Total Backend: ~800 lines
+- Models: ~200 lines
+- Schemas: ~200 lines
+- Routes: ~500 lines
+- Tests: ~300 lines
+Total Backend: ~1200 lines
 
 Frontend:
-- Components & Pages: ~350 lines
+- Pages & Components: ~400 lines
 - API Client: ~80 lines
-- Styles: ~200 lines
-Total Frontend: ~630 lines
+- Styles: ~250 lines
+Total Frontend: ~730 lines
+
+Total: ~1930 lines
 ```
 
 ## 🔄 Development Workflow
 
 1. Start services:
-   ```bash
-   docker-compose up -d
+   ```powershell
+   # Terminal 1
+   cd backend; $env:PYTHONPATH='.'; python -m uvicorn app.main:app --reload
+
+   # Terminal 2
+   cd frontend; npm run dev
    ```
 
-2. Backend API docs:
-   ```
-   http://localhost:8000/docs
-   ```
+2. Backend API docs: http://localhost:8000/docs
 
-3. Frontend dev:
-   ```
-   http://localhost:3000
-   ```
+3. Frontend: http://localhost:3000
 
-4. Test API with curl (see API_EXAMPLES.md)
+4. Run tests:
+   ```powershell
+   cd backend; $env:PYTHONPATH='.'; pytest tests/ -v
+   ```
 
 ## ⚡ Quick Testing Checklist
 
-- [ ] Start Docker Compose
-- [ ] Create master record via POST /api/v1/masters/
+- [ ] Start backend on port 8000
+- [ ] Start frontend on port 3000
+- [ ] Register master via POST /api/v1/auth/register
+- [ ] Login and get JWT token
 - [ ] Create service via POST /api/v1/services/
-- [ ] Create working hours via POST /api/v1/working-hours/
-- [ ] Test booking flow in frontend
-- [ ] Verify appointment creation in database
-- [ ] Test review submission
-- [ ] Check API documentation at /docs
-
-## 📞 Support & Questions
-
-For issues or questions:
-1. Check logs: `docker-compose logs <service>`
-2. Review API docs: http://localhost:8000/docs
-3. Check database directly: `psql postgresql://postgres:postgres@localhost:5432/sugar_booking`
+- [ ] Create working hours
+- [ ] Book appointment via frontend
+- [ ] Verify appointment in database
+- [ ] Run tests: pytest tests/ -v
 
 ---
 
-**Status**: ✅ **READY FOR DEVELOPMENT**  
-**Last Updated**: 2026-09-09  
-**Next Review**: After implementing slot availability logic
+**Status**: ✅ **TESTED — READY FOR ADMIN PANEL DEVELOPMENT**
+**Last Updated**: 2026-09-15
+**Tests**: 18/18 passing

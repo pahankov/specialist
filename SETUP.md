@@ -2,31 +2,47 @@
 
 ## Environment Configuration
 
-### Backend Configuration
+### Backend
 
-Создайте файл `backend/config.env` с содержимым:
+Backend использует SQLite по умолчанию. База данных создаётся автоматически при первом запуске.
 
-```
-DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/sugar_booking
-REDIS_URL=redis://redis:6379/0
-SECRET_KEY=your-secret-key-change-in-production
-ACCESS_TOKEN_EXPIRE_MINUTES=10080
-APP_NAME=Sugar Booking API
-DEBUG=true
-TELEGRAM_BOT_TOKEN=
-VK_API_TOKEN=
-MAX_API_TOKEN=
-```
+Файл `sugar_booking.db` находится в корне проекта. Для production используйте PostgreSQL через Docker Compose.
 
-### Frontend Configuration
+### Frontend
 
-Переменные окружения фронтенда устанавливаются в `docker-compose.yml`:
+Переменные окружения фронтенда настраиваются в `frontend/vite.config.ts`:
 
-```
-VITE_API_URL=http://localhost:8000
+```ts
+server: {
+  port: 3000,
+  host: '0.0.0.0',
+}
 ```
 
-## Docker Compose
+API URL задаётся в `frontend/src/api/client.ts`:
+
+```ts
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'
+```
+
+## Запуск
+
+### Backend
+
+```powershell
+cd backend
+$env:PYTHONPATH='.'
+python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+### Frontend
+
+```powershell
+cd frontend
+npm run dev
+```
+
+### Docker (production)
 
 ```bash
 # Запуск всех сервисов
@@ -39,43 +55,41 @@ docker-compose logs -f
 docker-compose down
 ```
 
-## Локальная разработка
-
-### Backend
-
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload
-```
-
-### Frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
 ## Доступные URL
 
-- API: http://localhost:8000
-- API Docs: http://localhost:8000/docs
-- Frontend: http://localhost:3000
+| Сервис | URL |
+|--------|-----|
+| Frontend | http://localhost:3000 |
+| API Docs (Swagger) | http://localhost:8000/docs |
+| Health Check | http://localhost:8000/health |
 
 ## Инициализация БД
 
-При первом запуске backend автоматически создаст все таблицы благодаря:
+При первом запуске backend автоматически создаст все таблицы:
 
 ```python
 async with engine.begin() as conn:
     await conn.run_sync(Base.metadata.create_all)
 ```
 
-## Интеграция мессенджеров (позже)
+## Тесты
 
-- Telegram: Используйте `TELEGRAM_BOT_TOKEN`
-- VK: Используйте `VK_API_TOKEN`
-- MAX: Используйте `MAX_API_TOKEN`
+```powershell
+cd backend
+$env:PYTHONPATH='.'
+pytest tests/ -v                          # Все тесты
+pytest tests/test_auth.py -v              # Только auth
+pytest tests/ -v --cov=app                # С покрытием
+```
+
+## Структура базы данных
+
+```
+sugar_booking.db (SQLite)
+├── masters           # Мастера
+├── services          # Услуги
+├── appointments      # Записи
+├── clients           # Клиенты
+├── working_hours     # Рабочее время
+└── blocked_slots     # Заблокированные слоты
+```

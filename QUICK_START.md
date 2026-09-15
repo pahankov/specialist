@@ -2,51 +2,35 @@
 
 ## 🚀 Запуск проекта локально
 
-### Windows
-
-**Способ 1: Двойной клик на батники**
-
-1. Откройте `sugar-booking/run_backend.bat` (откроется консоль с backend)
-2. Откройте `sugar-booking/run_frontend.bat` (откроется консоль с frontend)
-3. Подождите 10-15 секунд инициализации
-
-**Способ 2: Вручную через PowerShell**
+### Backend (Windows PowerShell)
 
 ```powershell
-# Terminal 1 - Backend
-cd sugar-booking\backend
-.\venv\Scripts\activate
+cd backend
+$env:PYTHONPATH='.'
 python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
 
-# Terminal 2 - Frontend
-cd sugar-booking\frontend
+### Frontend (Windows PowerShell)
+
+```powershell
+cd frontend
 npm run dev
 ```
 
-### macOS/Linux
+### Батники (Windows)
 
-```bash
-# Terminal 1 - Backend
-cd sugar-booking/backend
-source venv/bin/activate
-python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
-
-# Terminal 2 - Frontend
-cd sugar-booking/frontend
-npm run dev
 ```
-
----
+run_backend.bat    # Запуск backend
+run_frontend.bat   # Запуск frontend
+```
 
 ## 📍 Доступные сервисы
 
-После запуска откройте в браузере:
-
-- **API Documentation**: http://localhost:8000/docs
-- **Frontend (PWA)**: http://localhost:3000
-- **Health Check**: http://localhost:8000/health
-
----
+| Сервис | URL |
+|--------|-----|
+| Frontend | http://localhost:3000 |
+| API Docs (Swagger UI) | http://localhost:8000/docs |
+| Health Check | http://localhost:8000/health |
 
 ## 🧪 Тестирование API
 
@@ -56,26 +40,36 @@ npm run dev
 curl -X POST http://localhost:8000/api/v1/auth/register \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "Маша",
-    "phone": "+79999999999",
-    "telegram_username": "masha_sugar",
-    "email": "masha@example.com",
-    "password": "securepassword123"
+    "name": "Елена",
+    "email": "elena@example.com",
+    "password": "SecurePass123!",
+    "phone": "+79991234567",
+    "telegram_username": "elena_sugar"
   }'
+```
+
+Ответ:
+```json
+{
+  "id": 1,
+  "name": "Елена",
+  "email": "elena@example.com",
+  "phone": "+79991234567",
+  "telegram_username": "elena_sugar"
+}
 ```
 
 ### 2. Логин мастера
 
 ```bash
-curl -X POST "http://localhost:8000/api/v1/auth/login?email=masha@example.com&password=securepassword123"
+curl -X POST "http://localhost:8000/api/v1/auth/login?email=elena@example.com&password=SecurePass123!"
 ```
 
 Ответ:
 ```json
 {
   "access_token": "eyJ0eXAiOiJKV1QiLCJhbGc...",
-  "token_type": "bearer",
-  "master": { ... }
+  "token_type": "bearer"
 }
 ```
 
@@ -87,31 +81,13 @@ curl -X POST http://localhost:8000/api/v1/services/ \
   -d '{
     "master_id": 1,
     "name": "Шугаринг ног полностью",
+    "description": "Удаление волос на ногах сахарной пастой",
     "duration_minutes": 60,
-    "price": 2500.00
+    "price": 2500
   }'
 ```
 
-### 4. Создание рабочих часов
-
-```bash
-curl -X POST http://localhost:8000/api/v1/working-hours/ \
-  -H "Content-Type: application/json" \
-  -d '{
-    "master_id": 1,
-    "day_of_week": 0,
-    "start_time": "10:00:00",
-    "end_time": "20:00:00"
-  }'
-```
-
-### 5. Получение доступных слотов (для клиента)
-
-```bash
-curl "http://localhost:8000/api/v1/appointments/available-slots?master_id=1&service_id=1&date=2026-09-10"
-```
-
-### 6. Создание записи клиентом
+### 4. Создание записи клиентом
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/appointments/public \
@@ -121,88 +97,84 @@ curl -X POST http://localhost:8000/api/v1/appointments/public \
     "service_id": 1,
     "client_name": "Иван",
     "client_phone": "+79991234567",
-    "appointment_date": "2026-09-10T14:00:00"
+    "appointment_date": "2026-09-20T14:00:00"
   }'
 ```
 
-### 7. Получение всех клиентов
+### 5. Получение доступных слотов
 
 ```bash
-curl http://localhost:8000/api/v1/clients/
+curl "http://localhost:8000/api/v1/appointments/available-slots?master_id=1&service_id=1&date=2026-09-20"
 ```
 
----
+### 6. Получение списка мастеров
 
-## 🎯 Функциональность
-
-### ✅ Реализовано
-
-- ✅ Регистрация и аутентификация мастера (JWT)
-- ✅ Управление услугами
-- ✅ Управление рабочим расписанием
-- ✅ Блокировка времени (отпуск, выходные)
-- ✅ Расчёт доступных слотов
-- ✅ Создание записей клиентами (с автоматическим созданием клиента)
-- ✅ Управление клиентами
-- ✅ Отзывы и комментарии
-- ✅ PWA фронтенд для бронирования
-
-### 🔄 В разработке
-
-- 🔄 Админ-панель для мастера (календарь + управление записями)
-- 🔄 Автоподтверждение записей (через 1 час)
-- 🔄 Система уведомлений
-- 🔄 Интеграция с мессенджерами (Telegram, VK, MAX)
-
-### ⏳ Планируется
-
-- ⏳ Редактирование записей мастером
-- ⏳ Отправка уведомлений при изменении записи
-- ⏳ История операций
-- ⏳ Аналитика
-
----
-
-## 📊 Структура БД
-
-База автоматически создаётся при первом запуске backend:
-
-```
-sugar_booking.db (SQLite)
-├── masters (мастера)
-├── clients (клиенты)
-├── services (услуги)
-├── appointments (записи)
-├── reviews (отзывы)
-├── working_hours (рабочее время)
-├── blocked_slots (блокировки)
-├── notifications (уведомления)
-└── chat_messages (сообщения)
+```bash
+curl http://localhost:8000/api/v1/masters/
 ```
 
----
+### 7. Обновление мастера
+
+```bash
+curl -X PATCH http://localhost:8000/api/v1/masters/1 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Елена Иванова",
+    "phone": "+79999999999"
+  }'
+```
+
+### 8. Удаление мастера
+
+```bash
+curl -X DELETE http://localhost:8000/api/v1/masters/1
+```
+
+## 🎯 Что реализовано
+
+### ✅ Backend
+- Регистрация и аутентификация мастера (JWT)
+- CRUD мастеров (создание, чтение, обновление, удаление)
+- CRUD услуг
+- CRUD записей (создание, отмена)
+- Публичная запись без авторизации
+- Расчёт доступных дней и слотов
+- Управление клиентами (автоматическое создание при записи)
+- Управление рабочим расписанием
+- Swagger UI документация (`/docs`)
+
+### ✅ Frontend
+- Главная страница (список мастеров и услуг)
+- Страница бронирования
+- Адаптивный дизайн
+
+### ✅ Тесты
+- 18 pytest-тестов (auth + masters CRUD)
+- In-memory SQLite для изоляции тестов
+- pytest-asyncio для асинхронных тестов
 
 ## 🐛 Решение проблем
 
 ### Backend не запускается
 
-```bash
-cd sugar-booking/backend
-.\venv\Scripts\pip install --upgrade -r requirements.txt
+```powershell
+cd backend
+pip install -r requirements.txt
+pip install pytest httpx pytest-asyncio pytest-cov
 ```
 
 ### Frontend не подгружается
 
-```bash
-cd sugar-booking/frontend
-rm -rf node_modules
+```powershell
+cd frontend
+Remove-Item -Recurse -Force node_modules
 npm install
 npm run dev
 ```
 
-### Port 8000 / 3000 already in use
+### Порт уже занят
 
-```bash
+```powershell
 # Найти процесс на порту 8000
 netstat -ano | findstr :8000
 
@@ -210,17 +182,25 @@ netstat -ano | findstr :8000
 taskkill /PID <PID> /F
 ```
 
----
+## 🧪 Запуск тестов
+
+```powershell
+cd backend
+$env:PYTHONPATH='.'
+pytest tests/ -v                          # Все тесты
+pytest tests/test_auth.py -v              # Только auth
+pytest tests/test_masters.py -v           # Только masters
+pytest tests/ -v --cov=app                # С покрытием
+```
 
 ## 📚 Документация
 
-См. также:
-- `README.md` — обзор проекта
-- `ARCHITECTURE.md` — архитектура системы
-- `API_EXAMPLES.md` — примеры API
-- `PROJECT_STATUS.md` — статус разработки
+- [`README.md`](./README.md) — обзор проекта
+- [`ARCHITECTURE.md`](./ARCHITECTURE.md) — архитектура системы
+- [`SETUP.md`](./SETUP.md) — подробная настройка
+- [`CHANGELOG.md`](./CHANGELOG.md) — история изменений
 
 ---
 
-**Версия**: 0.2.0 (с аутентификацией и логикой доступных слотов)  
-**Последнее обновление**: 2026-09-09
+**Версия**: 0.3.0  
+**Последнее обновление**: 2026-09-15
