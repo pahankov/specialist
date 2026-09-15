@@ -1,6 +1,365 @@
-.schedule-table { width: 100%; border-collapse: collapse; }
-.schedule-table th, .schedule-table td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #f0f0f0; }
-.schedule-table th { font-weight: 600; color: #666; font-size: 13px; text-transform: uppercase; }
-.schedule-table td { font-size: 14px; color: #333; }
-.schedule-table .btn-delete { background: #fee2e2; color: #991b1b; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; }
-.schedule-table .btn-delete:hover { background: #fecaca; }
+/* Legend */
+.legend {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+  padding: 16px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #333;
+}
+
+.legend-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+}
+
+.legend-dot.free { background: #e0e0e0; }
+.legend-dot.pending { background: #ffc107; }
+.legend-dot.confirmed { background: #2196f3; }
+.legend-dot.completed { background: #4caf50; }
+.legend-dot.cancelled { background: #9e9e9e; }
+
+.schedule-calendar {
+  margin-bottom: 24px;
+}
+
+.calendar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.month-nav {
+  background: #667eea;
+  color: white;
+  border: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  font-size: 20px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.month-nav:hover {
+  background: #5a6fd6;
+}
+
+.month-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #1a1a2e;
+  text-transform: capitalize;
+}
+
+.calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.weekday {
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: #666;
+  padding: 8px 0;
+}
+
+.weekday.saturday {
+  color: #ff9800;
+}
+
+.weekday.sunday {
+  color: #f44336;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+}
+
+.calendar-day {
+  padding: 12px 8px;
+  border-radius: 10px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 2px solid transparent;
+  background: white;
+  min-height: 80px;
+}
+
+.calendar-day:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.calendar-day.other-month {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.calendar-day.other-month:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.calendar-day.active {
+  border-color: #4caf50;
+  background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+}
+
+.calendar-day.inactive {
+  border-color: #e0e0e0;
+  background: #f9f9f9;
+}
+
+.calendar-day.today {
+  border-color: #667eea;
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.3);
+}
+
+.calendar-day.selected {
+  border-color: #ff9800;
+  box-shadow: 0 0 0 3px rgba(255, 152, 0, 0.3);
+}
+
+.day-number {
+  font-size: 18px;
+  font-weight: 700;
+  color: #333;
+  margin-bottom: 6px;
+}
+
+.calendar-day.today .day-number {
+  color: #667eea;
+}
+
+.day-status {
+  font-size: 11px;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.status-badge.active {
+  background: #c8e6c9;
+  color: #2e7d32;
+}
+
+.status-badge.inactive {
+  background: #f5f5f5;
+  color: #999;
+}
+
+.day-appointments-count {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #1565c0;
+  font-weight: 500;
+}
+
+/* Hours section */
+.hours-section {
+  margin-bottom: 24px;
+}
+
+.hours-section h3 {
+  margin: 0 0 16px;
+  font-size: 18px;
+  color: #1a1a2e;
+  text-transform: capitalize;
+}
+
+.hours-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hour-slot {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 2px solid #e0e0e0;
+  background: white;
+  transition: all 0.2s ease;
+}
+
+.hour-slot.status-free {
+  border-color: #e0e0e0;
+  background: #fafafa;
+}
+
+.hour-slot.status-pending {
+  border-color: #ffc107;
+  background: #fff8e1;
+}
+
+.hour-slot.status-confirmed {
+  border-color: #2196f3;
+  background: #e3f2fd;
+}
+
+.hour-slot.status-completed {
+  border-color: #4caf50;
+  background: #e8f5e9;
+}
+
+.hour-slot.status-cancelled {
+  border-color: #9e9e9e;
+  background: #f5f5f5;
+  opacity: 0.7;
+}
+
+.hour-time {
+  font-size: 16px;
+  font-weight: 700;
+  color: #333;
+  min-width: 60px;
+}
+
+.appointment-info {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.appt-client {
+  font-weight: 600;
+  color: #333;
+  font-size: 14px;
+}
+
+.appt-service {
+  color: #666;
+  font-size: 13px;
+}
+
+.appt-status {
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.appt-status.status-pending {
+  background: #fff8e1;
+  color: #f57f17;
+}
+
+.appt-status.status-confirmed {
+  background: #e3f2fd;
+  color: #1565c0;
+}
+
+.appt-status.status-completed {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.appt-status.status-cancelled {
+  background: #f5f5f5;
+  color: #616161;
+}
+
+.schedule-summary {
+  margin-top: 8px;
+}
+
+.schedule-summary h3 {
+  margin: 0 0 16px;
+  font-size: 18px;
+  color: #1a1a2e;
+}
+
+.summary-stats {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.summary-item {
+  text-align: center;
+  flex: 1;
+  min-width: 120px;
+}
+
+.summary-value {
+  display: block;
+  font-size: 32px;
+  font-weight: 700;
+  color: #667eea;
+  margin-bottom: 4px;
+}
+
+.summary-label {
+  font-size: 13px;
+  color: #666;
+}
+
+.empty-state {
+  color: #999;
+  font-size: 14px;
+  text-align: center;
+  padding: 20px 0;
+}
+
+@media (max-width: 768px) {
+  .calendar-grid {
+    gap: 4px;
+  }
+
+  .calendar-day {
+    padding: 8px 4px;
+    min-height: 60px;
+  }
+
+  .day-number {
+    font-size: 14px;
+  }
+
+  .hours-grid {
+    gap: 8px;
+  }
+
+  .hour-slot {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .appointment-info {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .summary-stats {
+    gap: 16px;
+  }
+
+  .legend {
+    gap: 12px;
+  }
+}

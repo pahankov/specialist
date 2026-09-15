@@ -9,7 +9,7 @@ from app.models.appointment import Appointment
 from app.models.client import Client
 from app.models.service import Service
 from app.models.master import Master
-from app.schemas.appointment import AppointmentResponse
+from app.schemas.appointment import AppointmentResponse, AppointmentCreate
 from app.api.dependencies import require_master
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -135,6 +135,44 @@ async def get_admin_appointments(
     return appointments
 
 
+@router.post("/appointments", response_model=AppointmentResponse, status_code=201)
+async def create_appointment(
+    data: AppointmentCreate,
+    master: Master = Depends(require_master),
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a new appointment for the authenticated master."""
+    from app.models.client import Client
+    
+    if data.master_id != master.id:
+        raise HTTPException(status_code=403, detail="Not your master")
+    
+    # Find or create client
+    result = await db.execute(
+        select(Client).where(Client.phone == data.client_phone)
+    )
+    client = result.scalar_one_or_none()
+    if not client:
+        client = Client(name=data.client_name, phone=data.client_phone)
+        db.add(client)
+        await db.commit()
+        await db.refresh(client)
+    
+    new_appointment = Appointment(
+        master_id=data.master_id,
+        service_id=data.service_id,
+        client_id=client.id,
+        appointment_date=data.appointment_date,
+        status="pending",
+        notes=data.notes if hasattr(data, 'notes') else None
+    )
+    
+    db.add(new_appointment)
+    await db.commit()
+    await db.refresh(new_appointment)
+    return new_appointment
+
+
 @router.patch("/appointments/{appointment_id}/confirm")
 async def confirm_appointment(
     appointment_id: int,
@@ -188,84 +226,44 @@ async def cancel_appointment(
     return {"detail": "Appointment cancelled", "appointment": appointment}
 
 
-@router.post("/services", response_model=dict, status_code=201)
-async def create_service(
-    service_data: dict,
+@router.get("/appointments/by-date")
+async def get_appointments_by_date(
+    date_from: str = Query(..., description="Start date YYYY-MM-DD"),
+    date_to: str = Query(..., description="End date YYYY-MM-DD"),
     master: Master = Depends(require_master),
     db: AsyncSession = Depends(get_db)
 ):
-    """Create a new service for the authenticated master."""
-    from app.schemas.service import ServiceCreate
-
-    # Validate data
-    required_fields = ["name", "duration_minutes", "price"]
-    for field in required_fields:
-        if field not in service_data:
-            raise HTTPException(status_code=422, detail=f"Missing field: {field}")
-
-    service = Service(
-        master_id=master.id,
-        name=service_data["name"],
-        description=service_data.get("description"),
-        duration_minutes=service_data["duration_minutes"],
-        price=service_data["price"]
-    )
-
-    db.add(service)
-    await db.commit()
-    await db.refresh(service)
-    return service
-
-
-@router.patch("/services/{service_id}", response_model=dict)
-async def update_service(
-    service_id: int,
-    service_data: dict,
-    master: Master = Depends(require_master),
-    db: AsyncSession = Depends(get_db)
-):
-    """Update a service for the authenticated master."""
-    result = await db.execute(
-        select(Service).where(
-            Service.id == service_id,
-            Service.master_id == master.id
+    """Get appointments for a date range."""
+    from datetime import datetime
+    from sqlalchemy.orm import selectinload
+    
+    start_dt = datetime.strptime(date_from, "%Y-%m-%d").replace(tzinfo=None)
+    end_dt = datetime.strptime(date_to, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=None)
+    
+    query = (
+        select(Appointment)
+        .options(selectinload(Appointment.client), selectinload(Appointment.service))
+        .where(
+            Appointment.master_id == master.id,
+            Appointment.appointment_date >= start_dt,
+            Appointment.appointment_date <= end_dt
         )
+        .order_by(Appointment.appointment_date)
     )
-    service = result.scalar_one_or_none()
-
-    if not service:
-        raise HTTPException(status_code=404, detail="Service not found")
-
-    for key, value in service_data.items():
-        if value is not None and hasattr(service, key):
-            setattr(service, key, value)
-
-    await db.commit()
-    await db.refresh(service)
-    return service
-
-
-@router.delete("/services/{service_id}", status_code=200)
-async def delete_service(
-    service_id: int,
-    master: Master = Depends(require_master),
-    db: AsyncSession = Depends(get_db)
-):
-    """Delete a service for the authenticated master."""
-    result = await db.execute(
-        select(Service).where(
-            Service.id == service_id,
-            Service.master_id == master.id
-        )
-    )
-    service = result.scalar_one_or_none()
-
-    if not service:
-        raise HTTPException(status_code=404, detail="Service not found")
-
-    await db.delete(service)
-    await db.commit()
-    return {"detail": "Service deleted"}
+    result = await db.execute(query)
+    appointments = result.scalars().all()
+    
+    return [
+        {
+            "id": a.id,
+            "client_name": a.client.name if a.client else "Unknown",
+            "client_phone": a.client.phone if a.client else "",
+            "service_name": a.service.name if a.service else "",
+            "appointment_date": a.appointment_date.isoformat(),
+            "status": a.status
+        }
+        for a in appointments
+    ]
 
 
 @router.get("/working-hours")

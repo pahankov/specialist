@@ -5,9 +5,14 @@ from sqlalchemy.future import select
 from app.database import get_db
 from app.models.master import Master
 from app.schemas.master import MasterCreate, MasterResponse
+from pydantic import BaseModel
 from datetime import datetime, timedelta
 from jose import jwt
 from passlib.context import CryptContext
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
 
 router = APIRouter()
 security = HTTPBearer()
@@ -59,11 +64,11 @@ async def register_master(master: MasterCreate, db: AsyncSession = Depends(get_d
     return new_master
 
 @router.post("/login")
-async def login(email: str, password: str, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Master).where(Master.email == email))
+async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Master).where(Master.email == req.email))
     master = result.scalar_one_or_none()
     
-    if not master or not pwd_context.verify(password, master.hashed_password):
+    if not master or not pwd_context.verify(req.password, master.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password"

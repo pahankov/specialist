@@ -1,7 +1,7 @@
 import axios from 'axios'
 import type { DashboardStats, LoginResponse } from './types'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 function getAuthHeader(): Record<string, string> {
   const token = localStorage.getItem('access_token')
@@ -43,5 +43,11 @@ export const adminApi = {
   },
   deleteWorkingHour(id: number) {
     return axios.delete(`${API_URL}/admin/working-hours/${id}`, { headers: getAuthHeader() })
+  },
+  getAppointmentsByDate(dateFrom: string, dateTo: string) {
+    return axios.get(`${API_URL}/admin/appointments/by-date`, {
+      headers: getAuthHeader(),
+      params: { date_from: dateFrom, date_to: dateTo }
+    })
   }
 }
