@@ -1,0 +1,7 @@
+mcpServers:
+  - name: Everything Server
+    command: npx
+    args:
+      - -y
+      - "@modelcontextprotocol/server-everything"
+    env: {}

@@ -1,0 +1,47 @@
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from typing import List
+from app.database import get_db
+from app.models.client import Client
+from app.schemas.client import ClientCreate, ClientResponse
+
+router = APIRouter()
+
+@router.get("/", response_model=List[ClientResponse])
+async def get_clients(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Client))
+    clients = result.scalars().all()
+    return clients
+
+@router.get("/{client_id}", response_model=ClientResponse)
+async def get_client(client_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Client).where(Client.id == client_id))
+    client = result.scalar_one_or_none()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    return client
+
+@router.post("/", response_model=ClientResponse, status_code=201)
+async def create_client(client: ClientCreate, db: AsyncSession = Depends(get_db)):
+    # Check if client already exists
+    result = await db.execute(select(Client).where(Client.phone == client.phone))
+    existing = result.scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=400, detail="Client with this phone already exists")
+    
+    new_client = Client(**client.model_dump())
+    db.add(new_client)
+    await db.commit()
+    await db.refresh(new_client)
+    return new_client
+
+@router.delete("/{client_id}", status_code=204)
+async def delete_client(client_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Client).where(Client.id == client_id))
+    client = result.scalar_one_or_none()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    await db.delete(client)
+    await db.commit()
+    return None
