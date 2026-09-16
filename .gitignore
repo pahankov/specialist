@@ -14,3 +14,5 @@ sugar_booking.db
 *.json
 !package.json
 !package-lock.json
+# Build artifacts (compiled JSX from TypeScript)
+frontend/src/**/*.js

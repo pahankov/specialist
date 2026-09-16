@@ -1,15 +1,12 @@
 import { useEffect, useState } from 'react'
 import { adminApi } from '../api/adminClient'
-import './SchedulePage.css'
 
-const dayNames = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
-const dayNamesFull = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота']
-
-const statusConfig = {
-  pending: { label: 'Ожидает', color: '#ffc107', bg: '#fff8e1', text: '#f57f17' },
-  confirmed: { label: 'Подтверждена', color: '#2196f3', bg: '#e3f2fd', text: '#1565c0' },
-  completed: { label: 'Завершена', color: '#4caf50', bg: '#e8f5e9', text: '#2e7d32' },
-  cancelled: { label: 'Отменена', color: '#9e9e9e', bg: '#f5f5f5', text: '#616161' },
+const statusConfig: Record<string, { label: string; bg: string; text: string }> = {
+  free: { label: 'Свободно', bg: '#e0e0e0', text: '#666' },
+  pending: { label: 'Ожидает', bg: '#fff8e1', text: '#f57f17' },
+  confirmed: { label: 'Подтверждена', bg: '#e3f2fd', text: '#1565c0' },
+  completed: { label: 'Завершена', bg: '#e8f5e9', text: '#2e7d32' },
+  cancelled: { label: 'Отменена', bg: '#f5f5f5', text: '#616161' },
 }
 
 function SchedulePage() {
@@ -42,10 +39,15 @@ function SchedulePage() {
     }
   }
 
-  const fetchAppointmentsForDate = async (date: Date) => {
-    const dateStr = date.toISOString().split('T')[0]
+  const fetchAppointmentsForMonth = async () => {
+    const now = new Date()
+    const year = now.getFullYear()
+    const month = now.getMonth()
+    const from = `${year}-${String(month + 1).padStart(2, '0')}-01`
+    const lastDay = new Date(year, month + 1, 0).getDate()
+    const to = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
     try {
-      const resp = await adminApi.getAppointmentsByDate(dateStr, dateStr)
+      const resp = await adminApi.getAppointmentsByDate(from, to)
       setAppointments(resp.data)
     } catch {
       setAppointments([])
@@ -53,12 +55,7 @@ function SchedulePage() {
   }
 
   useEffect(() => { fetchSchedule() }, [])
-
-  useEffect(() => {
-    if (selectedDate) {
-      fetchAppointmentsForDate(selectedDate)
-    }
-  }, [selectedDate])
+  useEffect(() => { fetchAppointmentsForMonth() }, [])
 
   const getMonthDays = (date: Date) => {
     const year = date.getFullYear()
@@ -66,31 +63,30 @@ function SchedulePage() {
     const firstDay = new Date(year, month, 1)
     const lastDay = new Date(year, month + 1, 0)
     const days: { date: Date; isCurrentMonth: boolean }[] = []
-
     const startDayOfWeek = firstDay.getDay()
     for (let i = 0; i < startDayOfWeek; i++) {
-      const padDate = new Date(year, month, 1 - (startDayOfWeek - i))
-      days.push({ date: padDate, isCurrentMonth: false })
+      days.push({ date: new Date(year, month, 1 - (startDayOfWeek - i)), isCurrentMonth: false })
     }
-
     for (let d = 1; d <= lastDay.getDate(); d++) {
       days.push({ date: new Date(year, month, d), isCurrentMonth: true })
     }
-
     return days
   }
 
   const isDayActive = (date: Date) => {
-    const dow = date.getDay()
-    return !!schedule[dow]
+    // JS getDay(): 0=Sun, 1=Mon, ..., 6=Sat
+    // Backend day_of_week: 0=Mon, 1=Tue, ..., 6=Sun
+    const jsDow = date.getDay()
+    const pyDow = (jsDow + 6) % 7  // Convert Sun=0→6, Mon=1→0, Tue=2→1, ..., Sat=6→5
+    return !!schedule[pyDow]
   }
 
   const getAppointmentsForSlot = (date: Date, hour: number) => {
     const dateStr = date.toISOString().split('T')[0]
-    const hourStr = `${String(hour).padStart(2, '0')}:00`
+    const hourStr = `${String(hour).padStart(2, '0')}`
     return appointments.filter(a => {
       const aDate = a.appointment_date.split('T')[0]
-      const aHour = a.appointment_date.split('T')[1]?.slice(0, 5)
+      const aHour = a.appointment_date.split('T')[1]?.slice(0, 2)
       return aDate === dateStr && aHour === hourStr
     })
   }
@@ -98,8 +94,6 @@ function SchedulePage() {
   const getSlotStatus = (date: Date, hour: number) => {
     const slots = getAppointmentsForSlot(date, hour)
     if (slots.length === 0) return 'free'
-    
-    // If multiple appointments (shouldn't happen), prioritize by status
     const statusOrder = ['completed', 'confirmed', 'pending', 'cancelled']
     for (const status of statusOrder) {
       if (slots.some(s => s.status === status)) return status
@@ -107,109 +101,114 @@ function SchedulePage() {
     return 'pending'
   }
 
-  const goToPrevMonth = () => {
-    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))
-  }
-
-  const goToNextMonth = () => {
-    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))
-  }
-
+  const goToPrevMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))
+  const goToNextMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))
   const isToday = (date: Date) => {
     const today = new Date()
-    return date.getDate() === today.getDate() &&
-      date.getMonth() === today.getMonth() &&
-      date.getFullYear() === today.getFullYear()
+    return date.getDate() === today.getDate() && date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear()
   }
-
+  const isPast = (date: Date) => {
+    const now = new Date()
+    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+    const n = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    return d < n
+  }
+  const isSlotPast = (date: Date, hour: number) => {
+    const slotDate = new Date(date)
+    slotDate.setHours(hour, 0, 0, 0)
+    return slotDate < new Date()
+  }
   const formatHour = (h: number) => String(h).padStart(2, '0') + ':00'
 
-  if (loading) return <div className="admin-main"><div className="loading">Загрузка...</div></div>
-  if (error) return <div className="admin-main"><div className="error-message">{error}</div></div>
+  if (loading) return <div style={{ padding: 60, textAlign: 'center', color: '#666', fontSize: 16 }}>Загрузка...</div>
+  if (error) return <div style={{ padding: 60, textAlign: 'center', color: '#f44336' }}>{error}</div>
 
   const monthDays = getMonthDays(currentMonth)
   const monthName = currentMonth.toLocaleString('ru-RU', { month: 'long', year: 'numeric' })
 
   return (
-    <div className="admin-main">
-      <div className="page-header">
-        <h1>📅 Рабочее расписание</h1>
-        <p>Нажмите на день чтобы увидеть бронирования</p>
+    <div style={{ padding: '0 20px', maxWidth: 1200, margin: '0 auto' }}>
+      <div style={{ marginBottom: 8 }}>
+        <h1 style={{ fontSize: 24, margin: 0, color: '#1a1a2e' }}>📅 Рабочее расписание</h1>
+        <p style={{ margin: '4px 0 0', color: '#666', fontSize: 14 }}>Нажмите на день чтобы увидеть бронирования</p>
       </div>
 
       {/* Legend */}
-      <div className="legend card">
-        <div className="legend-item">
-          <span className="legend-dot free" />
-          <span>Свободно</span>
-        </div>
-        <div className="legend-item">
-          <span className="legend-dot pending" />
-          <span>Ожидает</span>
-        </div>
-        <div className="legend-item">
-          <span className="legend-dot confirmed" />
-          <span>Подтверждена</span>
-        </div>
-        <div className="legend-item">
-          <span className="legend-dot completed" />
-          <span>Завершена</span>
-        </div>
-        <div className="legend-item">
-          <span className="legend-dot cancelled" />
-          <span>Отменена</span>
-        </div>
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 20, padding: 14, background: '#f9f9f9', borderRadius: 10 }}>
+        {[
+          { color: '#e0e0e0', label: 'Свободно' },
+          { color: '#ffc107', label: 'Ожидает' },
+          { color: '#2196f3', label: 'Подтверждена' },
+          { color: '#4caf50', label: 'Завершена' },
+          { color: '#9e9e9e', label: 'Отменена' },
+        ].map(item => (
+          <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#333' }}>
+            <span style={{ width: 16, height: 16, borderRadius: 4, background: item.color, display: 'inline-block' }} />
+            <span>{item.label}</span>
+          </div>
+        ))}
       </div>
 
       {/* Calendar */}
-      <div className="schedule-calendar">
-        <div className="calendar-header">
-          <button className="month-nav" onClick={goToPrevMonth}>←</button>
-          <span className="month-title">{monthName}</span>
-          <button className="month-nav" onClick={goToNextMonth}>→</button>
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <button onClick={goToPrevMonth} style={{ background: '#667eea', color: 'white', border: 'none', width: 40, height: 40, borderRadius: 8, fontSize: 20, cursor: 'pointer' }}>←</button>
+          <span style={{ fontSize: 20, fontWeight: 600, color: '#1a1a2e', textTransform: 'capitalize' }}>{monthName}</span>
+          <button onClick={goToNextMonth} style={{ background: '#667eea', color: 'white', border: 'none', width: 40, height: 40, borderRadius: 8, fontSize: 20, cursor: 'pointer' }}>→</button>
         </div>
 
-        <div className="calendar-weekdays">
-          {dayNames.map((name, i) => (
-            <div key={i} className={`weekday ${i === 0 ? 'sunday' : ''} ${i === 6 ? 'saturday' : ''}`}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8, marginBottom: 8 }}>
+          {['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'].map((name, i) => (
+            <div key={i} style={{ textAlign: 'center', fontSize: 13, fontWeight: 600, color: i === 0 ? '#f44336' : i === 6 ? '#ff9800' : '#666', padding: '8px 0' }}>
               {name}
             </div>
           ))}
         </div>
 
-        <div className="calendar-grid">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8 }}>
           {monthDays.map((day, i) => {
             const active = isDayActive(day.date)
             const today = isToday(day.date)
-            const selected = selectedDate?.getDate() === day.date.getDate() &&
-              selectedDate?.getMonth() === day.date.getMonth()
+            const past = isPast(day.date)
+            const selected = selectedDate?.getDate() === day.date.getDate() && selectedDate?.getMonth() === day.date.getMonth()
+            const jsDow = day.date.getDay()
+            const pyDow = (jsDow + 6) % 7
+            const hours = schedule[pyDow]
+            let apptCount = 0
+            if (active && day.isCurrentMonth && hours) {
+              for (let h = hours.start; h < hours.end; h++) {
+                if (!isSlotPast(day.date, h) && getSlotStatus(day.date, h) !== 'free') apptCount++
+              }
+            }
 
             return (
               <div
                 key={i}
-                className={`calendar-day ${day.isCurrentMonth ? '' : 'other-month'} ${active ? 'active' : 'inactive'} ${today ? 'today' : ''} ${selected ? 'selected' : ''}`}
-                onClick={() => day.isCurrentMonth && setSelectedDate(day.date)}
+                onClick={() => day.isCurrentMonth && !past && setSelectedDate(day.date)}
+                style={{
+                  padding: '12px 8px',
+                  borderRadius: 10,
+                  textAlign: 'center',
+                  cursor: (day.isCurrentMonth && !past) ? 'pointer' : 'default',
+                  background: past ? '#f0f0f0' : active ? 'linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)' : '#f9f9f9',
+                  border: `2px solid ${past ? '#e0e0e0' : active ? '#4caf50' : '#e0e0e0'}`,
+                  minHeight: 80,
+                  opacity: past ? 0.4 : day.isCurrentMonth ? 1 : 0.3,
+                  transition: 'all 0.2s ease',
+                  boxShadow: selected ? '0 0 0 3px rgba(255,152,0,0.3)' : today ? '0 0 0 2px rgba(102,126,234,0.3)' : 'none',
+                }}
+                onMouseEnter={(e) => { if (day.isCurrentMonth && !past) e.currentTarget.style.transform = 'translateY(-2px)' }}
+                onMouseLeave={(e) => { if (day.isCurrentMonth && !past) e.currentTarget.style.transform = 'none' }}
               >
-                <div className="day-number">{day.date.getDate()}</div>
-                <div className="day-status">
-                  {active ? (
-                    <span className="status-badge active">Рабочий</span>
-                  ) : (
-                    <span className="status-badge inactive">Выходной</span>
-                  )}
+                <div style={{ fontSize: 18, fontWeight: 700, color: past ? '#bbb' : today ? '#667eea' : '#333', marginBottom: 6 }}>
+                  {day.date.getDate()}
                 </div>
-                {active && day.isCurrentMonth && (
-                  <div className="day-appointments-count">
-                    {(() => {
-                      const dow = day.date.getDay()
-                      const hours = schedule[dow]
-                      let count = 0
-                      for (let h = hours.start; h < hours.end; h++) {
-                        const status = getSlotStatus(day.date, h)
-                        if (status !== 'free') count++
-                      }
-                      return count > 0 ? `${count} записей` : ''
-                    })()}
+                <div style={{ fontSize: 10, fontWeight: 600, background: past ? '#e0e0e0' : active ? '#c8e6c9' : '#f5f5f5', color: past ? '#999' : active ? '#2e7d32' : '#999', padding: '2px 8px', borderRadius: 10, display: 'inline-block' }}>
+                  {past ? 'Прошёл' : active ? 'Рабочий' : 'Выходной'}
+                </div>
+                {active && !past && apptCount > 0 && (
+                  <div style={{ marginTop: 4, fontSize: 11, color: '#1565c0', fontWeight: 500 }}>
+                    {apptCount} записей
                   </div>
                 )}
               </div>
@@ -220,33 +219,41 @@ function SchedulePage() {
 
       {/* Time slots for selected date */}
       {selectedDate && (
-        <div className="hours-section card">
-          <h3>
+        <div style={{ marginBottom: 24, padding: 20, background: 'white', borderRadius: 12, border: '1px solid #e0e0e0' }}>
+          <h3 style={{ margin: '0 0 16px', fontSize: 18, color: '#1a1a2e', textTransform: 'capitalize' }}>
             🕐 {selectedDate.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })}
+            {isPast(selectedDate) && <span style={{ fontSize: 14, color: '#999', fontWeight: 400, marginLeft: 12 }}>— прошедший день</span>}
           </h3>
           {isDayActive(selectedDate) ? (
-            <div className="hours-grid">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {(() => {
-                const dow = selectedDate.getDay()
-                const hours = schedule[dow]
-                const slots = []
+                const jsDow = selectedDate.getDay()
+                const pyDow = (jsDow + 6) % 7
+                const hours = schedule[pyDow]
+                const slots: React.ReactNode[] = []
                 for (let h = hours.start; h < hours.end; h++) {
                   const status = getSlotStatus(selectedDate, h)
-                  const config = statusConfig[status]
+                  const cfg = statusConfig[status]
                   const slotsForHour = getAppointmentsForSlot(selectedDate, h)
-                  
+                  const past = isSlotPast(selectedDate, h)
+
                   slots.push(
-                    <div key={h} className={`hour-slot status-${status}`}>
-                      <div className="hour-time">{formatHour(h)}</div>
-                      {slotsForHour.map(a => (
-                        <div key={a.id} className="appointment-info">
-                          <div className="appt-client">{a.client_name}</div>
-                          <div className="appt-service">{a.service_name}</div>
-                          <div className={`appt-status status-${status}`}>
-                            {config.label}
+                    <div key={h} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 16px', borderRadius: 8, border: `2px solid ${cfg.bg}`, background: past ? '#f5f5f5' : cfg.bg, opacity: past ? 0.5 : 1 }}>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: past ? '#bbb' : '#333', minWidth: 60 }}>{formatHour(h)}</div>
+                      {slotsForHour.length > 0 ? slotsForHour.map(a => {
+                        const sc = statusConfig[a.status]
+                        return (
+                          <div key={a.id} style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 12 }}>
+                            <span style={{ fontWeight: 600, color: '#333', fontSize: 14 }}>{a.client_name}</span>
+                            <span style={{ color: '#666', fontSize: 13 }}>{a.service_name}</span>
+                            <span style={{ padding: '4px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600, background: sc.bg, color: sc.text }}>
+                              {sc.label}
+                            </span>
                           </div>
-                        </div>
-                      ))}
+                        )
+                      }) : (
+                        <span style={{ flex: 1, color: past ? '#bbb' : '#999', fontSize: 13 }}>{past ? 'Прошёл' : 'Свободно'}</span>
+                      )}
                     </div>
                   )
                 }
@@ -254,29 +261,25 @@ function SchedulePage() {
               })()}
             </div>
           ) : (
-            <p className="empty-state">Этот день — выходной. Настройте расписание в настройках дней недели.</p>
+            <p style={{ color: '#999', fontSize: 14, textAlign: 'center', padding: '20px 0' }}>Этот день — выходной</p>
           )}
         </div>
       )}
 
       {/* Summary */}
-      <div className="schedule-summary card">
-        <h3>📊 Статистика недели</h3>
-        <div className="summary-stats">
-          <div className="summary-item">
-            <span className="summary-value">{Object.keys(schedule).length}</span>
-            <span className="summary-label">Рабочих дней</span>
-          </div>
-          <div className="summary-item">
-            <span className="summary-value">{7 - Object.keys(schedule).length}</span>
-            <span className="summary-label">Выходных</span>
-          </div>
-          <div className="summary-item">
-            <span className="summary-value">
-              {Object.values(schedule).reduce((total, h) => total + (h.end - h.start), 0)}
-            </span>
-            <span className="summary-label">Часов в неделю</span>
-          </div>
+      <div style={{ padding: 20, background: 'white', borderRadius: 12, border: '1px solid #e0e0e0' }}>
+        <h3 style={{ margin: '0 0 16px', fontSize: 18, color: '#1a1a2e' }}>📊 Статистика недели</h3>
+        <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+          {[
+            { value: Object.keys(schedule).length, label: 'Рабочих дней' },
+            { value: 7 - Object.keys(schedule).length, label: 'Выходных' },
+            { value: Object.values(schedule).reduce((t, h) => t + (h.end - h.start), 0), label: 'Часов в неделю' },
+          ].map(item => (
+            <div key={item.label} style={{ textAlign: 'center', flex: 1, minWidth: 120 }}>
+              <span style={{ display: 'block', fontSize: 32, fontWeight: 700, color: '#667eea', marginBottom: 4 }}>{item.value}</span>
+              <span style={{ fontSize: 13, color: '#666' }}>{item.label}</span>
+            </div>
+          ))}
         </div>
       </div>
     </div>

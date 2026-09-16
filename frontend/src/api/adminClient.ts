@@ -10,7 +10,7 @@ function getAuthHeader(): Record<string, string> {
 
 export const adminApi = {
   login(email: string, password: string) {
-    return axios.post<LoginResponse>(`${API_URL}/auth/login`, null, {
+    return axios.post<LoginResponse>('http://localhost:8000/api/v1/auth/login', null, {
       params: { email, password }
     })
   },

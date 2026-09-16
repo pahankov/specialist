@@ -12,6 +12,16 @@
 
 ### Запуск
 
+**Быстрый запуск (Windows):**
+
+```
+start.bat              # Backend + Frontend
+run_backend.bat        # Только backend
+run_frontend.bat       # Только frontend
+```
+
+**Ручной запуск:**
+
 **Backend:**
 ```powershell
 cd backend
@@ -39,26 +49,27 @@ npm run dev
 sugar-booking/
 ├── backend/
 │   ├── app/
-│   │   ├── api/              # REST endpoints (auth, masters, services, appointments, clients, working_hours)
+│   │   ├── api/              # REST endpoints (auth, masters, services, appointments, clients, working_hours, admin)
 │   │   ├── models/           # SQLAlchemy ORM models
 │   │   ├── schemas/          # Pydantic schemas (request/response validation)
 │   │   ├── config.py         # Настройки (SQLite, JWT)
 │   │   ├── database.py       # Подключение к БД (aiosqlite)
 │   │   └── main.py           # FastAPI приложение
-│   ├── tests/                # pytest тесты
+│   ├── tests/                # pytest тесты (auth + masters CRUD)
 │   ├── requirements.txt      # Зависимости Python
 │   └── pyproject.toml        # Конфиг pytest
 ├── frontend/
 │   ├── src/
 │   │   ├── api/              # API клиент (axios)
-│   │   ├── pages/            # React страницы (HomePage, BookingPage)
+│   │   ├── pages/            # React страницы (8 страниц: публичные + админ-панель)
 │   │   ├── App.tsx           # Роутинг
 │   │   └── main.tsx          # Точка входа
 │   ├── package.json
 │   └── vite.config.ts
 ├── docker-compose.yml        # Docker-конфиг (PostgreSQL + Redis, для production)
-├── run_backend.bat           # Батник для запуска backend (Windows)
-└── run_frontend.bat          # Батник для запуска frontend (Windows)
+├── start.bat                 # Запуск backend + frontend (Windows)
+├── run_backend.bat           # Запуск backend только (Windows)
+└── run_frontend.bat          # Запуск frontend только (Windows)
 ```
 
 ## 🔌 API Endpoints
@@ -91,6 +102,7 @@ sugar-booking/
 | `GET` | `/admin/working-hours` | Расписание |
 | `POST` | `/admin/working-hours` | Добавить рабочий день |
 | `DELETE` | `/admin/working-hours/{id}` | Удалить рабочий день |
+| `GET` | `/admin/appointments/by-date` | Записи по дате |
 
 ### Services
 | Метод | Endpoint | Описание |
@@ -108,11 +120,15 @@ sugar-booking/
 | `POST` | `/api/v1/appointments/public` | Публичная запись (без авторизации) |
 | `GET` | `/api/v1/appointments/available-days` | Доступные дни |
 | `GET` | `/api/v1/appointments/available-slots` | Доступные слоты |
+| `DELETE` | `/api/v1/appointments/{id}` | Удалить запись |
 
 ### Clients
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
 | `GET` | `/api/v1/clients/` | Список клиентов |
+| `GET` | `/api/v1/clients/{id}` | Клиент по ID |
+| `POST` | `/api/v1/clients/` | Создать клиента |
+| `DELETE` | `/api/v1/clients/{id}` | Удалить клиента |
 
 ### Working Hours
 | Метод | Endpoint | Описание |
@@ -128,6 +144,7 @@ cd backend
 $env:PYTHONPATH='.'
 pytest tests/ -v                          # Все тесты
 pytest tests/test_auth.py -v              # Только auth
+pytest tests/test_masters.py -v           # Только masters
 pytest tests/ -v --cov=app                # С покрытием
 ```
 
