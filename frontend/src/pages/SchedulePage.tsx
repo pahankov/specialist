@@ -85,6 +85,12 @@ function SchedulePage() {
   useEffect(() => { fetchAppointmentsForMonth() }, [currentMonth])
   useEffect(() => { fetchBlockedSlots() }, [])
   useEffect(() => {
+    // Auto-select today if no date selected
+    if (!selectedDate && !loading) {
+      setSelectedDate(new Date())
+    }
+  }, [loading])
+  useEffect(() => {
     if (bookingForm.open) {
       adminApi.getClients()
         .then(r => setBookingClients(r.data))
@@ -424,14 +430,15 @@ function SchedulePage() {
       {/* Time slots for selected date */}
       {selectedDate && (
         <div style={{ marginBottom: 24, padding: 20, background: 'white', borderRadius: 12, border: '1px solid #e0e0e0' }}>
-          <h3 style={{ margin: '0 0 16px', fontSize: 18, color: '#1a1a2e', textTransform: 'capitalize' }}>
+          <h3 style={{ margin: '0 0 16px', fontSize: 18, color: '#1a1a2e', textTransform: 'capitalize', display: 'flex', alignItems: 'center', gap: 12 }}>
             🕐 {selectedDate.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })}
-            {isPast(selectedDate) && <span style={{ fontSize: 14, color: '#999', fontWeight: 400, marginLeft: 12 }}>— прошедший день</span>}
+            {isPast(selectedDate) && <span style={{ fontSize: 14, color: '#999', fontWeight: 400 }}>— прошедший день</span>}
+            {!isDayActive(selectedDate) && <span style={{ fontSize: 14, color: '#f44336', fontWeight: 600 }}>— выходной</span>}
           </h3>
           {isDayActive(selectedDate) ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {/* Global checkbox */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8, padding: '8px 12px', background: '#f5f5f5', borderRadius: 8 }}>
                 <input
                   type="checkbox"
                   checked={isAllHoursActive()}
@@ -455,15 +462,15 @@ function SchedulePage() {
                   const hourActive = isHourActive(selectedDate, h)
 
                   slots.push(
-                    <div key={h} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 16px', borderRadius: 8, border: `2px solid ${cfg.bg}`, background: past ? '#f5f5f5' : cfg.bg, opacity: past ? 0.5 : 1 }}>
+                    <div key={h} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 16px', borderRadius: 8, border: `2px solid ${cfg.bg}`, background: past ? '#f5f5f5' : cfg.bg, opacity: past ? 0.5 : 1, transition: 'all 0.2s ease' }}>
                       <input
                         type="checkbox"
                         checked={hourActive}
                         onChange={() => toggleHour(selectedDate!.toISOString().split('T')[0], h)}
                         disabled={past}
-                        style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#667eea' }}
+                        style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#667eea', flexShrink: 0 }}
                       />
-                      <div style={{ fontSize: 16, fontWeight: 700, color: past ? '#bbb' : '#333', minWidth: 60 }}>{formatHour(h)}</div>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: past ? '#bbb' : '#333', minWidth: 60, flexShrink: 0 }}>{formatHour(h)}</div>
                       {slotsForHour.length > 0 ? slotsForHour.map(a => {
                         const sc = statusConfig[a.status]
                         return (
@@ -481,7 +488,9 @@ function SchedulePage() {
                           {!past && hourActive && (
                             <button
                               onClick={() => openBookingForm(selectedDate!, h)}
-                              style={{ background: '#667eea', color: 'white', border: 'none', padding: '4px 12px', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+                              style={{ background: '#667eea', color: 'white', border: 'none', padding: '6px 16px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, transition: 'all 0.2s ease', boxShadow: '0 2px 4px rgba(102,126,234,0.3)' }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = '#5a6fd6'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = '#667eea'}
                             >
                               + Записать
                             </button>
@@ -498,7 +507,12 @@ function SchedulePage() {
               })()}
             </div>
           ) : (
-            <p style={{ color: '#999', fontSize: 14, textAlign: 'center', padding: '20px 0' }}>Этот день — выходной</p>
+            <div style={{ textAlign: 'center', padding: '20px 0' }}>
+              <p style={{ color: '#999', fontSize: 14 }}>Этот день — выходной</p>
+              <p style={{ color: '#667eea', fontSize: 13, marginTop: 8 }}>
+                Добавьте рабочие часы в разделе "Рабочие часы по дням" ниже
+              </p>
+            </div>
           )}
         </div>
       )}
