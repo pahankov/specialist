@@ -1,9 +1,9 @@
 """Admin API endpoints for master dashboard."""
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import func, select, exists
+from sqlalchemy import func, select
 from typing import List, Optional
-from datetime import datetime, date, timedelta
+from datetime import datetime, timedelta, time
 import csv
 import io
 from app.database import get_db
@@ -11,14 +11,17 @@ from app.models.appointment import Appointment
 from app.models.client import Client
 from app.models.service import Service
 from app.models.master import Master
+from app.models.working_hour import WorkingHour
+from app.models.blocked_slot import BlockedSlot
 from app.schemas.appointment import AppointmentResponse, AppointmentCreate, AppointmentWithDetails, AdminBookingCreate
 from app.schemas.service import ServiceCreate, ServiceResponse, ServiceUpdate
 from app.schemas.client import ClientCreate, ClientUpdate, ClientResponse
+from app.schemas.working_hour import WorkingHourCreate, WorkingHourUpdate, WorkingHourResponse
 from app.schemas.audit_log import AuditLogResponse, AuditLogListResponse
 from app.schemas.blocked_slot import BlockedSlotCreate, BlockedSlotResponse
 from app.api.dependencies import require_master
+from app.api.admin_helpers import get_owned_or_404, get_or_404
 from app.api.audit_helper import log_action
-from starlette.requests import Request
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -219,23 +222,11 @@ async def confirm_appointment(
     db: AsyncSession = Depends(get_db)
 ):
     """Confirm an appointment."""
-    result = await db.execute(
-        select(Appointment).where(
-            Appointment.id == appointment_id,
-            Appointment.master_id == master.id
-        )
-    )
-    appointment = result.scalar_one_or_none()
-
-    if not appointment:
-        raise HTTPException(status_code=404, detail="Appointment not found")
-
+    appointment = await get_owned_or_404(db, Appointment, appointment_id, master.id)
     appointment.status = "confirmed"
-    await db.commit()
+    await db.flush()
     await db.refresh(appointment)
-
-    await log_action(db, master.id, "confirm", "appointment", appointment.id, f"Статус изменён на confirmed")
-
+    await log_action(db, master.id, "confirm", "appointment", appointment.id, "Статус изменён на confirmed")
     return appointment
 
 
@@ -247,28 +238,13 @@ async def cancel_appointment(
     db: AsyncSession = Depends(get_db)
 ):
     """Cancel an appointment."""
-    result = await db.execute(
-        select(Appointment).where(
-            Appointment.id == appointment_id,
-            Appointment.master_id == master.id
-        )
-    )
-    appointment = result.scalar_one_or_none()
-
-    if not appointment:
-        raise HTTPException(status_code=404, detail="Appointment not found")
-
+    appointment = await get_owned_or_404(db, Appointment, appointment_id, master.id)
     appointment.status = "cancelled"
     if reason:
-        if appointment.notes:
-            appointment.notes = f"{appointment.notes}\nОтмена: {reason}"
-        else:
-            appointment.notes = f"Отмена: {reason}"
-    await db.commit()
+        appointment.notes = f"{appointment.notes}\nОтмена: {reason}" if appointment.notes else f"Отмена: {reason}"
+    await db.flush()
     await db.refresh(appointment)
-
     await log_action(db, master.id, "cancel", "appointment", appointment.id, f"Причина: {reason}")
-
     return appointment
 
 
@@ -279,23 +255,11 @@ async def complete_appointment(
     db: AsyncSession = Depends(get_db)
 ):
     """Mark an appointment as completed."""
-    result = await db.execute(
-        select(Appointment).where(
-            Appointment.id == appointment_id,
-            Appointment.master_id == master.id
-        )
-    )
-    appointment = result.scalar_one_or_none()
-
-    if not appointment:
-        raise HTTPException(status_code=404, detail="Appointment not found")
-
+    appointment = await get_owned_or_404(db, Appointment, appointment_id, master.id)
     appointment.status = "completed"
-    await db.commit()
+    await db.flush()
     await db.refresh(appointment)
-
     await log_action(db, master.id, "complete", "appointment", appointment.id)
-
     return appointment
 
 
@@ -306,19 +270,8 @@ async def delete_appointment(
     db: AsyncSession = Depends(get_db)
 ):
     """Delete an appointment."""
-    result = await db.execute(
-        select(Appointment).where(
-            Appointment.id == appointment_id,
-            Appointment.master_id == master.id
-        )
-    )
-    appointment = result.scalar_one_or_none()
-
-    if not appointment:
-        raise HTTPException(status_code=404, detail="Appointment not found")
-
+    appointment = await get_owned_or_404(db, Appointment, appointment_id, master.id)
     await log_action(db, master.id, "delete", "appointment", appointment_id)
-
     await db.delete(appointment)
     await db.commit()
     return {"detail": "Appointment deleted"}
@@ -421,69 +374,37 @@ async def get_appointments_by_date(
     ]
 
 
-@router.get("/working-hours")
+@router.get("/working-hours", response_model=List[WorkingHourResponse])
 async def get_working_hours(
     master: Master = Depends(require_master),
     db: AsyncSession = Depends(get_db)
 ):
     """Get working hours for the authenticated master."""
-    from app.models.working_hour import WorkingHour
-
     result = await db.execute(
         select(WorkingHour).where(WorkingHour.master_id == master.id)
         .order_by(WorkingHour.day_of_week)
     )
     hours = result.scalars().all()
-
-    return [
-        {
-            "id": h.id,
-            "master_id": h.master_id,
-            "day_of_week": h.day_of_week,
-            "start_time": h.start_time.isoformat() if h.start_time else None,
-            "end_time": h.end_time.isoformat() if h.end_time else None
-        }
-        for h in hours
-    ]
+    return hours
 
 
-@router.post("/working-hours", status_code=201)
+@router.post("/working-hours", response_model=WorkingHourResponse, status_code=201)
 async def create_working_hour(
-    hour_data: dict,
+    data: WorkingHourCreate,
     master: Master = Depends(require_master),
     db: AsyncSession = Depends(get_db)
 ):
     """Create working hours for the authenticated master."""
-    from app.models.working_hour import WorkingHour
-    from datetime import time
-
-    required_fields = ["day_of_week", "start_time", "end_time"]
-    for field in required_fields:
-        if field not in hour_data:
-            raise HTTPException(status_code=422, detail=f"Missing field: {field}")
-
-    # Parse time strings
-    start_parts = hour_data["start_time"].split(":")
-    end_parts = hour_data["end_time"].split(":")
-
     hour = WorkingHour(
         master_id=master.id,
-        day_of_week=hour_data["day_of_week"],
-        start_time=time(int(start_parts[0]), int(start_parts[1])),
-        end_time=time(int(end_parts[0]), int(end_parts[1]))
+        day_of_week=data.day_of_week,
+        start_time=time.fromisoformat(data.start_time),
+        end_time=time.fromisoformat(data.end_time)
     )
-
     db.add(hour)
     await db.commit()
     await db.refresh(hour)
-
-    return {
-        "id": hour.id,
-        "master_id": hour.master_id,
-        "day_of_week": hour.day_of_week,
-        "start_time": hour.start_time.isoformat(),
-        "end_time": hour.end_time.isoformat()
-    }
+    return hour
 
 
 @router.delete("/working-hours/{hour_id}", status_code=200)
@@ -493,67 +414,32 @@ async def delete_working_hour(
     db: AsyncSession = Depends(get_db)
 ):
     """Delete working hours for the authenticated master."""
-    from app.models.working_hour import WorkingHour
-
-    result = await db.execute(
-        select(WorkingHour).where(
-            WorkingHour.id == hour_id,
-            WorkingHour.master_id == master.id
-        )
-    )
-    hour = result.scalar_one_or_none()
-
-    if not hour:
-        raise HTTPException(status_code=404, detail="Working hour not found")
-
+    hour = await get_owned_or_404(db, WorkingHour, hour_id, master.id)
     await db.delete(hour)
     await db.commit()
     return {"detail": "Working hour deleted"}
 
 
-@router.patch("/working-hours/{hour_id}", status_code=200)
+@router.patch("/working-hours/{hour_id}", response_model=WorkingHourResponse, status_code=200)
 async def update_working_hour(
     hour_id: int,
-    hour_data: dict,
+    data: WorkingHourUpdate,
     master: Master = Depends(require_master),
     db: AsyncSession = Depends(get_db)
 ):
     """Update working hours for the authenticated master."""
-    from app.models.working_hour import WorkingHour
-    from datetime import time
+    hour = await get_owned_or_404(db, WorkingHour, hour_id, master.id)
 
-    result = await db.execute(
-        select(WorkingHour).where(
-            WorkingHour.id == hour_id,
-            WorkingHour.master_id == master.id
-        )
-    )
-    hour = result.scalar_one_or_none()
-
-    if not hour:
-        raise HTTPException(status_code=404, detail="Working hour not found")
-
-    if "day_of_week" in hour_data:
-        hour.day_of_week = hour_data["day_of_week"]
-
-    if "start_time" in hour_data:
-        parts = hour_data["start_time"].split(":")
-        hour.start_time = time(int(parts[0]), int(parts[1]))
-
-    if "end_time" in hour_data:
-        parts = hour_data["end_time"].split(":")
-        hour.end_time = time(int(parts[0]), int(parts[1]))
+    if data.day_of_week is not None:
+        hour.day_of_week = data.day_of_week
+    if data.start_time is not None:
+        hour.start_time = time.fromisoformat(data.start_time)
+    if data.end_time is not None:
+        hour.end_time = time.fromisoformat(data.end_time)
 
     await db.commit()
     await db.refresh(hour)
-
-    return {
-        "id": hour.id,
-        "master_id": hour.master_id,
-        "day_of_week": hour.day_of_week,
-        "start_time": hour.start_time.isoformat(),
-        "end_time": hour.end_time.isoformat()
-    }
+    return hour
 
 
 # ─── Services CRUD (admin only) ──────────────────────────────────────────────
@@ -623,21 +509,10 @@ async def update_admin_service(
     db: AsyncSession = Depends(get_db)
 ):
     """Update a service belonging to the authenticated master."""
-    result = await db.execute(
-        select(Service).where(
-            Service.id == service_id,
-            Service.master_id == master.id
-        )
-    )
-    service = result.scalar_one_or_none()
-
-    if not service:
-        raise HTTPException(status_code=404, detail="Service not found or not yours")
-
+    service = await get_owned_or_404(db, Service, service_id, master.id)
     for field, value in data.model_dump().items():
         if value is not None:
             setattr(service, field, value)
-
     await db.commit()
     await db.refresh(service)
     return service
@@ -650,19 +525,8 @@ async def delete_admin_service(
     db: AsyncSession = Depends(get_db)
 ):
     """Soft-delete a service belonging to the authenticated master."""
-    result = await db.execute(
-        select(Service).where(
-            Service.id == service_id,
-            Service.master_id == master.id
-        )
-    )
-    service = result.scalar_one_or_none()
-
-    if not service:
-        raise HTTPException(status_code=404, detail="Service not found or not yours")
-
+    service = await get_owned_or_404(db, Service, service_id, master.id)
     await log_action(db, master.id, "delete", "service", service_id, service.name)
-
     service.is_active = False
     await db.commit()
     return {"detail": "Service deleted"}
@@ -709,13 +573,8 @@ async def delete_admin_client(
     if not appt_check.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Клиент не найден или не относится к вам")
 
-    result = await db.execute(
-        select(Client).where(Client.id == client_id)
-    )
-    client = result.scalar_one_or_none()
-
+    client = await get_or_404(db, Client, client_id)
     await log_action(db, master.id, "delete", "client", client_id, client.name)
-
     await db.delete(client)
     await db.commit()
     return {"detail": "Клиент удалён"}
@@ -762,13 +621,7 @@ async def update_admin_client(
     db: AsyncSession = Depends(get_db)
 ):
     """Update a client with duplicate check."""
-    result = await db.execute(
-        select(Client).where(Client.id == client_id)
-    )
-    client = result.scalar_one_or_none()
-
-    if not client:
-        raise HTTPException(status_code=404, detail="Клиент не найден")
+    client = await get_or_404(db, Client, client_id)
 
     # Check phone duplicate (if changed)
     if data.phone and data.phone != client.phone:
@@ -931,7 +784,6 @@ async def get_blocked_slots(
     db: AsyncSession = Depends(get_db)
 ):
     """Get blocked slots for the authenticated master."""
-    from app.models.blocked_slot import BlockedSlot
     result = await db.execute(
         select(BlockedSlot)
         .where(BlockedSlot.master_id == master.id)
@@ -958,16 +810,11 @@ async def create_blocked_slot(
     db: AsyncSession = Depends(get_db)
 ):
     """Block a time slot (no appointments allowed)."""
-    from app.models.blocked_slot import BlockedSlot
-
-    if data.master_id != master.id:
-        raise HTTPException(status_code=403, detail="Not your master")
-
     if data.start_dt >= data.end_dt:
         raise HTTPException(status_code=422, detail="start_dt must be before end_dt")
 
     slot = BlockedSlot(
-        master_id=data.master_id,
+        master_id=master.id,
         start_dt=data.start_dt,
         end_dt=data.end_dt,
         reason=data.reason
@@ -975,9 +822,7 @@ async def create_blocked_slot(
     db.add(slot)
     await db.commit()
     await db.refresh(slot)
-
     await log_action(db, master.id, "create", "blocked_slot", slot.id, f"Блокировка: {slot.start_dt} - {slot.end_dt}")
-
     return slot
 
 
@@ -988,21 +833,8 @@ async def delete_blocked_slot(
     db: AsyncSession = Depends(get_db)
 ):
     """Delete a blocked slot."""
-    from app.models.blocked_slot import BlockedSlot
-
-    result = await db.execute(
-        select(BlockedSlot).where(
-            BlockedSlot.id == slot_id,
-            BlockedSlot.master_id == master.id
-        )
-    )
-    slot = result.scalar_one_or_none()
-
-    if not slot:
-        raise HTTPException(status_code=404, detail="Blocked slot not found")
-
+    slot = await get_owned_or_404(db, BlockedSlot, slot_id, master.id)
     await log_action(db, master.id, "delete", "blocked_slot", slot_id)
-
     await db.delete(slot)
     await db.commit()
     return {"detail": "Blocked slot deleted"}
