@@ -541,14 +541,9 @@ async def get_admin_clients(
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get clients associated with the authenticated master's appointments (paginated)."""
-    subquery = (
-        select(Appointment.client_id)
-        .where(Appointment.master_id == master.id)
-    )
+    """Get all clients (paginated)."""
     result = await db.execute(
         select(Client)
-        .where(Client.id.in_(subquery))
         .order_by(Client.name)
         .offset(offset)
         .limit(limit)
@@ -749,14 +744,9 @@ async def export_clients_csv(
     master: Master = Depends(require_master),
     db: AsyncSession = Depends(get_db)
 ):
-    """Export clients to CSV."""
-    subquery = (
-        select(Appointment.client_id)
-        .where(Appointment.master_id == master.id)
-    )
+    """Export all clients to CSV."""
     result = await db.execute(
         select(Client)
-        .where(Client.id.in_(subquery))
         .order_by(Client.name)
     )
     clients = result.scalars().all()
