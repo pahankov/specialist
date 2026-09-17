@@ -36,5 +36,12 @@ class WorkingHourResponse(BaseModel):
     start_time: str
     end_time: str
 
+    @field_validator("start_time", "end_time", mode="before")
+    @classmethod
+    def time_to_str(cls, v):
+        if isinstance(v, time):
+            return v.isoformat()
+        return v
+
     class Config:
         from_attributes = True
