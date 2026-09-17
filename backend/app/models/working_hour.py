@@ -1,5 +1,6 @@
-from sqlalchemy import Column, Integer, String, Time, ForeignKey, Index
+from sqlalchemy import Column, Integer, String, Time, ForeignKey, Index, DateTime
 from sqlalchemy.orm import relationship
+from datetime import datetime
 from app.database import Base
 
 class WorkingHour(Base):
