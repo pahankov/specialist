@@ -10,7 +10,9 @@ function AdminLayout() {
     { path: '/admin/dashboard', label: '📊 Дашборд' },
     { path: '/admin/appointments', label: '📅 Записи' },
     { path: '/admin/services', label: '💇 Услуги' },
+    { path: '/admin/clients', label: '👥 Клиенты' },
     { path: '/admin/schedule', label: '🕐 Расписание' },
+    { path: '/admin/logs', label: '📋 Логи' },
   ]
   return (
     <div className="admin-layout">

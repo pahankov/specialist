@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { adminApi } from '../api/adminClient'
+import type { WorkingHour } from '../api/types'
 
 const statusConfig: Record<string, { label: string; bg: string; text: string }> = {
   free: { label: 'Свободно', bg: '#e0e0e0', text: '#666' },
@@ -11,15 +12,47 @@ const statusConfig: Record<string, { label: string; bg: string; text: string }> 
 
 function SchedulePage() {
   const [schedule, setSchedule] = useState<Record<number, { start: number; end: number }>>({})
+  const [workingHours, setWorkingHours] = useState<WorkingHour[]>([])
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [appointments, setAppointments] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [successMsg, setSuccessMsg] = useState('')
+  const [showForm, setShowForm] = useState(false)
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [dayOfWeek, setDayOfWeek] = useState(0)
+  const [startTime, setStartTime] = useState('10:00')
+  const [endTime, setEndTime] = useState('18:00')
+  const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [bookingClients, setBookingClients] = useState<any[]>([])
+  const [bookingLoading, setBookingLoading] = useState(false)
+  const [bookingForm, setBookingForm] = useState<{
+    open: boolean
+    date: Date | null
+    hour: number | null
+    clientId: number | null
+    serviceId: number | null
+    status: string
+    notes: string
+  }>({ open: false, date: null, hour: null, clientId: null, serviceId: null, status: 'pending', notes: '' })
+  const [blockedSlots, setBlockedSlots] = useState<any[]>([])
+  const [showBlockForm, setShowBlockForm] = useState(false)
+  const [blockForm, setBlockForm] = useState<{
+    date: string
+    startTime: string
+    endTime: string
+    reason: string
+  }>({ date: '', startTime: '09:00', endTime: '17:00', reason: '' })
+  const [activeHours, setActiveHours] = useState<Record<string, boolean>>({})
+  const [clientSearch, setClientSearch] = useState('')
+  const [serviceSearch, setServiceSearch] = useState('')
+  const [allServices, setAllServices] = useState<any[]>([])
 
   const fetchSchedule = async () => {
     try {
       const resp = await adminApi.getWorkingHours()
+      setWorkingHours(resp.data)
       const map: Record<number, { start: number; end: number }> = {}
       resp.data.forEach((h: any) => {
         const startHour = parseInt(h.start_time?.slice(0, 2) || '10')
@@ -39,6 +72,181 @@ function SchedulePage() {
     }
   }
 
+  const fetchBlockedSlots = async () => {
+    try {
+      const resp = await adminApi.getBlockedSlots()
+      setBlockedSlots(resp.data)
+    } catch {
+      setBlockedSlots([])
+    }
+  }
+
+  useEffect(() => { fetchSchedule() }, [])
+  useEffect(() => { fetchAppointmentsForMonth() }, [currentMonth])
+  useEffect(() => { fetchBlockedSlots() }, [])
+  useEffect(() => {
+    if (bookingForm.open) {
+      adminApi.getClients()
+        .then(r => setBookingClients(r.data))
+        .catch(() => setBookingClients([]))
+      adminApi.getAllServices()
+        .then(r => setAllServices(r.data))
+        .catch(() => setAllServices([]))
+    }
+  }, [bookingForm.open])
+
+  const toggleAllHours = (checked: boolean) => {
+    const dateStr = selectedDate?.toISOString().split('T')[0]
+    if (!dateStr) return
+    const newActive: Record<string, boolean> = {}
+    const pyDow = selectedDate ? (selectedDate.getDay() + 6) % 7 : 0
+    const hours = schedule[pyDow]
+    if (hours) {
+      for (let h = hours.start; h < hours.end; h++) {
+        newActive[`${dateStr}-${h}`] = checked
+      }
+    }
+    setActiveHours(prev => ({ ...prev, ...newActive }))
+  }
+
+  const isAllHoursActive = () => {
+    const dateStr = selectedDate?.toISOString().split('T')[0]
+    if (!dateStr) return false
+    const pyDow = selectedDate ? (selectedDate.getDay() + 6) % 7 : 0
+    const hours = schedule[pyDow]
+    if (!hours) return false
+    for (let h = hours.start; h < hours.end; h++) {
+      if (!activeHours[`${dateStr}-${h}`]) return false
+    }
+    return hours.end > hours.start
+  }
+
+  const filteredClients = clientSearch
+    ? bookingClients.filter((c: any) =>
+        c.name.toLowerCase().includes(clientSearch.toLowerCase()) ||
+        c.phone.includes(clientSearch)
+      )
+    : bookingClients
+
+  const filteredServices = serviceSearch
+    ? allServices.filter((s: any) =>
+        s.name.toLowerCase().includes(serviceSearch.toLowerCase())
+      )
+    : allServices
+
+  const clearSuccess = () => { setSuccessMsg(''); setError('') }
+  const resetForm = () => { setDayOfWeek(0); setStartTime('10:00'); setEndTime('18:00'); setEditingId(null); setShowForm(false) }
+
+  const showError = (err: any) => {
+    const detail = err.response?.data?.detail
+    if (typeof detail === 'string') setError(detail)
+    else if (detail && typeof detail === 'object') setError(JSON.stringify(detail))
+    else setError('Произошла ошибка')
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    clearSuccess()
+    try {
+      if (editingId) {
+        await adminApi.updateWorkingHour(editingId, { day_of_week: dayOfWeek, start_time: startTime, end_time: endTime })
+        setSuccessMsg('Расписание обновлено')
+      } else {
+        await adminApi.createWorkingHour({ day_of_week: dayOfWeek, start_time: startTime, end_time: endTime })
+        setSuccessMsg('Расписание создано')
+      }
+      resetForm(); fetchSchedule()
+    } catch (err: any) { showError(err) }
+  }
+
+  const handleEdit = (wh: WorkingHour) => {
+    setDayOfWeek(wh.day_of_week)
+    setStartTime(wh.start_time || '10:00')
+    setEndTime(wh.end_time || '18:00')
+    setEditingId(wh.id)
+    setShowForm(true)
+    clearSuccess()
+  }
+
+  const handleDelete = async (id: number) => {
+    clearSuccess()
+    try {
+      await adminApi.deleteWorkingHour(id)
+      setSuccessMsg('Расписание удалено')
+      fetchSchedule()
+    } catch (err: any) { showError(err) }
+    finally { setDeletingId(null) }
+  }
+
+  const openBookingForm = (date: Date, hour: number) => {
+    setBookingForm({ open: true, date, hour, clientId: null, serviceId: null, status: 'pending', notes: '' })
+  }
+
+  const closeBookingForm = () => {
+    setBookingForm({ open: false, date: null, hour: null, clientId: null, serviceId: null, status: 'pending', notes: '' })
+    setBookingClients([])
+  }
+
+  const handleBookAppointment = async () => {
+    if (!bookingForm.date || bookingForm.hour === null || !bookingForm.clientId || !bookingForm.serviceId) return
+    setBookingLoading(true)
+    try {
+      const dateStr = bookingForm.date.toISOString().split('T')[0]
+      const hourStr = String(bookingForm.hour).padStart(2, '0')
+      const appointmentDate = `${dateStr}T${hourStr}:00:00`
+      await adminApi.bookAppointment({
+        client_id: bookingForm.clientId,
+        service_id: bookingForm.serviceId,
+        appointment_date: appointmentDate,
+        status: bookingForm.status,
+        notes: bookingForm.notes || undefined
+      })
+      setSuccessMsg('Запись создана')
+      closeBookingForm()
+      fetchAppointmentsForMonth()
+    } catch (err: any) {
+      showError(err)
+    } finally {
+      setBookingLoading(false)
+    }
+  }
+
+  const handleBlockSlot = async () => {
+    if (!blockForm.date || !blockForm.startTime || !blockForm.endTime) return
+    try {
+      const [sh, sm] = blockForm.startTime.split(':').map(Number)
+      const [eh, em] = blockForm.endTime.split(':').map(Number)
+      const startDt = new Date(blockForm.date)
+      startDt.setHours(sh, sm, 0, 0)
+      const endDt = new Date(blockForm.date)
+      endDt.setHours(eh, em, 0, 0)
+      await adminApi.createBlockedSlot({
+        master_id: 1,
+        start_dt: startDt.toISOString(),
+        end_dt: endDt.toISOString(),
+        reason: blockForm.reason || undefined
+      })
+      setSuccessMsg('Время заблокировано')
+      setShowBlockForm(false)
+      setBlockForm({ date: '', startTime: '09:00', endTime: '17:00', reason: '' })
+      fetchBlockedSlots()
+    } catch (err: any) {
+      showError(err)
+    }
+  }
+
+  const toggleHour = (dateStr: string, hour: number) => {
+    const key = `${dateStr}-${hour}`
+    setActiveHours(prev => ({ ...prev, [key]: !prev[key] }))
+  }
+
+  const isHourActive = (date: Date, hour: number) => {
+    const dateStr = date.toISOString().split('T')[0]
+    return !!activeHours[`${dateStr}-${hour}`]
+  }
+
+  const dayLabels = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье']
+
   const fetchAppointmentsForMonth = async () => {
     const now = new Date()
     const year = now.getFullYear()
@@ -53,9 +261,6 @@ function SchedulePage() {
       setAppointments([])
     }
   }
-
-  useEffect(() => { fetchSchedule() }, [])
-  useEffect(() => { fetchAppointmentsForMonth() }, [])
 
   const getMonthDays = (date: Date) => {
     const year = date.getFullYear()
@@ -226,6 +431,18 @@ function SchedulePage() {
           </h3>
           {isDayActive(selectedDate) ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {/* Global checkbox */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={isAllHoursActive()}
+                  onChange={(e) => toggleAllHours(e.target.checked)}
+                  style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#667eea' }}
+                />
+                <span style={{ fontSize: 14, fontWeight: 600, color: '#333' }}>
+                  Выбрать все часы
+                </span>
+              </div>
               {(() => {
                 const jsDow = selectedDate.getDay()
                 const pyDow = (jsDow + 6) % 7
@@ -236,9 +453,17 @@ function SchedulePage() {
                   const cfg = statusConfig[status]
                   const slotsForHour = getAppointmentsForSlot(selectedDate, h)
                   const past = isSlotPast(selectedDate, h)
+                  const hourActive = isHourActive(selectedDate, h)
 
                   slots.push(
                     <div key={h} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 16px', borderRadius: 8, border: `2px solid ${cfg.bg}`, background: past ? '#f5f5f5' : cfg.bg, opacity: past ? 0.5 : 1 }}>
+                      <input
+                        type="checkbox"
+                        checked={hourActive}
+                        onChange={() => toggleHour(selectedDate!.toISOString().split('T')[0], h)}
+                        disabled={past}
+                        style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#667eea' }}
+                      />
                       <div style={{ fontSize: 16, fontWeight: 700, color: past ? '#bbb' : '#333', minWidth: 60 }}>{formatHour(h)}</div>
                       {slotsForHour.length > 0 ? slotsForHour.map(a => {
                         const sc = statusConfig[a.status]
@@ -252,7 +477,20 @@ function SchedulePage() {
                           </div>
                         )
                       }) : (
-                        <span style={{ flex: 1, color: past ? '#bbb' : '#999', fontSize: 13 }}>{past ? 'Прошёл' : 'Свободно'}</span>
+                        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <span style={{ color: past ? '#bbb' : '#999', fontSize: 13 }}>{past ? 'Прошёл' : 'Свободно'}</span>
+                          {!past && hourActive && (
+                            <button
+                              onClick={() => openBookingForm(selectedDate!, h)}
+                              style={{ background: '#667eea', color: 'white', border: 'none', padding: '4px 12px', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+                            >
+                              + Записать
+                            </button>
+                          )}
+                          {!past && !hourActive && (
+                            <span style={{ color: '#999', fontSize: 12, fontStyle: 'italic' }}>Неактивен</span>
+                          )}
+                        </div>
                       )}
                     </div>
                   )
@@ -266,7 +504,243 @@ function SchedulePage() {
         </div>
       )}
 
-      {/* Summary */}
+      {/* Success/Error messages */}
+      {successMsg && <div style={{ background: '#e8f5e9', color: '#2e7d32', padding: '12px 16px', borderRadius: 8, marginBottom: 20 }}>{successMsg}</div>}
+      {error && <div style={{ background: '#fee2e2', color: '#991b1b', padding: '12px 16px', borderRadius: 8, marginBottom: 20 }}>{error}</div>}
+
+      {/* Manual booking modal */}
+      {bookingForm.open && (
+        <div className="modal-overlay" onClick={closeBookingForm}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 450, maxHeight: '80vh', overflow: 'auto' }}>
+            <h3>📅 Записать клиента</h3>
+            <p style={{ color: '#666', fontSize: 14, marginBottom: 16 }}>
+              {bookingForm.date?.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })} в {formatHour(bookingForm.hour!)}
+            </p>
+            <div className="form-group">
+              <label>Клиент</label>
+              <input
+                type="text"
+                value={clientSearch}
+                onChange={(e) => setClientSearch(e.target.value)}
+                placeholder="Начните вводить имя или телефон..."
+                style={{ width: '100%', padding: 10, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14, marginBottom: 8 }}
+              />
+              <div style={{ maxHeight: 200, overflow: 'auto', border: '2px solid #e0e0e0', borderRadius: 8 }}>
+                <select
+                  value={bookingForm.clientId || ''}
+                  onChange={(e) => setBookingForm({ ...bookingForm, clientId: +e.target.value })}
+                  style={{ width: '100%', padding: 10, border: 'none', borderRadius: 0, fontSize: 14, background: 'white' }}
+                >
+                  <option value="">Выберите клиента</option>
+                  {filteredClients.map((c: any) => (
+                    <option key={c.id} value={c.id}>{c.name} ({c.phone})</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="form-group">
+              <label>Услуга</label>
+              <input
+                type="text"
+                value={serviceSearch}
+                onChange={(e) => setServiceSearch(e.target.value)}
+                placeholder="Начните вводить название..."
+                style={{ width: '100%', padding: 10, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14, marginBottom: 8 }}
+              />
+              <div style={{ maxHeight: 200, overflow: 'auto', border: '2px solid #e0e0e0', borderRadius: 8 }}>
+                <select
+                  value={bookingForm.serviceId || ''}
+                  onChange={(e) => setBookingForm({ ...bookingForm, serviceId: e.target.value ? parseInt(e.target.value) : null, notes: bookingForm.notes })}
+                  style={{ width: '100%', padding: 10, border: 'none', borderRadius: 0, fontSize: 14, background: 'white' }}
+                >
+                  <option value="">Выберите услугу</option>
+                  {filteredServices.map((s: any) => (
+                    <option key={s.id} value={s.id}>{s.name} — {s.duration_minutes} мин, {Number(s.price).toLocaleString('ru-RU')} ₽</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="form-group">
+              <label>Статус</label>
+              <select
+                value={bookingForm.status}
+                onChange={(e) => setBookingForm({ ...bookingForm, status: e.target.value })}
+                style={{ width: '100%', padding: 10, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }}
+              >
+                <option value="pending">⏳ Ожидает</option>
+                <option value="confirmed">✅ Подтверждена</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Примечания</label>
+              <textarea
+                value={bookingForm.notes}
+                onChange={(e) => setBookingForm({ ...bookingForm, notes: e.target.value })}
+                placeholder="Доп. информация..."
+                rows={2}
+                style={{ width: '100%', padding: 10, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14, resize: 'vertical' }}
+              />
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-ghost" onClick={closeBookingForm}>Отмена</button>
+              <button
+                className="btn btn-primary"
+                onClick={handleBookAppointment}
+                disabled={!bookingForm.clientId || !bookingForm.serviceId || bookingLoading}
+              >
+                {bookingLoading ? 'Запись...' : 'Записать'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Working hours management */}
+      {showForm && (
+        <div style={{ marginBottom: 24, padding: 20, background: 'white', borderRadius: 12, border: '1px solid #e0e0e0' }}>
+          <h3 style={{ margin: '0 0 16px', fontSize: 18, color: '#1a1a2e' }}>{editingId ? 'Редактировать расписание' : 'Новое расписание'}</h3>
+          <form onSubmit={handleSubmit}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 16 }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: 6, fontWeight: 600, fontSize: 13, color: '#333' }}>День недели</label>
+                <select value={dayOfWeek} onChange={(e) => setDayOfWeek(+e.target.value)} style={{ width: '100%', padding: '10px 14px', border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }}>
+                  {dayLabels.map((label, i) => <option key={i} value={i}>{label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: 6, fontWeight: 600, fontSize: 13, color: '#333' }}>Начало</label>
+                <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} required style={{ width: '100%', padding: '10px 14px', border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: 6, fontWeight: 600, fontSize: 13, color: '#333' }}>Конец</label>
+                <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} required style={{ width: '100%', padding: '10px 14px', border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }} />
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button type="submit" style={{ background: '#667eea', color: 'white', border: 'none', padding: '10px 24px', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>
+                {editingId ? 'Сохранить' : 'Создать'}
+              </button>
+              <button type="button" onClick={resetForm} style={{ background: '#f0f0f0', color: '#333', border: '1px solid #ddd', padding: '10px 24px', borderRadius: 8, cursor: 'pointer', fontWeight: 500 }}>
+                Отмена
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      <div style={{ marginBottom: 24, padding: 20, background: 'white', borderRadius: 12, border: '1px solid #e0e0e0' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <h3 style={{ margin: 0, fontSize: 18, color: '#1a1a2e' }}>📋 Рабочие часы по дням</h3>
+          <button onClick={() => setShowForm(true)} style={{ background: '#667eea', color: 'white', border: 'none', padding: '8px 16px', borderRadius: 8, cursor: 'pointer', fontWeight: 500 }}>+ Добавить</button>
+        </div>
+        {workingHours.length === 0 ? (
+          <p style={{ color: '#999', textAlign: 'center', padding: '20px 0' }}>Нет рабочих часов</p>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid #f0f0f0' }}>
+                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: '#666', fontSize: 13, textTransform: 'uppercase' }}>День</th>
+                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: '#666', fontSize: 13, textTransform: 'uppercase' }}>Начало</th>
+                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: '#666', fontSize: 13, textTransform: 'uppercase' }}>Конец</th>
+                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: '#666', fontSize: 13, textTransform: 'uppercase' }}>Действия</th>
+              </tr>
+            </thead>
+            <tbody>
+              {workingHours.map(wh => (
+                <tr key={wh.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                  <td style={{ padding: '12px 16px', fontSize: 14, color: '#333', fontWeight: 500 }}>{dayLabels[wh.day_of_week]}</td>
+                  <td style={{ padding: '12px 16px', fontSize: 14, color: '#333' }}>{wh.start_time || '—'}</td>
+                  <td style={{ padding: '12px 16px', fontSize: 14, color: '#333' }}>{wh.end_time || '—'}</td>
+                  <td style={{ padding: '12px 16px', fontSize: 14, color: '#333' }}>
+                    <button onClick={() => handleEdit(wh)} style={{ background: '#fef3c7', color: '#92400e', border: 'none', padding: '6px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 13, marginRight: 8 }}>✏️</button>
+                    {deletingId === wh.id ? (
+                      <>
+                        <button onClick={() => handleDelete(wh.id)} style={{ background: '#dc2626', color: 'white', border: 'none', padding: '6px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 13, marginRight: 8 }}>✓</button>
+                        <button onClick={() => setDeletingId(null)} style={{ background: '#f0f0f0', color: '#333', border: '1px solid #ddd', padding: '6px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>Отмена</button>
+                      </>
+                    ) : (
+                      <button onClick={() => setDeletingId(wh.id)} style={{ background: '#fee2e2', color: '#991b1b', border: 'none', padding: '6px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>🗑️</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Blocked Slots */}
+      <div style={{ marginBottom: 24, padding: 20, background: 'white', borderRadius: 12, border: '1px solid #e0e0e0' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <h3 style={{ margin: 0, fontSize: 18, color: '#1a1a2e' }}>🚫 Заблокированные слоты</h3>
+          <button onClick={() => setShowBlockForm(true)} style={{ background: '#667eea', color: 'white', border: 'none', padding: '8px 16px', borderRadius: 8, cursor: 'pointer', fontWeight: 500 }}>+ Заблокировать</button>
+        </div>
+        {blockedSlots.length === 0 ? (
+          <p style={{ color: '#999', textAlign: 'center', padding: '20px 0' }}>Нет заблокированных слотов</p>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid #f0f0f0' }}>
+                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: '#666', fontSize: 13, textTransform: 'uppercase' }}>Начало</th>
+                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: '#666', fontSize: 13, textTransform: 'uppercase' }}>Конец</th>
+                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: '#666', fontSize: 13, textTransform: 'uppercase' }}>Причина</th>
+                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: '#666', fontSize: 13, textTransform: 'uppercase' }}>Действия</th>
+              </tr>
+            </thead>
+            <tbody>
+              {blockedSlots.map((slot: any) => (
+                <tr key={slot.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                  <td style={{ padding: '12px 16px', fontSize: 14, color: '#333' }}>
+                    {new Date(slot.start_dt).toLocaleString('ru-RU')}
+                  </td>
+                  <td style={{ padding: '12px 16px', fontSize: 14, color: '#333' }}>
+                    {new Date(slot.end_dt).toLocaleString('ru-RU')}
+                  </td>
+                  <td style={{ padding: '12px 16px', fontSize: 14, color: '#666' }}>{slot.reason || '—'}</td>
+                  <td style={{ padding: '12px 16px', fontSize: 14, color: '#333' }}>
+                    <button onClick={() => {
+                      if (confirm('Удалить блокировку?')) {
+                        adminApi.deleteBlockedSlot(slot.id).then(() => fetchBlockedSlots())
+                      }
+                    }} style={{ background: '#fee2e2', color: '#991b1b', border: 'none', padding: '6px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>🗑️</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Block slot form */}
+      {showBlockForm && (
+        <div style={{ marginBottom: 24, padding: 20, background: 'white', borderRadius: 12, border: '1px solid #e0e0e0' }}>
+          <h3 style={{ margin: '0 0 16px', fontSize: 18, color: '#1a1a2e' }}>🚫 Заблокировать время</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 16 }}>
+            <div>
+              <label style={{ display: 'block', marginBottom: 6, fontWeight: 600, fontSize: 13, color: '#333' }}>Дата</label>
+              <input type="date" value={blockForm.date} onChange={(e) => setBlockForm({ ...blockForm, date: e.target.value })} required style={{ width: '100%', padding: '10px 14px', border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }} />
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: 6, fontWeight: 600, fontSize: 13, color: '#333' }}>Начало</label>
+              <input type="time" value={blockForm.startTime} onChange={(e) => setBlockForm({ ...blockForm, startTime: e.target.value })} required style={{ width: '100%', padding: '10px 14px', border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }} />
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: 6, fontWeight: 600, fontSize: 13, color: '#333' }}>Конец</label>
+              <input type="time" value={blockForm.endTime} onChange={(e) => setBlockForm({ ...blockForm, endTime: e.target.value })} required style={{ width: '100%', padding: '10px 14px', border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }} />
+            </div>
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', marginBottom: 6, fontWeight: 600, fontSize: 13, color: '#333' }}>Причина</label>
+            <input value={blockForm.reason} onChange={(e) => setBlockForm({ ...blockForm, reason: e.target.value })} placeholder="Например: выходной, отпуск" style={{ width: '100%', padding: '10px 14px', border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }} />
+          </div>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <button onClick={handleBlockSlot} style={{ background: '#667eea', color: 'white', border: 'none', padding: '10px 24px', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>Заблокировать</button>
+            <button onClick={() => setShowBlockForm(false)} style={{ background: '#f0f0f0', color: '#333', border: '1px solid #ddd', padding: '10px 24px', borderRadius: 8, cursor: 'pointer', fontWeight: 500 }}>Отмена</button>
+          </div>
+        </div>
+      )}
+
+      {/* Summary - moved to bottom */}
       <div style={{ padding: 20, background: 'white', borderRadius: 12, border: '1px solid #e0e0e0' }}>
         <h3 style={{ margin: '0 0 16px', fontSize: 18, color: '#1a1a2e' }}>📊 Статистика недели</h3>
         <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>

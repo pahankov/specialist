@@ -60,7 +60,7 @@ class TestLogin:
             "email": test_master_data["email"],
             "password": test_master_data["password"]
         }
-        resp = await client.post("/api/v1/auth/login", params=login_data)
+        resp = await client.post("/api/v1/auth/login", json=login_data)
         assert resp.status_code == 200
         data = resp.json()
 
@@ -76,7 +76,7 @@ class TestLogin:
             "email": test_master_data["email"],
             "password": "WrongPassword123"
         }
-        resp = await client.post("/api/v1/auth/login", params=login_data)
+        resp = await client.post("/api/v1/auth/login", json=login_data)
         assert resp.status_code == 401
         assert "Incorrect" in resp.json()["detail"]
 
@@ -86,10 +86,10 @@ class TestLogin:
             "email": "nonexistent@example.com",
             "password": "AnyPassword"
         }
-        resp = await client.post("/api/v1/auth/login", params=login_data)
+        resp = await client.post("/api/v1/auth/login", json=login_data)
         assert resp.status_code == 401
 
     async def test_login_missing_fields(self, client):
         """Login fails when fields are missing."""
-        resp = await client.post("/api/v1/auth/login", params={})
+        resp = await client.post("/api/v1/auth/login", json={})
         assert resp.status_code == 422

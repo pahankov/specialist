@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { servicesApi, appointmentsApi } from '../api/client'
-import type { Service, Appointment } from '../api/types'
+import type { Service } from '../api/types'
 import './BookingPage.css'
 
 function BookingPage() {

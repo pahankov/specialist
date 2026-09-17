@@ -14,4 +14,15 @@
 .btn-sm { padding: 6px 12px; font-size: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: 500; }
 .btn-confirm { background: #d1fae5; color: #065f46; }
 .btn-cancel { background: #fee2e2; color: #991b1b; }
+.btn-complete { background: #dbeafe; color: #1e40af; }
+.btn-delete { background: #fee2e2; color: #991b1b; border: none; padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 14px; }
 .text-muted { color: #999; font-size: 13px; }
+.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+.modal { background: white; border-radius: 16px; padding: 32px; max-width: 400px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+.modal h3 { margin: 0 0 8px; font-size: 20px; color: #1a1a2e; }
+.modal p { margin: 0 0 24px; color: #666; font-size: 15px; }
+.modal-actions { display: flex; gap: 12px; justify-content: flex-end; }
+.modal-actions .btn { min-width: 100px; }
+.modal .btn-ghost { background: #f0f0f0; color: #333; border: 1px solid #ddd; padding: 8px 20px; border-radius: 8px; font-weight: 500; }
+.modal .btn-delete { background: #dc2626; color: white; padding: 8px 20px; border-radius: 8px; font-weight: 500; }
+.form-actions .btn-ghost { background: #f0f0f0; color: #333; border: 1px solid #ddd; padding: 8px 20px; border-radius: 8px; font-weight: 500; }

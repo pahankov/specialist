@@ -10,7 +10,7 @@ class Appointment(Base):
     service_id = Column(Integer, ForeignKey("services.id"), nullable=False)
     client_id = Column(Integer, ForeignKey("clients.id"), nullable=False)
     appointment_date = Column(DateTime, nullable=False)
-    status = Column(String(20), default="confirmed")
+    status = Column(String(20), default="pending")
     notes = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
     master = relationship("Master", back_populates="appointments")

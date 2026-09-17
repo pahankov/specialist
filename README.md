@@ -56,7 +56,7 @@ sugar-booking/
 ├── backend/
 │   ├── app/
 │   │   ├── api/              # REST endpoints (auth, masters, services, appointments, clients, working_hours, admin)
-│   │   ├── models/           # SQLAlchemy ORM models (5 сущностей)
+│   │   ├── models/           # SQLAlchemy ORM models (7 сущностей)
 │   │   ├── schemas/          # Pydantic schemas (request/response validation)
 │   │   ├── config.py         # Настройки (SQLite, JWT)
 │   │   ├── database.py       # Подключение к БД (aiosqlite)
@@ -67,7 +67,7 @@ sugar-booking/
 ├── frontend/
 │   ├── src/
 │   │   ├── api/              # API клиент (axios)
-│   │   ├── pages/            # 8 страниц (публичные + админ-панель)
+│   │   ├── pages/            # 10 страниц (публичные + админ-панель)
 │   │   ├── App.tsx           # Роутинг
 │   │   └── main.tsx          # Точка входа
 │   ├── package.json
@@ -95,22 +95,30 @@ sugar-booking/
 ### ✅ Backend
 - Регистрация и аутентификация мастера (JWT)
 - CRUD мастеров (создание, чтение, обновление, удаление)
-- CRUD услуг
-- CRUD записей (создание, отмена)
+- CRUD услуг (создание, чтение, обновление, soft-delete)
+- CRUD записей (создание, подтверждение, завершение, отмена, удаление)
+- CRUD клиентов (создание, чтение, обновление, удаление)
+- CRUD заблокированных слотов (блокировка времени)
+- CRUD рабочего расписания
 - Публичная запись без авторизации
+- Админская запись с выбором клиента из БД и проверкой конфликтов
 - Расчёт доступных дней и слотов
 - Управление клиентами (автоматическое создание при записи)
-- Управление рабочим расписанием
+- Журнал действий (audit logs) — фиксация всех операций
+- Экспорт записей и клиентов в CSV
+- Пагинация списка записей
 - Swagger UI документация (`/docs`)
 
 ### ✅ Frontend
 - Главная страница (список мастеров и услуг)
 - Страница бронирования
-- Админ-панель (8 страниц):
+- Админ-панель (10 страниц):
   - Дашборд — статистика записей, клиентов, услуг, доход
-  - Записи — фильтрация по статусу, подтверждение, отмена
-  - Услуги — создание, редактирование, удаление
+  - Записи — фильтрация по статусу, пагинация, подтверждение, завершение, отмена, удаление
+  - Услуги — создание, редактирование, soft-delete
+  - Клиенты — создание, редактирование, удаление, экспорт CSV
   - Расписание — управление рабочими часами
+  - Логи — журнал всех действий с фильтрацией и пагинацией
 - Адаптивный дизайн
 
 ### ✅ Тесты
@@ -172,26 +180,46 @@ sugar-booking/
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
 | `GET` | `/admin/dashboard` | Статистика (записи, клиенты, доход) |
-| `GET` | `/admin/appointments` | Список записей |
+| `GET` | `/admin/appointments` | Список записей (пагинация, фильтрация) |
+| `POST` | `/admin/appointments` | Создать запись |
+| `POST` | `/admin/appointments/book` | Админская запись (выбор клиента из БД) |
+| `GET` | `/admin/appointments/by-date` | Записи по дате |
 | `PATCH` | `/admin/appointments/{id}/confirm` | Подтвердить запись |
 | `PATCH` | `/admin/appointments/{id}/cancel` | Отменить запись |
-| `GET` | `/admin/appointments/by-date` | Записи по дате |
+| `PATCH` | `/admin/appointments/{id}/complete` | Завершить запись |
+| `DELETE` | `/admin/appointments/{id}` | Удалить запись |
+| `GET` | `/admin/services` | Список активных услуг |
+| `GET` | `/admin/services/all` | Список всех услуг (включая неактивные) |
 | `POST` | `/admin/services` | Создать услугу |
 | `PATCH` | `/admin/services/{id}` | Обновить услугу |
-| `DELETE` | `/admin/services/{id}` | Удалить услугу |
+| `DELETE` | `/admin/services/{id}` | Soft-delete услуги |
+| `GET` | `/admin/clients` | Список клиентов |
+| `POST` | `/admin/clients` | Создать клиента |
+| `PATCH` | `/admin/clients/{id}` | Обновить клиента |
+| `DELETE` | `/admin/clients/{id}` | Удалить клиента |
 | `GET` | `/admin/working-hours` | Расписание |
 | `POST` | `/admin/working-hours` | Добавить рабочий день |
+| `PATCH` | `/admin/working-hours/{id}` | Обновить рабочий день |
 | `DELETE` | `/admin/working-hours/{id}` | Удалить рабочий день |
+| `GET` | `/admin/audit-logs` | Журнал действий (пагинация, фильтрация) |
+| `GET` | `/admin/export/appointments` | Экспорт записей в CSV |
+| `GET` | `/admin/export/clients` | Экспорт клиентов в CSV |
+| `GET` | `/admin/blocked-slots` | Заблокированные слоты |
+| `POST` | `/admin/blocked-slots` | Заблокировать слот |
+| `DELETE` | `/admin/blocked-slots/{id}` | Убрать блокировку |
 
 ## 🔐 Админ-панель
 
 Вход: `/admin/login` — используйте email и пароль зарегистрированного мастера.
 
 Функции:
-- **Дашборд** — статистика записей, клиентов, услуг, доход
-- **Записи** — фильтрация по статусу, подтверждение, отмена
-- **Услуги** — создание, редактирование, удаление
-- **Расписание** — управление рабочими часами
+- **Дашборд** — статистика записей, клиентов, услуг, доход, ближайшие записи
+- **Записи** — фильтрация по статусу, пагинация, подтверждение, завершение, отмена (с причиной), удаление
+- **Услуги** — создание, редактирование, soft-delete (неактивные скрыты)
+- **Клиенты** — создание, редактирование, удаление, экспорт CSV
+- **Расписание** — управление рабочими часами (создание, обновление, удаление)
+- **Логи** — журнал всех действий с фильтрацией по типу и пагинацией
+- **Заблокированные слоты** — блокировка времени (через API)
 
 ## 🗄️ База данных
 
@@ -203,10 +231,14 @@ sugar-booking/
 
 ```
 Master (id, name, email, phone, telegram_username, hashed_password, ...)
-  ├─ 1:N ──> Service (id, master_id, name, description, duration_minutes, price)
+  ├─ 1:N ──> Service (id, master_id, name, description, duration_minutes, price, is_active)
   │           └─ 1:N ──> Appointment
   ├─ 1:N ──> Appointment (id, master_id, service_id, client_id, appointment_date, status, notes)
+  │           └─ N:1 ──> Client
+  │           └─ N:1 ──> Service
   ├─ 1:N ──> WorkingHour (id, master_id, day_of_week, start_time, end_time)
+  ├─ 1:N ──> AuditLog (id, master_id, action, entity_type, entity_id, details, ip_address, created_at)
+  └─ 1:N ──> BlockedSlot (id, master_id, start_dt, end_dt, reason, created_at)
 
 Client (id, name, phone, email, created_at)
   └─ 1:N ──> Appointment
@@ -291,6 +323,17 @@ curl -X POST http://localhost:8000/api/v1/appointments/public \
 
 ## 📚 История версий
 
+### [0.5.0] — 2026-09-17
+- **Клиенты:** полный CRUD в админ-панели (создание, редактирование, удаление, валидация дублей)
+- **Журнал действий:** AuditLog — фиксация всех операций с фильтрацией и пагинацией
+- **Заблокированные слоты:** блокировка времени, когда записи невозможны
+- **Экспорт CSV:** записей и клиентов из админ-панели
+- **Завершение записей:** новый статус `completed`
+- **Админская запись:** создание записи из админ-панели с выбором клиента и проверкой конфликтов
+- **Пагинация:** список записей (limit/offset)
+- **Soft-delete услуг:** услуги скрываются вместо удаления
+- **Frontend:** ClientsPage, LogsPage, обновление AppointmentsPage и ServicesPage
+
 ### [0.4.0] — 2026-09-15
 - **Админ-панель:** JWT-аутентификация, дашборд, управление записями/услугами/расписанием
 - **Frontend:** LoginPage, AdminLayout, DashboardPage, AppointmentsPage, ServicesPage, SchedulePage
@@ -317,6 +360,12 @@ curl -X POST http://localhost:8000/api/v1/appointments/public \
 - CI/CD (GitHub Actions)
 - Frontend-тесты (Vitest)
 - Деплой (Nginx, HTTPS)
+
+### В планах
+- Множественные мастера с разными графиками
+- Отзывы и рейтинги
+- Уведомления (Telegram/email)
+- Отчёты и аналитика
 
 ---
 

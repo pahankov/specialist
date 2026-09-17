@@ -10,11 +10,21 @@ function DashboardPage() {
   const [error, setError] = useState('')
 
   useEffect(() => {
+    setLoading(true)
     adminApi.getDashboard()
-      .then(r => setStats(r.data))
+      .then(r => {
+        console.log('Dashboard API response:', r.data)
+        setStats(r.data)
+      })
       .catch((err: any) => {
-        if (err.response?.status === 401) { localStorage.removeItem('access_token'); window.location.href = '/admin/login' }
-        else setError('Ошибка загрузки')
+        console.error('Dashboard error:', err)
+        if (err.response?.status === 401) {
+          localStorage.removeItem('access_token')
+          window.location.href = '/admin/login'
+        } else {
+          const detail = err.response?.data?.detail || err.message || 'Неизвестная ошибка'
+          setError(`Ошибка загрузки: ${detail}`)
+        }
       })
       .finally(() => setLoading(false))
   }, [])
@@ -44,8 +54,15 @@ function DashboardPage() {
         <div className="card">
           <div className="card-header"><h3>Ближайшие записи</h3><Link to="/admin/appointments" className="link">Все →</Link></div>
           <div className="appointment-list">
-            {stats.upcoming_appointments.slice(0, 5).map(a => (<div key={a.id} className="appointment-row"><span className="appt-date">{new Date(a.appointment_date).toLocaleDateString('ru-RU')}</span><span className={`appt-status status-${a.status}`}>{statusLabels[a.status] || a.status}</span></div>))}
-            {stats.upcoming_appointments.length === 0 && <p className="empty-state">Нет ближайших записей</p>}
+            {stats.recent_appointments.slice(0, 5).map(a => (<div key={a.id} className="appointment-row">
+              <div className="appt-info">
+                <span className="appt-client">{a.client_name || '—'}</span>
+                <span className="appt-service">{a.service_name || '—'}</span>
+              </div>
+              <span className="appt-date">{new Date(a.appointment_date).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+              <span className={`appt-status status-${a.status}`}>{statusLabels[a.status] || a.status}</span>
+            </div>))}
+            {stats.recent_appointments.length === 0 && <p className="empty-state">Нет записей</p>}
           </div>
         </div>
       </div>

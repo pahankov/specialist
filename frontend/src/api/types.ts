@@ -24,14 +24,19 @@ export interface Service {
   is_active: boolean
 }
 
+export interface Client {
+  id: number
+  name: string
+  phone: string
+  email?: string
+}
+
 export interface Appointment {
   id: number
   master_id: number
   service_id: number
-  client_name: string
-  client_phone: string
   appointment_date: string
-  status: 'confirmed' | 'cancelled' | 'completed'
+  status: 'confirmed' | 'cancelled' | 'completed' | 'pending'
   created_at: string
   updated_at?: string
 }
@@ -87,9 +92,13 @@ export interface DashboardStats {
   recent_appointments: Array<{
     id: number
     client_id: number
+    client_name: string | null
+    client_phone: string | null
     appointment_date: string
     status: string
     service_id: number
+    service_name: string | null
+    service_price: number
   }>
   upcoming_appointments: Array<{
     id: number
@@ -102,4 +111,5 @@ export interface AppointmentWithClient extends Appointment {
   client_name?: string
   client_phone?: string
   service_name?: string
+  service_price?: number
 }

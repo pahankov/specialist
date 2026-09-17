@@ -6,7 +6,9 @@ import AdminLayout from './pages/AdminLayout'
 import DashboardPage from './pages/DashboardPage'
 import AppointmentsPage from './pages/AppointmentsPage'
 import ServicesPage from './pages/ServicesPage'
+import ClientsPage from './pages/ClientsPage'
 import SchedulePage from './pages/SchedulePage'
+import LogsPage from './pages/LogsPage'
 import './App.css'
 
 function getIsAuthenticated() {
@@ -44,7 +46,9 @@ function App() {
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="appointments" element={<AppointmentsPage />} />
           <Route path="services" element={<ServicesPage />} />
+          <Route path="clients" element={<ClientsPage />} />
           <Route path="schedule" element={<SchedulePage />} />
+          <Route path="logs" element={<LogsPage />} />
         </Route>
 
         {/* Catch all */}
