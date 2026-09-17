@@ -9,12 +9,19 @@ from app.models.service import Service
 from app.models.client import Client
 from app.models.master import Master
 from app.schemas.appointment import AppointmentCreate, AppointmentResponse, AvailableDay, AvailableSlot, PublicBookingCreate
+from app.api.dependencies import require_master
 
 router = APIRouter()
 
 @router.get("/", response_model=List[AppointmentResponse])
-async def get_appointments(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Appointment))
+async def get_appointments(
+    master: Master = Depends(require_master),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get appointments for the authenticated master."""
+    result = await db.execute(
+        select(Appointment).where(Appointment.master_id == master.id)
+    )
     appointments = result.scalars().all()
     return appointments
 
@@ -24,7 +31,7 @@ async def get_available_days(
     days_ahead: int = Query(14),
     db: AsyncSession = Depends(get_db)
 ):
-    # Simplified: return next N days as available
+    """Get available days for a master (next N days, excluding Sundays)."""
     available_days = []
     today = datetime.now().date()
     
@@ -46,6 +53,7 @@ async def get_available_slots(
     date: str = Query(...),
     db: AsyncSession = Depends(get_db)
 ):
+    """Get available time slots for a service on a given date."""
     # Get service duration
     service_result = await db.execute(select(Service).where(Service.id == service_id))
     service = service_result.scalar_one_or_none()
@@ -73,6 +81,19 @@ async def get_available_slots(
 
 @router.post("/public", response_model=AppointmentResponse, status_code=201)
 async def public_booking(booking: PublicBookingCreate, db: AsyncSession = Depends(get_db)):
+    """Public booking — no auth required. Creates appointment for any master."""
+    # Verify master exists and is active
+    master_result = await db.execute(select(Master).where(Master.id == booking.master_id, Master.is_active == True))
+    master = master_result.scalar_one_or_none()
+    if not master:
+        raise HTTPException(status_code=404, detail="Master not found or inactive")
+    
+    # Verify service exists and belongs to master
+    service_result = await db.execute(select(Service).where(Service.id == booking.service_id, Service.master_id == booking.master_id, Service.is_active == True))
+    service = service_result.scalar_one_or_none()
+    if not service:
+        raise HTTPException(status_code=404, detail="Service not found or inactive")
+    
     # Check or create client
     client_result = await db.execute(select(Client).where(Client.phone == booking.client_phone))
     client = client_result.scalar_one_or_none()
@@ -84,7 +105,7 @@ async def public_booking(booking: PublicBookingCreate, db: AsyncSession = Depend
             phone=booking.client_phone
         )
         db.add(client)
-        await db.commit()
+        await db.flush()
         await db.refresh(client)
     
     # Create appointment
@@ -97,13 +118,21 @@ async def public_booking(booking: PublicBookingCreate, db: AsyncSession = Depend
     )
     
     db.add(appointment)
-    await db.commit()
+    await db.flush()
     await db.refresh(appointment)
     
     return appointment
 
 @router.post("/", response_model=AppointmentResponse, status_code=201)
-async def create_appointment(appointment: AppointmentCreate, db: AsyncSession = Depends(get_db)):
+async def create_appointment(
+    appointment: AppointmentCreate,
+    master: Master = Depends(require_master),
+    db: AsyncSession = Depends(get_db)
+):
+    """Create appointment (authenticated master only)."""
+    if appointment.master_id != master.id:
+        raise HTTPException(status_code=403, detail="Not your master")
+    
     # Check or create client
     client_result = await db.execute(select(Client).where(Client.phone == appointment.client_phone))
     client = client_result.scalar_one_or_none()
@@ -114,7 +143,7 @@ async def create_appointment(appointment: AppointmentCreate, db: AsyncSession = 
             phone=appointment.client_phone
         )
         db.add(client)
-        await db.commit()
+        await db.flush()
         await db.refresh(client)
     
     # Create appointment
@@ -127,14 +156,24 @@ async def create_appointment(appointment: AppointmentCreate, db: AsyncSession = 
     )
     
     db.add(new_appointment)
-    await db.commit()
+    await db.flush()
     await db.refresh(new_appointment)
     
     return new_appointment
 
 @router.delete("/{appointment_id}", status_code=204)
-async def delete_appointment(appointment_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Appointment).where(Appointment.id == appointment_id))
+async def delete_appointment(
+    appointment_id: int,
+    master: Master = Depends(require_master),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete appointment (authenticated master only)."""
+    result = await db.execute(
+        select(Appointment).where(
+            Appointment.id == appointment_id,
+            Appointment.master_id == master.id
+        )
+    )
     appointment = result.scalar_one_or_none()
     
     if not appointment:

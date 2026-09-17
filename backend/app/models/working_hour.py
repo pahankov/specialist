@@ -13,4 +13,6 @@ class WorkingHour(Base):
     day_of_week = Column(Integer, nullable=False)  # 0=Monday, 6=Sunday
     start_time = Column(Time, nullable=False)
     end_time = Column(Time, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, index=True)
     master = relationship("Master", back_populates="working_hours")

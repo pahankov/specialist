@@ -14,4 +14,5 @@ class Client(Base):
     phone = Column(String(20), unique=True, nullable=False)
     email = Column(String(255), index=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, index=True)
     appointments = relationship("Appointment", back_populates="client")

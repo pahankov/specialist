@@ -26,7 +26,7 @@ const processQueue = (error: Error | null, token: string | null = null) => {
   failedQueue = []
 }
 
-// Axios interceptor for refresh token
+// Axios interceptor for auth
 adminAxios.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   const token = localStorage.getItem('access_token')
   if (token) {
@@ -55,26 +55,28 @@ adminAxios.interceptors.response.use(
       originalRequest._retry = true
       isRefreshing = true
 
+      const refreshToken = localStorage.getItem('refresh_token')
+      
+      if (!refreshToken) {
+        localStorage.removeItem('access_token')
+        localStorage.removeItem('refresh_token')
+        window.location.href = '/admin/login'
+        return Promise.reject(error)
+      }
+
       try {
-        const storedToken = localStorage.getItem('access_token')
-        if (!storedToken) {
-          localStorage.removeItem('access_token')
-          window.location.href = '/admin/login'
-          return Promise.reject(error)
-        }
-
-        const email = localStorage.getItem('login_email')
-        const password = localStorage.getItem('login_password')
+        const resp = await axios.post<{ access_token: string; refresh_token: string; token_type: string }>(
+          `${API_URL}/api/v1/auth/refresh`,
+          { refresh_token: refreshToken }
+        )
         
-        if (!email || !password) {
-          localStorage.removeItem('access_token')
-          window.location.href = '/admin/login'
-          return Promise.reject(error)
-        }
-
-        const resp = await axios.post<LoginResponse>(`${API_URL}/api/v1/auth/login`, { email, password })
         const newToken = resp.data.access_token
+        const newRefreshToken = resp.data.refresh_token
+        
         localStorage.setItem('access_token', newToken)
+        if (newRefreshToken) {
+          localStorage.setItem('refresh_token', newRefreshToken)
+        }
         
         processQueue(null, newToken)
         
@@ -86,6 +88,7 @@ adminAxios.interceptors.response.use(
       } catch (refreshError: any) {
         processQueue(refreshError, null)
         localStorage.removeItem('access_token')
+        localStorage.removeItem('refresh_token')
         window.location.href = '/admin/login'
         return Promise.reject(refreshError)
       } finally {
@@ -120,11 +123,11 @@ export const adminApi = {
     return adminAxios.delete(`/admin/appointments/${id}`)
   },
   // ── Services ──
-  getServices() {
-    return adminAxios.get<Service[]>('/admin/services')
+  getServices(limit = 100, offset = 0) {
+    return adminAxios.get('/admin/services', { params: { limit, offset } })
   },
-  getAllServices() {
-    return adminAxios.get<Service[]>('/admin/services/all')
+  getAllServices(limit = 100, offset = 0) {
+    return adminAxios.get('/admin/services/all', { params: { limit, offset } })
   },
   createService(data: { name: string; description?: string; duration_minutes: number; price: number }) {
     return adminAxios.post('/admin/services', data)
@@ -136,8 +139,8 @@ export const adminApi = {
     return adminAxios.delete(`/admin/services/${id}`)
   },
   // ── Clients ──
-  getClients() {
-    return adminAxios.get<Client[]>('/admin/clients')
+  getClients(limit = 100, offset = 0) {
+    return adminAxios.get('/admin/clients', { params: { limit, offset } })
   },
   createClient(data: { name: string; phone: string; email?: string }) {
     return adminAxios.post('/admin/clients', data)
@@ -179,7 +182,7 @@ export const adminApi = {
   getBlockedSlots() {
     return adminAxios.get('/admin/blocked-slots')
   },
-  createBlockedSlot(data: { master_id: number; start_dt: string; end_dt: string; reason?: string }) {
+  createBlockedSlot(data: { start_dt: string; end_dt: string; reason?: string }) {
     return adminAxios.post('/admin/blocked-slots', data)
   },
   deleteBlockedSlot(id: number) {

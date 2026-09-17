@@ -18,6 +18,7 @@ class Appointment(Base):
     status = Column(String(20), default="pending", index=True)
     notes = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, index=True)
     master = relationship("Master", back_populates="appointments")
     service = relationship("Service", back_populates="appointments")
     client = relationship("Client", back_populates="appointments")

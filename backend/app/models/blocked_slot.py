@@ -16,6 +16,7 @@ class BlockedSlot(Base):
     end_dt = Column(DateTime, nullable=False)
     reason = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, index=True)
 
     master = relationship("Master", back_populates="blocked_slots")
 

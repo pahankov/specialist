@@ -9,6 +9,7 @@ import ServicesPage from './pages/ServicesPage'
 import ClientsPage from './pages/ClientsPage'
 import SchedulePage from './pages/SchedulePage'
 import LogsPage from './pages/LogsPage'
+import ErrorBoundary from './components/ErrorBoundary'
 import './App.css'
 
 function getIsAuthenticated() {
@@ -24,8 +25,9 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function App() {
   return (
-    <div className="app">
-      <Routes>
+    <ErrorBoundary>
+      <div className="app">
+        <Routes>
         {/* Public routes */}
         <Route path="/" element={<HomePage />} />
         <Route path="/booking" element={<BookingPage />} />
@@ -53,9 +55,10 @@ function App() {
 
         {/* Catch all */}
         <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </div>
-  )
-}
+        </Routes>
+        </div>
+      </ErrorBoundary>
+    )
+  }
 
 export default App

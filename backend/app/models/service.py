@@ -15,5 +15,7 @@ class Service(Base):
     duration_minutes = Column(Integer, nullable=False)
     price = Column(Numeric(10, 2), nullable=False)
     is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     master = relationship("Master", back_populates="services")
     appointments = relationship("Appointment", back_populates="service")

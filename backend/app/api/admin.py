@@ -582,13 +582,17 @@ async def create_admin_service(
 @router.get("/services", response_model=List[ServiceResponse])
 async def get_admin_services(
     master: Master = Depends(require_master),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get active services for the authenticated master."""
+    """Get active services for the authenticated master (paginated)."""
     result = await db.execute(
         select(Service)
         .where(Service.master_id == master.id, Service.is_active == True)
         .order_by(Service.name)
+        .offset(offset)
+        .limit(limit)
     )
     return result.scalars().all()
 
@@ -596,13 +600,17 @@ async def get_admin_services(
 @router.get("/services/all", response_model=List[ServiceResponse])
 async def get_all_admin_services(
     master: Master = Depends(require_master),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get all services for the authenticated master (including inactive)."""
+    """Get all services for the authenticated master (including inactive, paginated)."""
     result = await db.execute(
         select(Service)
         .where(Service.master_id == master.id)
         .order_by(Service.name)
+        .offset(offset)
+        .limit(limit)
     )
     return result.scalars().all()
 
@@ -665,9 +673,11 @@ async def delete_admin_service(
 @router.get("/clients", response_model=List[ClientResponse])
 async def get_admin_clients(
     master: Master = Depends(require_master),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get clients associated with the authenticated master's appointments."""
+    """Get clients associated with the authenticated master's appointments (paginated)."""
     subquery = (
         select(Appointment.client_id)
         .where(Appointment.master_id == master.id)
@@ -676,6 +686,8 @@ async def get_admin_clients(
         select(Client)
         .where(Client.id.in_(subquery))
         .order_by(Client.name)
+        .offset(offset)
+        .limit(limit)
     )
     return result.scalars().all()
 
