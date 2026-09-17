@@ -221,7 +221,6 @@ function SchedulePage() {
       const endDt = new Date(blockForm.date)
       endDt.setHours(eh, em, 0, 0)
       await adminApi.createBlockedSlot({
-        master_id: 1,
         start_dt: startDt.toISOString(),
         end_dt: endDt.toISOString(),
         reason: blockForm.reason || undefined

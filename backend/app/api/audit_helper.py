@@ -22,4 +22,4 @@ async def log_action(
         ip_address=ip_address
     )
     db.add(entry)
-    await db.commit()
+    await db.flush()

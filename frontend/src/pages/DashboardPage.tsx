@@ -13,7 +13,6 @@ function DashboardPage() {
     setLoading(true)
     adminApi.getDashboard()
       .then(r => {
-        console.log('Dashboard API response:', r.data)
         setStats(r.data)
       })
       .catch((err: any) => {
