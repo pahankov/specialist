@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { adminApi } from '../api/adminClient'
 
 const statusConfig: Record<string, { label: string; bg: string; text: string }> = {
@@ -32,17 +32,98 @@ function SchedulePage() {
   const [clientSearch, setClientSearch] = useState('')
   const [serviceSearch, setServiceSearch] = useState('')
   const [allServices, setAllServices] = useState<any[]>([])
+  const [longPressTriggered, setLongPressTriggered] = useState(false)
 
-  // Long press state for day toggle
+  // Refs to avoid stale closures in event handlers
+  const scheduleRef = useRef(schedule)
+  scheduleRef.current = schedule
+
+  // Long press state
   const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pressDateRef = useRef<Date | null>(null)
   const LONG_PRESS_MS = 500
+
+  // Fetch function for backend refresh (defined first so toggleDayWork can reference it)
+  const fetchScheduleFromBackend = useCallback(async () => {
+    try {
+      const resp = await adminApi.getWorkingHours()
+      const map: Record<number, { start: number; end: number }> = {}
+      resp.data.forEach((h: any) => {
+        map[h.day_of_week] = { start: 8, end: 22 }
+      })
+      for (let dow = 0; dow < 7; dow++) {
+        if (!map[dow]) {
+          map[dow] = { start: 8, end: 22 }
+        }
+      }
+      setSchedule(map)
+    } catch (err) {
+      console.error('Failed to refresh schedule:', err)
+    }
+  }, [])
+
+  // toggleDayWork as stable callback that reads schedule from ref
+  const toggleDayWork = useCallback(async (date: Date) => {
+    const jsDow = date.getDay()
+    const pyDow = (jsDow + 6) % 7
+    const currentSchedule = scheduleRef.current
+    const isActive = !!currentSchedule[pyDow]
+    const dateStr = date.toISOString().split('T')[0]
+
+    // Optimistic UI update
+    setSchedule(prev => {
+      const next = { ...prev }
+      if (isActive) {
+        delete next[pyDow]
+      } else {
+        next[pyDow] = { start: 8, end: 22 }
+      }
+      return next
+    })
+    setActiveHours(prev => {
+      const next = { ...prev }
+      if (isActive) {
+        for (let h = 8; h < 22; h++) { delete next[`${dateStr}-${h}`] }
+      } else {
+        for (let h = 8; h < 22; h++) { next[`${dateStr}-${h}`] = true }
+      }
+      return next
+    })
+
+    // Sync with backend
+    try {
+      const resp = await adminApi.getWorkingHours()
+      const existing = resp.data.find((h: any) => h.day_of_week === pyDow)
+      if (isActive) {
+        if (existing) {
+          await adminApi.deleteWorkingHour(existing.id)
+        }
+      } else {
+        if (existing) {
+          await adminApi.updateWorkingHour(existing.id, {
+            day_of_week: pyDow,
+            start_time: '08:00',
+            end_time: '22:00'
+          })
+        } else {
+          await adminApi.createWorkingHour({
+            day_of_week: pyDow,
+            start_time: '08:00',
+            end_time: '22:00'
+          })
+        }
+      }
+      // Refresh schedule from backend to confirm
+      await fetchScheduleFromBackend()
+    } catch (err) {
+      console.error('Failed to sync working hours:', err)
+    }
+  }, [])
 
   useEffect(() => {
     const handlePointerDown = (e: PointerEvent) => {
       const tile = (e.target as HTMLElement).closest('.calendar-day')
       if (!tile) return
-      // Parse date from data attribute or skip
       const dateStr = tile.getAttribute('data-date')
       if (!dateStr) return
       const date = new Date(dateStr)
@@ -56,6 +137,8 @@ function SchedulePage() {
       const timer = setTimeout(() => {
         if (pressDateRef.current) {
           toggleDayWork(pressDateRef.current)
+          setLongPressTriggered(true)
+          setTimeout(() => setLongPressTriggered(false), 100)
           pressDateRef.current = null
         }
       }, LONG_PRESS_MS)
@@ -79,17 +162,22 @@ function SchedulePage() {
       window.removeEventListener('pointercancel', handlePointerUp)
       if (pressTimerRef.current) clearTimeout(pressTimerRef.current)
     }
-  }, [])
+  }, [toggleDayWork])
+
+  useEffect(() => { fetchSchedule() }, [])
 
   const fetchSchedule = async () => {
     try {
       const resp = await adminApi.getWorkingHours()
       const map: Record<number, { start: number; end: number }> = {}
       resp.data.forEach((h: any) => {
-        const startHour = parseInt(h.start_time?.slice(0, 2) || '8')
-        const endHour = parseInt(h.end_time?.slice(0, 2) || '22')
-        map[h.day_of_week] = { start: startHour, end: endHour }
+        map[h.day_of_week] = { start: 8, end: 22 }
       })
+      for (let dow = 0; dow < 7; dow++) {
+        if (!map[dow]) {
+          map[dow] = { start: 8, end: 22 }
+        }
+      }
       setSchedule(map)
     } catch (err: any) {
       if (err.response?.status === 401) {
@@ -103,7 +191,6 @@ function SchedulePage() {
     }
   }
 
-  useEffect(() => { fetchSchedule() }, [])
   useEffect(() => { fetchAppointmentsForMonth() }, [])
   useEffect(() => {
     if (bookingForm.open) {
@@ -149,8 +236,6 @@ function SchedulePage() {
         s.name.toLowerCase().includes(serviceSearch.toLowerCase())
       )
     : allServices
-
-  const clearSuccess = () => { setSuccessMsg(''); setError('') }
 
   const openBookingForm = (date: Date, hour: number) => {
     setBookingForm({ open: true, date, hour, clientId: null, serviceId: null, status: 'pending', notes: '' })
@@ -202,35 +287,6 @@ function SchedulePage() {
     return d < n
   }
 
-  const toggleDayWork = (date: Date) => {
-    const jsDow = date.getDay()
-    const pyDow = (jsDow + 6) % 7
-    const isActive = !!schedule[pyDow]
-    setSchedule(prev => {
-      const next = { ...prev }
-      if (isActive) {
-        delete next[pyDow]
-        const dateStr = date.toISOString().split('T')[0]
-        setActiveHours(prev2 => {
-          const next2 = { ...prev2 }
-          for (let h = 8; h < 22; h++) { delete next2[`${dateStr}-${h}`] }
-          return next2
-        })
-      } else {
-        next[pyDow] = { start: 8, end: 22 }
-        const dateStr = date.toISOString().split('T')[0]
-        setActiveHours(prev2 => {
-          const next2 = { ...prev2 }
-          for (let h = 8; h < 22; h++) { next2[`${dateStr}-${h}`] = true }
-          return next2
-        })
-      }
-      return next
-    })
-  }
-
-  const dayLabels = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье']
-
   const fetchAppointmentsForMonth = async () => {
     const now = new Date()
     const year = now.getFullYear()
@@ -273,7 +329,7 @@ function SchedulePage() {
   const getHoursForDay = (date: Date) => {
     const jsDow = date.getDay()
     const pyDow = (jsDow + 6) % 7
-    return schedule[pyDow] || { start: 8, end: 22 } // default 8-22
+    return schedule[pyDow] || { start: 8, end: 22 } // all days default 8-22
   }
 
   const getAppointmentsForSlot = (date: Date, hour: number) => {
@@ -375,7 +431,7 @@ function SchedulePage() {
                 key={i}
                 data-date={day.date.toISOString()}
                 className={`calendar-day ${day.isCurrentMonth ? '' : 'other-month'} ${active ? 'active' : 'inactive'} ${today ? 'today' : ''} ${selected ? 'selected' : ''}`}
-                onClick={() => day.isCurrentMonth && !past && setSelectedDate(day.date)}
+                onClick={() => day.isCurrentMonth && !past && !longPressTriggered && setSelectedDate(day.date)}
                 style={{
                   padding: '12px 8px',
                   borderRadius: 10,
