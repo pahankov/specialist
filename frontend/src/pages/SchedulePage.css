@@ -363,3 +363,39 @@
     gap: 12px;
   }
 }
+
+/* Hour granules in calendar */
+.hour-granules {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  justify-content: center;
+  margin-top: 6px;
+}
+
+.hour-granule {
+  width: 28px;
+  height: 22px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.hour-granule:hover {
+  transform: scale(1.15);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+
+.hour-granule.active {
+  box-shadow: 0 2px 6px rgba(102,126,234,0.5);
+}
+
+.hour-granule.has-appointment {
+  opacity: 0.8;
+}

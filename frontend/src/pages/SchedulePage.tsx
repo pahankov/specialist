@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { adminApi } from '../api/adminClient'
-import type { WorkingHour } from '../api/types'
 
 const statusConfig: Record<string, { label: string; bg: string; text: string }> = {
   free: { label: 'Свободно', bg: '#e0e0e0', text: '#666' },
@@ -12,19 +11,12 @@ const statusConfig: Record<string, { label: string; bg: string; text: string }> 
 
 function SchedulePage() {
   const [schedule, setSchedule] = useState<Record<number, { start: number; end: number }>>({})
-  const [workingHours, setWorkingHours] = useState<WorkingHour[]>([])
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [appointments, setAppointments] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [successMsg, setSuccessMsg] = useState('')
-  const [showForm, setShowForm] = useState(false)
-  const [editingId, setEditingId] = useState<number | null>(null)
-  const [dayOfWeek, setDayOfWeek] = useState(0)
-  const [startTime, setStartTime] = useState('10:00')
-  const [endTime, setEndTime] = useState('18:00')
-  const [deletingId, setDeletingId] = useState<number | null>(null)
   const [bookingClients, setBookingClients] = useState<any[]>([])
   const [bookingLoading, setBookingLoading] = useState(false)
   const [bookingForm, setBookingForm] = useState<{
@@ -36,27 +28,66 @@ function SchedulePage() {
     status: string
     notes: string
   }>({ open: false, date: null, hour: null, clientId: null, serviceId: null, status: 'pending', notes: '' })
-  const [blockedSlots, setBlockedSlots] = useState<any[]>([])
-  const [showBlockForm, setShowBlockForm] = useState(false)
-  const [blockForm, setBlockForm] = useState<{
-    date: string
-    startTime: string
-    endTime: string
-    reason: string
-  }>({ date: '', startTime: '09:00', endTime: '17:00', reason: '' })
   const [activeHours, setActiveHours] = useState<Record<string, boolean>>({})
   const [clientSearch, setClientSearch] = useState('')
   const [serviceSearch, setServiceSearch] = useState('')
   const [allServices, setAllServices] = useState<any[]>([])
 
+  // Long press state for day toggle
+  const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pressDateRef = useRef<Date | null>(null)
+  const LONG_PRESS_MS = 500
+
+  useEffect(() => {
+    const handlePointerDown = (e: PointerEvent) => {
+      const tile = (e.target as HTMLElement).closest('.calendar-day')
+      if (!tile) return
+      // Parse date from data attribute or skip
+      const dateStr = tile.getAttribute('data-date')
+      if (!dateStr) return
+      const date = new Date(dateStr)
+      if (isPast(date)) return
+
+      pressDateRef.current = date
+      if (pressTimerRef.current) {
+        clearTimeout(pressTimerRef.current)
+        pressTimerRef.current = null
+      }
+      const timer = setTimeout(() => {
+        if (pressDateRef.current) {
+          toggleDayWork(pressDateRef.current)
+          pressDateRef.current = null
+        }
+      }, LONG_PRESS_MS)
+      pressTimerRef.current = timer
+    }
+
+    const handlePointerUp = () => {
+      if (pressTimerRef.current) {
+        clearTimeout(pressTimerRef.current)
+        pressTimerRef.current = null
+      }
+      pressDateRef.current = null
+    }
+
+    window.addEventListener('pointerdown', handlePointerDown)
+    window.addEventListener('pointerup', handlePointerUp)
+    window.addEventListener('pointercancel', handlePointerUp)
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown)
+      window.removeEventListener('pointerup', handlePointerUp)
+      window.removeEventListener('pointercancel', handlePointerUp)
+      if (pressTimerRef.current) clearTimeout(pressTimerRef.current)
+    }
+  }, [])
+
   const fetchSchedule = async () => {
     try {
       const resp = await adminApi.getWorkingHours()
-      setWorkingHours(resp.data)
       const map: Record<number, { start: number; end: number }> = {}
       resp.data.forEach((h: any) => {
-        const startHour = parseInt(h.start_time?.slice(0, 2) || '10')
-        const endHour = parseInt(h.end_time?.slice(0, 2) || '18')
+        const startHour = parseInt(h.start_time?.slice(0, 2) || '8')
+        const endHour = parseInt(h.end_time?.slice(0, 2) || '22')
         map[h.day_of_week] = { start: startHour, end: endHour }
       })
       setSchedule(map)
@@ -72,24 +103,8 @@ function SchedulePage() {
     }
   }
 
-  const fetchBlockedSlots = async () => {
-    try {
-      const resp = await adminApi.getBlockedSlots()
-      setBlockedSlots(resp.data)
-    } catch {
-      setBlockedSlots([])
-    }
-  }
-
   useEffect(() => { fetchSchedule() }, [])
-  useEffect(() => { fetchAppointmentsForMonth() }, [currentMonth])
-  useEffect(() => { fetchBlockedSlots() }, [])
-  useEffect(() => {
-    // Auto-select today if no date selected
-    if (!selectedDate && !loading) {
-      setSelectedDate(new Date())
-    }
-  }, [loading])
+  useEffect(() => { fetchAppointmentsForMonth() }, [])
   useEffect(() => {
     if (bookingForm.open) {
       adminApi.getClients()
@@ -105,12 +120,9 @@ function SchedulePage() {
     const dateStr = selectedDate?.toISOString().split('T')[0]
     if (!dateStr) return
     const newActive: Record<string, boolean> = {}
-    const pyDow = selectedDate ? (selectedDate.getDay() + 6) % 7 : 0
-    const hours = schedule[pyDow]
-    if (hours) {
-      for (let h = hours.start; h < hours.end; h++) {
-        newActive[`${dateStr}-${h}`] = checked
-      }
+    const hours = getHoursForDay(selectedDate)
+    for (let h = hours.start; h < hours.end; h++) {
+      newActive[`${dateStr}-${h}`] = checked
     }
     setActiveHours(prev => ({ ...prev, ...newActive }))
   }
@@ -118,9 +130,7 @@ function SchedulePage() {
   const isAllHoursActive = () => {
     const dateStr = selectedDate?.toISOString().split('T')[0]
     if (!dateStr) return false
-    const pyDow = selectedDate ? (selectedDate.getDay() + 6) % 7 : 0
-    const hours = schedule[pyDow]
-    if (!hours) return false
+    const hours = getHoursForDay(selectedDate)
     for (let h = hours.start; h < hours.end; h++) {
       if (!activeHours[`${dateStr}-${h}`]) return false
     }
@@ -141,48 +151,6 @@ function SchedulePage() {
     : allServices
 
   const clearSuccess = () => { setSuccessMsg(''); setError('') }
-  const resetForm = () => { setDayOfWeek(0); setStartTime('10:00'); setEndTime('18:00'); setEditingId(null); setShowForm(false) }
-
-  const showError = (err: any) => {
-    const detail = err.response?.data?.detail
-    if (typeof detail === 'string') setError(detail)
-    else if (detail && typeof detail === 'object') setError(JSON.stringify(detail))
-    else setError('Произошла ошибка')
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    clearSuccess()
-    try {
-      if (editingId) {
-        await adminApi.updateWorkingHour(editingId, { day_of_week: dayOfWeek, start_time: startTime, end_time: endTime })
-        setSuccessMsg('Расписание обновлено')
-      } else {
-        await adminApi.createWorkingHour({ day_of_week: dayOfWeek, start_time: startTime, end_time: endTime })
-        setSuccessMsg('Расписание создано')
-      }
-      resetForm(); fetchSchedule()
-    } catch (err: any) { showError(err) }
-  }
-
-  const handleEdit = (wh: WorkingHour) => {
-    setDayOfWeek(wh.day_of_week)
-    setStartTime(wh.start_time || '10:00')
-    setEndTime(wh.end_time || '18:00')
-    setEditingId(wh.id)
-    setShowForm(true)
-    clearSuccess()
-  }
-
-  const handleDelete = async (id: number) => {
-    clearSuccess()
-    try {
-      await adminApi.deleteWorkingHour(id)
-      setSuccessMsg('Расписание удалено')
-      fetchSchedule()
-    } catch (err: any) { showError(err) }
-    finally { setDeletingId(null) }
-  }
 
   const openBookingForm = (date: Date, hour: number) => {
     setBookingForm({ open: true, date, hour, clientId: null, serviceId: null, status: 'pending', notes: '' })
@@ -211,32 +179,9 @@ function SchedulePage() {
       closeBookingForm()
       fetchAppointmentsForMonth()
     } catch (err: any) {
-      showError(err)
+      setError(err.response?.data?.detail || 'Произошла ошибка')
     } finally {
       setBookingLoading(false)
-    }
-  }
-
-  const handleBlockSlot = async () => {
-    if (!blockForm.date || !blockForm.startTime || !blockForm.endTime) return
-    try {
-      const [sh, sm] = blockForm.startTime.split(':').map(Number)
-      const [eh, em] = blockForm.endTime.split(':').map(Number)
-      const startDt = new Date(blockForm.date)
-      startDt.setHours(sh, sm, 0, 0)
-      const endDt = new Date(blockForm.date)
-      endDt.setHours(eh, em, 0, 0)
-      await adminApi.createBlockedSlot({
-        start_dt: startDt.toISOString(),
-        end_dt: endDt.toISOString(),
-        reason: blockForm.reason || undefined
-      })
-      setSuccessMsg('Время заблокировано')
-      setShowBlockForm(false)
-      setBlockForm({ date: '', startTime: '09:00', endTime: '17:00', reason: '' })
-      fetchBlockedSlots()
-    } catch (err: any) {
-      showError(err)
     }
   }
 
@@ -248,6 +193,40 @@ function SchedulePage() {
   const isHourActive = (date: Date, hour: number) => {
     const dateStr = date.toISOString().split('T')[0]
     return !!activeHours[`${dateStr}-${hour}`]
+  }
+
+  const isPast = (date: Date) => {
+    const now = new Date()
+    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+    const n = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    return d < n
+  }
+
+  const toggleDayWork = (date: Date) => {
+    const jsDow = date.getDay()
+    const pyDow = (jsDow + 6) % 7
+    const isActive = !!schedule[pyDow]
+    setSchedule(prev => {
+      const next = { ...prev }
+      if (isActive) {
+        delete next[pyDow]
+        const dateStr = date.toISOString().split('T')[0]
+        setActiveHours(prev2 => {
+          const next2 = { ...prev2 }
+          for (let h = 8; h < 22; h++) { delete next2[`${dateStr}-${h}`] }
+          return next2
+        })
+      } else {
+        next[pyDow] = { start: 8, end: 22 }
+        const dateStr = date.toISOString().split('T')[0]
+        setActiveHours(prev2 => {
+          const next2 = { ...prev2 }
+          for (let h = 8; h < 22; h++) { next2[`${dateStr}-${h}`] = true }
+          return next2
+        })
+      }
+      return next
+    })
   }
 
   const dayLabels = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье']
@@ -291,6 +270,12 @@ function SchedulePage() {
     return !!schedule[pyDow]
   }
 
+  const getHoursForDay = (date: Date) => {
+    const jsDow = date.getDay()
+    const pyDow = (jsDow + 6) % 7
+    return schedule[pyDow] || { start: 8, end: 22 } // default 8-22
+  }
+
   const getAppointmentsForSlot = (date: Date, hour: number) => {
     const dateStr = date.toISOString().split('T')[0]
     const hourStr = `${String(hour).padStart(2, '0')}`
@@ -316,12 +301,6 @@ function SchedulePage() {
   const isToday = (date: Date) => {
     const today = new Date()
     return date.getDate() === today.getDate() && date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear()
-  }
-  const isPast = (date: Date) => {
-    const now = new Date()
-    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate())
-    const n = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    return d < n
   }
   const isSlotPast = (date: Date, hour: number) => {
     const slotDate = new Date(date)
@@ -394,6 +373,8 @@ function SchedulePage() {
             return (
               <div
                 key={i}
+                data-date={day.date.toISOString()}
+                className={`calendar-day ${day.isCurrentMonth ? '' : 'other-month'} ${active ? 'active' : 'inactive'} ${today ? 'today' : ''} ${selected ? 'selected' : ''}`}
                 onClick={() => day.isCurrentMonth && !past && setSelectedDate(day.date)}
                 style={{
                   padding: '12px 8px',
@@ -406,9 +387,10 @@ function SchedulePage() {
                   opacity: past ? 0.4 : day.isCurrentMonth ? 1 : 0.3,
                   transition: 'all 0.2s ease',
                   boxShadow: selected ? '0 0 0 3px rgba(255,152,0,0.3)' : today ? '0 0 0 2px rgba(102,126,234,0.3)' : 'none',
+                  userSelect: 'none',
+                  WebkitUserSelect: 'none',
                 }}
                 onMouseEnter={(e) => { if (day.isCurrentMonth && !past) e.currentTarget.style.transform = 'translateY(-2px)' }}
-                onMouseLeave={(e) => { if (day.isCurrentMonth && !past) e.currentTarget.style.transform = 'none' }}
               >
                 <div style={{ fontSize: 18, fontWeight: 700, color: past ? '#bbb' : today ? '#667eea' : '#333', marginBottom: 6 }}>
                   {day.date.getDate()}
@@ -430,15 +412,13 @@ function SchedulePage() {
       {/* Time slots for selected date */}
       {selectedDate && (
         <div style={{ marginBottom: 24, padding: 20, background: 'white', borderRadius: 12, border: '1px solid #e0e0e0' }}>
-          <h3 style={{ margin: '0 0 16px', fontSize: 18, color: '#1a1a2e', textTransform: 'capitalize', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <h3 style={{ margin: '0 0 16px', fontSize: 18, color: '#1a1a2e', textTransform: 'capitalize' }}>
             🕐 {selectedDate.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })}
-            {isPast(selectedDate) && <span style={{ fontSize: 14, color: '#999', fontWeight: 400 }}>— прошедший день</span>}
-            {!isDayActive(selectedDate) && <span style={{ fontSize: 14, color: '#f44336', fontWeight: 600 }}>— выходной</span>}
+            {isPast(selectedDate) && <span style={{ fontSize: 14, color: '#999', fontWeight: 400, marginLeft: 12 }}>— прошедший день</span>}
           </h3>
-          {isDayActive(selectedDate) ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {/* Global checkbox */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8, padding: '8px 12px', background: '#f5f5f5', borderRadius: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
                 <input
                   type="checkbox"
                   checked={isAllHoursActive()}
@@ -450,9 +430,7 @@ function SchedulePage() {
                 </span>
               </div>
               {(() => {
-                const jsDow = selectedDate.getDay()
-                const pyDow = (jsDow + 6) % 7
-                const hours = schedule[pyDow]
+                const hours = getHoursForDay(selectedDate)
                 const slots: React.ReactNode[] = []
                 for (let h = hours.start; h < hours.end; h++) {
                   const status = getSlotStatus(selectedDate, h)
@@ -462,15 +440,15 @@ function SchedulePage() {
                   const hourActive = isHourActive(selectedDate, h)
 
                   slots.push(
-                    <div key={h} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 16px', borderRadius: 8, border: `2px solid ${cfg.bg}`, background: past ? '#f5f5f5' : cfg.bg, opacity: past ? 0.5 : 1, transition: 'all 0.2s ease' }}>
+                    <div key={h} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 16px', borderRadius: 8, border: `2px solid ${hourActive ? '#4caf50' : cfg.bg}`, background: past ? '#f5f5f5' : (hourActive ? '#e8f5e9' : cfg.bg), opacity: past ? 0.5 : 1, transition: 'all 0.2s ease' }}>
                       <input
                         type="checkbox"
                         checked={hourActive}
                         onChange={() => toggleHour(selectedDate!.toISOString().split('T')[0], h)}
                         disabled={past}
-                        style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#667eea', flexShrink: 0 }}
+                        style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#4caf50', flexShrink: 0 }}
                       />
-                      <div style={{ fontSize: 16, fontWeight: 700, color: past ? '#bbb' : '#333', minWidth: 60, flexShrink: 0 }}>{formatHour(h)}</div>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: past ? '#bbb' : (hourActive ? '#2e7d32' : '#333'), minWidth: 60, flexShrink: 0 }}>{formatHour(h)}</div>
                       {slotsForHour.length > 0 ? slotsForHour.map(a => {
                         const sc = statusConfig[a.status]
                         return (
@@ -484,13 +462,11 @@ function SchedulePage() {
                         )
                       }) : (
                         <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 12 }}>
-                          <span style={{ color: past ? '#bbb' : '#999', fontSize: 13 }}>{past ? 'Прошёл' : 'Свободно'}</span>
+                          <span style={{ color: past ? '#bbb' : (hourActive ? '#4caf50' : '#999'), fontSize: 13 }}>{past ? 'Прошёл' : (hourActive ? 'Свободно' : 'Неактивен')}</span>
                           {!past && hourActive && (
                             <button
                               onClick={() => openBookingForm(selectedDate!, h)}
-                              style={{ background: '#667eea', color: 'white', border: 'none', padding: '6px 16px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, transition: 'all 0.2s ease', boxShadow: '0 2px 4px rgba(102,126,234,0.3)' }}
-                              onMouseEnter={(e) => e.currentTarget.style.background = '#5a6fd6'}
-                              onMouseLeave={(e) => e.currentTarget.style.background = '#667eea'}
+                              style={{ background: '#4caf50', color: 'white', border: 'none', padding: '4px 12px', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
                             >
                               + Записать
                             </button>
@@ -505,15 +481,7 @@ function SchedulePage() {
                 }
                 return slots
               })()}
-            </div>
-          ) : (
-            <div style={{ textAlign: 'center', padding: '20px 0' }}>
-              <p style={{ color: '#999', fontSize: 14 }}>Этот день — выходной</p>
-              <p style={{ color: '#667eea', fontSize: 13, marginTop: 8 }}>
-                Добавьте рабочие часы в разделе "Рабочие часы по дням" ниже
-              </p>
-            </div>
-          )}
+          </div>
         </div>
       )}
 
@@ -608,152 +576,7 @@ function SchedulePage() {
         </div>
       )}
 
-      {/* Working hours management */}
-      {showForm && (
-        <div style={{ marginBottom: 24, padding: 20, background: 'white', borderRadius: 12, border: '1px solid #e0e0e0' }}>
-          <h3 style={{ margin: '0 0 16px', fontSize: 18, color: '#1a1a2e' }}>{editingId ? 'Редактировать расписание' : 'Новое расписание'}</h3>
-          <form onSubmit={handleSubmit}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 16 }}>
-              <div>
-                <label style={{ display: 'block', marginBottom: 6, fontWeight: 600, fontSize: 13, color: '#333' }}>День недели</label>
-                <select value={dayOfWeek} onChange={(e) => setDayOfWeek(+e.target.value)} style={{ width: '100%', padding: '10px 14px', border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }}>
-                  {dayLabels.map((label, i) => <option key={i} value={i}>{label}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={{ display: 'block', marginBottom: 6, fontWeight: 600, fontSize: 13, color: '#333' }}>Начало</label>
-                <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} required style={{ width: '100%', padding: '10px 14px', border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }} />
-              </div>
-              <div>
-                <label style={{ display: 'block', marginBottom: 6, fontWeight: 600, fontSize: 13, color: '#333' }}>Конец</label>
-                <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} required style={{ width: '100%', padding: '10px 14px', border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }} />
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: 12 }}>
-              <button type="submit" style={{ background: '#667eea', color: 'white', border: 'none', padding: '10px 24px', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>
-                {editingId ? 'Сохранить' : 'Создать'}
-              </button>
-              <button type="button" onClick={resetForm} style={{ background: '#f0f0f0', color: '#333', border: '1px solid #ddd', padding: '10px 24px', borderRadius: 8, cursor: 'pointer', fontWeight: 500 }}>
-                Отмена
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      <div style={{ marginBottom: 24, padding: 20, background: 'white', borderRadius: 12, border: '1px solid #e0e0e0' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h3 style={{ margin: 0, fontSize: 18, color: '#1a1a2e' }}>📋 Рабочие часы по дням</h3>
-          <button onClick={() => setShowForm(true)} style={{ background: '#667eea', color: 'white', border: 'none', padding: '8px 16px', borderRadius: 8, cursor: 'pointer', fontWeight: 500 }}>+ Добавить</button>
-        </div>
-        {workingHours.length === 0 ? (
-          <p style={{ color: '#999', textAlign: 'center', padding: '20px 0' }}>Нет рабочих часов</p>
-        ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid #f0f0f0' }}>
-                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: '#666', fontSize: 13, textTransform: 'uppercase' }}>День</th>
-                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: '#666', fontSize: 13, textTransform: 'uppercase' }}>Начало</th>
-                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: '#666', fontSize: 13, textTransform: 'uppercase' }}>Конец</th>
-                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: '#666', fontSize: 13, textTransform: 'uppercase' }}>Действия</th>
-              </tr>
-            </thead>
-            <tbody>
-              {workingHours.map(wh => (
-                <tr key={wh.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                  <td style={{ padding: '12px 16px', fontSize: 14, color: '#333', fontWeight: 500 }}>{dayLabels[wh.day_of_week]}</td>
-                  <td style={{ padding: '12px 16px', fontSize: 14, color: '#333' }}>{wh.start_time || '—'}</td>
-                  <td style={{ padding: '12px 16px', fontSize: 14, color: '#333' }}>{wh.end_time || '—'}</td>
-                  <td style={{ padding: '12px 16px', fontSize: 14, color: '#333' }}>
-                    <button onClick={() => handleEdit(wh)} style={{ background: '#fef3c7', color: '#92400e', border: 'none', padding: '6px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 13, marginRight: 8 }}>✏️</button>
-                    {deletingId === wh.id ? (
-                      <>
-                        <button onClick={() => handleDelete(wh.id)} style={{ background: '#dc2626', color: 'white', border: 'none', padding: '6px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 13, marginRight: 8 }}>✓</button>
-                        <button onClick={() => setDeletingId(null)} style={{ background: '#f0f0f0', color: '#333', border: '1px solid #ddd', padding: '6px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>Отмена</button>
-                      </>
-                    ) : (
-                      <button onClick={() => setDeletingId(wh.id)} style={{ background: '#fee2e2', color: '#991b1b', border: 'none', padding: '6px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>🗑️</button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      {/* Blocked Slots */}
-      <div style={{ marginBottom: 24, padding: 20, background: 'white', borderRadius: 12, border: '1px solid #e0e0e0' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h3 style={{ margin: 0, fontSize: 18, color: '#1a1a2e' }}>🚫 Заблокированные слоты</h3>
-          <button onClick={() => setShowBlockForm(true)} style={{ background: '#667eea', color: 'white', border: 'none', padding: '8px 16px', borderRadius: 8, cursor: 'pointer', fontWeight: 500 }}>+ Заблокировать</button>
-        </div>
-        {blockedSlots.length === 0 ? (
-          <p style={{ color: '#999', textAlign: 'center', padding: '20px 0' }}>Нет заблокированных слотов</p>
-        ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid #f0f0f0' }}>
-                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: '#666', fontSize: 13, textTransform: 'uppercase' }}>Начало</th>
-                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: '#666', fontSize: 13, textTransform: 'uppercase' }}>Конец</th>
-                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: '#666', fontSize: 13, textTransform: 'uppercase' }}>Причина</th>
-                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: '#666', fontSize: 13, textTransform: 'uppercase' }}>Действия</th>
-              </tr>
-            </thead>
-            <tbody>
-              {blockedSlots.map((slot: any) => (
-                <tr key={slot.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                  <td style={{ padding: '12px 16px', fontSize: 14, color: '#333' }}>
-                    {new Date(slot.start_dt).toLocaleString('ru-RU')}
-                  </td>
-                  <td style={{ padding: '12px 16px', fontSize: 14, color: '#333' }}>
-                    {new Date(slot.end_dt).toLocaleString('ru-RU')}
-                  </td>
-                  <td style={{ padding: '12px 16px', fontSize: 14, color: '#666' }}>{slot.reason || '—'}</td>
-                  <td style={{ padding: '12px 16px', fontSize: 14, color: '#333' }}>
-                    <button onClick={() => {
-                      if (confirm('Удалить блокировку?')) {
-                        adminApi.deleteBlockedSlot(slot.id).then(() => fetchBlockedSlots())
-                      }
-                    }} style={{ background: '#fee2e2', color: '#991b1b', border: 'none', padding: '6px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>🗑️</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      {/* Block slot form */}
-      {showBlockForm && (
-        <div style={{ marginBottom: 24, padding: 20, background: 'white', borderRadius: 12, border: '1px solid #e0e0e0' }}>
-          <h3 style={{ margin: '0 0 16px', fontSize: 18, color: '#1a1a2e' }}>🚫 Заблокировать время</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 16 }}>
-            <div>
-              <label style={{ display: 'block', marginBottom: 6, fontWeight: 600, fontSize: 13, color: '#333' }}>Дата</label>
-              <input type="date" value={blockForm.date} onChange={(e) => setBlockForm({ ...blockForm, date: e.target.value })} required style={{ width: '100%', padding: '10px 14px', border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }} />
-            </div>
-            <div>
-              <label style={{ display: 'block', marginBottom: 6, fontWeight: 600, fontSize: 13, color: '#333' }}>Начало</label>
-              <input type="time" value={blockForm.startTime} onChange={(e) => setBlockForm({ ...blockForm, startTime: e.target.value })} required style={{ width: '100%', padding: '10px 14px', border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }} />
-            </div>
-            <div>
-              <label style={{ display: 'block', marginBottom: 6, fontWeight: 600, fontSize: 13, color: '#333' }}>Конец</label>
-              <input type="time" value={blockForm.endTime} onChange={(e) => setBlockForm({ ...blockForm, endTime: e.target.value })} required style={{ width: '100%', padding: '10px 14px', border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }} />
-            </div>
-          </div>
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ display: 'block', marginBottom: 6, fontWeight: 600, fontSize: 13, color: '#333' }}>Причина</label>
-            <input value={blockForm.reason} onChange={(e) => setBlockForm({ ...blockForm, reason: e.target.value })} placeholder="Например: выходной, отпуск" style={{ width: '100%', padding: '10px 14px', border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }} />
-          </div>
-          <div style={{ display: 'flex', gap: 12 }}>
-            <button onClick={handleBlockSlot} style={{ background: '#667eea', color: 'white', border: 'none', padding: '10px 24px', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>Заблокировать</button>
-            <button onClick={() => setShowBlockForm(false)} style={{ background: '#f0f0f0', color: '#333', border: '1px solid #ddd', padding: '10px 24px', borderRadius: 8, cursor: 'pointer', fontWeight: 500 }}>Отмена</button>
-          </div>
-        </div>
-      )}
-
-      {/* Summary - moved to bottom */}
+      {/* Summary */}
       <div style={{ padding: 20, background: 'white', borderRadius: 12, border: '1px solid #e0e0e0' }}>
         <h3 style={{ margin: '0 0 16px', fontSize: 18, color: '#1a1a2e' }}>📊 Статистика недели</h3>
         <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
