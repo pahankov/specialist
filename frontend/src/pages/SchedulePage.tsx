@@ -47,9 +47,10 @@ function SchedulePage() {
   const LONG_PRESS_MS = 500
 
   const toggleDayWork = useCallback(async (date: Date) => {
-    const dateStr = date.toISOString().split('T')[0]
+    const jsDow = date.getDay()
+    const pyDow = (jsDow + 6) % 7
     const currentSchedule = scheduleRef.current
-    const isActive = !!currentSchedule[dateStr]
+    const isActive = !!currentSchedule[pyDow]
     const currentActive = activeHoursRef.current
 
     // Optimistic UI update — update BOTH schedule AND activeHours atomically
@@ -57,20 +58,18 @@ function SchedulePage() {
     const newActiveHours: Record<string, boolean> = { ...currentActive }
 
     if (isActive) {
-      delete newSchedule[dateStr]
-      for (let h = 8; h < 22; h++) { delete newActiveHours[`${dateStr}-${h}`] }
+      delete newSchedule[pyDow]
+      for (let h = 8; h < 22; h++) { delete newActiveHours[`${pyDow}-${h}`] }
     } else {
-      newSchedule[dateStr] = { start: 8, end: 22 }
-      for (let h = 8; h < 22; h++) { newActiveHours[`${dateStr}-${h}`] = true }
+      newSchedule[pyDow] = { start: 8, end: 22 }
+      for (let h = 8; h < 22; h++) { newActiveHours[`${pyDow}-${h}`] = true }
     }
 
     setSchedule(newSchedule)
     setActiveHours(newActiveHours)
 
-    // Sync with backend — store by day_of_week for template, but UI is date-specific
+    // Sync with backend
     try {
-      const jsDow = date.getDay()
-      const pyDow = (jsDow + 6) % 7
       if (isActive) {
         const resp = await adminApi.getWorkingHours()
         const existing = resp.data.find((h: any) => h.day_of_week === pyDow)
@@ -153,8 +152,29 @@ function SchedulePage() {
   useEffect(() => { fetchSchedule() }, [])
 
   const fetchSchedule = async () => {
-    // Schedule is now date-specific — populated only via l
-    setLoading(false)
+    try {
+      const resp = await adminApi.getWorkingHours()
+      const newSchedule: Record<string, { start: number; end: number }> = {}
+      const newActiveHours: Record<string, boolean> = {}
+      for (const wh of resp.data) {
+        const startTime = wh.start_time.split(':').map(Number)
+        const endTime = wh.end_time.split(':').map(Number)
+        newSchedule[wh.day_of_week] = {
+          start: startTime[0],
+          end: endTime[0]
+        }
+        for (let h = startTime[0]; h < endTime[0]; h++) {
+          newActiveHours[`${wh.day_of_week}-${h}`] = true
+        }
+      }
+      setSchedule(newSchedule)
+      setActiveHours(newActiveHours)
+    } catch (err: any) {
+      console.error('[fetchSchedule] ERROR:', err.message)
+      console.error('[fetchSchedule] Response:', err.response?.data)
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => { fetchAppointmentsForMonth() }, [])
@@ -170,22 +190,24 @@ function SchedulePage() {
   }, [bookingForm.open])
 
   const toggleAllHours = (checked: boolean) => {
-    const dateStr = selectedDate?.toISOString().split('T')[0]
-    if (!dateStr) return
-    const newActive: Record<string, boolean> = {}
+    if (!selectedDate) return
+    const jsDow = selectedDate.getDay()
+    const pyDow = (jsDow + 6) % 7
     const hours = getHoursForDay(selectedDate)
+    const newActive: Record<string, boolean> = {}
     for (let h = hours.start; h < hours.end; h++) {
-      newActive[`${dateStr}-${h}`] = checked
+      newActive[`${pyDow}-${h}`] = checked
     }
     setActiveHours(prev => ({ ...prev, ...newActive }))
   }
 
   const isAllHoursActive = () => {
-    const dateStr = selectedDate?.toISOString().split('T')[0]
-    if (!dateStr) return false
+    if (!selectedDate) return false
+    const jsDow = selectedDate.getDay()
+    const pyDow = (jsDow + 6) % 7
     const hours = getHoursForDay(selectedDate)
     for (let h = hours.start; h < hours.end; h++) {
-      if (!activeHours[`${dateStr}-${h}`]) return false
+      if (!activeHours[`${pyDow}-${h}`]) return false
     }
     return hours.end > hours.start
   }
@@ -237,13 +259,16 @@ function SchedulePage() {
   }
 
   const toggleHour = (dateStr: string, hour: number) => {
-    const key = `${dateStr}-${hour}`
-    setActiveHours(prev => ({ ...prev, [key]: !prev[key] }))
+    const date = new Date(dateStr)
+    const jsDow = date.getDay()
+    const pyDow = (jsDow + 6) % 7
+    setActiveHours(prev => ({ ...prev, [`${pyDow}-${hour}`]: !prev[`${pyDow}-${hour}`] }))
   }
 
   const isHourActive = (date: Date, hour: number) => {
-    const dateStr = date.toISOString().split('T')[0]
-    return !!activeHours[`${dateStr}-${hour}`]
+    const jsDow = date.getDay()
+    const pyDow = (jsDow + 6) % 7
+    return !!activeHours[`${pyDow}-${hour}`]
   }
 
   const fetchAppointmentsForMonth = async () => {
@@ -278,13 +303,15 @@ function SchedulePage() {
   }
 
   const isDayActive = (date: Date) => {
-    const dateStr = date.toISOString().split('T')[0]
-    return !!schedule[dateStr]
+    const jsDow = date.getDay()
+    const pyDow = (jsDow + 6) % 7
+    return !!schedule[pyDow]
   }
 
   const getHoursForDay = (date: Date) => {
-    const dateStr = date.toISOString().split('T')[0]
-    if (schedule[dateStr]) return schedule[dateStr]
+    const jsDow = date.getDay()
+    const pyDow = (jsDow + 6) % 7
+    if (schedule[pyDow]) return schedule[pyDow]
     return { start: 8, end: 22 } // default for inactive days
   }
 

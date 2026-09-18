@@ -21,6 +21,9 @@ for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8000 "') do taskkill /F /PI
 for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":3000 "') do taskkill /F /PID %%a 2>nul
 timeout /t 2 /nobreak >nul
 
+echo Очищаем кэш Vite...
+if exist "%FRONTEND_DIR%\node_modules\.vite" rmdir /s /q "%FRONTEND_DIR%\node_modules\.vite" 2>nul
+
 echo Запуск бэкенда (порт 8000)...
 start "Sugar Booking - Backend" cmd /k "cd /d %BACKEND_DIR% && python -m uvicorn app.main:app --host 0.0.0.0 --port 8000"
 

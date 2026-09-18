@@ -382,7 +382,7 @@ async def get_working_hours(
     """Get working hours for the authenticated master."""
     result = await db.execute(
         select(WorkingHour).where(WorkingHour.master_id == master.id)
-        .order_by(WorkingHour.day_of_week)
+        .order_by(WorkingHour.date)
     )
     hours = result.scalars().all()
     return hours
@@ -397,7 +397,7 @@ async def create_working_hour(
     """Create working hours for the authenticated master."""
     hour = WorkingHour(
         master_id=master.id,
-        day_of_week=data.day_of_week,
+        date=data.date,
         start_time=time.fromisoformat(data.start_time),
         end_time=time.fromisoformat(data.end_time)
     )
@@ -430,8 +430,8 @@ async def update_working_hour(
     """Update working hours for the authenticated master."""
     hour = await get_owned_or_404(db, WorkingHour, hour_id, master.id)
 
-    if data.day_of_week is not None:
-        hour.day_of_week = data.day_of_week
+    if data.date is not None:
+        hour.date = data.date
     if data.start_time is not None:
         hour.start_time = time.fromisoformat(data.start_time)
     if data.end_time is not None:

@@ -45,7 +45,7 @@ export const adminApi = {
   getAppointmentsByDate(from: string, to: string) {
     return axios.get(`${ADMIN_URL}/appointments/by-date`, {
       headers: getAuthHeader(),
-      params: { from, to }
+      params: { date_from: from, date_to: to }
     })
   },
   createService(data: { name: string; description?: string; duration_minutes: number; price: number }) {
