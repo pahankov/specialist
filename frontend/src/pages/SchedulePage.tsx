@@ -10,7 +10,7 @@ const statusConfig: Record<string, { label: string; bg: string; text: string }> 
 }
 
 function SchedulePage() {
-  const [schedule, setSchedule] = useState<Record<number, { start: number; end: number }>>({})
+  const [schedule, setSchedule] = useState<Record<string, { start: number; end: number }>>({})
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [appointments, setAppointments] = useState<any[]>([])
@@ -38,67 +38,48 @@ function SchedulePage() {
   const scheduleRef = useRef(schedule)
   scheduleRef.current = schedule
 
+  const activeHoursRef = useRef(activeHours)
+  activeHoursRef.current = activeHours
+
   // Long press state
   const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pressDateRef = useRef<Date | null>(null)
   const LONG_PRESS_MS = 500
 
-  // Fetch function for backend refresh (defined first so toggleDayWork can reference it)
-  const fetchScheduleFromBackend = useCallback(async () => {
-    try {
-      const resp = await adminApi.getWorkingHours()
-      const map: Record<number, { start: number; end: number }> = {}
-      resp.data.forEach((h: any) => {
-        map[h.day_of_week] = { start: 8, end: 22 }
-      })
-      for (let dow = 0; dow < 7; dow++) {
-        if (!map[dow]) {
-          map[dow] = { start: 8, end: 22 }
-        }
-      }
-      setSchedule(map)
-    } catch (err) {
-      console.error('Failed to refresh schedule:', err)
-    }
-  }, [])
-
-  // toggleDayWork as stable callback that reads schedule from ref
   const toggleDayWork = useCallback(async (date: Date) => {
-    const jsDow = date.getDay()
-    const pyDow = (jsDow + 6) % 7
-    const currentSchedule = scheduleRef.current
-    const isActive = !!currentSchedule[pyDow]
     const dateStr = date.toISOString().split('T')[0]
+    const currentSchedule = scheduleRef.current
+    const isActive = !!currentSchedule[dateStr]
+    const currentActive = activeHoursRef.current
 
-    // Optimistic UI update
-    setSchedule(prev => {
-      const next = { ...prev }
-      if (isActive) {
-        delete next[pyDow]
-      } else {
-        next[pyDow] = { start: 8, end: 22 }
-      }
-      return next
-    })
-    setActiveHours(prev => {
-      const next = { ...prev }
-      if (isActive) {
-        for (let h = 8; h < 22; h++) { delete next[`${dateStr}-${h}`] }
-      } else {
-        for (let h = 8; h < 22; h++) { next[`${dateStr}-${h}`] = true }
-      }
-      return next
-    })
+    // Optimistic UI update — update BOTH schedule AND activeHours atomically
+    const newSchedule: Record<string, { start: number; end: number }> = { ...currentSchedule }
+    const newActiveHours: Record<string, boolean> = { ...currentActive }
 
-    // Sync with backend
+    if (isActive) {
+      delete newSchedule[dateStr]
+      for (let h = 8; h < 22; h++) { delete newActiveHours[`${dateStr}-${h}`] }
+    } else {
+      newSchedule[dateStr] = { start: 8, end: 22 }
+      for (let h = 8; h < 22; h++) { newActiveHours[`${dateStr}-${h}`] = true }
+    }
+
+    setSchedule(newSchedule)
+    setActiveHours(newActiveHours)
+
+    // Sync with backend — store by day_of_week for template, but UI is date-specific
     try {
-      const resp = await adminApi.getWorkingHours()
-      const existing = resp.data.find((h: any) => h.day_of_week === pyDow)
+      const jsDow = date.getDay()
+      const pyDow = (jsDow + 6) % 7
       if (isActive) {
+        const resp = await adminApi.getWorkingHours()
+        const existing = resp.data.find((h: any) => h.day_of_week === pyDow)
         if (existing) {
           await adminApi.deleteWorkingHour(existing.id)
         }
       } else {
+        const resp = await adminApi.getWorkingHours()
+        const existing = resp.data.find((h: any) => h.day_of_week === pyDow)
         if (existing) {
           await adminApi.updateWorkingHour(existing.id, {
             day_of_week: pyDow,
@@ -113,12 +94,17 @@ function SchedulePage() {
           })
         }
       }
-      // Refresh schedule from backend to confirm
-      await fetchScheduleFromBackend()
     } catch (err) {
       console.error('Failed to sync working hours:', err)
     }
   }, [])
+
+  const isPast = (date: Date) => {
+    const now = new Date()
+    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+    const n = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    return d < n
+  }
 
   useEffect(() => {
     const handlePointerDown = (e: PointerEvent) => {
@@ -167,28 +153,8 @@ function SchedulePage() {
   useEffect(() => { fetchSchedule() }, [])
 
   const fetchSchedule = async () => {
-    try {
-      const resp = await adminApi.getWorkingHours()
-      const map: Record<number, { start: number; end: number }> = {}
-      resp.data.forEach((h: any) => {
-        map[h.day_of_week] = { start: 8, end: 22 }
-      })
-      for (let dow = 0; dow < 7; dow++) {
-        if (!map[dow]) {
-          map[dow] = { start: 8, end: 22 }
-        }
-      }
-      setSchedule(map)
-    } catch (err: any) {
-      if (err.response?.status === 401) {
-        localStorage.removeItem('access_token')
-        window.location.href = '/admin/login'
-      } else {
-        setError('Ошибка загрузки')
-      }
-    } finally {
-      setLoading(false)
-    }
+    // Schedule is now date-specific — populated only via l
+    setLoading(false)
   }
 
   useEffect(() => { fetchAppointmentsForMonth() }, [])
@@ -280,13 +246,6 @@ function SchedulePage() {
     return !!activeHours[`${dateStr}-${hour}`]
   }
 
-  const isPast = (date: Date) => {
-    const now = new Date()
-    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate())
-    const n = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    return d < n
-  }
-
   const fetchAppointmentsForMonth = async () => {
     const now = new Date()
     const year = now.getFullYear()
@@ -319,17 +278,14 @@ function SchedulePage() {
   }
 
   const isDayActive = (date: Date) => {
-    // JS getDay(): 0=Sun, 1=Mon, ..., 6=Sat
-    // Backend day_of_week: 0=Mon, 1=Tue, ..., 6=Sun
-    const jsDow = date.getDay()
-    const pyDow = (jsDow + 6) % 7  // Convert Sun=0→6, Mon=1→0, Tue=2→1, ..., Sat=6→5
-    return !!schedule[pyDow]
+    const dateStr = date.toISOString().split('T')[0]
+    return !!schedule[dateStr]
   }
 
   const getHoursForDay = (date: Date) => {
-    const jsDow = date.getDay()
-    const pyDow = (jsDow + 6) % 7
-    return schedule[pyDow] || { start: 8, end: 22 } // all days default 8-22
+    const dateStr = date.toISOString().split('T')[0]
+    if (schedule[dateStr]) return schedule[dateStr]
+    return { start: 8, end: 22 } // default for inactive days
   }
 
   const getAppointmentsForSlot = (date: Date, hour: number) => {
@@ -636,11 +592,23 @@ function SchedulePage() {
       <div style={{ padding: 20, background: 'white', borderRadius: 12, border: '1px solid #e0e0e0' }}>
         <h3 style={{ margin: '0 0 16px', fontSize: 18, color: '#1a1a2e' }}>📊 Статистика недели</h3>
         <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-          {[
-            { value: Object.keys(schedule).length, label: 'Рабочих дней' },
-            { value: 7 - Object.keys(schedule).length, label: 'Выходных' },
-            { value: Object.values(schedule).reduce((t, h) => t + (h.end - h.start), 0), label: 'Часов в неделю' },
-          ].map(item => (
+          {(() => {
+            // Count working days by day_of_week (0-6)
+            const workingDays = new Set<number>()
+            Object.keys(schedule).forEach(key => {
+              const val = schedule[key]
+              if (val) {
+                const numKey = Number(key)
+                if (numKey >= 0 && numKey <= 6) workingDays.add(numKey)
+              }
+            })
+            const workDayCount = workingDays.size
+            return [
+              { value: workDayCount, label: 'Рабочих дней' },
+              { value: 7 - workDayCount, label: 'Выходных' },
+              { value: Object.values(schedule).reduce((t, h) => t + (h.end - h.start), 0), label: 'Часов в неделю' },
+            ]
+          })().map(item => (
             <div key={item.label} style={{ textAlign: 'center', flex: 1, minWidth: 120 }}>
               <span style={{ display: 'block', fontSize: 32, fontWeight: 700, color: '#667eea', marginBottom: 4 }}>{item.value}</span>
               <span style={{ fontSize: 13, color: '#666' }}>{item.label}</span>
