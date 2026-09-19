@@ -291,9 +291,9 @@ async def confirm_appointment(
     """Confirm an appointment."""
     appointment = await get_owned_or_404(db, Appointment, appointment_id, master.id)
     appointment.status = "confirmed"
+    await log_action(db, master.id, "confirm", "appointment", appointment.id, "Статус изменён на confirmed")
     await db.commit()
     await db.refresh(appointment)
-    await log_action(db, master.id, "confirm", "appointment", appointment.id, "Статус изменён на confirmed")
     return appointment
 
 
@@ -309,9 +309,9 @@ async def cancel_appointment(
     appointment.status = "cancelled"
     if reason:
         appointment.notes = f"{appointment.notes}\nОтмена: {reason}" if appointment.notes else f"Отмена: {reason}"
+    await log_action(db, master.id, "cancel", "appointment", appointment.id, f"Причина: {reason}")
     await db.commit()
     await db.refresh(appointment)
-    await log_action(db, master.id, "cancel", "appointment", appointment.id, f"Причина: {reason}")
     return appointment
 
 
@@ -324,9 +324,9 @@ async def complete_appointment(
     """Mark an appointment as completed."""
     appointment = await get_owned_or_404(db, Appointment, appointment_id, master.id)
     appointment.status = "completed"
+    await log_action(db, master.id, "complete", "appointment", appointment.id)
     await db.commit()
     await db.refresh(appointment)
-    await log_action(db, master.id, "complete", "appointment", appointment.id)
     return appointment
 
 
@@ -880,9 +880,9 @@ async def create_blocked_slot(
         reason=data.reason
     )
     db.add(slot)
+    await log_action(db, master.id, "create", "blocked_slot", slot.id, f"Блокировка: {slot.start_dt} - {slot.end_dt}")
     await db.commit()
     await db.refresh(slot)
-    await log_action(db, master.id, "create", "blocked_slot", slot.id, f"Блокировка: {slot.start_dt} - {slot.end_dt}")
     return slot
 
 
