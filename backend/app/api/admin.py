@@ -308,7 +308,7 @@ async def book_appointment(
             Appointment.master_id == master.id,
             Appointment.status != "cancelled",
             Appointment.appointment_date < service_end,
-            Appointment.appointment_date + timedelta(minutes=Service.duration_minutes) > data.appointment_date
+            Appointment.appointment_date + timedelta(minutes=service.duration_minutes) > data.appointment_date
         )
         .limit(1)
     )
