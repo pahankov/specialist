@@ -382,7 +382,7 @@ async def get_working_hours(
     """Get working hours for the authenticated master."""
     result = await db.execute(
         select(WorkingHour).where(WorkingHour.master_id == master.id)
-        .order_by(WorkingHour.date)
+        .order_by(WorkingHour.schedule_date)
     )
     hours = result.scalars().all()
     return hours
@@ -395,15 +395,17 @@ async def create_working_hour(
     db: AsyncSession = Depends(get_db)
 ):
     """Create working hours for the authenticated master."""
+    print(f'[WORKING-HOURS CREATE] schedule_date={data.schedule_date}, start={data.start_time}, end={data.end_time}')
     hour = WorkingHour(
         master_id=master.id,
-        date=data.date,
+        schedule_date=data.schedule_date,
         start_time=time.fromisoformat(data.start_time),
         end_time=time.fromisoformat(data.end_time)
     )
     db.add(hour)
     await db.commit()
     await db.refresh(hour)
+    print(f'[WORKING-HOURS CREATE] Created id={hour.id}, schedule_date={hour.schedule_date}')
     return hour
 
 
@@ -430,8 +432,8 @@ async def update_working_hour(
     """Update working hours for the authenticated master."""
     hour = await get_owned_or_404(db, WorkingHour, hour_id, master.id)
 
-    if data.date is not None:
-        hour.date = data.date
+    if data.schedule_date is not None:
+        hour.schedule_date = data.schedule_date
     if data.start_time is not None:
         hour.start_time = time.fromisoformat(data.start_time)
     if data.end_time is not None:

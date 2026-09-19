@@ -2,19 +2,19 @@ from pydantic import BaseModel
 from typing import Optional
 
 class WorkingHourCreate(BaseModel):
-    date: str  # YYYY-MM-DD
+    schedule_date: str  # YYYY-MM-DD
     start_time: str
     end_time: str
 
 class WorkingHourUpdate(BaseModel):
-    date: Optional[str] = None
+    schedule_date: Optional[str] = None
     start_time: Optional[str] = None
     end_time: Optional[str] = None
 
 class WorkingHourResponse(BaseModel):
     id: int
     master_id: int
-    date: str
+    schedule_date: str
     start_time: str
     end_time: str
     

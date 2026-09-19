@@ -47,10 +47,9 @@ function SchedulePage() {
   const LONG_PRESS_MS = 500
 
   const toggleDayWork = useCallback(async (date: Date) => {
-    const jsDow = date.getDay()
-    const pyDow = (jsDow + 6) % 7
+    const dateStr = date.toISOString().split('T')[0]
     const currentSchedule = scheduleRef.current
-    const isActive = !!currentSchedule[pyDow]
+    const isActive = !!currentSchedule[dateStr]
     const currentActive = activeHoursRef.current
 
     // Optimistic UI update — update BOTH schedule AND activeHours atomically
@@ -58,36 +57,36 @@ function SchedulePage() {
     const newActiveHours: Record<string, boolean> = { ...currentActive }
 
     if (isActive) {
-      delete newSchedule[pyDow]
-      for (let h = 8; h < 22; h++) { delete newActiveHours[`${pyDow}-${h}`] }
+      delete newSchedule[dateStr]
+      for (let h = 8; h < 22; h++) { delete newActiveHours[`${dateStr}-${h}`] }
     } else {
-      newSchedule[pyDow] = { start: 8, end: 22 }
-      for (let h = 8; h < 22; h++) { newActiveHours[`${pyDow}-${h}`] = true }
+      newSchedule[dateStr] = { start: 8, end: 22 }
+      for (let h = 8; h < 22; h++) { newActiveHours[`${dateStr}-${h}`] = true }
     }
 
     setSchedule(newSchedule)
     setActiveHours(newActiveHours)
 
-    // Sync with backend
+    // Sync with backend — save by schedule_date
     try {
       if (isActive) {
         const resp = await adminApi.getWorkingHours()
-        const existing = resp.data.find((h: any) => h.day_of_week === pyDow)
+        const existing = resp.data.find((h: any) => h.schedule_date === dateStr)
         if (existing) {
           await adminApi.deleteWorkingHour(existing.id)
         }
       } else {
         const resp = await adminApi.getWorkingHours()
-        const existing = resp.data.find((h: any) => h.day_of_week === pyDow)
+        const existing = resp.data.find((h: any) => h.schedule_date === dateStr)
         if (existing) {
           await adminApi.updateWorkingHour(existing.id, {
-            day_of_week: pyDow,
+            schedule_date: dateStr,
             start_time: '08:00',
             end_time: '22:00'
           })
         } else {
           await adminApi.createWorkingHour({
-            day_of_week: pyDow,
+            schedule_date: dateStr,
             start_time: '08:00',
             end_time: '22:00'
           })
@@ -159,12 +158,12 @@ function SchedulePage() {
       for (const wh of resp.data) {
         const startTime = wh.start_time.split(':').map(Number)
         const endTime = wh.end_time.split(':').map(Number)
-        newSchedule[wh.day_of_week] = {
+        newSchedule[wh.schedule_date] = {
           start: startTime[0],
           end: endTime[0]
         }
         for (let h = startTime[0]; h < endTime[0]; h++) {
-          newActiveHours[`${wh.day_of_week}-${h}`] = true
+          newActiveHours[`${wh.schedule_date}-${h}`] = true
         }
       }
       setSchedule(newSchedule)
@@ -190,24 +189,22 @@ function SchedulePage() {
   }, [bookingForm.open])
 
   const toggleAllHours = (checked: boolean) => {
-    if (!selectedDate) return
-    const jsDow = selectedDate.getDay()
-    const pyDow = (jsDow + 6) % 7
+    const dateStr = selectedDate?.toISOString().split('T')[0]
+    if (!dateStr) return
     const hours = getHoursForDay(selectedDate)
     const newActive: Record<string, boolean> = {}
     for (let h = hours.start; h < hours.end; h++) {
-      newActive[`${pyDow}-${h}`] = checked
+      newActive[`${dateStr}-${h}`] = checked
     }
     setActiveHours(prev => ({ ...prev, ...newActive }))
   }
 
   const isAllHoursActive = () => {
-    if (!selectedDate) return false
-    const jsDow = selectedDate.getDay()
-    const pyDow = (jsDow + 6) % 7
+    const dateStr = selectedDate?.toISOString().split('T')[0]
+    if (!dateStr) return false
     const hours = getHoursForDay(selectedDate)
     for (let h = hours.start; h < hours.end; h++) {
-      if (!activeHours[`${pyDow}-${h}`]) return false
+      if (!activeHours[`${dateStr}-${h}`]) return false
     }
     return hours.end > hours.start
   }
@@ -259,16 +256,13 @@ function SchedulePage() {
   }
 
   const toggleHour = (dateStr: string, hour: number) => {
-    const date = new Date(dateStr)
-    const jsDow = date.getDay()
-    const pyDow = (jsDow + 6) % 7
-    setActiveHours(prev => ({ ...prev, [`${pyDow}-${hour}`]: !prev[`${pyDow}-${hour}`] }))
+    const key = `${dateStr}-${hour}`
+    setActiveHours(prev => ({ ...prev, [key]: !prev[key] }))
   }
 
   const isHourActive = (date: Date, hour: number) => {
-    const jsDow = date.getDay()
-    const pyDow = (jsDow + 6) % 7
-    return !!activeHours[`${pyDow}-${hour}`]
+    const dateStr = date.toISOString().split('T')[0]
+    return !!activeHours[`${dateStr}-${hour}`]
   }
 
   const fetchAppointmentsForMonth = async () => {
@@ -303,15 +297,13 @@ function SchedulePage() {
   }
 
   const isDayActive = (date: Date) => {
-    const jsDow = date.getDay()
-    const pyDow = (jsDow + 6) % 7
-    return !!schedule[pyDow]
+    const dateStr = date.toISOString().split('T')[0]
+    return !!schedule[dateStr]
   }
 
   const getHoursForDay = (date: Date) => {
-    const jsDow = date.getDay()
-    const pyDow = (jsDow + 6) % 7
-    if (schedule[pyDow]) return schedule[pyDow]
+    const dateStr = date.toISOString().split('T')[0]
+    if (schedule[dateStr]) return schedule[dateStr]
     return { start: 8, end: 22 } // default for inactive days
   }
 
@@ -395,13 +387,12 @@ function SchedulePage() {
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8 }}>
           {monthDays.map((day, i) => {
+            const dateStr = day.date.toISOString().split('T')[0]
             const active = isDayActive(day.date)
             const today = isToday(day.date)
             const past = isPast(day.date)
             const selected = selectedDate?.getDate() === day.date.getDate() && selectedDate?.getMonth() === day.date.getMonth()
-            const jsDow = day.date.getDay()
-            const pyDow = (jsDow + 6) % 7
-            const hours = schedule[pyDow]
+            const hours = schedule[dateStr]
             let apptCount = 0
             if (active && day.isCurrentMonth && hours) {
               for (let h = hours.start; h < hours.end; h++) {
@@ -617,23 +608,14 @@ function SchedulePage() {
 
       {/* Summary */}
       <div style={{ padding: 20, background: 'white', borderRadius: 12, border: '1px solid #e0e0e0' }}>
-        <h3 style={{ margin: '0 0 16px', fontSize: 18, color: '#1a1a2e' }}>📊 Статистика недели</h3>
+        <h3 style={{ margin: '0 0 16px', fontSize: 18, color: '#1a1a2e' }}>📊 Статистика</h3>
         <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
           {(() => {
-            // Count working days by day_of_week (0-6)
-            const workingDays = new Set<number>()
-            Object.keys(schedule).forEach(key => {
-              const val = schedule[key]
-              if (val) {
-                const numKey = Number(key)
-                if (numKey >= 0 && numKey <= 6) workingDays.add(numKey)
-              }
-            })
-            const workDayCount = workingDays.size
+            // Count working days by date
+            const workingDays = Object.keys(schedule).filter(k => schedule[k]).length
             return [
-              { value: workDayCount, label: 'Рабочих дней' },
-              { value: 7 - workDayCount, label: 'Выходных' },
-              { value: Object.values(schedule).reduce((t, h) => t + (h.end - h.start), 0), label: 'Часов в неделю' },
+              { value: workingDays, label: 'Рабочих дней' },
+              { value: Object.values(schedule).reduce((t, h) => t + (h.end - h.start), 0), label: 'Часов всего' },
             ]
           })().map(item => (
             <div key={item.label} style={{ textAlign: 'center', flex: 1, minWidth: 120 }}>

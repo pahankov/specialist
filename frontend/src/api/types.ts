@@ -63,7 +63,7 @@ export interface Review {
 export interface WorkingHour {
   id: number
   master_id: number
-  day_of_week: number
+  date: string
   start_time: string
   end_time: string
   is_active: boolean

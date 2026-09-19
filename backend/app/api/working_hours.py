@@ -23,7 +23,7 @@ async def create_working_hour(wh: WorkingHourCreate, db: AsyncSession = Depends(
     
     new_wh = WorkingHour(
         master_id=wh.master_id,
-        day_of_week=wh.day_of_week,
+        schedule_date=wh.schedule_date,
         start_time=start_time,
         end_time=end_time
     )

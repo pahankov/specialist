@@ -78,10 +78,10 @@ export const adminApi = {
   getWorkingHours() {
     return axios.get(`${ADMIN_URL}/working-hours`, { headers: getAuthHeader() })
   },
-  createWorkingHour(data: { day_of_week: number; start_time: string; end_time: string }) {
+  createWorkingHour(data: { schedule_date: string; start_time: string; end_time: string }) {
     return axios.post(`${ADMIN_URL}/working-hours`, data, { headers: getAuthHeader() })
   },
-  updateWorkingHour(id: number, data: { day_of_week?: number; start_time?: string; end_time?: string }) {
+  updateWorkingHour(id: number, data: { schedule_date?: string; start_time?: string; end_time?: string }) {
     return axios.patch(`${ADMIN_URL}/working-hours/${id}`, data, { headers: getAuthHeader() })
   },
   deleteWorkingHour(id: number) {

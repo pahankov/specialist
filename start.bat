@@ -2,19 +2,9 @@
 echo === Запуск Sugar Booking ===
 echo.
 
-REM Автоопределение worktree или корневого каталога
 set "PROJECT_DIR=%~dp0"
-set "WORKTREE_DIR=%PROJECT_DIR%.gigacode_vsc\worktrees\open-brick"
-
-if exist "%WORKTREE_DIR%\frontend\" (
-    echo Using worktree: %WORKTREE_DIR%
-    set "BACKEND_DIR=%WORKTREE_DIR%\backend"
-    set "FRONTEND_DIR=%WORKTREE_DIR%\frontend"
-) else (
-    echo Using main project
-    set "BACKEND_DIR=%PROJECT_DIR%backend"
-    set "FRONTEND_DIR=%PROJECT_DIR%frontend"
-)
+set "BACKEND_DIR=%PROJECT_DIR%backend"
+set "FRONTEND_DIR=%PROJECT_DIR%frontend"
 
 echo Убиваем старые процессы...
 for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8000 "') do taskkill /F /PID %%a 2>nul
