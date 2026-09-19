@@ -12,6 +12,8 @@ function AdminLayout() {
     { path: '/admin/services', label: '💇 Услуги' },
     { path: '/admin/clients', label: '👥 Клиенты' },
     { path: '/admin/schedule', label: '🕐 Расписание' },
+  ]
+  const bottomNavItems = [
     { path: '/admin/logs', label: '📋 Логи' },
   ]
   return (
@@ -24,6 +26,10 @@ function AdminLayout() {
         <nav className="sidebar-nav">
           {navItems.map((item) => (
             <Link key={item.path} to={item.path} className={`nav-item ${isActive(item.path) ? 'active' : ''}`}>{item.label}</Link>
+          ))}
+          <div className="sidebar-divider" />
+          {bottomNavItems.map((item) => (
+            <Link key={item.path} to={item.path} className={`nav-item nav-item-bottom ${isActive(item.path) ? 'active' : ''}`}>{item.label}</Link>
           ))}
         </nav>
         <div className="sidebar-footer">

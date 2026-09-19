@@ -7,6 +7,8 @@
 .nav-item { display: block; padding: 12px 20px; color: rgba(255,255,255,0.7); text-decoration: none; font-size: 15px; transition: all 0.2s; border-left: 3px solid transparent; }
 .nav-item:hover { background: rgba(255,255,255,0.05); color: white; }
 .nav-item.active { background: rgba(233,69,96,0.1); color: #e94560; border-left-color: #e94560; }
+.sidebar-divider { height: 1px; background: rgba(255,255,255,0.1); margin: 8px 16px; }
+.nav-item-bottom { margin-top: 4px; }
 .sidebar-footer { padding: 16px 20px; border-top: 1px solid rgba(255,255,255,0.1); }
 .btn-logout { width: 100%; text-align: left; }
 .admin-main { flex: 1; margin-left: 260px; background: #f5f7fa; min-height: 100vh; }

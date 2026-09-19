@@ -127,7 +127,7 @@ function AppointmentsPage() {
                 <td><span className={`status-badge status-${a.status}`}>{statusLabels[a.status] || a.status}</span></td>
                 <td className="actions-cell">
                   {a.status === 'pending' && (<><button className="btn btn-sm btn-confirm" onClick={() => handleConfirm(a.id)}>✅ Подтвердить</button><button className="btn btn-sm btn-cancel" onClick={() => handleCancel(a.id)}>❌ Отменить</button></>)}
-                  {a.status === 'confirmed' && (<><button className="btn btn-sm btn-complete" onClick={() => handleComplete(a.id)}>🏁 Завершить</button><button className="btn btn-sm btn-cancel" onClick={() => handleCancel(a.id)}>❌ Отменить</button></>)}
+                  {a.status === 'confirmed' && (<><button className="btn btn-sm btn-complete" onClick={() => handleComplete(a.id)} disabled={!isAppointmentTimePassed(a.appointment_date)}>🏁 Завершить</button><button className="btn btn-sm btn-cancel" onClick={() => handleCancel(a.id)}>❌ Отменить</button></>)}
                   {a.status === 'completed' && <span className="text-muted">Завершена</span>}
                   {a.status === 'cancelled' && <span className="text-muted">Отменена</span>}
                 </td>
