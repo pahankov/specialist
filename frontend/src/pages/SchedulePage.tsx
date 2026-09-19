@@ -31,6 +31,8 @@ function SchedulePage() {
   const [activeHours, setActiveHours] = useState<Record<string, boolean>>({})
   const [clientSearch, setClientSearch] = useState('')
   const [serviceSearch, setServiceSearch] = useState('')
+  const [showClientDropdown, setShowClientDropdown] = useState(false)
+  const [showServiceDropdown, setShowServiceDropdown] = useState(false)
   const [allServices, setAllServices] = useState<any[]>([])
   const [longPressTriggered, setLongPressTriggered] = useState(false)
 
@@ -149,6 +151,17 @@ function SchedulePage() {
   }, [toggleDayWork])
 
   useEffect(() => { fetchSchedule() }, [])
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (!target.closest('.client-dropdown') && showClientDropdown) setShowClientDropdown(false)
+      if (!target.closest('.service-dropdown') && showServiceDropdown) setShowServiceDropdown(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [showClientDropdown, showServiceDropdown])
 
   const fetchSchedule = async () => {
     try {
@@ -529,46 +542,74 @@ function SchedulePage() {
             </p>
             <div className="form-group">
               <label>Клиент</label>
-              <input
-                type="text"
-                value={clientSearch}
-                onChange={(e) => setClientSearch(e.target.value)}
-                placeholder="Начните вводить имя или телефон..."
-                style={{ width: '100%', padding: 10, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14, marginBottom: 8 }}
-              />
-              <div style={{ maxHeight: 200, overflow: 'auto', border: '2px solid #e0e0e0', borderRadius: 8 }}>
-                <select
-                  value={bookingForm.clientId || ''}
-                  onChange={(e) => setBookingForm({ ...bookingForm, clientId: +e.target.value })}
-                  style={{ width: '100%', padding: 10, border: 'none', borderRadius: 0, fontSize: 14, background: 'white' }}
-                >
-                  <option value="">Выберите клиента</option>
-                  {filteredClients.map((c: any) => (
-                    <option key={c.id} value={c.id}>{c.name} ({c.phone})</option>
-                  ))}
-                </select>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="text"
+                  value={clientSearch}
+                  onChange={(e) => { setClientSearch(e.target.value); setShowClientDropdown(true) }}
+                  onFocus={() => setShowClientDropdown(true)}
+                  placeholder="Начните вводить имя или телефон..."
+                  style={{ width: '100%', padding: 10, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }}
+                />
+                {showClientDropdown && (
+                  <div className="client-dropdown" style={{
+                    position: 'absolute', top: '100%', left: 0, right: 0, maxHeight: 200, overflow: 'auto',
+                    border: '2px solid #e0e0e0', borderRadius: 8, marginTop: 4, background: 'white', zIndex: 1000
+                  }}>
+                    {filteredClients.length === 0 ? (
+                      <div style={{ padding: 12, color: '#999', fontSize: 13 }}>Ничего не найдено</div>
+                    ) : (
+                      filteredClients.map((c: any) => (
+                        <div
+                          key={c.id}
+                          onClick={() => { setBookingForm({ ...bookingForm, clientId: c.id }); setShowClientDropdown(false); setClientSearch('') }}
+                          style={{ padding: '10px 12px', cursor: 'pointer', fontSize: 14, borderBottom: '1px solid #f0f0f0',
+                            background: bookingForm.clientId === c.id ? '#e8f5e9' : 'white' }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = '#f5f5f5'}
+                          onMouseLeave={(e) => e.currentTarget.style.background = bookingForm.clientId === c.id ? '#e8f5e9' : 'white'}
+                        >
+                          <strong>{c.name}</strong> — {c.phone}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
               </div>
             </div>
             <div className="form-group">
               <label>Услуга</label>
-              <input
-                type="text"
-                value={serviceSearch}
-                onChange={(e) => setServiceSearch(e.target.value)}
-                placeholder="Начните вводить название..."
-                style={{ width: '100%', padding: 10, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14, marginBottom: 8 }}
-              />
-              <div style={{ maxHeight: 200, overflow: 'auto', border: '2px solid #e0e0e0', borderRadius: 8 }}>
-                <select
-                  value={bookingForm.serviceId || ''}
-                  onChange={(e) => setBookingForm({ ...bookingForm, serviceId: e.target.value ? parseInt(e.target.value) : null, notes: bookingForm.notes })}
-                  style={{ width: '100%', padding: 10, border: 'none', borderRadius: 0, fontSize: 14, background: 'white' }}
-                >
-                  <option value="">Выберите услугу</option>
-                  {filteredServices.map((s: any) => (
-                    <option key={s.id} value={s.id}>{s.name} — {s.duration_minutes} мин, {Number(s.price).toLocaleString('ru-RU')} ₽</option>
-                  ))}
-                </select>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="text"
+                  value={serviceSearch}
+                  onChange={(e) => { setServiceSearch(e.target.value); setShowServiceDropdown(true) }}
+                  onFocus={() => setShowServiceDropdown(true)}
+                  placeholder="Начните вводить название..."
+                  style={{ width: '100%', padding: 10, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }}
+                />
+                {showServiceDropdown && (
+                  <div className="service-dropdown" style={{
+                    position: 'absolute', top: '100%', left: 0, right: 0, maxHeight: 200, overflow: 'auto',
+                    border: '2px solid #e0e0e0', borderRadius: 8, marginTop: 4, background: 'white', zIndex: 1000
+                  }}>
+                    {filteredServices.length === 0 ? (
+                      <div style={{ padding: 12, color: '#999', fontSize: 13 }}>Ничего не найдено</div>
+                    ) : (
+                      filteredServices.map((s: any) => (
+                        <div
+                          key={s.id}
+                          onClick={() => { setBookingForm({ ...bookingForm, serviceId: s.id }); setShowServiceDropdown(false); setServiceSearch('') }}
+                          style={{ padding: '10px 12px', cursor: 'pointer', fontSize: 14, borderBottom: '1px solid #f0f0f0',
+                            background: bookingForm.serviceId === s.id ? '#e8f5e9' : 'white' }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = '#f5f5f5'}
+                          onMouseLeave={(e) => e.currentTarget.style.background = bookingForm.serviceId === s.id ? '#e8f5e9' : 'white'}
+                        >
+                          <strong>{s.name}</strong> — {s.duration_minutes} мин, {Number(s.price).toLocaleString('ru-RU')} ₽
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
               </div>
             </div>
             <div className="form-group">
