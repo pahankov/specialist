@@ -9,7 +9,7 @@ if db_url.startswith("sqlite://"):
     db_path = db_url.replace("sqlite:///", "").replace("sqlite://", "")
     # Make path absolute if relative
     if not os.path.isabs(db_path):
-        db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), db_path)
+        db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), db_path)
     # Ensure directory exists
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
     db_url = f"sqlite+aiosqlite:///{db_path}"
@@ -22,7 +22,6 @@ async def get_db():
     async with AsyncSessionLocal() as session:
         try:
             yield session
-            await session.commit()
         except Exception:
             await session.rollback()
             raise

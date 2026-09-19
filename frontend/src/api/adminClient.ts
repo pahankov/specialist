@@ -11,9 +11,7 @@ function getAuthHeader(): Record<string, string> {
 
 export const adminApi = {
   login(email: string, password: string) {
-    return axios.post<LoginResponse>(`${API_URL}/auth/login`, null, {
-      params: { email, password }
-    })
+    return axios.post<LoginResponse>(`${API_URL}/auth/login`, { email, password })
   },
   getDashboard() {
     return axios.get<DashboardStats>(`${ADMIN_URL}/dashboard`, { headers: getAuthHeader() })
