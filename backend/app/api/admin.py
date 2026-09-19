@@ -14,6 +14,7 @@ from app.models.service import Service
 from app.models.master import Master
 from app.models.working_hour import WorkingHour
 from app.models.blocked_slot import BlockedSlot
+from app.models.audit_log import AuditLog
 from app.schemas.appointment import AppointmentResponse, AppointmentCreate, AppointmentWithDetails, AdminBookingCreate
 from app.schemas.service import ServiceCreate, ServiceResponse, ServiceUpdate
 from app.schemas.client import ClientCreate, ClientUpdate, ClientResponse
