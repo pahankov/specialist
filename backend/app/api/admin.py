@@ -2,6 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select
+from sqlalchemy.orm import selectinload
 from typing import List, Optional
 from datetime import datetime, timedelta, time
 import csv
@@ -67,6 +68,7 @@ async def get_dashboard(
     # Recent appointments (last 10)
     recent_result = await db.execute(
         select(Appointment)
+        .options(selectinload(Appointment.client), selectinload(Appointment.service))
         .where(Appointment.master_id == master.id)
         .order_by(Appointment.appointment_date.desc())
         .limit(10)
@@ -77,6 +79,7 @@ async def get_dashboard(
     week_from_now = datetime.now() + timedelta(days=7)
     upcoming_result = await db.execute(
         select(Appointment)
+        .options(selectinload(Appointment.client), selectinload(Appointment.service))
         .where(
             Appointment.master_id == master.id,
             Appointment.appointment_date >= datetime.now(),
