@@ -403,7 +403,9 @@ async def create_working_hour(
         end_time=time.fromisoformat(data.end_time)
     )
     db.add(hour)
+    await db.flush()
     await db.refresh(hour)
+    await db.commit()
     print(f'[WORKING-HOURS CREATE] Created id={hour.id}, schedule_date={hour.schedule_date}')
     return hour
 
