@@ -195,7 +195,6 @@ function SchedulePage() {
     }
   }
 
-  useEffect(() => { fetchAppointmentsForMonth() }, [])
 
   const loadMonthlyStats = useCallback(() => {
     const year = currentMonth.getFullYear()
@@ -301,10 +300,9 @@ function SchedulePage() {
     return !!activeHours[`${dateStr}-${hour}`]
   }
 
-  const fetchAppointmentsForMonth = async () => {
-    const now = new Date()
-    const year = now.getFullYear()
-    const month = now.getMonth()
+  const fetchAppointmentsForMonth = useCallback(async () => {
+    const year = currentMonth.getFullYear()
+    const month = currentMonth.getMonth()
     const from = `${year}-${String(month + 1).padStart(2, '0')}-01`
     const lastDay = new Date(year, month + 1, 0).getDate()
     const to = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
@@ -314,7 +312,9 @@ function SchedulePage() {
     } catch {
       setAppointments([])
     }
-  }
+  }, [currentMonth])
+
+  useEffect(() => { fetchAppointmentsForMonth() }, [fetchAppointmentsForMonth])
 
   const getMonthDays = (date: Date) => {
     const year = date.getFullYear()
