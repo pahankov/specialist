@@ -35,6 +35,12 @@ function SchedulePage() {
   const [showServiceDropdown, setShowServiceDropdown] = useState(false)
   const [allServices, setAllServices] = useState<any[]>([])
   const [longPressTriggered, setLongPressTriggered] = useState(false)
+  const [monthlyStats, setMonthlyStats] = useState<{
+    confirmed_appointments: number
+    total_minutes: number
+    total_hours: number
+    revenue: number
+  } | null>(null)
 
   // Refs to avoid stale closures in event handlers
   const scheduleRef = useRef(schedule)
@@ -190,6 +196,23 @@ function SchedulePage() {
   }
 
   useEffect(() => { fetchAppointmentsForMonth() }, [])
+
+  const loadMonthlyStats = useCallback(() => {
+    const year = currentMonth.getFullYear()
+    const month = currentMonth.getMonth() + 1
+    adminApi.getMonthlyStats(year, month)
+      .then(r => {
+        console.log('[SchedulePage] Monthly stats loaded:', r.data)
+        setMonthlyStats(r.data)
+      })
+      .catch((err) => {
+        console.error('[SchedulePage] Failed to load monthly stats:', err)
+        console.error('[SchedulePage] Error details:', err.response?.data)
+        setMonthlyStats(null)
+      })
+  }, [currentMonth])
+
+  useEffect(() => { loadMonthlyStats() }, [loadMonthlyStats])
   useEffect(() => {
     if (bookingForm.open) {
       adminApi.getClients()
@@ -545,9 +568,9 @@ function SchedulePage() {
               <div style={{ position: 'relative' }}>
                 <input
                   type="text"
-                  value={clientSearch}
+                  value={bookingForm.clientId ? (bookingClients.find((c: any) => c.id === bookingForm.clientId)?.name || '') : clientSearch}
                   onChange={(e) => { setClientSearch(e.target.value); setShowClientDropdown(true) }}
-                  onFocus={() => setShowClientDropdown(true)}
+                  onFocus={() => { if (!bookingForm.clientId) setShowClientDropdown(true) }}
                   placeholder="Начните вводить имя или телефон..."
                   style={{ width: '100%', padding: 10, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }}
                 />
@@ -581,9 +604,9 @@ function SchedulePage() {
               <div style={{ position: 'relative' }}>
                 <input
                   type="text"
-                  value={serviceSearch}
+                  value={bookingForm.serviceId ? (allServices.find((s: any) => s.id === bookingForm.serviceId)?.name || '') : serviceSearch}
                   onChange={(e) => { setServiceSearch(e.target.value); setShowServiceDropdown(true) }}
-                  onFocus={() => setShowServiceDropdown(true)}
+                  onFocus={() => { if (!bookingForm.serviceId) setShowServiceDropdown(true) }}
                   placeholder="Начните вводить название..."
                   style={{ width: '100%', padding: 10, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }}
                 />
@@ -647,23 +670,22 @@ function SchedulePage() {
         </div>
       )}
 
-      {/* Summary */}
+      {/* Monthly Summary */}
       <div style={{ padding: 20, background: 'white', borderRadius: 12, border: '1px solid #e0e0e0' }}>
-        <h3 style={{ margin: '0 0 16px', fontSize: 18, color: '#1a1a2e' }}>📊 Статистика</h3>
+        <h3 style={{ margin: '0 0 16px', fontSize: 18, color: '#1a1a2e' }}>📊 Статистика за {monthName}</h3>
         <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-          {(() => {
-            // Count working days by date
-            const workingDays = Object.keys(schedule).filter(k => schedule[k]).length
-            return [
-              { value: workingDays, label: 'Рабочих дней' },
-              { value: Object.values(schedule).reduce((t, h) => t + (h.end - h.start), 0), label: 'Часов всего' },
-            ]
-          })().map(item => (
+          {monthlyStats ? (() => [
+            { value: monthlyStats.confirmed_appointments, label: 'Подтверждено записей' },
+            { value: monthlyStats.total_hours, label: 'Часов (подт.)' },
+            { value: `${monthlyStats.revenue.toLocaleString('ru-RU')} ₽`, label: 'Доход (заверш.)' },
+          ])().map(item => (
             <div key={item.label} style={{ textAlign: 'center', flex: 1, minWidth: 120 }}>
               <span style={{ display: 'block', fontSize: 32, fontWeight: 700, color: '#667eea', marginBottom: 4 }}>{item.value}</span>
               <span style={{ fontSize: 13, color: '#666' }}>{item.label}</span>
             </div>
-          ))}
+          )) : (
+            <div style={{ color: '#999', fontSize: 14 }}>Загрузка...</div>
+          )}
         </div>
       </div>
     </div>

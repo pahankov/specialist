@@ -90,14 +90,14 @@ async def get_dashboard(
     )
     upcoming_appointments = upcoming_result.scalars().all()
 
-    # Revenue (confirmed appointments)
+    # Revenue (completed appointments only)
     revenue_result = await db.execute(
         select(func.sum(Service.price))
         .select_from(Appointment)
         .join(Service, Appointment.service_id == Service.id)
         .where(
             Appointment.master_id == master.id,
-            Appointment.status == "confirmed"
+            Appointment.status == "completed"
         )
     )
     total_revenue = revenue_result.scalar() or 0
@@ -130,6 +130,70 @@ async def get_dashboard(
             }
             for a in upcoming_appointments
         ]
+    }
+
+
+@router.get("/monthly-stats")
+async def get_monthly_stats(
+    year: int = Query(..., description="Year"),
+    month: int = Query(..., description="Month (1-12)"),
+    master: Master = Depends(require_master),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get statistics for a specific month: confirmed/completed appointments and their hours."""
+
+    # Calculate date range for the month
+    start_dt = datetime(year, month, 1)
+    if month == 12:
+        end_dt = datetime(year + 1, 1, 1)
+    else:
+        end_dt = datetime(year, month + 1, 1)
+
+    # Count confirmed + completed appointments
+    confirmed_result = await db.execute(
+        select(func.count(Appointment.id))
+        .where(
+            Appointment.master_id == master.id,
+            Appointment.appointment_date >= start_dt,
+            Appointment.appointment_date < end_dt,
+            Appointment.status.in_(["confirmed", "completed"])
+        )
+    )
+    confirmed_count = confirmed_result.scalar() or 0
+
+    # Sum duration in minutes from services of confirmed + completed appointments
+    duration_result = await db.execute(
+        select(func.sum(Service.duration_minutes))
+        .select_from(Appointment)
+        .join(Service, Appointment.service_id == Service.id)
+        .where(
+            Appointment.master_id == master.id,
+            Appointment.appointment_date >= start_dt,
+            Appointment.appointment_date < end_dt,
+            Appointment.status.in_(["confirmed", "completed"])
+        )
+    )
+    total_minutes = duration_result.scalar() or 0
+
+    # Revenue from completed appointments for this month
+    revenue_result = await db.execute(
+        select(func.sum(Service.price))
+        .select_from(Appointment)
+        .join(Service, Appointment.service_id == Service.id)
+        .where(
+            Appointment.master_id == master.id,
+            Appointment.appointment_date >= start_dt,
+            Appointment.appointment_date < end_dt,
+            Appointment.status == "completed"
+        )
+    )
+    month_revenue = revenue_result.scalar() or 0
+
+    return {
+        "confirmed_appointments": confirmed_count,
+        "total_minutes": float(total_minutes),
+        "total_hours": round(total_minutes / 60, 1),
+        "revenue": float(month_revenue)
     }
 
 

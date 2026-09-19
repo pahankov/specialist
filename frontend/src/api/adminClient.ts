@@ -87,5 +87,11 @@ export const adminApi = {
   },
   getAuditLogs(params?: Record<string, any>) {
     return axios.get(`${ADMIN_URL}/audit-logs`, { headers: getAuthHeader(), params })
+  },
+  getMonthlyStats(year: number, month: number) {
+    return axios.get(`${ADMIN_URL}/monthly-stats`, {
+      headers: getAuthHeader(),
+      params: { year, month }
+    })
   }
 }
