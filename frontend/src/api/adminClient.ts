@@ -16,8 +16,8 @@ export const adminApi = {
   getDashboard() {
     return axios.get<DashboardStats>(`${ADMIN_URL}/dashboard`, { headers: getAuthHeader() })
   },
-  getAppointments(status?: string, limit = 50) {
-    return axios.get(`${ADMIN_URL}/appointments`, { headers: getAuthHeader(), params: { status, limit } })
+  getAppointments(status?: string, limit = 50, offset = 0) {
+    return axios.get(`${ADMIN_URL}/appointments`, { headers: getAuthHeader(), params: { status, limit, offset } })
   },
   confirmAppointment(id: number) {
     return axios.patch(`${ADMIN_URL}/appointments/${id}/confirm`, null, { headers: getAuthHeader() })

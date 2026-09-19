@@ -28,14 +28,14 @@ function DashboardPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  if (loading) return <div className="admin-main"><div className="loading">Загрузка...</div></div>
-  if (error) return <div className="admin-main"><div className="error-message">{error}</div></div>
+  if (loading) return <div><div className="loading">Загрузка...</div></div>
+  if (error) return <div><div className="error-message">{error}</div></div>
   if (!stats) return null
 
   const statusLabels: Record<string, string> = { pending: '⏳ Ожидает', confirmed: '✅ Подтверждена', cancelled: '❌ Отменена', completed: '🏁 Завершена' }
 
   return (
-    <div className="admin-main">
+    <div>
       <div className="page-header"><h1>Дашборд</h1><p>Обзор вашей записи и статистики</p></div>
       <div className="stats-grid">
         <div className="stat-card card"><div className="stat-icon">📅</div><div className="stat-value">{stats.total_appointments}</div><div className="stat-label">Всего записей</div></div>

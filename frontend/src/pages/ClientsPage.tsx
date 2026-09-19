@@ -89,19 +89,20 @@ function ClientsPage() {
     setPhone(formatted)
   }
 
-  if (loading) return <div className="admin-main"><div className="loading">Загрузка...</div></div>
+  if (loading) return <div><div className="loading">Загрузка...</div></div>
 
   return (
-    <div className="admin-main">
-      <div className="page-header">
-        <h1>Управление клиентами</h1>
-        <p>Добавление, редактирование и удаление клиентов</p>
+    <div>
+      <div className="page-header" style={{ display: 'flex', alignItems: 'center', gap: 16, justifyContent: 'center' }}>
+        <div>
+          <h1>Управление клиентами</h1>
+          <p>Добавление, редактирование и удаление клиентов</p>
+        </div>
         <button
           className="btn btn-ghost"
           onClick={() => {
             window.open(`${API_URL}/admin/export/clients`, '_blank')
           }}
-          style={{ marginLeft: 'auto' }}
         >
           📥 Экспорт CSV
         </button>

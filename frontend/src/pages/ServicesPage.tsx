@@ -72,11 +72,11 @@ function ServicesPage() {
     finally { setDeletingId(null) }
   }
 
-  if (loading) return <div className="admin-main"><div className="loading">Загрузка...</div></div>
-  if (error) return <div className="admin-main"><div className="error-message">{error}</div></div>
+  if (loading) return <div><div className="loading">Загрузка...</div></div>
+  if (error) return <div><div className="error-message">{error}</div></div>
 
   return (
-    <div className="admin-main">
+    <div>
       <div className="page-header"><h1>Управление услугами</h1><p>Добавление, редактирование и удаление услуг</p></div>
       {successMsg && <div className="success-message" style={{ background: '#e8f5e9', color: '#2e7d32', padding: '12px 16px', borderRadius: 8, marginBottom: 20 }}>{successMsg}</div>}
       {error && <div className="error-message">{error}</div>}

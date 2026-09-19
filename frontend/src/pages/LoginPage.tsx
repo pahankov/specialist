@@ -17,7 +17,6 @@ function LoginPage() {
     try {
       const resp = await adminApi.login(email, password)
       localStorage.setItem('access_token', resp.data.access_token)
-      localStorage.setItem('refresh_token', resp.data.refresh_token)
       navigate('/admin/dashboard')
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Ошибка входа')

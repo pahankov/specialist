@@ -1,6 +1,11 @@
 .app {
   min-height: 100vh;
+}
+.public-app {
   background: linear-gradient(135deg, #fff5f7 0%, #ffe4ec 100%);
+}
+.admin-app {
+  background: white;
 }
 
 .container {

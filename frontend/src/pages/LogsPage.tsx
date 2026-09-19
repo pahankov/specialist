@@ -51,8 +51,8 @@ function LogsPage() {
     fetchLogs()
   }, [entityFilter, currentPage])
 
-  if (loading) return <div className="admin-main"><div className="loading">Загрузка...</div></div>
-  if (error) return <div className="admin-main"><div className="error-message">{error}</div></div>
+  if (loading) return <div><div className="loading">Загрузка...</div></div>
+  if (error) return <div><div className="error-message">{error}</div></div>
 
   const filters = [
     { value: '', label: 'Все' },
@@ -62,7 +62,7 @@ function LogsPage() {
   ]
 
   return (
-    <div className="admin-main">
+    <div>
       <div className="page-header"><h1>📋 Журнал действий</h1><p>История всех операций в админ-панели</p></div>
 
       <div className="filters-bar">

@@ -322,7 +322,7 @@ function SchedulePage() {
     const firstDay = new Date(year, month, 1)
     const lastDay = new Date(year, month + 1, 0)
     const days: { date: Date; isCurrentMonth: boolean }[] = []
-    const startDayOfWeek = firstDay.getDay()
+    const startDayOfWeek = firstDay.getDay() === 0 ? 6 : firstDay.getDay() - 1
     for (let i = 0; i < startDayOfWeek; i++) {
       days.push({ date: new Date(year, month, 1 - (startDayOfWeek - i)), isCurrentMonth: false })
     }
@@ -384,13 +384,13 @@ function SchedulePage() {
 
   return (
     <div style={{ padding: '0 20px', maxWidth: 1200, margin: '0 auto' }}>
-      <div style={{ marginBottom: 8 }}>
+      <div style={{ marginBottom: 8, textAlign: 'center' }}>
         <h1 style={{ fontSize: 24, margin: 0, color: '#1a1a2e' }}>📅 Рабочее расписание</h1>
         <p style={{ margin: '4px 0 0', color: '#666', fontSize: 14 }}>Нажмите на день чтобы увидеть бронирования</p>
       </div>
 
       {/* Legend */}
-      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 20, padding: 14, background: '#f9f9f9', borderRadius: 10 }}>
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 20, padding: 14, background: '#f9f9f9', borderRadius: 10, justifyContent: 'center' }}>
         {[
           { color: '#e0e0e0', label: 'Свободно' },
           { color: '#ffc107', label: 'Ожидает' },
@@ -414,8 +414,8 @@ function SchedulePage() {
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8, marginBottom: 8 }}>
-          {['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'].map((name, i) => (
-            <div key={i} style={{ textAlign: 'center', fontSize: 13, fontWeight: 600, color: i === 0 ? '#f44336' : i === 6 ? '#ff9800' : '#666', padding: '8px 0' }}>
+          {['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map((name, i) => (
+            <div key={i} style={{ textAlign: 'center', fontSize: 13, fontWeight: 600, color: i === 5 ? '#ff9800' : i === 6 ? '#f44336' : '#666', padding: '8px 0' }}>
               {name}
             </div>
           ))}

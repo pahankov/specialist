@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import HomePage from './pages/HomePage'
 import BookingPage from './pages/BookingPage'
 import LoginPage from './pages/LoginPage'
@@ -24,9 +24,11 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function App() {
+  const location = useLocation()
+  const isAdminRoute = location.pathname.startsWith('/admin')
   return (
     <ErrorBoundary>
-      <div className="app">
+      <div className={`app ${isAdminRoute ? 'admin-app' : 'public-app'}`}>
         <Routes>
         {/* Public routes */}
         <Route path="/" element={<HomePage />} />

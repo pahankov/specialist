@@ -3,6 +3,9 @@ import { adminApi } from '../api/adminClient'
 import type { Appointment } from '../api/types'
 import './AppointmentsPage.css'
 
+type SortField = 'appointment_date' | 'client_name' | 'service_name' | 'service_price' | 'status'
+type SortDirection = 'asc' | 'desc'
+
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 function AppointmentsPage() {
@@ -15,6 +18,9 @@ function AppointmentsPage() {
   const [cancelingId, setCancelingId] = useState<number | null>(null)
   const [cancelReason, setCancelReason] = useState('')
   const [currentPage, setCurrentPage] = useState(0)
+  const [sortField, setSortField] = useState<SortField>('appointment_date')
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
+  const [showCompleted, setShowCompleted] = useState(false)
   const pageSize = 20
 
   const fetch = async () => {
@@ -86,24 +92,58 @@ function AppointmentsPage() {
     }
   }
 
+  const isAppointmentTimePassed = (dateStr: string) => new Date(dateStr) <= new Date()
+
   const statusLabels: Record<string, string> = { pending: '⏳ Ожидает', confirmed: '✅ Подтверждена', cancelled: '❌ Отменена', completed: '🏁 Завершена' }
   const filters = [{ value: '', label: 'Все' }, { value: 'pending', label: '⏳ Ожидает' }, { value: 'confirmed', label: '✅ Подтверждена' }, { value: 'cancelled', label: '❌ Отменена' }, { value: 'completed', label: '🏁 Завершена' }]
 
-  if (loading) return <div className="admin-main"><div className="loading">Загрузка...</div></div>
-  if (error) return <div className="admin-main"><div className="error-message">{error}</div></div>
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortDirection('asc')
+    }
+  }
+
+  const sortedAppointments = [...appointments].sort((a, b) => {
+    let valA: string | number | Date = a[sortField] ?? ''
+    let valB: string | number | Date = b[sortField] ?? ''
+
+    if (sortField === 'appointment_date') {
+      valA = new Date(valA as string).getTime()
+      valB = new Date(valB as string).getTime()
+    }
+
+    if (valA < valB) return sortDirection === 'asc' ? -1 : 1
+    if (valA > valB) return sortDirection === 'asc' ? 1 : -1
+    return 0
+  })
+
+  const filteredAppointments = sortedAppointments.filter(a => {
+    // Hide completed unless toggle is on
+    if (a.status === 'completed' && !showCompleted) return false
+    // Hide past appointments (pending/confirmed with passed time)
+    if (a.status !== 'completed' && a.status !== 'cancelled' && isAppointmentTimePassed(a.appointment_date)) return false
+    return true
+  })
+
+  if (loading) return <div><div className="loading">Загрузка...</div></div>
+  if (error) return <div><div className="error-message">{error}</div></div>
 
   return (
-    <div className="admin-main">
-      <div className="page-header">
-        <h1>Управление записями</h1>
-        <p>Подтверждение, завершение и отмена записей</p>
+    <div className="appointments-page">
+      <div className="page-header" style={{ display: 'flex', alignItems: 'center', gap: 16, justifyContent: 'center' }}>
+        <div>
+          <h1>Управление записями</h1>
+          <p>Подтверждение, завершение и отмена записей</p>
+        </div>
         <button
           className="btn btn-ghost"
           onClick={() => {
             const statusParam = filter ? `?status=${filter}` : ''
             window.open(`${API_URL}/admin/export/appointments${statusParam}`, '_blank')
           }}
-          style={{ marginLeft: 'auto' }}
         >
           📥 Экспорт CSV
         </button>
@@ -113,12 +153,27 @@ function AppointmentsPage() {
       <div className="filters-bar">
         {filters.map(f => (<button key={f.value} className={`filter-btn ${filter === f.value ? 'active' : ''}`} onClick={() => setFilter(f.value)}>{f.label}</button>))}
       </div>
-      <div className="card">
-        {appointments.length === 0 ? <p className="empty-state">Нет записей</p> : (
+      <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14, color: '#666' }}>
+          <input type="checkbox" checked={showCompleted} onChange={() => setShowCompleted(p => !p)} style={{ width: 16, height: 16, accentColor: '#667eea' }} />
+          Показать завершённые
+        </label>
+      </div>
+      <div style={{ background: 'white', borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.08)', padding: 24 }}>
+        {filteredAppointments.length === 0 ? <p className="empty-state">Нет записей</p> : (
           <table className="appointments-table">
-            <thead><tr><th>Дата</th><th>Клиент</th><th>Телефон</th><th>Услуга</th><th>Сумма</th><th>Статус</th><th>Действия</th><th></th></tr></thead>
+            <thead><tr>
+              <th className={`sortable ${sortField === 'appointment_date' ? 'active' : ''}`} onClick={() => handleSort('appointment_date')}>Дата <span className="sort-arrow">{sortField === 'appointment_date' ? (sortDirection === 'asc' ? '↑' : '↓') : '⇅'}</span></th>
+              <th className={`sortable ${sortField === 'client_name' ? 'active' : ''}`} onClick={() => handleSort('client_name')}>Клиент <span className="sort-arrow">{sortField === 'client_name' ? (sortDirection === 'asc' ? '↑' : '↓') : '⇅'}</span></th>
+              <th>Телефон</th>
+              <th className={`sortable ${sortField === 'service_name' ? 'active' : ''}`} onClick={() => handleSort('service_name')}>Услуга <span className="sort-arrow">{sortField === 'service_name' ? (sortDirection === 'asc' ? '↑' : '↓') : '⇅'}</span></th>
+              <th className={`sortable ${sortField === 'service_price' ? 'active' : ''}`} onClick={() => handleSort('service_price')}>Сумма <span className="sort-arrow">{sortField === 'service_price' ? (sortDirection === 'asc' ? '↑' : '↓') : '⇅'}</span></th>
+              <th className={`sortable ${sortField === 'status' ? 'active' : ''}`} onClick={() => handleSort('status')}>Статус <span className="sort-arrow">{sortField === 'status' ? (sortDirection === 'asc' ? '↑' : '↓') : '⇅'}</span></th>
+              <th>Действия</th>
+              <th></th>
+            </tr></thead>
             <tbody>
-              {appointments.map(a => (<tr key={a.id}>
+              {filteredAppointments.map(a => (<tr key={a.id}>
                 <td>{new Date(a.appointment_date).toLocaleString('ru-RU')}</td>
                 <td><strong>{a.client_name || '—'}</strong></td>
                 <td><a href={`tel:${a.client_phone || ''}`}>{a.client_phone || '—'}</a></td>
