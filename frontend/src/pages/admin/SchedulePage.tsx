@@ -392,11 +392,10 @@ function SchedulePage() {
       {/* Legend */}
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 20, padding: 14, background: '#f9f9f9', borderRadius: 10, justifyContent: 'center' }}>
         {[
-          { color: '#e0e0e0', label: 'Свободно' },
-          { color: '#ffc107', label: 'Ожидает' },
-          { color: '#2196f3', label: 'Подтверждена' },
-          { color: '#4caf50', label: 'Завершена' },
-          { color: '#9e9e9e', label: 'Отменена' },
+          { color: '#4caf50', bg: '#e8f5e9', label: 'Рабочий день' },
+          { color: '#e0e0e0', bg: '#f5f5f5', label: 'Выходной' },
+          { color: '#667eea', bg: '#e8eaf6', label: 'Сегодня' },
+          { color: '#9e9e9e', bg: '#f5f5f5', label: 'Прошедший' },
         ].map(item => (
           <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#333' }}>
             <span style={{ width: 16, height: 16, borderRadius: 4, background: item.color, display: 'inline-block' }} />
@@ -447,22 +446,22 @@ function SchedulePage() {
                   borderRadius: 10,
                   textAlign: 'center',
                   cursor: (day.isCurrentMonth && !past) ? 'pointer' : 'default',
-                  background: past ? '#f0f0f0' : active ? 'linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)' : '#f9f9f9',
-                  border: `2px solid ${past ? '#e0e0e0' : active ? '#4caf50' : '#e0e0e0'}`,
+                  background: past ? '#f5f5f5' : active ? 'linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)' : today ? '#fff8e1' : '#f9f9f9',
+                  border: `2px solid ${past ? '#e0e0e0' : active ? '#4caf50' : today ? '#ff9800' : '#e0e0e0'}`,
                   minHeight: 80,
-                  opacity: past ? 0.4 : day.isCurrentMonth ? 1 : 0.3,
+                  opacity: past ? 0.6 : 1,
                   transition: 'all 0.2s ease',
-                  boxShadow: selected ? '0 0 0 3px rgba(255,152,0,0.3)' : today ? '0 0 0 2px rgba(102,126,234,0.3)' : 'none',
+                  boxShadow: today ? '0 0 0 2px rgba(255,152,0,0.2)' : selected ? '0 0 0 3px rgba(255,152,0,0.3)' : 'none',
                   userSelect: 'none',
                   WebkitUserSelect: 'none',
                 }}
                 onMouseEnter={(e) => { if (day.isCurrentMonth && !past) e.currentTarget.style.transform = 'translateY(-2px)' }}
               >
-                <div style={{ fontSize: 18, fontWeight: 700, color: past ? '#bbb' : today ? '#667eea' : '#333', marginBottom: 6 }}>
+                <div style={{ fontSize: 18, fontWeight: 700, color: past ? '#bbb' : today ? '#ff9800' : '#333', marginBottom: 6 }}>
                   {day.date.getDate()}
                 </div>
-                <div style={{ fontSize: 10, fontWeight: 600, background: past ? '#e0e0e0' : active ? '#c8e6c9' : '#f5f5f5', color: past ? '#999' : active ? '#2e7d32' : '#999', padding: '2px 8px', borderRadius: 10, display: 'inline-block' }}>
-                  {past ? 'Прошёл' : active ? 'Рабочий' : 'Выходной'}
+                <div style={{ fontSize: 10, fontWeight: 600, background: past ? '#e0e0e0' : active ? '#c8e6c9' : today ? '#ffe0b2' : '#f5f5f5', color: past ? '#999' : active ? '#2e7d32' : today ? '#e65100' : '#999', padding: '2px 8px', borderRadius: 10, display: 'inline-block' }}>
+                  {past ? 'Прошёл' : active ? 'Рабочий' : today ? 'Сегодня' : 'Выходной'}
                 </div>
                 {active && !past && apptCount > 0 && (
                   <div style={{ marginTop: 4, fontSize: 11, color: '#1565c0', fontWeight: 500 }}>
