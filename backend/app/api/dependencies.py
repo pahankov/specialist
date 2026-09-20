@@ -96,6 +96,16 @@ def require_master(master: Master = Depends(get_current_master)) -> Master:
     return master
 
 
+def require_super_admin(master: Master = Depends(get_current_master)) -> Master:
+    """Dependency that requires a master with is_admin=True."""
+    if not master.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Доступ разрешён только суперпользователям"
+        )
+    return master
+
+
 def require_client(client: Client = Depends(get_current_client)) -> Client:
     """Dependency that requires a valid client token."""
     return client

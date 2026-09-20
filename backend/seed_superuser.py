@@ -5,7 +5,7 @@ import os
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.future import select
 from app.database import Base, AsyncSessionLocal
 from app.models.master import Master
@@ -34,7 +34,7 @@ async def seed_superuser():
             name="Павел",
             email="pahankov@mail.ru",
             hashed_password=hashed,
-            phone="+7 (999) 123-45-67",
+            phone="+7 (961) 520-23-11",
             is_admin=True,
         )
         session.add(master)

@@ -3,6 +3,7 @@
 export interface Master {
   id: number
   name: string
+  email: string
   phone?: string
   telegram_username?: string
   description?: string
@@ -127,13 +128,26 @@ export interface AdminLoginResponse {
 
 export interface AdminStats {
   total_masters: number
+  active_masters?: number
+  admin_masters?: number
   total_appointments: number
+  status_counts: Record<string, number>
   total_clients: number
   total_services: number
+  total_revenue: number
   recent_appointments?: Array<{
     id: number
     master_id: number
+    master_name?: string | null
     client_name: string | null
+    appointment_date: string
+    status: string
+    service_name?: string | null
+    service_price?: number
+  }>
+  upcoming_appointments?: Array<{
+    id: number
+    master_name?: string | null
     appointment_date: string
     status: string
   }>

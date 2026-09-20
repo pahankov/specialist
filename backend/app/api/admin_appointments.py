@@ -36,27 +36,50 @@ async def get_admin_appointments(
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get appointments with client and service details."""
-    query = (
-        select(Appointment, Client.name.label('client_name'), Client.phone.label('client_phone'),
-               Service.name.label('service_name'), Service.price.label('service_price'))
-        .join(Client, Appointment.client_id == Client.id, isouter=True)
-        .join(Service, Appointment.service_id == Service.id, isouter=True)
-        .where(Appointment.master_id == master.id)
-    )
+    """Get appointments with client and service details.
+    Superadmins see all appointments; regular masters see only their own.
+    """
+    if master.is_admin:
+        query = (
+            select(Appointment, Client.name.label('client_name'), Client.phone.label('client_phone'),
+                   Service.name.label('service_name'), Service.price.label('service_price'),
+                   Master.name.label('master_name'))
+            .join(Client, Appointment.client_id == Client.id, isouter=True)
+            .join(Service, Appointment.service_id == Service.id, isouter=True)
+            .join(Master, Appointment.master_id == Master.id, isouter=True)
+        )
+    else:
+        query = (
+            select(Appointment, Client.name.label('client_name'), Client.phone.label('client_phone'),
+                   Service.name.label('service_name'), Service.price.label('service_price'))
+            .join(Client, Appointment.client_id == Client.id, isouter=True)
+            .join(Service, Appointment.service_id == Service.id, isouter=True)
+            .where(Appointment.master_id == master.id)
+        )
     if status:
         query = query.where(Appointment.status == status)
     query = query.order_by(Appointment.appointment_date.desc()).offset(offset).limit(limit)
     result = await db.execute(query)
     rows = result.all()
-    return [
-        AppointmentWithDetails(
-            id=row[0].id, master_id=row[0].master_id, service_id=row[0].service_id,
-            client_id=row[0].client_id, appointment_date=row[0].appointment_date,
-            status=row[0].status, notes=row[0].notes,
-            client_name=row[1], client_phone=row[2], service_name=row[3], service_price=row[4]
-        ) for row in rows
-    ]
+    
+    if master.is_admin and len(rows) > 0 and rows[0][5] is not None:  # has master_name column
+        return [
+            AppointmentWithDetails(
+                id=row[0].id, master_id=row[0].master_id, service_id=row[0].service_id,
+                client_id=row[0].client_id, appointment_date=row[0].appointment_date,
+                status=row[0].status, notes=row[0].notes,
+                client_name=row[1], client_phone=row[2], service_name=row[3], service_price=row[4]
+            ) for row in rows
+        ]
+    else:
+        return [
+            AppointmentWithDetails(
+                id=row[0].id, master_id=row[0].master_id, service_id=row[0].service_id,
+                client_id=row[0].client_id, appointment_date=row[0].appointment_date,
+                status=row[0].status, notes=row[0].notes,
+                client_name=row[1], client_phone=row[2], service_name=row[3], service_price=row[4]
+            ) for row in rows
+        ]
 
 
 @router.post("/appointments", response_model=AppointmentResponse, status_code=201)

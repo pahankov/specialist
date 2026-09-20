@@ -299,26 +299,40 @@ export const superAdminAuthApi = {
 }
 
 export const superAdminApi = {
+  // Global dashboard stats
   getGlobalDashboard() {
     return apiClient.get<AdminStats>('/api/v1/admin/dashboard')
   },
-  getAllMasters(search?: string, isActive?: boolean) {
-    return apiClient.get<Master[]>('/api/v1/masters/', { params: { search, is_active: isActive } })
+
+  // Master management
+  getAllMasters(params?: { search?: string; is_active?: boolean; is_admin?: boolean }) {
+    return apiClient.get<Master[]>('/api/v1/admin/masters', { params })
   },
   getMasterById(id: number) {
-    return apiClient.get<Master>(`/api/v1/masters/${id}`)
+    return apiClient.get<Master>(`/api/v1/admin/masters/${id}`)
   },
   createMaster(data: { name: string; email: string; password: string; phone?: string; telegram_username?: string }) {
-    return apiClient.post<Master>('/api/v1/masters/', data)
+    return apiClient.post<Master>('/api/v1/admin/masters', data)
   },
   updateMaster(id: number, data: { name?: string; phone?: string; telegram_username?: string; description?: string; password?: string }) {
-    return apiClient.patch<Master>(`/api/v1/masters/${id}`, data)
+    return apiClient.patch<Master>(`/api/v1/admin/masters/${id}`, data)
   },
   deleteMaster(id: number) {
-    return apiClient.delete(`/api/v1/masters/${id}`)
+    return apiClient.delete(`/api/v1/admin/masters/${id}`)
+  },
+  toggleMasterActive(id: number) {
+    return apiClient.post<Master>(`/api/v1/admin/masters/${id}/toggle-active`)
+  },
+  toggleMasterAdmin(id: number) {
+    return apiClient.post<Master>(`/api/v1/admin/masters/${id}/toggle-admin`)
   },
   getMasterStats(id: number) {
-    return apiClient.get<AdminStats>(`/api/v1/masters/${id}/stats`)
+    return apiClient.get<AdminStats>(`/api/v1/admin/masters/${id}/stats`)
+  },
+
+  // Global stats
+  getGlobalStats() {
+    return apiClient.get<AdminStats>('/api/v1/admin/global-stats')
   },
 }
 

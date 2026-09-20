@@ -1,6 +1,8 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { HomePage, BookingPage } from './pages/public'
 import { LoginPage, AdminLayout, DashboardPage, AppointmentsPage, ServicesPage, ClientsPage, SchedulePage, LogsPage } from './pages/admin'
+import MastersPage from './pages/admin/MastersPage'
+import GlobalStatsPage from './pages/admin/GlobalStatsPage'
 import ErrorBoundary from './components/ErrorBoundary'
 import './App.css'
 
@@ -8,7 +10,18 @@ function getIsAuthenticated() {
   return !!document.cookie.includes('access_token=')
 }
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
+function getIsAdmin() {
+  const match = document.cookie.match(new RegExp('(^| )' + 'access_token' + '=([^;]+)'))
+  if (!match) return false
+  try {
+    const payload = JSON.parse(atob(match[2].split('.')[1]))
+    return payload.is_admin === true
+  } catch {
+    return false
+  }
+}
+
+function AdminRoute({ children }: { children: React.ReactNode }) {
   if (!getIsAuthenticated()) {
     return <Navigate to="/admin/login" replace />
   }
@@ -18,6 +31,28 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 function App() {
   const location = useLocation()
   const isAdminRoute = location.pathname.startsWith('/admin')
+  const isAdminUser = getIsAdmin()
+
+  // Superadmin navigation items
+  const superadminNavItems = [
+    { path: '/admin/dashboard', label: '📊 Дашборд' },
+    { path: '/admin/masters', label: '👨‍💼 Мастера' },
+    { path: '/admin/appointments', label: '📅 Все записи' },
+    { path: '/admin/clients', label: '👥 Все клиенты' },
+    { path: '/admin/schedule', label: '🕐 Расписание' },
+  ]
+
+  // Regular master navigation items
+  const masterNavItems = [
+    { path: '/admin/dashboard', label: '📊 Дашборд' },
+    { path: '/admin/appointments', label: '📅 Мои записи' },
+    { path: '/admin/services', label: '💇 Мои услуги' },
+    { path: '/admin/clients', label: '👥 Клиенты' },
+    { path: '/admin/schedule', label: '🕐 Расписание' },
+  ]
+
+  const navItems = isAdminUser ? superadminNavItems : masterNavItems
+
   return (
     <ErrorBoundary>
       <div className={`app ${isAdminRoute ? 'admin-app' : 'public-app'}`}>
@@ -26,16 +61,16 @@ function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/booking" element={<BookingPage />} />
 
-        {/* Master login */}
+        {/* Master/Superadmin login */}
         <Route path="/admin/login" element={<LoginPage />} />
 
-        {/* Protected master admin routes */}
+        {/* Protected admin routes */}
         <Route
           path="/admin"
           element={
-            <ProtectedRoute>
-              <AdminLayout />
-            </ProtectedRoute>
+            <AdminRoute>
+              <AdminLayout navItems={navItems} isAdmin={isAdminUser} />
+            </AdminRoute>
           }
         >
           <Route index element={<Navigate to="/admin/dashboard" replace />} />
@@ -45,6 +80,13 @@ function App() {
           <Route path="clients" element={<ClientsPage />} />
           <Route path="schedule" element={<SchedulePage />} />
           <Route path="logs" element={<LogsPage />} />
+          {/* Superadmin-only routes */}
+          {isAdminUser && (
+            <>
+              <Route path="masters" element={<MastersPage />} />
+              <Route path="global-stats" element={<GlobalStatsPage />} />
+            </>
+          )}
         </Route>
 
         {/* Catch all */}

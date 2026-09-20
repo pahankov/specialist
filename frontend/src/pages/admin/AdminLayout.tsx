@@ -9,6 +9,16 @@ interface MasterInfo {
   is_admin: boolean
 }
 
+interface NavItem {
+  path: string
+  label: string
+}
+
+interface AdminLayoutProps {
+  navItems: NavItem[]
+  isAdmin: boolean
+}
+
 function getCookie(name: string): string | null {
   const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
   return match ? match[2] : null
@@ -23,7 +33,7 @@ function decodeJwtPayload(token: string): any {
   }
 }
 
-function AdminLayout() {
+function AdminLayout({ navItems, isAdmin }: AdminLayoutProps) {
   const navigate = useNavigate()
   const location = useLocation()
   const [master, setMaster] = useState<MasterInfo | null>(null)
@@ -36,9 +46,9 @@ function AdminLayout() {
       const payload = decodeJwtPayload(token)
       if (payload) {
         const masterId = parseInt(payload.sub)
-        const isAdmin = payload.is_admin === true
+        const isAdminUser = payload.is_admin === true
         const name = payload.name || 'Мастер'
-        setMaster({ id: masterId, name, is_admin: isAdmin })
+        setMaster({ id: masterId, name, is_admin: isAdminUser })
       }
     } catch {
       adminApi.getDashboard().catch(() => {})
@@ -56,31 +66,21 @@ function AdminLayout() {
   }
 
   const isActive = (path: string) => location.pathname === path
-  const navItems = [
-    { path: '/admin/dashboard', label: '📊 Дашборд' },
-    { path: '/admin/appointments', label: '📅 Записи' },
-    { path: '/admin/services', label: '💇 Услуги' },
-    { path: '/admin/clients', label: '👥 Клиенты' },
-    { path: '/admin/schedule', label: '🕐 Расписание' },
-  ]
-  const bottomNavItems = [
-    { path: '/admin/logs', label: '📋 Логи' },
-  ]
+
+  const layoutTitle = isAdmin ? '🍬 Панель суперпользователя' : '🍬 Мастерская'
+  const userRole = isAdmin ? 'Суперпользователь' : 'Мастер'
+
   return (
     <div className="admin-layout">
       <aside className="admin-sidebar">
         <div className="sidebar-header">
-          <h2>🍬 Мастерская</h2>
-          <p className="sidebar-subtitle">{master?.is_admin ? 'Суперпользователь' : 'Админ-панель'}</p>
+          <h2>{layoutTitle}</h2>
+          <p className="sidebar-subtitle">{userRole}</p>
           {master && <p className="sidebar-user">👤 {master.name}</p>}
         </div>
         <nav className="sidebar-nav">
           {navItems.map((item) => (
             <Link key={item.path} to={item.path} className={`nav-item ${isActive(item.path) ? 'active' : ''}`}>{item.label}</Link>
-          ))}
-          <div className="sidebar-divider" />
-          {bottomNavItems.map((item) => (
-            <Link key={item.path} to={item.path} className={`nav-item nav-item-bottom ${isActive(item.path) ? 'active' : ''}`}>{item.label}</Link>
           ))}
         </nav>
         <div className="sidebar-footer">

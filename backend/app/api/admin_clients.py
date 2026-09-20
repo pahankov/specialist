@@ -19,7 +19,7 @@ async def get_admin_clients(
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get all clients (paginated)."""
+    """Get all clients (paginated). Superadmins see all; masters see all too (clients are shared)."""
     result = await db.execute(select(Client).order_by(Client.name).offset(offset).limit(limit))
     return result.scalars().all()
 
