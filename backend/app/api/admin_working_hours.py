@@ -34,8 +34,8 @@ async def create_working_hour(
     """Create working hours."""
     hour = WorkingHour(
         master_id=master.id, schedule_date=data.schedule_date,
-        start_time=time.fromisoformat(data.start_time),
-        end_time=time.fromisoformat(data.end_time)
+        start_time=data.start_time,
+        end_time=data.end_time
     )
     db.add(hour)
     await db.flush()
@@ -59,10 +59,10 @@ async def update_working_hour(
         hour.schedule_date = data.schedule_date
         changes.append(f"дата: {data.schedule_date}")
     if data.start_time is not None:
-        hour.start_time = time.fromisoformat(data.start_time)
+        hour.start_time = data.start_time
         changes.append(f"начало: {data.start_time}")
     if data.end_time is not None:
-        hour.end_time = time.fromisoformat(data.end_time)
+        hour.end_time = data.end_time
         changes.append(f"конец: {data.end_time}")
     await log_action(db, master.id, "update", "working_hour", hour_id, ", ".join(changes) if changes else "Обновление", level="info")
     await db.commit()

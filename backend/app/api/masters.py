@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from typing import List
@@ -13,10 +13,15 @@ router = APIRouter()
 
 
 @router.get("/", response_model=List[MasterResponse])
-async def get_masters(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Master))
-    masters = result.scalars().all()
-    return masters
+async def get_masters(
+    db: AsyncSession = Depends(get_db),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+):
+    result = await db.execute(
+        select(Master).offset(offset).limit(limit)
+    )
+    return result.scalars().all()
 
 
 @router.get("/{master_id}", response_model=MasterResponse)

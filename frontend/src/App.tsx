@@ -5,7 +5,7 @@ import ErrorBoundary from './components/ErrorBoundary'
 import './App.css'
 
 function getIsAuthenticated() {
-  return !!localStorage.getItem('access_token')
+  return !!document.cookie.includes('access_token=')
 }
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {

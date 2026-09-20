@@ -1,7 +1,8 @@
-from sqlalchemy import Column, Integer, String, Time, ForeignKey, Index, DateTime
+from sqlalchemy import Column, Integer, Date, Time, ForeignKey, Index, DateTime
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 from app.database import Base
+
 
 class WorkingHour(Base):
     __tablename__ = "working_hours"
@@ -10,10 +11,11 @@ class WorkingHour(Base):
     )
 
     id = Column(Integer, primary_key=True)
-    master_id = Column(Integer, ForeignKey("masters.id"), nullable=False, index=True)
-    schedule_date = Column(String(10), nullable=False)  # YYYY-MM-DD
+    master_id = Column(Integer, ForeignKey("masters.id", ondelete="CASCADE"), nullable=False, index=True)
+    schedule_date = Column(Date, nullable=False)
     start_time = Column(Time, nullable=False)
     end_time = Column(Time, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc))
     master = relationship("Master", back_populates="working_hours")

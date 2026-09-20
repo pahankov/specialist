@@ -3,11 +3,11 @@ from typing import Optional
 from decimal import Decimal
 
 class ServiceCreate(BaseModel):
-    master_id: int
     name: str
     description: Optional[str] = None
     duration_minutes: int
     price: Decimal
+    master_id: Optional[int] = None
 
 class ServiceUpdate(BaseModel):
     name: Optional[str] = None

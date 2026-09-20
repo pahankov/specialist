@@ -19,7 +19,7 @@ export interface Service {
   name: string
   description?: string
   duration_minutes: number
-  price: number
+  price: number | string
   is_active: boolean
 }
 
@@ -34,10 +34,16 @@ export interface Appointment {
   id: number
   master_id: number
   service_id: number
+  client_id?: number
   appointment_date: string
   status: 'confirmed' | 'cancelled' | 'completed' | 'pending'
+  notes?: string
   created_at: string
   updated_at?: string
+  client_name?: string
+  client_phone?: string
+  service_name?: string
+  service_price?: number | string
 }
 
 export interface AppointmentCreate {
@@ -46,6 +52,7 @@ export interface AppointmentCreate {
   client_name: string
   client_phone: string
   appointment_date: string
+  notes?: string
 }
 
 export interface Review {
@@ -62,10 +69,10 @@ export interface Review {
 export interface WorkingHour {
   id: number
   master_id: number
-  date: string
+  schedule_date: string
   start_time: string
   end_time: string
-  is_active: boolean
+  is_active?: boolean
 }
 
 export interface BlockedSlot {
@@ -130,4 +137,38 @@ export interface AdminStats {
     appointment_date: string
     status: string
   }>
+}
+
+export interface MonthlyStats {
+  confirmed_appointments: number
+  total_minutes: number
+  total_hours: number
+  revenue: number
+}
+
+export interface CalendarDay {
+  date: Date
+  isCurrentMonth: boolean
+}
+
+export interface TimeSlot {
+  hour: number
+  status: 'free' | 'pending' | 'confirmed' | 'completed' | 'cancelled'
+  appointments: Appointment[]
+  isActive: boolean
+}
+
+export interface DaySchedule {
+  start: number
+  end: number
+}
+
+export interface BookingFormState {
+  open: boolean
+  date: Date | null
+  hour: number | null
+  clientId: number | null
+  serviceId: number | null
+  status: 'pending' | 'confirmed'
+  notes: string
 }

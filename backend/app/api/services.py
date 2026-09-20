@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from typing import List
@@ -12,10 +12,21 @@ logger = get_logger(__name__)
 router = APIRouter()
 
 @router.get("/", response_model=List[ServiceResponse])
-async def get_services(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Service))
-    services = result.scalars().all()
-    return services
+async def get_services(
+    db: AsyncSession = Depends(get_db),
+    master_id: int = Query(None),
+    is_active: bool = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+):
+    query = select(Service)
+    if master_id is not None:
+        query = query.where(Service.master_id == master_id)
+    if is_active is not None:
+        query = query.where(Service.is_active == is_active)
+    query = query.offset(offset).limit(limit)
+    result = await db.execute(query)
+    return result.scalars().all()
 
 @router.get("/{service_id}", response_model=ServiceResponse)
 async def get_service(service_id: int, db: AsyncSession = Depends(get_db)):
@@ -27,7 +38,16 @@ async def get_service(service_id: int, db: AsyncSession = Depends(get_db)):
 
 @router.post("/", response_model=ServiceResponse, status_code=201)
 async def create_service(service: ServiceCreate, db: AsyncSession = Depends(get_db)):
-    new_service = Service(**service.model_dump())
+    if service.master_id is None:
+        raise HTTPException(status_code=422, detail="master_id is required")
+    new_service = Service(
+        master_id=service.master_id,
+        name=service.name,
+        description=service.description,
+        duration_minutes=service.duration_minutes,
+        price=service.price,
+        is_active=True
+    )
     db.add(new_service)
     await db.commit()
     await db.refresh(new_service)

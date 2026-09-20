@@ -18,7 +18,7 @@ function LoginPage() {
     setLoading(true)
     try {
       const resp = await authApi.login(email, password)
-      localStorage.setItem('access_token', resp.data.access_token)
+      // Access token is set via Set-Cookie header from backend
       navigate('/admin/dashboard')
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Ошибка входа')

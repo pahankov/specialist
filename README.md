@@ -8,6 +8,7 @@
 
 - **Python** 3.11+
 - **Node.js** 20+
+- **PostgreSQL** 16 (production, через Docker)
 
 ### Запуск
 
@@ -56,17 +57,19 @@ sugar-booking/
 ├── backend/
 │   ├── app/
 │   │   ├── api/              # REST endpoints (auth, masters, services, appointments, clients, working_hours, admin)
-│   │   ├── models/           # SQLAlchemy ORM models (7 сущностей)
+│   │   ├── models/           # SQLAlchemy ORM models (9 сущностей + RefreshToken)
 │   │   ├── schemas/          # Pydantic schemas (request/response validation)
-│   │   ├── config.py         # Настройки (SQLite, JWT)
-│   │   ├── database.py       # Подключение к БД (aiosqlite)
-│   │   └── main.py           # FastAPI приложение
-│   ├── tests/                # pytest тесты (97 тестов: все модули)
+│   │   ├── config.py         # Настройки (SQLite/PostgreSQL, JWT, refresh tokens)
+│   │   ├── database.py       # Подключение к БД (aiosqlite / asyncpg)
+│   │   └── main.py           # FastAPI приложение (lifespan, create_all для SQLite)
+│   ├── alembic/              # Alembic миграции для PostgreSQL
+│   ├── alembic.ini           # Конфиг Alembic
+│   ├── tests/                # pytest тесты (98 тестов: все модули)
 │   ├── requirements.txt      # Зависимости Python
 │   └── pyproject.toml        # Конфиг pytest
 ├── frontend/
 │   ├── src/
-│   │   ├── api/              # API клиент (axios с auth-interceptor)
+│   │   ├── api/              # API клиент (axios с auth-interceptor, refresh queue, httpOnly cookies)
 │   │   ├── components/       # Общие компоненты (Modal, Pagination, FilterBar, MessageBar)
 │   │   ├── pages/            # Публичные + админ-панель (10 страниц)
 │   │   ├── App.tsx           # Роутинг
@@ -83,10 +86,11 @@ sugar-booking/
 
 | Компонент | Технология |
 |-----------|-----------|
-| Backend | FastAPI 0.115, SQLAlchemy 2.0 (async), aiosqlite |
-| Auth | JWT (python-jose), bcrypt (passlib) |
+| Backend | FastAPI 0.115, SQLAlchemy 2.0 (async), aiosqlite / asyncpg |
+| Auth | JWT (python-jose), bcrypt (passlib), refresh token rotation, httpOnly cookies |
+| Migrations | Alembic 1.14 |
 | Frontend | React 18, TypeScript 5, Vite 6 |
-| HTTP | Axios |
+| HTTP | Axios (interceptors, refresh queue) |
 | Тесты | pytest, pytest-asyncio, httpx |
 | Production DB | PostgreSQL 16 |
 | Production cache | Redis 7 |
@@ -94,36 +98,44 @@ sugar-booking/
 ## 📋 Что реализовано
 
 ### ✅ Backend
-- Регистрация и аутентификация мастера (JWT)
+- Регистрация и аутентификация мастера (JWT + refresh token rotation)
+- httpOnly cookies для refresh token, readable cookies для access token
 - CRUD мастеров (создание, чтение, обновление, удаление)
 - CRUD услуг (создание, чтение, обновление, soft-delete)
 - CRUD записей (создание, подтверждение, завершение, отмена, удаление)
 - CRUD клиентов (создание, чтение, обновление, удаление)
 - CRUD заблокированных слотов (блокировка времени)
 - CRUD рабочего расписания
-- Публичная запись без авторизации
+- Публичная запись с проверкой конфликтов (409 Conflict при пересечении)
 - Админская запись с выбором клиента из БД и проверкой конфликтов
 - Расчёт доступных дней и слотов
 - Управление клиентами (автоматическое создание при записи)
 - Журнал действий (audit logs) — фиксация всех операций
 - Экспорт записей и клиентов в CSV
-- Пагинация списка записей
+- Пагинация: мастера, клиенты, услуги (limit/offset, 1-200)
+- Валидация пароля: min 8 символов, 1 заглавная, 1 цифра
+- Валидация телефона: 10 цифр, автоформатирование в +7 (XXX) XXX-XX-XX
+- Alembic миграции для PostgreSQL
+- Авто-создание таблиц для SQLite через `create_all` в lifespan
 - Swagger UI документация (`/docs`)
 
 ### ✅ Frontend
 - Главная страница (список мастеров и услуг)
-- Страница бронирования
+- Страница бронирования с проверкой конфликтов
 - Админ-панель (10 страниц):
   - Дашборд — статистика записей, клиентов, услуг, доход
   - Записи — фильтрация по статусу, пагинация, подтверждение, завершение, отмена, удаление
-  - Услуги — создание, редактирование, soft-delete
-  - Клиенты — создание, редактирование, удаление, экспорт CSV
-  - Расписание — управление рабочими часами
+  - Услуги — создание, редактирование, soft-delete, пагинация
+  - Клиенты — создание, редактирование, удаление, экспорт CSV, пагинация
+  - Расписание — Calendar, TimeSlots, BookingModal, MonthlyStats (рефакторинг из монолита)
   - Логи — журнал всех действий с фильтрацией и пагинацией
+- Cookie-based auth (без localStorage)
+- Axios interceptor с refresh-очередью
+- Обработка ошибок 422 (валидация)
 - Адаптивный дизайн
 
 ### ✅ Тесты
-- 97 pytest-тестов (все модули: auth, masters, services, appointments, clients, admin CRUD)
+- 98 pytest-тестов (все модули: auth, masters, services, appointments, clients, admin CRUD)
 - 100% покрытие всех эндпоинтов
 - In-memory SQLite для изоляции тестов
 - pytest-asyncio для асинхронных тестов
@@ -134,12 +146,14 @@ sugar-booking/
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
 | `POST` | `/api/v1/auth/register` | Регистрация мастера |
-| `POST` | `/api/v1/auth/login` | Вход (JWT токен) |
+| `POST` | `/api/v1/auth/login` | Вход (JWT + refresh token в cookies) |
+| `POST` | `/api/v1/auth/refresh` | Обновление access token (refresh token rotation) |
+| `POST` | `/api/v1/auth/logout` | Выход (очистка cookies) |
 
 ### Masters
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
-| `GET` | `/api/v1/masters/` | Список мастеров |
+| `GET` | `/api/v1/masters/` | Список мастеров (пагинация) |
 | `GET` | `/api/v1/masters/{id}` | Мастер по ID |
 | `POST` | `/api/v1/masters/` | Создать мастера |
 | `PATCH` | `/api/v1/masters/{id}` | Обновить мастера |
@@ -148,7 +162,7 @@ sugar-booking/
 ### Services
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
-| `GET` | `/api/v1/services/` | Список услуг |
+| `GET` | `/api/v1/services/` | Список услуг (пагинация) |
 | `GET` | `/api/v1/services/{id}` | Услуга по ID |
 | `POST` | `/api/v1/services/` | Создать услугу |
 | `DELETE` | `/api/v1/services/{id}` | Удалить услугу |
@@ -158,7 +172,7 @@ sugar-booking/
 |-------|----------|----------|
 | `GET` | `/api/v1/appointments/` | Список записей |
 | `POST` | `/api/v1/appointments/` | Создать запись |
-| `POST` | `/api/v1/appointments/public` | Публичная запись (без авторизации) |
+| `POST` | `/api/v1/appointments/public` | Публичная запись с conflict-check (409 при пересечении) |
 | `GET` | `/api/v1/appointments/available-days` | Доступные дни |
 | `GET` | `/api/v1/appointments/available-slots` | Доступные слоты |
 | `DELETE` | `/api/v1/appointments/{id}` | Удалить запись |
@@ -225,25 +239,36 @@ sugar-booking/
 
 ## 🗄️ База данных
 
-**Локальная разработка:** SQLite (aiosqlite) — таблицы создаются автоматически при старте.
+**Локальная разработка:** SQLite (aiosqlite) — таблицы создаются автоматически при старте через `create_all`.
 
-**Production:** PostgreSQL 16 (через Docker Compose).
+**Production:** PostgreSQL 16 (через Docker Compose) + Alembic миграции.
+
+### Миграции
+
+```powershell
+cd backend
+alembic revision --autogenerate -m "description"
+alembic upgrade head
+```
 
 ### Сущности
 
 ```
-Master (id, name, email, phone, telegram_username, hashed_password, ...)
-  ├─ 1:N ──> Service (id, master_id, name, description, duration_minutes, price, is_active)
+Master (id, name, email, phone, telegram_username, hashed_password, is_admin, is_active, avatar_url, timezone.utc)
+  ├─ 1:N ──> Service (id, master_id, name, description, duration_minutes, price, is_active, cascade delete)
   │           └─ 1:N ──> Appointment
-  ├─ 1:N ──> Appointment (id, master_id, service_id, client_id, appointment_date, status, notes)
+  ├─ 1:N ──> Appointment (id, master_id, service_id, client_id, appointment_date, status, notes, cascade delete)
   │           └─ N:1 ──> Client
   │           └─ N:1 ──> Service
-  ├─ 1:N ──> WorkingHour (id, master_id, schedule_date, start_time, end_time)
+  ├─ 1:N ──> WorkingHour (id, master_id, schedule_date[Date], start_time, end_time)
   ├─ 1:N ──> AuditLog (id, master_id, action, entity_type, entity_id, details, ip_address, created_at)
-  └─ 1:N ──> BlockedSlot (id, master_id, start_dt, end_dt, reason, created_at)
+  ├─ 1:N ──> BlockedSlot (id, master_id, start_dt, end_dt, reason, created_at)
+  └─ 1:N ──> RefreshToken (id, master_id, token_jti, expires_at, is_revoked, cascade delete)
 
-Client (id, name, phone, email, created_at)
+Client (id, name, phone, email, created_at, unique phone)
   └─ 1:N ──> Appointment
+
+RefreshToken (id, master_id, token_jti, token_hash, expires_at, is_revoked, created_at, used_for_rotation)
 ```
 
 ### Статусы записей
@@ -254,20 +279,31 @@ Client (id, name, phone, email, created_at)
 
 ## 🔒 Безопасность
 
-1. **Пароли:** Bcrypt hashing (passlib)
-2. **Аутентификация:** JWT токены (python-jose, HS256)
-3. **Валидация:** Pydantic schemas с проверкой типов
-4. **SQL-инъекции:** Защищено SQLAlchemy ORM
+1. **Пароли:** Bcrypt hashing (passlib), валидация: min 8 символов, 1 заглавная, 1 цифра
+2. **Аутентификация:** JWT токены (python-jose, HS256) + refresh token rotation
+3. **Cookies:** access_token — `httponly=False` (читается JS), refresh_token — `httponly=True` (только HTTP)
+4. **Валидация:** Pydantic schemas с проверкой типов
+5. **SQL-инъекции:** Защищено SQLAlchemy ORM
 
 ## 🧪 Тесты
 
 ```powershell
 cd backend
 $env:PYTHONPATH='.'
-pytest tests/ -v                          # Все тесты
+pytest tests/ -v                          # Все тесты (98)
 pytest tests/test_auth.py -v              # Только auth
 pytest tests/test_masters.py -v           # Только masters
 pytest tests/ -v --cov=app                # С покрытием
+```
+
+## 🌱 Seed-скрипт
+
+Создание суперпользователя:
+
+```powershell
+cd backend
+$env:PYTHONPATH='.'
+python seed_superuser.py
 ```
 
 ## 🐛 Решение проблем
@@ -331,9 +367,21 @@ curl -X POST http://localhost:8000/api/v1/auth/register \
   -d '{"name":"Елена","email":"elena@example.com","password":"SecurePass123!","phone":"+79991234567","telegram_username":"elena_sugar"}'
 ```
 
-### Логин
+### Логин (возвращает cookies)
 ```bash
-curl -X POST "http://localhost:8000/api/v1/auth/login?email=elena@example.com&password=SecurePass123!"
+curl -X POST "http://localhost:8000/api/v1/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"elena@example.com","password":"SecurePass123!"}'
+```
+
+### Обновление токена
+```bash
+curl -X POST http://localhost:8000/api/v1/auth/refresh
+```
+
+### Выход (очистка cookies)
+```bash
+curl -X POST http://localhost:8000/api/v1/auth/logout
 ```
 
 ### Создание услуги
@@ -343,14 +391,27 @@ curl -X POST http://localhost:8000/api/v1/services/ \
   -d '{"master_id":1,"name":"Шугаринг ног полностью","description":"Удаление волос на ногах","duration_minutes":60,"price":2500}'
 ```
 
-### Публичная запись
+### Публичная запись (с conflict-check)
 ```bash
 curl -X POST http://localhost:8000/api/v1/appointments/public \
   -H "Content-Type: application/json" \
-  -d '{"master_id":1,"service_id":1,"client_name":"Иван","client_phone":"+79991234567","appointment_date":"2026-09-20T14:00:00"}'
+  -d '{"master_id":1,"service_id":1,"client_name":"Иван","client_phone":"9991234567","appointment_date":"2026-09-20T14:00:00"}'
 ```
 
 ## 📚 История версий
+
+### [0.8.0] — 2026-09-21
+- **Alembic миграции:** поддержка PostgreSQL через Alembic 1.14
+- **Refresh token flow:** rotation + httpOnly cookies, endpoint `/api/v1/auth/refresh` и `/api/v1/auth/logout`
+- **Conflict check:** публичная запись проверяет пересечение слотов с существующими (409 Conflict)
+- **Рефакторинг SchedulePage:** 710 строк → 5 компонентов (Calendar, TimeSlots, BookingModal, MonthlyStats, helpers)
+- **Валидация пароля:** min 8 символов, 1 заглавная, 1 цифра
+- **Пагинация:** masters, clients, services (limit/offset, 1-200)
+- **LoginModal:** обработка 422 ошибок, подсказка требований пароля, телефон 10 цифр
+- **Seed-скрипт:** создание суперпользователя (`seed_superuser.py`)
+- **Фиксы:** дубликаты функций в helpers/hooks, ошибка `dt_timezone`, `postgresql_where` в индексах
+- **Модели:** cascade delete, Date вместо String(10), timezone.utc, unique phone, индексы
+- **Тесты:** 98 тестов (все проходят)
 
 ### [0.7.0] — 2026-09-21
 - **Логирование:** стандартная система с 5 уровнями (DEBUG, INFO, WARNING, ERROR, CRITICAL)
@@ -407,7 +468,7 @@ curl -X POST http://localhost:8000/api/v1/appointments/public \
 - Система уведомлений (email/push)
 
 ### Phase 3 — Production Ready
-- Миграция на PostgreSQL (Alembic)
+- ✅ Alembic миграции (реализовано)
 - CI/CD (GitHub Actions)
 - Frontend-тесты (Vitest)
 - Деплой (Nginx, HTTPS)

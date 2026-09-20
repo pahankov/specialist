@@ -17,33 +17,86 @@ import type {
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
-// ─── Unified axios instance with auth interceptor ───────────────────
+// ─── Cookie helper ──────────────────────────────────────────────────
+
+function getCookie(name: string): string | null {
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
+  return match ? match[2] : null
+}
+
+// ─── Unified axios instance ────────────────────────────────────────
 
 const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE,
   headers: { 'Content-Type': 'application/json' },
+  withCredentials: true,  // send cookies
 })
 
-// Attach auth token to every request automatically
+// Attach access token from cookie to every request
 apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-  const token = localStorage.getItem('access_token')
+  const token = getCookie('access_token')
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
   return config
 })
 
-// Handle 401 globally — redirect to login
+// Handle 401 — try refresh, then redirect to login
+let isRefreshing = false
+let failedQueue: Array<{
+  resolve: (token: string) => void
+  reject: (error: any) => void
+}> = []
+
+function processQueue(error: any, token: string | null = null) {
+  failedQueue.forEach(prom => {
+    if (error) prom.reject(error)
+    else prom.resolve(token!)
+  })
+  failedQueue = []
+  isRefreshing = false
+}
+
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('access_token')
-      // Only redirect if not already on login page
-      if (!window.location.pathname.includes('/admin/login')) {
+  async (error) => {
+    const originalRequest = error.config
+
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject })
+        }).then(token => {
+          originalRequest.headers.Authorization = `Bearer ${token}`
+          return apiClient(originalRequest)
+        })
+      }
+
+      originalRequest._retry = true
+      isRefreshing = true
+
+      try {
+        // Call refresh endpoint — token comes from httpOnly cookie automatically
+        const { data } = await apiClient.post<{ access_token: string }>('/api/v1/auth/refresh')
+        
+        // Update access token in cookie (set via Set-Cookie header from backend)
+        // Also update axios defaults
+        apiClient.defaults.headers.common.Authorization = `Bearer ${data.access_token}`
+        
+        processQueue(null, data.access_token)
+        
+        originalRequest.headers.Authorization = `Bearer ${data.access_token}`
+        return apiClient(originalRequest)
+      } catch (refreshError) {
+        processQueue(refreshError, null)
+        // Not refreshed — logout
+        document.cookie = 'access_token=; path=/; max-age=0'
+        document.cookie = 'refresh_token=; path=/; max-age=0'
         window.location.href = '/admin/login'
+        return Promise.reject(refreshError)
       }
     }
+
     return Promise.reject(error)
   }
 )
@@ -116,18 +169,16 @@ export const clientsPublicApi = {
   delete: (id: number) => apiClient.delete(`/api/v1/clients/${id}`),
 }
 
-// ─── Auth API (public + admin) ──────────────────────────────────────
+// ─── Auth API ──────────────────────────────────────────────────────
 
 export const authApi = {
-  // Master login
   login: (email: string, password: string) =>
     apiClient.post<LoginResponse>('/api/v1/auth/login', { email, password }),
-  // Master registration
   register: (data: { name: string; email: string; password: string; phone?: string; telegram_username?: string }) =>
     apiClient.post<Master>('/api/v1/auth/register', data),
-  // Client login by phone
   clientLogin: (phone: string) =>
     apiClient.post<LoginResponse>('/api/v1/auth/client/login', { phone }),
+  logout: () => apiClient.post('/api/v1/auth/logout'),
 }
 
 export const adminApi = {
@@ -238,7 +289,7 @@ export const adminApi = {
   },
 }
 
-// ─── SuperAdmin API (auth required, uses interceptor) ───────────────
+// ─── SuperAdmin API ────────────────────────────────────────────────
 
 export const superAdminAuthApi = {
   register: (data: { name: string; email: string; password: string }) =>
@@ -248,12 +299,9 @@ export const superAdminAuthApi = {
 }
 
 export const superAdminApi = {
-  // Global dashboard
   getGlobalDashboard() {
     return apiClient.get<AdminStats>('/api/v1/admin/dashboard')
   },
-
-  // Masters management
   getAllMasters(search?: string, isActive?: boolean) {
     return apiClient.get<Master[]>('/api/v1/masters/', { params: { search, is_active: isActive } })
   },

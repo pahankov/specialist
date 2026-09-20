@@ -9,30 +9,52 @@ interface MasterInfo {
   is_admin: boolean
 }
 
+function getCookie(name: string): string | null {
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
+  return match ? match[2] : null
+}
+
+function decodeJwtPayload(token: string): any {
+  try {
+    const payload = token.split('.')[1]
+    return JSON.parse(atob(payload))
+  } catch {
+    return null
+  }
+}
+
 function AdminLayout() {
   const navigate = useNavigate()
   const location = useLocation()
   const [master, setMaster] = useState<MasterInfo | null>(null)
 
   useEffect(() => {
-    const token = localStorage.getItem('access_token')
+    const token = getCookie('access_token')
     if (!token) return
 
-    // Try to get master info from token payload
     try {
-      const payload = JSON.parse(atob(token.split('.')[1]))
-      const masterId = parseInt(payload.sub)
-      const isAdmin = payload.is_admin === true
-      const name = payload.name || 'Мастер'
-      setMaster({ id: masterId, name, is_admin: isAdmin })
+      const payload = decodeJwtPayload(token)
+      if (payload) {
+        const masterId = parseInt(payload.sub)
+        const isAdmin = payload.is_admin === true
+        const name = payload.name || 'Мастер'
+        setMaster({ id: masterId, name, is_admin: isAdmin })
+      }
     } catch {
-      // If we can't parse token, try to fetch
-      adminApi.getDashboard()
-        .catch(() => {})
+      adminApi.getDashboard().catch(() => {})
     }
   }, [])
 
-  const handleLogout = () => { localStorage.removeItem('access_token'); navigate('/') }
+  const handleLogout = async () => {
+    try {
+      await adminApi.getDashboard() // just to trigger, won't be used
+    } catch { /* ignore */ }
+    
+    document.cookie = 'access_token=; path=/; max-age=0'
+    // Backend will also clear refresh_token cookie via /api/v1/auth/logout
+    navigate('/')
+  }
+
   const isActive = (path: string) => location.pathname === path
   const navItems = [
     { path: '/admin/dashboard', label: '📊 Дашборд' },

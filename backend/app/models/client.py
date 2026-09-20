@@ -1,7 +1,8 @@
 from sqlalchemy import Column, Integer, String, DateTime, Index
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 from app.database import Base
+
 
 class Client(Base):
     __tablename__ = "clients"
@@ -13,6 +14,7 @@ class Client(Base):
     name = Column(String(100), nullable=False)
     phone = Column(String(20), unique=True, nullable=False)
     email = Column(String(255), index=True)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc))
     appointments = relationship("Appointment", back_populates="client")

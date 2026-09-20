@@ -35,7 +35,7 @@ class TestRegisterMaster:
         assert "уже существует" in resp2.json()["detail"]
 
     async def test_register_weak_password(self, client):
-        """Registration accepts any password (no strength validation yet)."""
+        """Registration rejects weak passwords (min 8 chars, 1 uppercase, 1 digit)."""
         data = {
             "name": "Weak Password User",
             "email": "weak@example.com",
@@ -43,7 +43,17 @@ class TestRegisterMaster:
             "phone": "+79990000000"
         }
         resp = await client.post("/api/v1/auth/register", json=data)
-        # Currently accepts any password (no validation in schema)
+        assert resp.status_code == 422  # validation error
+
+    async def test_register_strong_password(self, client):
+        """Registration accepts strong passwords."""
+        data = {
+            "name": "Strong Password User",
+            "email": "strong@example.com",
+            "password": "SecurePass123",
+            "phone": "+79990000001"
+        }
+        resp = await client.post("/api/v1/auth/register", json=data)
         assert resp.status_code == 201
 
 

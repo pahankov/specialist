@@ -18,8 +18,8 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
   const [loading, setLoading] = useState(false)
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value.replace(/\D/g, '').slice(0, 11)
-    setPhone(value)
+    const digits = e.target.value.replace(/\D/g, '').slice(0, 10)
+    setPhone(digits)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -31,7 +31,6 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
       setLoading(true)
       try {
         const resp = await authApi.clientLogin(phone)
-        localStorage.setItem('access_token', resp.data.access_token)
         window.location.href = '/client/appointments'
       } catch (err: any) {
         setError(err.response?.data?.detail || 'Клиент не найден')
@@ -46,12 +45,17 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
       setLoading(true)
       try {
         await authApi.register({ name, email, password, phone: phone || undefined })
-        // Auto-login after successful registration
-        const loginResp = await authApi.login(email, password)
-        localStorage.setItem('access_token', loginResp.data.access_token)
+        await authApi.login(email, password)
         window.location.href = '/admin/dashboard'
       } catch (err: any) {
-        setError(err.response?.data?.detail || 'Ошибка регистрации')
+        const detail = err.response?.data?.detail
+        if (Array.isArray(detail) && detail.length > 0) {
+          setError(detail[0]?.msg || 'Ошибка валидации')
+        } else if (typeof detail === 'string') {
+          setError(detail)
+        } else {
+          setError('Ошибка регистрации. Пароль: 8+ символов, заглавная буква, цифра.')
+        }
       } finally {
         setLoading(false)
       }
@@ -61,8 +65,7 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
     // Master login
     setLoading(true)
     try {
-      const resp = await authApi.login(email, password)
-      localStorage.setItem('access_token', resp.data.access_token)
+      await authApi.login(email, password)
       window.location.href = '/admin/dashboard'
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Ошибка входа')
@@ -101,8 +104,8 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Введите пароль"
-                required={!isRegister}
+                placeholder={isRegister ? 'Мин. 8 символов, заглавная буква, цифра' : 'Введите пароль'}
+                required={isRegister}
                 style={{ paddingRight: 44 }}
               />
               <button
@@ -117,6 +120,11 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
                 {showPassword ? '🙈' : '👁️'}
               </button>
             </div>
+            {isRegister && (
+              <small style={{ color: '#999', fontSize: 12, display: 'block', marginTop: 4 }}>
+                Мин. 8 символов, 1 заглавная буква, 1 цифра
+              </small>
+            )}
           </div>
 
           {/* Register fields */}
@@ -138,7 +146,8 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
                   type="tel"
                   value={phone}
                   onChange={handlePhoneChange}
-                  placeholder="+7 (999) 123-45-67"
+                  placeholder="9991234567"
+                  maxLength={10}
                   required
                 />
               </div>
@@ -153,7 +162,8 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
                 type="tel"
                 value={phone}
                 onChange={handlePhoneChange}
-                placeholder="+7 (999) 123-45-67"
+                placeholder="9991234567"
+                maxLength={10}
               />
             </div>
           )}

@@ -1,7 +1,8 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime
+from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, func
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 from app.database import Base
+
 
 class Master(Base):
     __tablename__ = "masters"
@@ -12,10 +13,12 @@ class Master(Base):
     phone = Column(String(20))
     telegram_username = Column(String(100))
     description = Column(Text)
+    avatar_url = Column(String(500))
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc))
     services = relationship("Service", back_populates="master")
     appointments = relationship("Appointment", back_populates="master")
     working_hours = relationship("WorkingHour", back_populates="master")

@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text, Index
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 from app.database import Base
 
 
@@ -11,12 +11,13 @@ class BlockedSlot(Base):
     )
 
     id = Column(Integer, primary_key=True)
-    master_id = Column(Integer, ForeignKey("masters.id"), nullable=False, index=True)
+    master_id = Column(Integer, ForeignKey("masters.id", ondelete="CASCADE"), nullable=False, index=True)
     start_dt = Column(DateTime, nullable=False)
     end_dt = Column(DateTime, nullable=False)
     reason = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc))
 
     master = relationship("Master", back_populates="blocked_slots")
 

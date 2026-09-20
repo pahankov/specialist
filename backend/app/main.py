@@ -11,11 +11,18 @@ logger = get_logger(__name__)
 
 logger.info("Инициализация приложения %s", settings.APP_NAME)
 
-# Create tables on startup
+
 async def lifespan(app: FastAPI):
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    """Application lifespan — create tables for SQLite, skip for PostgreSQL (Alembic)."""
+    is_postgres = "postgres" in settings.DATABASE_URL
+    if is_postgres:
+        logger.info("База данных: PostgreSQL (Alembic migrations)")
+    else:
+        logger.info("База данных: SQLite (auto-create tables)")
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
     yield
+
 
 app = FastAPI(
     title=settings.APP_NAME,

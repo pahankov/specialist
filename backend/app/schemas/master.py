@@ -1,11 +1,10 @@
-import re
 from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
 from typing import Optional
 from datetime import datetime
+import re
 
 
 def normalize_phone(phone: str) -> str:
-    """Извлекает цифры, нормализует к +7, возвращает формат +7 (XXX) XXX-XX-XX."""
     digits = re.sub(r'\D', '', phone)
     if not digits:
         raise ValueError('Введите номер телефона')
@@ -16,7 +15,7 @@ def normalize_phone(phone: str) -> str:
     if not digits.startswith('7'):
         digits = '7' + digits
     if len(digits) != 11:
-        raise ValueError('Номер телефона должен содержать 10 цифр (например 9991234567)')
+        raise ValueError('Номер телефона должен содержать 10 цифр')
     return f'+7 ({digits[1:4]}) {digits[4:7]}-{digits[7:9]}-{digits[9:11]}'
 
 
@@ -32,12 +31,25 @@ class MasterCreate(BaseModel):
     def validate_phone(cls, v: str) -> str:
         return normalize_phone(v)
 
+    @field_validator('password')
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError('Пароль должен содержать минимум 8 символов')
+        if not any(c.isupper() for c in v):
+            raise ValueError('Пароль должен содержать хотя бы одну заглавную букву')
+        if not any(c.isdigit() for c in v):
+            raise ValueError('Пароль должен содержать хотя бы одну цифру')
+        return v
+
+
 class MasterUpdate(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None
     telegram_username: Optional[str] = None
     description: Optional[str] = None
     password: Optional[str] = None
+
 
 class MasterResponse(BaseModel):
     id: int

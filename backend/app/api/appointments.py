@@ -109,6 +109,20 @@ async def public_booking(booking: PublicBookingCreate, db: AsyncSession = Depend
         logger.warning("Услуга не найдена: id=%s, мастер=%s", booking.service_id, booking.master_id)
         raise HTTPException(status_code=404, detail="Service not found or inactive")
     
+    # Check for time conflicts
+    service_end = booking.appointment_date + timedelta(minutes=service.duration_minutes)
+    conflict_result = await db.execute(
+        select(Appointment).where(
+            Appointment.master_id == booking.master_id,
+            Appointment.status != "cancelled",
+            Appointment.appointment_date < service_end,
+            Appointment.appointment_date + timedelta(minutes=service.duration_minutes) > booking.appointment_date
+        ).limit(1)
+    )
+    if conflict_result.scalar_one_or_none():
+        logger.warning("Конфликт времени: мастер=%s, время=%s", booking.master_id, booking.appointment_date)
+        raise HTTPException(status_code=409, detail="Это время уже занято")
+    
     # Check or create client
     client_result = await db.execute(select(Client).where(Client.phone == booking.client_phone))
     client = client_result.scalar_one_or_none()
