@@ -20,7 +20,7 @@ function AdminLayout() {
     <div className="admin-layout">
       <aside className="admin-sidebar">
         <div className="sidebar-header">
-          <h2>🍬 Sugar Booking</h2>
+          <h2>🍬 Мастерская</h2>
           <p className="sidebar-subtitle">Админ-панель</p>
         </div>
         <nav className="sidebar-nav">

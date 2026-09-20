@@ -38,7 +38,7 @@ function HomePage() {
     <div className="home-page">
       <header className="hero">
         <div className="hero-content">
-          <h1>Sugar Booking</h1>
+          <h1>Запись на шугаринг</h1>
           <p>Запишитесь к лучшему мастеру шугаринга</p>
           <Link to="/admin/login" className="btn btn-secondary admin-link">
             Панель администратора

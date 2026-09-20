@@ -30,7 +30,7 @@ function LoginPage() {
     <div className="login-page">
       <div className="login-card card">
         <h1>🔐 Вход для мастера</h1>
-        <p className="login-subtitle">Админ-панель Sugar Booking</p>
+        <p className="login-subtitle">Вход в систему</p>
         {error && <div className="error-message">{error}</div>}
         <form onSubmit={handleSubmit}>
           <div className="form-group">
