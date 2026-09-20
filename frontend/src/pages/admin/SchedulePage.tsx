@@ -60,6 +60,15 @@ function SchedulePage() {
     const isActive = !!currentSchedule[dateStr]
     const currentActive = activeHoursRef.current
 
+    // Check if day has appointments before deactivating
+    if (isActive) {
+      const dayAppointments = appointments.filter(a => a.appointment_date?.split('T')[0] === dateStr)
+      if (dayAppointments.length > 0) {
+        setError(`Нельзя деактивировать день — в нём ${dayAppointments.length} запись(ей). Сначала удалите записи.`)
+        return
+      }
+    }
+
     // Optimistic UI update — update BOTH schedule AND activeHours atomically
     const newSchedule: Record<string, { start: number; end: number }> = { ...currentSchedule }
     const newActiveHours: Record<string, boolean> = { ...currentActive }
@@ -103,7 +112,7 @@ function SchedulePage() {
     } catch (err) {
       console.error('Failed to sync working hours:', err)
     }
-  }, [])
+  }, [appointments])
 
   const isPast = (date: Date) => {
     const now = new Date()
@@ -280,7 +289,6 @@ function SchedulePage() {
         status: bookingForm.status,
         notes: bookingForm.notes || undefined
       })
-      setSuccessMsg('Запись создана')
       closeBookingForm()
       fetchAppointmentsForMonth()
     } catch (err: any) {
@@ -377,7 +385,6 @@ function SchedulePage() {
   const formatHour = (h: number) => String(h).padStart(2, '0') + ':00'
 
   if (loading) return <div style={{ padding: 60, textAlign: 'center', color: '#666', fontSize: 16 }}>Загрузка...</div>
-  if (error) return <div style={{ padding: 60, textAlign: 'center', color: '#f44336' }}>{error}</div>
 
   const monthDays = getMonthDays(currentMonth)
   const monthName = currentMonth.toLocaleString('ru-RU', { month: 'long', year: 'numeric' })
@@ -446,21 +453,21 @@ function SchedulePage() {
                   borderRadius: 10,
                   textAlign: 'center',
                   cursor: (day.isCurrentMonth && !past) ? 'pointer' : 'default',
-                  background: past ? '#f5f5f5' : active ? 'linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)' : today ? '#fff8e1' : '#f9f9f9',
-                  border: `2px solid ${past ? '#e0e0e0' : active ? '#4caf50' : today ? '#ff9800' : '#e0e0e0'}`,
+                  background: past ? '#e8e8e8' : active ? 'linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)' : today ? '#e3f2fd' : '#f9f9f9',
+                  border: `2px solid ${past ? '#bdbdbd' : active ? '#4caf50' : today ? '#42a5f5' : '#e0e0e0'}`,
                   minHeight: 80,
-                  opacity: past ? 0.6 : 1,
+                  opacity: past ? 0.85 : 1,
                   transition: 'all 0.2s ease',
-                  boxShadow: today ? '0 0 0 2px rgba(255,152,0,0.2)' : selected ? '0 0 0 3px rgba(255,152,0,0.3)' : 'none',
+                  boxShadow: today ? '0 0 0 3px rgba(66,165,245,0.25)' : selected ? '0 0 0 3px rgba(255,152,0,0.3)' : 'none',
                   userSelect: 'none',
                   WebkitUserSelect: 'none',
                 }}
                 onMouseEnter={(e) => { if (day.isCurrentMonth && !past) e.currentTarget.style.transform = 'translateY(-2px)' }}
               >
-                <div style={{ fontSize: 18, fontWeight: 700, color: past ? '#bbb' : today ? '#ff9800' : '#333', marginBottom: 6 }}>
+                <div style={{ fontSize: 18, fontWeight: 700, color: past ? '#9e9e9e' : today ? '#1976d2' : '#333', marginBottom: 6 }}>
                   {day.date.getDate()}
                 </div>
-                <div style={{ fontSize: 10, fontWeight: 600, background: past ? '#e0e0e0' : active ? '#c8e6c9' : today ? '#ffe0b2' : '#f5f5f5', color: past ? '#999' : active ? '#2e7d32' : today ? '#e65100' : '#999', padding: '2px 8px', borderRadius: 10, display: 'inline-block' }}>
+                <div style={{ fontSize: 10, fontWeight: 600, background: past ? '#bdbdbd' : active ? '#c8e6c9' : today ? '#bbdefb' : '#f5f5f5', color: past ? '#616161' : active ? '#2e7d32' : today ? '#1565c0' : '#999', padding: '2px 8px', borderRadius: 10, display: 'inline-block' }}>
                   {past ? 'Прошёл' : active ? 'Рабочий' : today ? 'Сегодня' : 'Выходной'}
                 </div>
                 {active && !past && apptCount > 0 && (
@@ -550,9 +557,18 @@ function SchedulePage() {
         </div>
       )}
 
-      {/* Success/Error messages */}
-      {successMsg && <div style={{ background: '#e8f5e9', color: '#2e7d32', padding: '12px 16px', borderRadius: 8, marginBottom: 20 }}>{successMsg}</div>}
-      {error && <div style={{ background: '#fee2e2', color: '#991b1b', padding: '12px 16px', borderRadius: 8, marginBottom: 20 }}>{error}</div>}
+      {/* Error modal */}
+      {error && (
+        <div className="modal-overlay" onClick={() => setError('')}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 450 }}>
+            <h3 style={{ color: '#c62828' }}>⚠️ Внимание</h3>
+            <p style={{ color: '#333', fontSize: 14, marginBottom: 20 }}>{error}</p>
+            <div className="modal-actions">
+              <button className="btn btn-primary" onClick={() => setError('')}>OK</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Manual booking modal */}
       {bookingForm.open && (
