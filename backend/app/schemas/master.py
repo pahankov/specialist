@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr
 from typing import Optional
 from datetime import datetime
 
@@ -15,5 +15,4 @@ class MasterResponse(BaseModel):
     email: str
     phone: Optional[str]
     telegram_username: Optional[str]
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

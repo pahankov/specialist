@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { adminApi } from '../api/adminClient'
-import type { DashboardStats } from '../api/types'
+import { adminApi } from '../../api/client'
+import type { DashboardStats } from '../../api/types'
 import './DashboardPage.css'
 
 function DashboardPage() {

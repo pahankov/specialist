@@ -1,5 +1,5 @@
 from datetime import time
-from pydantic import BaseModel, field_serializer
+from pydantic import BaseModel, ConfigDict, field_serializer
 from typing import Optional
 
 class WorkingHourCreate(BaseModel):
@@ -23,5 +23,4 @@ class WorkingHourResponse(BaseModel):
     def serialize_time(self, value: time | None) -> str | None:
         return value.strftime('%H:%M:%S') if value else None
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

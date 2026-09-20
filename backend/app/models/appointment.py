@@ -13,7 +13,7 @@ class Appointment(Base):
     id = Column(Integer, primary_key=True)
     master_id = Column(Integer, ForeignKey("masters.id"), nullable=False, index=True)
     service_id = Column(Integer, ForeignKey("services.id"), nullable=False, index=True)
-    client_id = Column(Integer, ForeignKey("clients.id"), nullable=False, index=True)
+    client_id = Column(Integer, ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True)
     appointment_date = Column(DateTime, nullable=False, index=True)
     status = Column(String(20), default="pending", index=True)
     notes = Column(Text)

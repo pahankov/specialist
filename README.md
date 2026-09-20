@@ -61,13 +61,14 @@ sugar-booking/
 │   │   ├── config.py         # Настройки (SQLite, JWT)
 │   │   ├── database.py       # Подключение к БД (aiosqlite)
 │   │   └── main.py           # FastAPI приложение
-│   ├── tests/                # pytest тесты (18 тестов: auth + masters CRUD)
+│   ├── tests/                # pytest тесты (97 тестов: все модули)
 │   ├── requirements.txt      # Зависимости Python
 │   └── pyproject.toml        # Конфиг pytest
 ├── frontend/
 │   ├── src/
-│   │   ├── api/              # API клиент (axios)
-│   │   ├── pages/            # 10 страниц (публичные + админ-панель)
+│   │   ├── api/              # API клиент (axios с auth-interceptor)
+│   │   ├── components/       # Общие компоненты (Modal, Pagination, FilterBar, MessageBar)
+│   │   ├── pages/            # Публичные + админ-панель (10 страниц)
 │   │   ├── App.tsx           # Роутинг
 │   │   └── main.tsx          # Точка входа
 │   ├── package.json
@@ -122,7 +123,8 @@ sugar-booking/
 - Адаптивный дизайн
 
 ### ✅ Тесты
-- 18 pytest-тестов (auth + masters CRUD)
+- 97 pytest-тестов (все модули: auth, masters, services, appointments, clients, admin CRUD)
+- 100% покрытие всех эндпоинтов
 - In-memory SQLite для изоляции тестов
 - pytest-asyncio для асинхронных тестов
 
@@ -236,7 +238,7 @@ Master (id, name, email, phone, telegram_username, hashed_password, ...)
   ├─ 1:N ──> Appointment (id, master_id, service_id, client_id, appointment_date, status, notes)
   │           └─ N:1 ──> Client
   │           └─ N:1 ──> Service
-  ├─ 1:N ──> WorkingHour (id, master_id, day_of_week, start_time, end_time)
+  ├─ 1:N ──> WorkingHour (id, master_id, schedule_date, start_time, end_time)
   ├─ 1:N ──> AuditLog (id, master_id, action, entity_type, entity_id, details, ip_address, created_at)
   └─ 1:N ──> BlockedSlot (id, master_id, start_dt, end_dt, reason, created_at)
 
@@ -322,6 +324,16 @@ curl -X POST http://localhost:8000/api/v1/appointments/public \
 ```
 
 ## 📚 История версий
+
+### [0.6.0] — 2026-09-20
+- **Рефакторинг фронтенда:** страницы разделены на `public/` и `admin/`, добавлены общие компоненты
+- **Единый API-клиент:** Axios-интерфейс с auth-interceptor и глобальной обработкой 401
+- **Рефакторинг бэкенда:** `admin.py` (901 строк) разбит на 9 модулей (dashboard, appointments, services, clients, working_hours, audit, export, blocked_slots)
+- **Админ-эндпоинты:** все под префиксом `/api/v1/admin/*`
+- **Полное логирование:** все CRUD-операции записываются в AuditLog (создание, обновление, удаление)
+- **Pydantic v2:** миграция `class Config:` → `ConfigDict`
+- **Тесты:** расширение с 18 до 97 тестов (100% покрытие)
+- **Фиксы:** `ServiceCreate.master_id` required, conflict-check в `book_appointment`, null-bytes в TSX
 
 ### [0.5.0] — 2026-09-17
 - **Клиенты:** полный CRUD в админ-панели (создание, редактирование, удаление, валидация дублей)

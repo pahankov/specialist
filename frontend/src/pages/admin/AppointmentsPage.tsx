@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { adminApi } from '../api/adminClient'
-import type { Appointment } from '../api/types'
+import { adminApi } from '../../api/client'
+import type { Appointment } from '../../api/types'
 import './AppointmentsPage.css'
 
 type SortField = 'appointment_date' | 'client_name' | 'service_name' | 'service_price' | 'status'
@@ -142,7 +142,7 @@ function AppointmentsPage() {
           className="btn btn-ghost"
           onClick={() => {
             const statusParam = filter ? `?status=${filter}` : ''
-            window.open(`${API_URL}/admin/export/appointments${statusParam}`, '_blank')
+            window.open(exportUrl('/api/v1/admin/export/appointments', filter), '_blank')
           }}
         >
           📥 Экспорт CSV

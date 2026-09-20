@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { adminApi } from '../api/adminClient'
+import { adminApi } from '../../api/client'
 
 const statusConfig: Record<string, { label: string; bg: string; text: string }> = {
   free: { label: 'Свободно', bg: '#e0e0e0', text: '#666' },

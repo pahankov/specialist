@@ -73,15 +73,80 @@ def test_master_data():
 @pytest.fixture
 async def auth_token(client, test_master_data):
     """Register a master and return JWT token."""
-    # Register
     resp = await client.post("/api/v1/auth/register", json=test_master_data)
     assert resp.status_code == 201, f"Register failed: {resp.text}"
 
-    # Login
     login_data = {
         "email": test_master_data["email"],
         "password": test_master_data["password"]
     }
-    resp = await client.post("/api/v1/auth/login", params=login_data)
+    resp = await client.post("/api/v1/auth/login", json=login_data)
     assert resp.status_code == 200, f"Login failed: {resp.text}"
     return resp.json()["access_token"]
+
+
+@pytest.fixture
+def auth_headers(auth_token):
+    """Return Authorization headers for authenticated requests."""
+    return {"Authorization": f"Bearer {auth_token}"}
+
+
+@pytest.fixture
+async def auth_context(client, test_master_data):
+    """Register a master and return both JWT token and master ID."""
+    reg_resp = await client.post("/api/v1/auth/register", json=test_master_data)
+    assert reg_resp.status_code == 201, f"Register failed: {reg_resp.text}"
+    master_id = reg_resp.json()["id"]
+
+    login_data = {
+        "email": test_master_data["email"],
+        "password": test_master_data["password"]
+    }
+    login_resp = await client.post("/api/v1/auth/login", json=login_data)
+    assert login_resp.status_code == 200, f"Login failed: {login_resp.text}"
+    token = login_resp.json()["access_token"]
+
+    return {"token": token, "master_id": master_id, "headers": {"Authorization": f"Bearer {token}"}}
+
+
+@pytest.fixture
+async def created_master_id(client, test_master_data):
+    """Register a master and return their ID."""
+    resp = await client.post("/api/v1/auth/register", json=test_master_data)
+    assert resp.status_code == 201
+    return resp.json()["id"]
+
+
+@pytest.fixture
+def test_service_data():
+    """Valid service creation data."""
+    return {
+        "name": "Шугаринг ног полностью",
+        "description": "Удаление волос на ногах",
+        "duration_minutes": 60,
+        "price": 2500
+    }
+
+
+@pytest.fixture
+def test_client_data():
+    """Valid client creation data."""
+    return {
+        "name": "Анна Иванова",
+        "phone": "+79991112233",
+        "email": "anna@example.com"
+    }
+
+
+@pytest.fixture
+def test_appointment_data():
+    """Valid appointment creation data."""
+    from datetime import datetime, timedelta
+    future_date = datetime.now() + timedelta(days=7)
+    return {
+        "master_id": 1,
+        "service_id": 1,
+        "client_name": "Тест Клиент",
+        "client_phone": "+79995556677",
+        "appointment_date": future_date.isoformat()
+    }

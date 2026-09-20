@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react'
-import { servicesApi, appointmentsApi } from '../api/client'
-import type { Service } from '../api/types'
+import { useSearchParams } from 'react-router-dom'
+import { servicesApi, appointmentsApi } from '../../api/client'
+import type { Service } from '../../api/types'
 import './BookingPage.css'
 
 function BookingPage() {
+  const [searchParams] = useSearchParams()
+  const defaultMasterId = searchParams.get('master_id') ? Number(searchParams.get('master_id')) : undefined
+
   const [services, setServices] = useState<Service[]>([])
   const [selectedService, setSelectedService] = useState<Service | null>(null)
   const [selectedDate, setSelectedDate] = useState<string>('')
@@ -17,13 +21,13 @@ function BookingPage() {
   useEffect(() => {
     const fetchServices = async () => {
       try {
-        const res = await servicesApi.getAll()
+        const res = await servicesApi.getAll(defaultMasterId)
         setServices(res.data)
         if (res.data.length > 0) {
           setSelectedService(res.data[0])
         }
       } catch (err) {
-        setError('Failed to load services')
+        setError('Не удалось загрузить услуги')
         console.error(err)
       } finally {
         setLoading(false)
@@ -31,7 +35,7 @@ function BookingPage() {
     }
 
     fetchServices()
-  }, [])
+  }, [defaultMasterId])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -46,7 +50,7 @@ function BookingPage() {
       setError(null)
 
       const appointmentData = {
-        master_id: 1,
+        master_id: selectedService!.master_id,
         service_id: selectedService.id,
         client_name: clientName,
         client_phone: clientPhone,
@@ -60,7 +64,7 @@ function BookingPage() {
       setClientPhone('')
       setSelectedDate('')
     } catch (err) {
-      setError('Failed to book appointment')
+      setError('Не удалось записаться')
       console.error(err)
     } finally {
       setSubmitting(false)

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { mastersApi, servicesApi } from '../api/client'
-import type { Master, Service } from '../api/types'
+import { mastersApi, servicesApi } from '../../api/client'
+import type { Master, Service } from '../../api/types'
 import './HomePage.css'
 
 function HomePage() {
@@ -58,7 +58,7 @@ function HomePage() {
                   <span className="duration">⏱️ {service.duration_minutes} мин</span>
                   <span className="price">₽{service.price}</span>
                 </div>
-                <Link to="/booking" className="btn btn-primary">
+                <Link to={`/booking?master_id=${service.master_id}`} className="btn btn-primary">
                   Записаться
                 </Link>
               </div>
@@ -79,6 +79,9 @@ function HomePage() {
                 <h3>{master.name}</h3>
                 {master.description && <p>{master.description}</p>}
                 {master.phone && <p className="phone">📱 {master.phone}</p>}
+                <Link to={`/booking?master_id=${master.id}`} className="btn btn-primary">
+                  Записаться
+                </Link>
               </div>
             ))}
           </div>

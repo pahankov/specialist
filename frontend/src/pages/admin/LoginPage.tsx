@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { adminApi } from '../api/adminClient'
+import { authApi } from '../../api/client'
+import type { LoginResponse } from '../../api/types'
 import './LoginPage.css'
 
 function LoginPage() {
@@ -15,7 +16,7 @@ function LoginPage() {
     setError('')
     setLoading(true)
     try {
-      const resp = await adminApi.login(email, password)
+      const resp = await authApi.login(email, password)
       localStorage.setItem('access_token', resp.data.access_token)
       navigate('/admin/dashboard')
     } catch (err: any) {

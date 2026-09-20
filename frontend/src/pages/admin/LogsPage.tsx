@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { adminApi } from '../api/adminClient'
+import { adminApi } from '../../api/client'
 import './LogsPage.css'
 
 function LogsPage() {

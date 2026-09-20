@@ -1,9 +1,9 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional
 from decimal import Decimal
 
 class ServiceCreate(BaseModel):
-    master_id: Optional[int] = None
+    master_id: int
     name: str
     description: Optional[str] = None
     duration_minutes: int
@@ -22,6 +22,6 @@ class ServiceResponse(BaseModel):
     description: Optional[str]
     duration_minutes: int
     price: Decimal
+    is_active: bool = True
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

@@ -1,0 +1,8 @@
+export { default as AdminLayout } from './AdminLayout'
+export { default as DashboardPage } from './DashboardPage'
+export { default as AppointmentsPage } from './AppointmentsPage'
+export { default as ServicesPage } from './ServicesPage'
+export { default as ClientsPage } from './ClientsPage'
+export { default as SchedulePage } from './SchedulePage'
+export { default as LogsPage } from './LogsPage'
+export { default as LoginPage } from './LoginPage'

@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional
 from datetime import datetime
 from decimal import Decimal
@@ -19,8 +19,7 @@ class AppointmentResponse(BaseModel):
     appointment_date: datetime
     status: str
     notes: Optional[str]
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class AppointmentWithDetails(BaseModel):
     id: int
@@ -34,8 +33,7 @@ class AppointmentWithDetails(BaseModel):
     client_phone: Optional[str]
     service_name: Optional[str]
     service_price: Optional[Decimal]
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class AvailableDay(BaseModel):
     date: str

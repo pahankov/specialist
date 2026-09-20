@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { adminApi } from '../api/adminClient'
-import type { Service } from '../api/types'
+import { adminApi } from '../../api/client'
+import type { Service } from '../../api/types'
 import './ServicesPage.css'
 
 function ServicesPage() {

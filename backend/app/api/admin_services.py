@@ -1,0 +1,93 @@
+"""Admin service CRUD endpoints."""
+from fastapi import APIRouter, Depends, Query, Response
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from typing import List
+from app.api.admin_base import (
+    get_db, Service, Master, require_master, get_owned_or_404, log_action,
+    ServiceCreate, ServiceResponse, ServiceUpdate
+)
+
+router = APIRouter()
+
+
+@router.post("/services", response_model=ServiceResponse, status_code=201)
+async def create_admin_service(
+    data: ServiceCreate,
+    master: Master = Depends(require_master),
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a service for the authenticated master."""
+    new_service = Service(
+        master_id=master.id, name=data.name, description=data.description,
+        duration_minutes=data.duration_minutes, price=data.price, is_active=True
+    )
+    db.add(new_service)
+    await log_action(db, master.id, "create", "service", new_service.id, data.name)
+    await db.commit()
+    await db.refresh(new_service)
+    return new_service
+
+
+@router.get("/services", response_model=List[ServiceResponse])
+async def get_admin_services(
+    master: Master = Depends(require_master),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get active services (paginated)."""
+    result = await db.execute(
+        select(Service).where(Service.master_id == master.id, Service.is_active == True)
+        .order_by(Service.name).offset(offset).limit(limit)
+    )
+    return result.scalars().all()
+
+
+@router.get("/services/all", response_model=List[ServiceResponse])
+async def get_all_admin_services(
+    master: Master = Depends(require_master),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get all services including inactive (paginated)."""
+    result = await db.execute(
+        select(Service).where(Service.master_id == master.id)
+        .order_by(Service.name).offset(offset).limit(limit)
+    )
+    return result.scalars().all()
+
+
+@router.patch("/services/{service_id}", response_model=ServiceResponse)
+async def update_admin_service(
+    service_id: int,
+    data: ServiceUpdate,
+    master: Master = Depends(require_master),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update a service."""
+    service = await get_owned_or_404(db, Service, service_id, master.id)
+    changes = []
+    for field, value in data.model_dump().items():
+        if value is not None:
+            setattr(service, field, value)
+            changes.append(field)
+    await log_action(db, master.id, "update", "service", service_id, f"Обновлено: {', '.join(changes)}" if changes else "Обновление")
+    await db.commit()
+    await db.refresh(service)
+    return service
+
+
+@router.delete("/services/{service_id}", status_code=204)
+async def delete_admin_service(
+    service_id: int,
+    master: Master = Depends(require_master),
+    db: AsyncSession = Depends(get_db)
+):
+    """Soft-delete a service."""
+    service = await get_owned_or_404(db, Service, service_id, master.id)
+    await log_action(db, master.id, "delete", "service", service_id, service.name)
+    service.is_active = False
+    await db.commit()
+    return None

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { adminApi } from '../api/adminClient'
-import type { Client } from '../api/types'
+import { adminApi } from '../../api/client'
+import type { Client } from '../../api/types'
 import './ClientsPage.css'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -101,7 +101,7 @@ function ClientsPage() {
         <button
           className="btn btn-ghost"
           onClick={() => {
-            window.open(`${API_URL}/admin/export/clients`, '_blank')
+            window.open(`${API_URL}/api/v1/admin/export/clients`, '_blank')
           }}
         >
           📥 Экспорт CSV
