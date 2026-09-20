@@ -13,6 +13,7 @@ class AuditLog(Base):
 
     id = Column(Integer, primary_key=True)
     master_id = Column(Integer, ForeignKey("masters.id"), nullable=True, index=True)
+    level = Column(String(10), nullable=False, default="info")
     action = Column(String(50), nullable=False)
     entity_type = Column(String(50), nullable=False)
     entity_id = Column(Integer, nullable=True)

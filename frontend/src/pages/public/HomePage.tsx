@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { mastersApi, servicesApi } from '../../api/client'
 import type { Master, Service } from '../../api/types'
+import LoginModal from '../../components/LoginModal'
 import './HomePage.css'
 
 function HomePage() {
@@ -9,6 +10,7 @@ function HomePage() {
   const [services, setServices] = useState<Service[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showLogin, setShowLogin] = useState(false)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -21,7 +23,7 @@ function HomePage() {
         setMasters(mastersRes.data)
         setServices(servicesRes.data)
       } catch (err) {
-        setError('Failed to load data')
+        setError('Не удалось загрузить данные')
         console.error(err)
       } finally {
         setLoading(false)
@@ -31,62 +33,69 @@ function HomePage() {
     fetchData()
   }, [])
 
-  if (loading) return <div className="home-page">Loading...</div>
+  if (loading) return <div className="home-page">Загрузка...</div>
   if (error) return <div className="home-page error">{error}</div>
 
   return (
     <div className="home-page">
+      {/* Hero Banner */}
       <header className="hero">
         <div className="hero-content">
-          <h1>Запись на шугаринг</h1>
-          <p>Запишитесь к лучшему мастеру шугаринга</p>
-          <Link to="/admin/login" className="btn btn-secondary admin-link">
-            Панель администратора
-          </Link>
+          <h1>Электронная запись</h1>
+          <p>Запишитесь к лучшему мастеру красоты</p>
+          <button className="btn btn-primary btn-login" onClick={() => setShowLogin(true)}>
+            Вход в систему
+          </button>
         </div>
       </header>
 
-      <section className="services-section">
-        <div className="container">
-          <h2>Наши услуги</h2>
-          <div className="services-grid">
-            {services.map((service) => (
-              <div key={service.id} className="service-card card">
-                <h3>{service.name}</h3>
-                {service.description && <p>{service.description}</p>}
-                <div className="service-meta">
-                  <span className="duration">⏱️ {service.duration_minutes} мин</span>
-                  <span className="price">₽{service.price}</span>
+      {/* Services Section */}
+      {services.length > 0 && (
+        <section className="services-section">
+          <div className="container">
+            <h2>Наши услуги</h2>
+            <div className="services-grid">
+              {services.map((service) => (
+                <div key={service.id} className="service-card card">
+                  <h3>{service.name}</h3>
+                  {service.description && <p>{service.description}</p>}
+                  <div className="service-meta">
+                    <span className="duration">⏱️ {service.duration_minutes} мин</span>
+                    <span className="price">₽{service.price}</span>
+                  </div>
+                  <Link to={`/booking?master_id=${service.master_id}`} className="btn btn-primary">
+                    Записаться
+                  </Link>
                 </div>
-                <Link to={`/booking?master_id=${service.master_id}`} className="btn btn-primary">
-                  Записаться
-                </Link>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
-      <section className="masters-section">
-        <div className="container">
-          <h2>Наши мастера</h2>
-          <div className="masters-grid">
-            {masters.map((master) => (
-              <div key={master.id} className="master-card card">
-                {master.avatar_url && (
-                  <img src={master.avatar_url} alt={master.name} className="avatar" />
-                )}
-                <h3>{master.name}</h3>
-                {master.description && <p>{master.description}</p>}
-                {master.phone && <p className="phone">📱 {master.phone}</p>}
-                <Link to={`/booking?master_id=${master.id}`} className="btn btn-primary">
-                  Записаться
-                </Link>
-              </div>
-            ))}
+      {/* Masters Section */}
+      {masters.length > 0 && (
+        <section className="masters-section">
+          <div className="container">
+            <h2>Наши мастера</h2>
+            <div className="masters-grid">
+              {masters.map((master) => (
+                <div key={master.id} className="master-card card">
+                  <h3>{master.name}</h3>
+                  {master.description && <p>{master.description}</p>}
+                  {master.phone && <p className="phone">📱 {master.phone}</p>}
+                  <Link to={`/booking?master_id=${master.id}`} className="btn btn-primary">
+                    Записаться
+                  </Link>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
+
+      {/* Login Modal */}
+      <LoginModal isOpen={showLogin} onClose={() => setShowLogin(false)} />
     </div>
   )
 }

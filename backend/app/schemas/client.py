@@ -8,9 +8,9 @@ def normalize_phone(phone: str) -> str:
     digits = re.sub(r'\D', '', phone)
     if not digits:
         raise ValueError('Введите номер телефона')
-    # Убираем лишние цифры, оставляем последние 11
+    # Слишком много цифр — ошибка
     if len(digits) > 11:
-        digits = digits[-11:]
+        raise ValueError('Номер телефона содержит слишком много цифр')
     # 8 в начале → 7
     if digits.startswith('8') and len(digits) == 11:
         digits = '7' + digits[1:]

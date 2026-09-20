@@ -40,7 +40,7 @@ async def create_working_hour(
     db.add(hour)
     await db.flush()
     await db.refresh(hour)
-    await log_action(db, master.id, "create", "working_hour", hour.id, f"{data.schedule_date}: {data.start_time}-{data.end_time}")
+    await log_action(db, master.id, "create", "working_hour", hour.id, f"{data.schedule_date}: {data.start_time}-{data.end_time}", level="info")
     await db.commit()
     return hour
 
@@ -64,7 +64,7 @@ async def update_working_hour(
     if data.end_time is not None:
         hour.end_time = time.fromisoformat(data.end_time)
         changes.append(f"конец: {data.end_time}")
-    await log_action(db, master.id, "update", "working_hour", hour_id, ", ".join(changes) if changes else "Обновление")
+    await log_action(db, master.id, "update", "working_hour", hour_id, ", ".join(changes) if changes else "Обновление", level="info")
     await db.commit()
     await db.refresh(hour)
     return hour
@@ -78,7 +78,7 @@ async def delete_working_hour(
 ):
     """Delete working hours."""
     hour = await get_owned_or_404(db, WorkingHour, hour_id, master.id)
-    await log_action(db, master.id, "delete", "working_hour", hour_id, f"{hour.schedule_date}: {hour.start_time}-{hour.end_time}")
+    await log_action(db, master.id, "delete", "working_hour", hour_id, f"{hour.schedule_date}: {hour.start_time}-{hour.end_time}", level="warning")
     await db.delete(hour)
     await db.commit()
     return None

@@ -74,7 +74,7 @@ async def create_appointment(
         appointment_date=data.appointment_date, status="pending", notes=data.notes
     )
     db.add(new_appointment)
-    await log_action(db, master.id, "create", "appointment", new_appointment.id, f"Клиент: {client.name}")
+    await log_action(db, master.id, "create", "appointment", new_appointment.id, f"Клиент: {client.name}", level="info")
     await db.commit()
     await db.refresh(new_appointment)
     return new_appointment
@@ -162,7 +162,7 @@ async def confirm_appointment(
     """Confirm an appointment."""
     appointment = await get_owned_or_404(db, Appointment, appointment_id, master.id)
     appointment.status = "confirmed"
-    await log_action(db, master.id, "confirm", "appointment", appointment.id, "Статус изменён на confirmed")
+    await log_action(db, master.id, "confirm", "appointment", appointment.id, "Статус изменён на confirmed", level="info")
     await db.commit()
     await db.refresh(appointment)
     return appointment
@@ -180,7 +180,7 @@ async def cancel_appointment(
     appointment.status = "cancelled"
     if reason:
         appointment.notes = f"{appointment.notes}\nОтмена: {reason}" if appointment.notes else f"Отмена: {reason}"
-    await log_action(db, master.id, "cancel", "appointment", appointment.id, f"Причина: {reason}")
+    await log_action(db, master.id, "cancel", "appointment", appointment.id, f"Причина: {reason}", level="warning")
     await db.commit()
     await db.refresh(appointment)
     return appointment
@@ -195,7 +195,7 @@ async def complete_appointment(
     """Mark an appointment as completed."""
     appointment = await get_owned_or_404(db, Appointment, appointment_id, master.id)
     appointment.status = "completed"
-    await log_action(db, master.id, "complete", "appointment", appointment.id)
+    await log_action(db, master.id, "complete", "appointment", appointment.id, level="info")
     await db.commit()
     await db.refresh(appointment)
     return appointment
@@ -209,7 +209,7 @@ async def delete_appointment(
 ):
     """Delete an appointment."""
     appointment = await get_owned_or_404(db, Appointment, appointment_id, master.id)
-    await log_action(db, master.id, "delete", "appointment", appointment_id)
+    await log_action(db, master.id, "delete", "appointment", appointment_id, level="warning")
     await db.delete(appointment)
     await db.commit()
     return None

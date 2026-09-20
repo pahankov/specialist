@@ -26,10 +26,10 @@ function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/booking" element={<BookingPage />} />
 
-        {/* Admin login */}
+        {/* Master login */}
         <Route path="/admin/login" element={<LoginPage />} />
 
-        {/* Protected admin routes */}
+        {/* Protected master admin routes */}
         <Route
           path="/admin"
           element={

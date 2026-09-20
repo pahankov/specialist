@@ -19,6 +19,9 @@ from app.api.admin_working_hours import router as working_hours_router
 from app.api.admin_audit import router as audit_router
 from app.api.admin_export import router as export_router
 from app.api.admin_blocked_slots import router as blocked_slots_router
+from app.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
 

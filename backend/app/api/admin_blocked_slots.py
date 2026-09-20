@@ -43,7 +43,7 @@ async def create_blocked_slot(
     )
     db.add(slot)
     await log_action(db, master.id, "create", "blocked_slot", slot.id,
-                     f"Блокировка: {slot.start_dt} - {slot.end_dt}")
+                     details=f"Блокировка: {slot.start_dt} - {slot.end_dt}", level="info")
     await db.commit()
     await db.refresh(slot)
     return slot
@@ -57,7 +57,7 @@ async def delete_blocked_slot(
 ):
     """Delete a blocked slot."""
     slot = await get_owned_or_404(db, BlockedSlot, slot_id, master.id)
-    await log_action(db, master.id, "delete", "blocked_slot", slot_id)
+    await log_action(db, master.id, "delete", "blocked_slot", slot_id, level="warning")
     await db.delete(slot)
     await db.commit()
     return None

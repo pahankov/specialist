@@ -5,6 +5,9 @@ from typing import List
 from app.database import get_db
 from app.models.service import Service
 from app.schemas.service import ServiceCreate, ServiceResponse
+from app.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 

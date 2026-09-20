@@ -7,6 +7,9 @@
 .admin-app {
   background: white;
 }
+.superadmin-app {
+  background: white;
+}
 
 .container {
   max-width: 1200px;

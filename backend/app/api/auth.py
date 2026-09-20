@@ -4,20 +4,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from app.database import get_db
 from app.models.master import Master
+from app.models.client import Client
 from app.schemas.master import MasterCreate, MasterResponse
+from app.schemas.client import ClientResponse
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 from jose import jwt
 from passlib.context import CryptContext
 from app.config import settings
+from app.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 class LoginRequest(BaseModel):
     email: str
     password: str
 
+class ClientLoginRequest(BaseModel):
+    phone: str
+
 class TokenResponse(BaseModel):
     access_token: str
-    refresh_token: str
     token_type: str = "bearer"
 
 router = APIRouter()
@@ -51,12 +58,14 @@ def create_refresh_token(data: dict):
 @router.post("/register", response_model=MasterResponse, status_code=status.HTTP_201_CREATED)
 async def register_master(master: MasterCreate, db: AsyncSession = Depends(get_db)):
     """Register a new master."""
+    logger.info("Запрос на регистрацию мастера: %s", master.email)
     result = await db.execute(select(Master).where(Master.email == master.email))
     existing_master = result.scalar_one_or_none()
     if existing_master:
+        logger.warning("Регистрация заблокирована — мастер уже существует: %s", master.email)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Master with this email already exists"
+            detail="Мастер с таким email уже существует"
         )
     
     hashed_password = pwd_context.hash(master.password)
@@ -73,28 +82,50 @@ async def register_master(master: MasterCreate, db: AsyncSession = Depends(get_d
     await db.commit()
     await db.refresh(new_master)
     
+    logger.info("Мастер успешно зарегистрирован: %s", master.email)
     return new_master
 
 @router.post("/login", response_model=TokenResponse)
 async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
-    """Login and get access + refresh tokens."""
+    """Login master and get access token."""
+    logger.info("Запрос на вход мастера: %s", req.email)
     result = await db.execute(select(Master).where(Master.email == req.email))
     master = result.scalar_one_or_none()
     
     if not master or not pwd_context.verify(req.password, master.hashed_password):
+        logger.warning("Неудачная попытка входа: %s", req.email)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password"
+            detail="Неверный email или пароль"
         )
     
     access_token = create_access_token(
-        data={"sub": master.email, "master_id": master.id}
-    )
-    refresh_token = create_refresh_token(
-        data={"sub": master.email, "master_id": master.id}
+        data={"sub": str(master.id), "is_admin": master.is_admin, "name": master.name}
     )
     
-    return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
+    logger.info("Мастер успешно вошёл в систему: %s", req.email)
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@router.post("/client/login", response_model=TokenResponse)
+async def client_login(req: ClientLoginRequest, db: AsyncSession = Depends(get_db)):
+    """Login client by phone and get access token."""
+    logger.info("Запрос на вход клиента: %s", req.phone)
+    result = await db.execute(select(Client).where(Client.phone == req.phone))
+    client = result.scalar_one_or_none()
+    
+    if not client:
+        logger.warning("Клиент не найден: %s", req.phone)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Клиент не найден"
+        )
+    
+    access_token = create_access_token(
+        data={"sub": str(client.id), "type": "client"}
+    )
+    
+    logger.info("Клиент успешно вошёл в систему: %s", req.phone)
+    return {"access_token": access_token, "token_type": "bearer"}
 
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh_token(req: dict):

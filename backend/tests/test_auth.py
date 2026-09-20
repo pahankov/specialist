@@ -13,7 +13,7 @@ class TestRegisterMaster:
 
         assert data["name"] == test_master_data["name"]
         assert data["email"] == test_master_data["email"]
-        assert data["phone"] == test_master_data["phone"]
+        assert data["phone"] == "+7 (999) 000-11-22"
         assert data["telegram_username"] == test_master_data["telegram_username"]
         assert "id" in data
         assert "hashed_password" not in data  # password should not be returned
@@ -32,7 +32,7 @@ class TestRegisterMaster:
         # Second registration with same email
         resp2 = await client.post("/api/v1/auth/register", json=test_master_data)
         assert resp2.status_code == 400
-        assert "already exists" in resp2.json()["detail"]
+        assert "уже существует" in resp2.json()["detail"]
 
     async def test_register_weak_password(self, client):
         """Registration accepts any password (no strength validation yet)."""
@@ -78,7 +78,7 @@ class TestLogin:
         }
         resp = await client.post("/api/v1/auth/login", json=login_data)
         assert resp.status_code == 401
-        assert "Incorrect" in resp.json()["detail"]
+        assert "Неверный" in resp.json()["detail"]
 
     async def test_login_nonexistent_user(self, client):
         """Login fails for non-existent email."""

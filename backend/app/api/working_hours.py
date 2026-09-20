@@ -6,6 +6,9 @@ from datetime import time
 from app.database import get_db
 from app.models.working_hour import WorkingHour
 from app.schemas.working_hour import WorkingHourCreate, WorkingHourResponse
+from app.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 

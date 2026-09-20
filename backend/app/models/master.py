@@ -13,6 +13,7 @@ class Master(Base):
     telegram_username = Column(String(100))
     description = Column(Text)
     is_active = Column(Boolean, default=True)
+    is_admin = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     services = relationship("Service", back_populates="master")

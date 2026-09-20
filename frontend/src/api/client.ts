@@ -11,6 +11,8 @@ import type {
   LoginResponse,
   DashboardStats,
   AppointmentWithClient,
+  AdminLoginResponse,
+  AdminStats,
 } from './types'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -50,7 +52,7 @@ apiClient.interceptors.response.use(
 
 export const servicesApi = {
   getAll: (masterId?: number) =>
-    apiClient.get<Service[]>('/api/v1/services', { params: { master_id: masterId } }),
+    apiClient.get<Service[]>('/api/v1/services/', { params: { master_id: masterId } }),
   getById: (id: number) => apiClient.get<Service>(`/api/v1/services/${id}`),
   create: (data: Omit<Service, 'id'>) => apiClient.post<Service>('/api/v1/services/', data),
   update: (id: number, data: Partial<Service>) =>
@@ -67,12 +69,12 @@ export const appointmentsApi = {
   create: (data: AppointmentCreate) =>
     apiClient.post<Appointment>('/api/v1/appointments/', data),
   publicBooking: (data: AppointmentCreate) =>
-    apiClient.post<Appointment>('/api/v1/appointments/public', data),
-  cancel: (id: number) => apiClient.post<Appointment>(`/api/v1/appointments/${id}/cancel`),
+    apiClient.post<Appointment>('/api/v1/appointments/public/', data),
+  cancel: (id: number) => apiClient.post<Appointment>(`/api/v1/appointments/${id}/cancel/`),
   getAvailableDays: (masterId: number) =>
-    apiClient.get(`/api/v1/appointments/available-days`, { params: { master_id: masterId } }),
+    apiClient.get(`/api/v1/appointments/available-days/`, { params: { master_id: masterId } }),
   getAvailableSlots: (masterId: number, date: string) =>
-    apiClient.get(`/api/v1/appointments/available-slots`, { params: { master_id: masterId, date } }),
+    apiClient.get(`/api/v1/appointments/available-slots/`, { params: { master_id: masterId, date } }),
 }
 
 export const reviewsApi = {
@@ -103,6 +105,8 @@ export const blockedSlotsApi = {
 export const mastersApi = {
   getAll: () => apiClient.get<Master[]>('/api/v1/masters/'),
   getById: (id: number) => apiClient.get<Master>(`/api/v1/masters/${id}`),
+  create: (data: { name: string; email: string; password: string; phone?: string; telegram_username?: string }) =>
+    apiClient.post<Master>('/api/v1/masters/', data),
 }
 
 export const clientsPublicApi = {
@@ -112,11 +116,18 @@ export const clientsPublicApi = {
   delete: (id: number) => apiClient.delete(`/api/v1/clients/${id}`),
 }
 
-// ─── Admin API (auth required, uses interceptor) ────────────────────
+// ─── Auth API (public + admin) ──────────────────────────────────────
 
 export const authApi = {
+  // Master login
   login: (email: string, password: string) =>
     apiClient.post<LoginResponse>('/api/v1/auth/login', { email, password }),
+  // Master registration
+  register: (data: { name: string; email: string; password: string; phone?: string; telegram_username?: string }) =>
+    apiClient.post<Master>('/api/v1/auth/register', data),
+  // Client login by phone
+  clientLogin: (phone: string) =>
+    apiClient.post<LoginResponse>('/api/v1/auth/client/login', { phone }),
 }
 
 export const adminApi = {
@@ -224,6 +235,42 @@ export const adminApi = {
   },
   exportClients() {
     return `${API_BASE}/api/v1/admin/export/clients`
+  },
+}
+
+// ─── SuperAdmin API (auth required, uses interceptor) ───────────────
+
+export const superAdminAuthApi = {
+  register: (data: { name: string; email: string; password: string }) =>
+    apiClient.post<AdminLoginResponse>('/api/v1/admin/register', data),
+  login: (email: string, password: string) =>
+    apiClient.post<AdminLoginResponse>('/api/v1/admin/login', { email, password }),
+}
+
+export const superAdminApi = {
+  // Global dashboard
+  getGlobalDashboard() {
+    return apiClient.get<AdminStats>('/api/v1/admin/dashboard')
+  },
+
+  // Masters management
+  getAllMasters(search?: string, isActive?: boolean) {
+    return apiClient.get<Master[]>('/api/v1/masters/', { params: { search, is_active: isActive } })
+  },
+  getMasterById(id: number) {
+    return apiClient.get<Master>(`/api/v1/masters/${id}`)
+  },
+  createMaster(data: { name: string; email: string; password: string; phone?: string; telegram_username?: string }) {
+    return apiClient.post<Master>('/api/v1/masters/', data)
+  },
+  updateMaster(id: number, data: { name?: string; phone?: string; telegram_username?: string; description?: string; password?: string }) {
+    return apiClient.patch<Master>(`/api/v1/masters/${id}`, data)
+  },
+  deleteMaster(id: number) {
+    return apiClient.delete(`/api/v1/masters/${id}`)
+  },
+  getMasterStats(id: number) {
+    return apiClient.get<AdminStats>(`/api/v1/masters/${id}/stats`)
   },
 }
 

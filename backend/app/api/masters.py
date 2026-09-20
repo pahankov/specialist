@@ -5,6 +5,9 @@ from typing import List
 from app.database import get_db
 from app.models.master import Master
 from app.schemas.master import MasterCreate, MasterResponse
+from app.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -76,11 +79,14 @@ async def update_master(
 
 @router.delete("/{master_id}", status_code=200)
 async def delete_master(master_id: int, db: AsyncSession = Depends(get_db)):
+    logger.info("Удаление мастера: id=%s", master_id)
     result = await db.execute(select(Master).where(Master.id == master_id))
     master = result.scalar_one_or_none()
     if not master:
+        logger.warning("Мастер не найден для удаления: id=%s", master_id)
         raise HTTPException(status_code=404, detail="Master not found")
 
     await db.delete(master)
     await db.commit()
+    logger.info("Мастер успешно удалён: id=%s", master_id)
     return {"detail": "Master deleted"}

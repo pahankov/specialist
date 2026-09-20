@@ -40,7 +40,7 @@ async def create_admin_client(
             raise HTTPException(status_code=400, detail="Клиент с таким email уже существует")
     new_client = Client(name=data.name, phone=data.phone, email=data.email)
     db.add(new_client)
-    await log_action(db, master.id, "create", "client", new_client.id, data.name)
+    await log_action(db, master.id, "create", "client", new_client.id, data.name, level="info")
     await db.commit()
     await db.refresh(new_client)
     return new_client
@@ -65,7 +65,7 @@ async def update_admin_client(
             raise HTTPException(status_code=400, detail="Клиент с таким email уже существует")
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(client, field, value)
-    await log_action(db, master.id, "update", "client", client_id, f"Обновлены поля: {', '.join(data.model_dump(exclude_unset=True).keys())}")
+    await log_action(db, master.id, "update", "client", client_id, f"Обновлены поля: {', '.join(data.model_dump(exclude_unset=True).keys())}", level="info")
     await db.commit()
     await db.refresh(client)
     return client
@@ -79,7 +79,7 @@ async def delete_admin_client(
 ):
     """Delete a client."""
     client = await get_or_404(db, Client, client_id)
-    await log_action(db, master.id, "delete", "client", client_id, client.name)
+    await log_action(db, master.id, "delete", "client", client_id, client.name, level="warning")
     await db.delete(client)
     await db.commit()
     return None

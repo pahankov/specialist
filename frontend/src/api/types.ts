@@ -5,11 +5,10 @@ export interface Master {
   name: string
   phone?: string
   telegram_username?: string
-  vk_id?: string
-  max_id?: string
   description?: string
   avatar_url?: string
   is_active: boolean
+  is_admin: boolean
   created_at: string
   updated_at?: string
 }
@@ -112,4 +111,23 @@ export interface AppointmentWithClient extends Appointment {
   client_phone?: string
   service_name?: string
   service_price?: number
+}
+
+export interface AdminLoginResponse {
+  access_token: string
+  token_type: string
+}
+
+export interface AdminStats {
+  total_masters: number
+  total_appointments: number
+  total_clients: number
+  total_services: number
+  recent_appointments?: Array<{
+    id: number
+    master_id: number
+    client_name: string | null
+    appointment_date: string
+    status: string
+  }>
 }

@@ -2,7 +2,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import engine, Base
+from app.logging_config import setup_logging, get_logger
 import asyncio
+
+# Инициализация логирования
+setup_logging("INFO")
+logger = get_logger(__name__)
+
+logger.info("Инициализация приложения %s", settings.APP_NAME)
 
 # Create tables on startup
 async def lifespan(app: FastAPI):

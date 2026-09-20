@@ -27,6 +27,12 @@ function LogsPage() {
     update: '✏️ Обновление'
   }
 
+  const levelLabels: Record<string, string> = {
+    info: 'ℹ️ INFO',
+    warning: '⚠️ WARNING',
+    error: '🚫 ERROR'
+  }
+
   const fetchLogs = async () => {
     try {
       const params: any = { limit: pageSize, offset: currentPage * pageSize }
@@ -85,6 +91,7 @@ function LogsPage() {
             <thead>
               <tr>
                 <th>Дата и время</th>
+                <th>Уровень</th>
                 <th>Действие</th>
                 <th>Объект</th>
                 <th>ID объекта</th>
@@ -104,10 +111,17 @@ function LogsPage() {
                     })}
                   </td>
                   <td>
+                    <span className={`level-badge level-${log.level}`}>
+                      {levelLabels[log.level] || log.level}
+                    </span>
+                  </td>
+                  <td>
                     <span className={`status-badge ${
                       log.action === 'delete' ? 'status-cancelled' :
                       log.action === 'confirm' ? 'status-confirmed' :
                       log.action === 'cancel' ? 'status-cancelled' :
+                      log.action === 'complete' ? 'status-completed' :
+                      log.action === 'create' ? 'status-pending' :
                       'status-pending'
                     }`}>
                       {actionLabels[log.action] || log.action}
