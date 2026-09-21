@@ -50,7 +50,7 @@ class TestRegisterMaster:
         data = {
             "name": "Strong Password User",
             "email": "strong@example.com",
-            "password": "SecurePass123",
+            "password": "SecurePass123!",
             "phone": "+79990000001"
         }
         resp = await client.post("/api/v1/auth/register", json=data)

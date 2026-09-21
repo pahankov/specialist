@@ -1,6 +1,7 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base
 from app.config import settings
+import logging
 import os
 
 db_url = settings.DATABASE_URL
@@ -29,10 +30,15 @@ if "sqlite" in db_url:
 
 engine = create_async_engine(
     db_url,
-    echo=settings.DEBUG,
+    echo=False,  # Disable SQL query logging — use SQLAlchemy logger instead
     # SQLite-specific: enable WAL mode for better concurrency
     connect_args={"check_same_thread": False} if "sqlite" in db_url else {},
 )
+
+# Configure SQLAlchemy logger separately — only show slow queries or errors
+sqlalchemy_logger = logging.getLogger("sqlalchemy")
+sqlalchemy_logger.setLevel(logging.WARNING)  # Only warnings and errors
+sqlalchemy_logger.propagate = True  # Let it go to root logger handlers
 
 AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 Base = declarative_base()
