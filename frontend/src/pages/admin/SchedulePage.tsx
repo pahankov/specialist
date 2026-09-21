@@ -109,6 +109,31 @@ function SchedulePage() {
     }
   }, [schedule, activeHours, appointments])
 
+  const handleAddSlot = useCallback(async (date: Date) => {
+    const dateStr = date.toISOString().split('T')[0]
+    // Check if already active
+    if (schedule[dateStr]) return
+
+    try {
+      await adminApi.createWorkingHour({
+        schedule_date: dateStr,
+        start_time: '09:00',
+        end_time: '18:00',
+      })
+      setSchedule(prev => ({
+        ...prev,
+        [dateStr]: { start: 9, end: 18 },
+      }))
+      const newActiveHours: Record<string, boolean> = {}
+      for (let h = 9; h < 18; h++) {
+        newActiveHours[`${dateStr}-${h}`] = true
+      }
+      setActiveHours(prev => ({ ...prev, ...newActiveHours }))
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Не удалось добавить рабочий день')
+    }
+  }, [schedule])
+
   const handleToggleHour = useCallback((dateStr: string, hour: number) => {
     toggleHour(dateStr, hour, setActiveHours)
   }, [])
@@ -174,6 +199,7 @@ function SchedulePage() {
         onNextMonth={handleNextMonth}
         onSelectDate={handleSelectDate}
         onToggleDay={handleToggleDay}
+        onAddSlot={handleAddSlot}
         longPressTriggered={longPressTriggered}
       />
 

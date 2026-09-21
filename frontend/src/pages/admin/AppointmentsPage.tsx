@@ -16,6 +16,7 @@ function AppointmentsPage() {
   const [successMsg, setSuccessMsg] = useState('')
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [cancelingId, setCancelingId] = useState<number | null>(null)
+  const [noShowingId, setNoShowingId] = useState<number | null>(null)
   const [cancelReason, setCancelReason] = useState('')
   const [currentPage, setCurrentPage] = useState(0)
   const [sortField, setSortField] = useState<SortField>('appointment_date')
@@ -89,6 +90,18 @@ function AppointmentsPage() {
     } finally {
       setCancelingId(null)
       setCancelReason('')
+    }
+  }
+
+  const handleNoShow = async (id: number) => {
+    try {
+      await adminApi.noShowAppointment(id)
+      setSuccessMsg('Отмечено как неявка')
+      fetch()
+    } catch (err: any) {
+      showError(err)
+    } finally {
+      setNoShowingId(null)
     }
   }
 
@@ -183,6 +196,7 @@ function AppointmentsPage() {
                 <td className="actions-cell">
                   {a.status === 'pending' && (<><button className="btn btn-sm btn-confirm" onClick={() => handleConfirm(a.id)}>✅ Подтвердить</button><button className="btn btn-sm btn-cancel" onClick={() => handleCancel(a.id)}>❌ Отменить</button></>)}
                   {a.status === 'confirmed' && (<><button className="btn btn-sm btn-complete" onClick={() => handleComplete(a.id)} disabled={!isAppointmentTimePassed(a.appointment_date)}>🏁 Завершить</button><button className="btn btn-sm btn-cancel" onClick={() => handleCancel(a.id)}>❌ Отменить</button></>)}
+                  {a.status === 'confirmed' && isAppointmentTimePassed(a.appointment_date) && (<button className="btn btn-sm btn-no-show" onClick={() => setNoShowingId(a.id)}>👤 Неявка</button>)}
                   {a.status === 'completed' && <span className="text-muted">Завершена</span>}
                   {a.status === 'cancelled' && <span className="text-muted">Отменена</span>}
                 </td>
@@ -223,6 +237,19 @@ function AppointmentsPage() {
             <div className="modal-actions">
               <button className="btn btn-ghost" onClick={() => setCancelingId(null)}>Отмена</button>
               <button className="btn btn-delete" onClick={handleConfirmCancel} disabled={!cancelReason.trim()}>Отменить</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {noShowingId && (
+        <div className="modal-overlay" onClick={() => setNoShowingId(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>👤 Отметить неявку?</h3>
+            <p>Клиент не появился на записи. Запись будет отменена, счётчик неяв увеличен.</p>
+            <div className="modal-actions">
+              <button className="btn btn-ghost" onClick={() => setNoShowingId(null)}>Отмена</button>
+              <button className="btn btn-delete" onClick={() => handleNoShow(noShowingId)}>Неявка</button>
             </div>
           </div>
         </div>

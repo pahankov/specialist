@@ -24,3 +24,4 @@ class Master(Base):
     working_hours = relationship("WorkingHour", back_populates="master")
     audit_logs = relationship("AuditLog", back_populates="master")
     blocked_slots = relationship("BlockedSlot", back_populates="master")
+    reviews = relationship("Review", back_populates="master")

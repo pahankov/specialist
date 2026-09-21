@@ -29,6 +29,7 @@ export interface Client {
   name: string
   phone: string
   email?: string
+  no_show_count?: number
 }
 
 export interface Appointment {
@@ -59,12 +60,24 @@ export interface AppointmentCreate {
 export interface Review {
   id: number
   appointment_id: number
+  master_id: number
   client_name: string
   client_phone: string
   rating: number
   comment?: string
-  created_at: string
   is_published: boolean
+  created_at: string
+}
+
+export interface ReviewCreate {
+  appointment_id: number
+  rating: number
+  comment?: string
+}
+
+export interface AverageRating {
+  average_rating: number | null
+  review_count: number
 }
 
 export interface WorkingHour {

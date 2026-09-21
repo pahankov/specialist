@@ -50,35 +50,50 @@ docker-compose down         # Остановка
 | API Docs (Swagger) | http://localhost:8000/docs |
 | Health Check | http://localhost:8000/health |
 
+### Переменные окружения
+
+Скопируйте `.env.example` в `.env` и настройте:
+
+```powershell
+copy .env.example .env
+```
+
+См. `.env.example` для полного списка переменных.
+
 ## 📦 Структура проекта
 
 ```
 sugar-booking/
 ├── backend/
 │   ├── app/
-│   │   ├── api/              # REST endpoints (auth, masters, services, appointments, clients, working_hours, admin)
-│   │   ├── models/           # SQLAlchemy ORM models (9 сущностей + RefreshToken)
+│   │   ├── api/              # REST endpoints (auth, masters, services, appointments, clients, working_hours, admin, reviews)
+│   │   ├── models/           # SQLAlchemy ORM models (10 сущностей + RefreshToken)
 │   │   ├── schemas/          # Pydantic schemas (request/response validation)
 │   │   ├── config.py         # Настройки (SQLite/PostgreSQL, JWT, refresh tokens)
 │   │   ├── database.py       # Подключение к БД (aiosqlite / asyncpg)
+│   │   ├── middleware.py     # Rate limiting middleware
 │   │   └── main.py           # FastAPI приложение (lifespan, create_all для SQLite)
 │   ├── alembic/              # Alembic миграции для PostgreSQL
 │   ├── alembic.ini           # Конфиг Alembic
-│   ├── tests/                # pytest тесты (98 тестов: все модули)
+│   ├── tests/                # pytest тесты (107 тестов: все модули + reviews)
 │   ├── requirements.txt      # Зависимости Python
 │   └── pyproject.toml        # Конфиг pytest
 ├── frontend/
 │   ├── src/
 │   │   ├── api/              # API клиент (axios с auth-interceptor, refresh queue, httpOnly cookies)
-│   │   ├── components/       # Общие компоненты (Modal, Pagination, FilterBar, MessageBar)
-│   │   ├── pages/            # Публичные + админ-панель (10 страниц)
+│   │   ├── components/       # Общие компоненты (Modal, Pagination, FilterBar, MessageBar, ReviewsSection)
+│   │   ├── pages/            # Публичные + админ-панель (12 страниц)
+│   │   ├── tests/            # Vitest автотесты (44 теста)
 │   │   ├── App.tsx           # Роутинг
 │   │   └── main.tsx          # Точка входа
 │   ├── package.json
-│   └── vite.config.ts
+│   ├── vitest.config.ts      # Vitest конфиг
+│   ├── .eslintrc.cjs         # ESLint конфиг
+│   └── .prettierrc           # Prettier конфиг
 ├── docker-compose.yml        # Docker-конфиг (PostgreSQL + Redis, production)
-├── start.bat                 # Запуск backend + frontend (Windows)
-├── run_backend.bat           # Запуск backend только (Windows)
+├ .env.example                # Шаблон переменных окружения
+├ start.bat                   # Запуск backend + frontend (Windows)
+├ run_backend.bat             # Запуск backend только (Windows)
 └── run_frontend.bat          # Запуск frontend только (Windows)
 ```
 
@@ -91,9 +106,11 @@ sugar-booking/
 | Migrations | Alembic 1.14 |
 | Frontend | React 18, TypeScript 5, Vite 6 |
 | HTTP | Axios (interceptors, refresh queue) |
-| Тесты | pytest, pytest-asyncio, httpx |
+| Тесты | pytest, pytest-asyncio, httpx, Vitest, @testing-library/react |
+| Линтинг | ESLint + Prettier |
 | Production DB | PostgreSQL 16 |
 | Production cache | Redis 7 |
+| Rate limiting | Встроенный middleware (60 req/min default) |
 
 ## 📋 Что реализовано
 
@@ -113,18 +130,22 @@ sugar-booking/
 - Журнал действий (audit logs) — фиксация всех операций
 - Экспорт записей и клиентов в CSV
 - Пагинация: мастера, клиенты, услуги (limit/offset, 1-200)
-- Валидация пароля: min 8 символов, 1 заглавная, 1 цифра
+- Валидация пароля: min 8 символов, 1 заглавная, 1 строчная, 1 цифра, 1 спецсимвол, 4 уникальных символа
 - Валидация телефона: 10 цифр, автоформатирование в +7 (XXX) XXX-XX-XX
 - Alembic миграции для PostgreSQL
 - Авто-создание таблиц для SQLite через `create_all` в lifespan
 - Swagger UI документация (`/docs`)
+- Health check эндпоинт (`/health`)
+- Rate limiting middleware (60 req/min default, 10 req/min для auth)
+- No-show tracking: счётчик неяв клиентов, эндпоинт `/admin/appointments/{id}/no-show`
+- Отзывы и рейтинги: CRUD отзывов, средний рейтинг, публичная страница отзывов
 
 ### ✅ Frontend
 - Главная страница (список мастеров и услуг)
 - Страница бронирования с проверкой конфликтов
 - Админ-панель (12 страниц):
   - Дашборд — статистика записей, клиентов, услуг, доход
-  - Записи — фильтрация по статусу, пагинация, подтверждение, завершение, отмена, удаление
+  - Записи — фильтрация по статусу, пагинация, подтверждение, завершение, отмена, удаление, no-show
   - Услуги — создание, редактирование, soft-delete, пагинация
   - Клиенты — создание, редактирование, удаление, экспорт CSV, пагинация
   - Расписание — Calendar, TimeSlots, BookingModal, MonthlyStats (рефакторинг из монолита)
@@ -136,12 +157,17 @@ sugar-booking/
 - Обработка ошибок 422 (валидация)
 - Адаптивный дизайн
 - Role-based роутинг: мастер и суперпользователь видят разные страницы
+- Секция отзывов клиентов на главной странице
+- Кнопка "+" для быстрого добавления рабочего дня в календаре
+- ESLint + Prettier для форматирования кода
 
 ### ✅ Тесты
-- 98 pytest-тестов (все модули: auth, masters, services, appointments, clients, admin CRUD)
+- **Backend:** 107 pytest-тестов (auth, masters, services, appointments, clients, reviews, admin CRUD)
+- **Frontend:** 44 Vitest-теста (helpers, hooks, Modal, MessageBar, Pagination, FilterBar)
 - 100% покрытие всех эндпоинтов
 - In-memory SQLite для изоляции тестов
 - pytest-asyncio для асинхронных тестов
+- @testing-library/react для компонентных тестов
 
 ## 🔌 API Endpoints
 
@@ -241,6 +267,20 @@ sugar-booking/
 | `GET` | `/admin/masters/{id}/stats` | Статистика по мастеру |
 | `GET` | `/admin/global-stats` | Глобальная статистика по всей системе |
 
+### Reviews (публичные + авторизованные)
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| `GET` | `/api/v1/reviews/` | Список опубликованных отзывов (фильтр по master_id) |
+| `GET` | `/api/v1/reviews/average` | Средний рейтинг мастера |
+| `POST` | `/api/v1/reviews/` | Создать отзыв (только на completed appointment) |
+| `PATCH` | `/api/v1/reviews/{id}` | Обновить отзыв (comment, publish) |
+| `DELETE` | `/api/v1/reviews/{id}` | Удалить отзыв |
+
+### Admin No-Show
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| `PATCH` | `/admin/appointments/{id}/no-show` | Отметить запись как неявку |
+
 ## 🔐 Админ-панель
 
 **Обычный мастер** (любой зарегистрированный мастер):
@@ -313,21 +353,28 @@ RefreshToken (id, master_id, token_jti, token_hash, expires_at, is_revoked, crea
 
 ## 🔒 Безопасность
 
-1. **Пароли:** Bcrypt hashing (passlib), валидация: min 8 символов, 1 заглавная, 1 цифра
+1. **Пароли:** Bcrypt hashing (passlib), валидация: min 8 символов, 1 заглавная, 1 строчная, 1 цифра, 1 спецсимвол (!@#$%^&* и т.д.), 4 уникальных символа
 2. **Аутентификация:** JWT токены (python-jose, HS256) + refresh token rotation
 3. **Cookies:** access_token — `httponly=False` (читается JS), refresh_token — `httponly=True` (только HTTP)
-4. **Валидация:** Pydantic schemas с проверкой типов
-5. **SQL-инъекции:** Защищено SQLAlchemy ORM
+4. **Rate limiting:** 60 req/min default, 10 req/min для auth-эндпоинтов
+5. **Валидация:** Pydantic schemas с проверкой типов
+6. **SQL-инъекции:** Защищено SQLAlchemy ORM
 
 ## 🧪 Тесты
 
 ```powershell
+# Backend
 cd backend
 $env:PYTHONPATH='.'
-pytest tests/ -v                          # Все тесты (98)
-pytest tests/test_auth.py -v              # Только auth
-pytest tests/test_masters.py -v           # Только masters
+pytest tests/ -v                          # Все тесты (107)
+pytest tests/test_reviews.py -v           # Только reviews
 pytest tests/ -v --cov=app                # С покрытием
+
+# Frontend
+cd frontend
+npx vitest run                            # Все тесты (44)
+npx vitest run src/tests/helpers.test.ts  # Только helpers
+npx vitest                              # Watch mode
 ```
 
 ## 🌱 Seed-скрипт
@@ -337,7 +384,7 @@ pytest tests/ -v --cov=app                # С покрытием
 ```powershell
 cd backend
 $env:PYTHONPATH='.'
-python seed_superuser.py
+python create_superuser.py
 ```
 
 ## 🐛 Решение проблем
@@ -405,8 +452,8 @@ curl -X POST http://localhost:8000/api/v1/auth/register \
 ```powershell
 cd backend
 $env:PYTHONPATH='.'
-python seed_superuser.py
-# Создаёт: pahankov@mail.ru / SecurePass123! (is_admin=true)
+python create_superuser.py
+# Создаёт: pahankov@mail.ru / Sug@r2026! (is_admin=true)
 ```
 
 ### Логин (возвращает cookies)
@@ -468,7 +515,54 @@ curl -X GET http://localhost:8000/api/v1/admin/masters/1/stats
 curl -X GET http://localhost:8000/api/v1/admin/global-stats
 ```
 
+### Отзывы и рейтинги
+```bash
+# Список отзывов
+curl -X GET "http://localhost:8000/api/v1/reviews/?master_id=1"
+
+# Средний рейтинг
+curl -X GET "http://localhost:8000/api/v1/reviews/average?master_id=1"
+
+# Создать отзыв
+curl -X POST http://localhost:8000/api/v1/reviews/ \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"appointment_id":1,"rating":5.0,"comment":"Отличный мастер!"}'
+
+# Обновить отзыв
+curl -X PATCH http://localhost:8000/api/v1/reviews/1 \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"comment":"Обновлённый комментарий","is_published":true}'
+
+# Удалить отзыв
+curl -X DELETE http://localhost:8000/api/v1/reviews/1 \
+  -H "Authorization: Bearer <token>"
+```
+
+### No-show tracking
+```bash
+# Отметить запись как неявку
+curl -X PATCH http://localhost:8000/api/v1/admin/appointments/1/no-show \
+  -H "Authorization: Bearer <token>"
+```
+
 ## 📚 История версий
+
+### [0.10.0] — 2026-09-21
+- **Отзывы и рейтинги:** CRUD отзывов (Backend: `reviews.py`, Frontend: `ReviewsSection`, `ReviewCard`)
+- **API отзывов:** `GET /api/v1/reviews/`, `GET /average`, `POST`, `PATCH`, `DELETE`
+- **No-show tracking:** `PATCH /admin/appointments/{id}/no-show`, поле `no_show_count` в Client
+- **Rate limiting:** middleware с настраиваемыми лимитами (60 req/min default, 10 для auth)
+- **Health check:** эндпоинт `/health`
+- **Пустые слоты:** кнопка "+" в календаре для быстрого добавления рабочего дня
+- **Валидация пароля:** 7 проверок (min 8, 1 заглавная, 1 строчная, 1 цифра, 1 спецсимвол, 4 уникальных)
+- **ESLint + Prettier:** линтинг и форматирование кода
+- **Frontend-тесты:** 44 Vitest-теста (helpers, hooks, Modal, MessageBar, Pagination, FilterBar)
+- **Миграции:** `0002_add_reviews`, `0003_add_no_show_count`
+- **CI/CD:** GitHub Actions (backend tests + frontend lint + vitest + build)
+- **`.env.example`:** шаблон переменных окружения
+- **Очистка:** удалены 31 .js-артефакт из frontend/src/
 
 ### [0.9.0] — 2026-09-21
 - **Админка суперпользователя:** полное разделение ролей (мастер vs is_admin=true)
@@ -483,7 +577,7 @@ curl -X GET http://localhost:8000/api/v1/admin/global-stats
 - **Фикс маршрутов:** trailing slash / masters endpoint (prefix в router, "" вместо "/")
 - **Фикс фильтров:** query-параметры is_active/is_admin как строки (alias для FastAPI)
 - **Фикс логов:** одна вкладка "Логи" для всех ролей
-- **Тесты:** 98/98 прошли
+- **Тесты:** 107/107 прошли (backend: 107, frontend: 44)
 
 ### [0.8.0] — 2026-09-21
 - **Alembic миграции:** поддержка PostgreSQL через Alembic 1.14
@@ -554,14 +648,15 @@ curl -X GET http://localhost:8000/api/v1/admin/global-stats
 
 ### Phase 3 — Production Ready
 - ✅ Alembic миграции (реализовано)
-- CI/CD (GitHub Actions)
-- Frontend-тесты (Vitest)
+- ✅ CI/CD (GitHub Actions)
+- ✅ Frontend-тесты (Vitest)
 - Деплой (Nginx, HTTPS)
 
 ### В планах
 - Множественные мастера с разными графиками
-- Отзывы и рейтинги
+- ✅ Отзывы и рейтинги (реализовано)
 - Уведомления (Telegram/email)
+- Платёжная система (ЮKassa / Тинькофф)
 - Отчёты и аналитика
 
 ---

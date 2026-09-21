@@ -110,6 +110,29 @@
   font-weight: 500;
 }
 
+.calendar-add-slot-btn {
+  margin-top: 4px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid #4caf50;
+  background: white;
+  color: #4caf50;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.calendar-add-slot-btn:hover {
+  background: #4caf50;
+  color: white;
+  transform: scale(1.1);
+}
+
 /* Time slots */
 .schedule-time-slots {
   margin-bottom: 24px;

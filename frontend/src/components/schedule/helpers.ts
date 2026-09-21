@@ -6,6 +6,7 @@ export const STATUS_CONFIG: Record<string, { label: string; bg: string; text: st
   confirmed: { label: 'Подтверждена', bg: '#e3f2fd', text: '#1565c0' },
   completed: { label: 'Завершена', bg: '#e8f5e9', text: '#2e7d32' },
   cancelled: { label: 'Отменена', bg: '#f5f5f5', text: '#616161' },
+  'no-show': { label: 'Неявка', bg: '#fff3e0', text: '#e65100' },
 }
 
 export function formatDate(date: Date): string {

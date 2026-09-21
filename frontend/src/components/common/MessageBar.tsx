@@ -2,7 +2,7 @@ import React from 'react'
 import './SharedComponents.css'
 
 interface MessageBarProps {
-  type: 'success' | 'error'
+  type: 'success' | 'error' | 'warning' | 'info'
   message: string
   onDismiss?: () => void
 }

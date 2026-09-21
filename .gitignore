@@ -1,20 +1,82 @@
-node_modules/
-__pycache__/
-*.pyc
-.env
+# Logs
+logs
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Dependencies
+node_modules
+dist
+dist-ssr
+*.local
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
 .DS_Store
-dist/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
 build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.mypy_cache
+.ruff_cache
+
+# Database
+*.db
+*.sqlite
 *.sqlite3
-postgres/
-redis/
-venv/
-sugar_booking.db
-*.json
-!package.json
-!package-lock.json
-# Build artifacts (compiled JSX from TypeScript)
-frontend/src/**/*.js
-# Application logs
-backend/app/logs/
+
+# Alembic
+# alembic/versions/ - keep migrations
+
+# Docker
+# docker-compose.yml - keep
+
+# Test coverage
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Vercel
+.vercel
