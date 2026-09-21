@@ -179,7 +179,9 @@ async def refresh_token(request: Request, db: AsyncSession = Depends(get_db)):
 
     await db.commit()
 
-    response = Response()
+    response = Response(
+        content=f'{{"access_token":"{new_access}","token_type":"bearer"}}'
+    )
     response.set_cookie(
         key="refresh_token", value=new_refresh_value,
         httponly=True, secure=not settings.DEBUG, samesite="lax",
@@ -190,9 +192,8 @@ async def refresh_token(request: Request, db: AsyncSession = Depends(get_db)):
         httponly=False, secure=not settings.DEBUG, samesite="lax",
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60, path="/",
     )
-    response.body = b'{"access_token":"' + new_access.encode() + b'","token_type":"bearer"}'
 
-    return TokenRefreshResponse(access_token=new_access)
+    return response
 
 
 @router.post("/logout")
@@ -212,7 +213,7 @@ async def logout(request: Request, db: AsyncSession = Depends(get_db)):
         except JWTError:
             pass
 
-    response = Response()
+    response = Response(content='{"detail":"Logged out"}')
     response.delete_cookie(key="refresh_token", path="/")
     response.delete_cookie(key="access_token", path="/")
-    return {"detail": "Logged out"}
+    return response
