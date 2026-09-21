@@ -82,7 +82,7 @@ async def register_master(master: MasterCreate, db: AsyncSession = Depends(get_d
 @router.post("/login", response_model=TokenResponse)
 async def login(response: Response, req: LoginRequest, db: AsyncSession = Depends(get_db)):
     """Login master — returns access token in response body, refresh token in httpOnly cookie."""
-    logger.info("Запрос на вход мастера: %s", req.email)
+    logger.info("Запрос на вход: %s", req.email)
     result = await db.execute(select(Master).where(Master.email == req.email))
     master = result.scalar_one_or_none()
 
@@ -91,6 +91,7 @@ async def login(response: Response, req: LoginRequest, db: AsyncSession = Depend
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail="Неверный email или пароль")
 
+    role = "Суперпользователь" if master.is_admin else "Мастер"
     access_token = create_access_token({
         "sub": str(master.id), "is_admin": master.is_admin, "name": master.name
     })
@@ -117,7 +118,7 @@ async def login(response: Response, req: LoginRequest, db: AsyncSession = Depend
         path="/",
     )
 
-    logger.info("Мастер успешно вошёл в систему: %s", req.email)
+    logger.info("%s успешно вошёл в систему: %s", role, req.email)
     return {"access_token": access_token, "token_type": "bearer"}
 
 
