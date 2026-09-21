@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { authApi } from '../api/client'
+import { PHONE_PLACEHOLDER, PASSWORD_PLACEHOLDER } from '../constants'
 import './LoginModal.css'
 
 interface LoginModalProps {
@@ -8,183 +9,86 @@ interface LoginModalProps {
 }
 
 function LoginModal({ isOpen, onClose }: LoginModalProps) {
+  const [isRegister, setIsRegister] = useState(false)
+  const [name, setName] = useState('')
+  const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [phone, setPhone] = useState('')
-  const [name, setName] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
-  const [isRegister, setIsRegister] = useState(false)
+  const [telegram, setTelegram] = useState('')
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
   const [loading, setLoading] = useState(false)
-
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const digits = e.target.value.replace(/\D/g, '').slice(0, 10)
-    setPhone(digits)
-  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
-
-    // Client login by phone
-    if (phone && !email) {
-      setLoading(true)
-      try {
-        const resp = await authApi.clientLogin(phone)
-        window.location.href = '/client/appointments'
-      } catch (err: any) {
-        setError(err.response?.data?.detail || 'Клиент не найден')
-      } finally {
-        setLoading(false)
-      }
-      return
-    }
-
-    // Master login or register
-    if (isRegister) {
-      setLoading(true)
-      try {
-        await authApi.register({ name, email, password, phone: phone || undefined })
-        await authApi.login(email, password)
-        window.location.href = '/admin/dashboard'
-      } catch (err: any) {
-        const detail = err.response?.data?.detail
-        if (Array.isArray(detail) && detail.length > 0) {
-          setError(detail[0]?.msg || 'Ошибка валидации')
-        } else if (typeof detail === 'string') {
-          setError(detail)
-        } else {
-          setError('Ошибка регистрации. Пароль: 8+ символов, заглавная буква, цифра.')
-        }
-      } finally {
-        setLoading(false)
-      }
-      return
-    }
-
-    // Master login
+    setSuccess('')
     setLoading(true)
     try {
-      await authApi.login(email, password)
-      window.location.href = '/admin/dashboard'
+      if (isRegister) {
+        await authApi.register({ name, email, password, phone, telegram_username: telegram || undefined })
+        setSuccess('Регистрация успешна! Теперь войдите.')
+        setIsRegister(false)
+      } else {
+        await authApi.clientLogin(phone)
+        setSuccess('Код отправлен (демо: вход сразу)')
+        onClose()
+      }
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Ошибка входа')
-    } finally {
-      setLoading(false)
-    }
+      setError(err.response?.data?.detail || 'Ошибка')
+    } finally { setLoading(false) }
   }
 
   if (!isOpen) return null
 
   return (
-    <div className="login-modal-overlay" onClick={onClose}>
-      <div className="login-modal" onClick={(e) => e.stopPropagation()}>
-        <button className="login-modal-close" onClick={onClose}>✕</button>
-        
-        <h2 className="login-title">Вход в систему</h2>
-
-        {error && <div className="login-error">{error}</div>}
-
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <h3>{isRegister ? 'Регистрация' : 'Вход для клиента'}</h3>
+        {success && <div className="success-message">{success}</div>}
+        {error && <div className="error-message">{error}</div>}
         <form onSubmit={handleSubmit}>
-          {/* Master fields */}
-          <div className="login-group">
-            <label>Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="master@example.com"
-            />
-          </div>
-
-          <div className="login-group">
-            <label>Пароль</label>
-            <div style={{ position: 'relative' }}>
-              <input
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder={isRegister ? 'Мин. 8 символов, заглавная буква, цифра' : 'Введите пароль'}
-                required={isRegister}
-                style={{ paddingRight: 44 }}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                style={{
-                  position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
-                  background: 'none', border: 'none', cursor: 'pointer', fontSize: 18,
-                  padding: '4px 8px', color: '#666'
-                }}
-              >
-                {showPassword ? '🙈' : '👁️'}
-              </button>
-            </div>
-            {isRegister && (
-              <small style={{ color: '#999', fontSize: 12, display: 'block', marginTop: 4 }}>
-                Мин. 8 символов, 1 заглавная буква, 1 цифра
-              </small>
-            )}
-          </div>
-
-          {/* Register fields */}
           {isRegister && (
             <>
               <div className="login-group">
                 <label>Имя</label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Ваше имя"
-                  required
-                />
+                <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Иван Иванов" required />
+              </div>
+              <div className="login-group">
+                <label>Email</label>
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" required />
+              </div>
+              <div className="login-group">
+                <label>Пароль</label>
+                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={PASSWORD_PLACEHOLDER} required />
               </div>
               <div className="login-group">
                 <label>Телефон</label>
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={handlePhoneChange}
-                  placeholder="9991234567"
-                  maxLength={10}
-                  required
-                />
+                <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={PHONE_PLACEHOLDER} maxLength={18} required />
+              </div>
+              <div className="login-group">
+                <label>Telegram</label>
+                <input type="text" value={telegram} onChange={(e) => setTelegram(e.target.value)} placeholder="@username" />
               </div>
             </>
           )}
-
-          {/* Client phone field */}
           {!isRegister && (
             <div className="login-group">
-              <label>Или телефон (для клиентов)</label>
-              <input
-                type="tel"
-                value={phone}
-                onChange={handlePhoneChange}
-                placeholder="9991234567"
-                maxLength={10}
-              />
+              <label>Телефон</label>
+              <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={PHONE_PLACEHOLDER} maxLength={18} required />
             </div>
           )}
-
-          {/* Register checkbox */}
-          <label className="login-checkbox">
-            <input
-              type="checkbox"
-              checked={isRegister}
-              onChange={(e) => setIsRegister(e.target.checked)}
-            />
-            <span>Зарегистрироваться как мастер</span>
-          </label>
-
-          <button type="submit" className="login-btn" disabled={loading}>
-            {loading
-              ? isRegister ? 'Регистрация...' : 'Входим...'
-              : isRegister ? 'Зарегистрироваться' : 'Войти'
-            }
+          <button type="submit" className="btn btn-primary" disabled={loading}>
+            {loading ? 'Отправка...' : (isRegister ? 'Зарегистрироваться' : 'Войти')}
           </button>
         </form>
+        <p style={{ marginTop: 16, textAlign: 'center' }}>
+          {isRegister ? 'Уже есть аккаунт? ' : 'Нет аккаунта? '}
+          <a href="#" onClick={(e) => { e.preventDefault(); setIsRegister(!isRegister) }}>
+            {isRegister ? 'Войти' : 'Зарегистрироваться'}
+          </a>
+        </p>
+        <button className="btn btn-ghost" onClick={onClose} style={{ marginTop: 8 }}>Закрыть</button>
       </div>
     </div>
   )

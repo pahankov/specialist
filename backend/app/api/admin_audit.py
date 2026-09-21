@@ -2,6 +2,7 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select
+from sqlalchemy.orm import selectinload
 from typing import Optional
 from app.api.admin_base import (
     get_db, AuditLog, Master, require_master, AuditLogListResponse, AuditLogResponse
@@ -9,6 +10,22 @@ from app.api.admin_base import (
 from app.api.dependencies import require_super_admin
 
 router = APIRouter()
+
+
+def _build_log_response(log: AuditLog) -> AuditLogResponse:
+    """Build AuditLogResponse with master name from relationship."""
+    return AuditLogResponse(
+        id=log.id,
+        master_id=log.master_id,
+        master_name=log.master.name if log.master else None,
+        level=log.level,
+        action=log.action,
+        entity_type=log.entity_type,
+        entity_id=log.entity_id,
+        details=log.details,
+        ip_address=log.ip_address,
+        created_at=log.created_at
+    )
 
 
 @router.get("/audit-logs", response_model=AuditLogListResponse)
@@ -27,18 +44,12 @@ async def get_audit_logs(
         count_query = count_query.where(AuditLog.entity_type == entity_type)
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
-    query = query.order_by(AuditLog.created_at.desc()).offset(offset).limit(limit)
+    query = query.options(selectinload(AuditLog.master)).order_by(AuditLog.created_at.desc()).offset(offset).limit(limit)
     result = await db.execute(query)
     logs = result.scalars().all()
     return AuditLogListResponse(
         total=total,
-        logs=[
-            AuditLogResponse(
-                id=log.id, master_id=log.master_id, action=log.action,
-                entity_type=log.entity_type, entity_id=log.entity_id,
-                details=log.details, ip_address=log.ip_address, created_at=log.created_at
-            ) for log in logs
-        ]
+        logs=[_build_log_response(log) for log in logs]
     )
 
 
@@ -52,7 +63,7 @@ async def get_all_audit_logs(
     db: AsyncSession = Depends(get_db)
 ):
     """Get ALL audit logs (superadmin only)."""
-    query = select(AuditLog)
+    query = select(AuditLog).options(selectinload(AuditLog.master))
     count_query = select(func.count(AuditLog.id))
 
     if entity_type:
@@ -69,11 +80,5 @@ async def get_all_audit_logs(
     logs = result.scalars().all()
     return AuditLogListResponse(
         total=total,
-        logs=[
-            AuditLogResponse(
-                id=log.id, master_id=log.master_id, action=log.action,
-                entity_type=log.entity_type, entity_id=log.entity_id,
-                details=log.details, ip_address=log.ip_address, created_at=log.created_at
-            ) for log in logs
-        ]
+        logs=[_build_log_response(log) for log in logs]
     )

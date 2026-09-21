@@ -23,9 +23,10 @@ async def create_admin_service(
         duration_minutes=data.duration_minutes, price=data.price, is_active=True
     )
     db.add(new_service)
+    await db.flush()
+    await db.refresh(new_service)
     await log_action(db, master.id, "create", "service", new_service.id, data.name, level="info")
     await db.commit()
-    await db.refresh(new_service)
     return new_service
 
 

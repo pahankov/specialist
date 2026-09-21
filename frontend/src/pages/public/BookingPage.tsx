@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { servicesApi, appointmentsApi } from '../../api/client'
 import type { Service } from '../../api/types'
+import { PHONE_PLACEHOLDER } from '../../constants'
 import './BookingPage.css'
 
 function BookingPage() {
@@ -141,7 +142,7 @@ function BookingPage() {
             />
             <input
               type="tel"
-              placeholder="Ваш телефон"
+              placeholder={PHONE_PLACEHOLDER}
               value={clientPhone}
               onChange={(e) => setClientPhone(e.target.value)}
               className="input"

@@ -42,10 +42,11 @@ async def create_blocked_slot(
         master_id=master.id, start_dt=data.start_dt, end_dt=data.end_dt, reason=data.reason
     )
     db.add(slot)
+    await db.flush()
+    await db.refresh(slot)
     await log_action(db, master.id, "create", "blocked_slot", slot.id,
                      details=f"Блокировка: {slot.start_dt} - {slot.end_dt}", level="info")
     await db.commit()
-    await db.refresh(slot)
     return slot
 
 

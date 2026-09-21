@@ -40,9 +40,10 @@ async def create_admin_client(
             raise HTTPException(status_code=400, detail="Клиент с таким email уже существует")
     new_client = Client(name=data.name, phone=data.phone, email=data.email)
     db.add(new_client)
+    await db.flush()
+    await db.refresh(new_client)
     await log_action(db, master.id, "create", "client", new_client.id, data.name, level="info")
     await db.commit()
-    await db.refresh(new_client)
     return new_client
 
 

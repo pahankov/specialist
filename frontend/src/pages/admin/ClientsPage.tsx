@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { adminApi } from '../../api/client'
 import type { Client } from '../../api/types'
+import { PHONE_PLACEHOLDER, EMAIL_PLACEHOLDER } from '../../constants'
 import './ClientsPage.css'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -100,9 +101,7 @@ function ClientsPage() {
         </div>
         <button
           className="btn btn-ghost"
-          onClick={() => {
-            window.open(`${API_URL}/api/v1/admin/export/clients`, '_blank')
-          }}
+          onClick={() => { window.open(`${API_URL}/api/v1/admin/export/clients`, '_blank') }}
         >
           📥 Экспорт CSV
         </button>
@@ -116,8 +115,8 @@ function ClientsPage() {
           <form onSubmit={handleSubmit}>
             <div className="form-row">
               <div className="form-group"><label>Имя</label><input value={name} onChange={(e) => setName(e.target.value)} required placeholder="Иван Иванов" /></div>
-              <div className="form-group"><label>Телефон</label><input value={phone} onChange={handlePhoneChange} required placeholder="9991234567" /></div>
-              <div className="form-group"><label>Email</label><input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="client@mail.ru" /></div>
+              <div className="form-group"><label>Телефон</label><input value={phone} onChange={handlePhoneChange} required placeholder={PHONE_PLACEHOLDER} /></div>
+              <div className="form-group"><label>Email</label><input value={email} onChange={(e) => setEmail(e.target.value)} placeholder={EMAIL_PLACEHOLDER} /></div>
             </div>
             <div className="form-actions">
               <button type="submit" className="btn btn-primary">{editingId ? 'Сохранить' : 'Создать'}</button>
@@ -164,4 +163,5 @@ function ClientsPage() {
     </div>
   )
 }
+
 export default ClientsPage

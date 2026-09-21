@@ -34,6 +34,14 @@ async def get_all_masters(
     db: AsyncSession = Depends(get_db)
 ):
     """Get all masters (superadmin only)."""
+    # Reject empty strings — they cause 422 in some FastAPI/axios combos
+    if search == '':
+        search = None
+    if filter_active == '':
+        filter_active = None
+    if filter_admin == '':
+        filter_admin = None
+
     logger.info("GET /admin/masters: search=%r is_active=%r is_admin=%r limit=%d offset=%d",
                 search, filter_active, filter_admin, limit, offset)
     query = select(Master)
@@ -88,9 +96,10 @@ async def create_master(
         telegram_username=data.telegram_username,
     )
     db.add(new_master)
+    await db.flush()
+    await db.refresh(new_master)
     await log_action(db, super_admin.id, "create", "master", new_master.id, data.email, level="info")
     await db.commit()
-    await db.refresh(new_master)
     logger.info("Суперпользователь %s создал мастера: %s", super_admin.email, data.email)
     return new_master
 

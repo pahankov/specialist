@@ -75,7 +75,7 @@ sugar-booking/
 │   │   └── main.py           # FastAPI приложение (lifespan, create_all для SQLite)
 │   ├── alembic/              # Alembic миграции для PostgreSQL
 │   ├── alembic.ini           # Конфиг Alembic
-│   ├── tests/                # pytest тесты (107 тестов: все модули + reviews)
+│   ├── tests/                # pytest тесты (135 тестов: auth, masters, services, appointments, clients, reviews, admin CRUD, rate limiting, refresh tokens, password security, no-show)
 │   ├── requirements.txt      # Зависимости Python
 │   └── pyproject.toml        # Конфиг pytest
 ├── frontend/
@@ -162,7 +162,7 @@ sugar-booking/
 - ESLint + Prettier для форматирования кода
 
 ### ✅ Тесты
-- **Backend:** 107 pytest-тестов (auth, masters, services, appointments, clients, reviews, admin CRUD)
+- **Backend:** 135 pytest-тестов (auth, masters, services, appointments, clients, reviews, admin CRUD, rate limiting, refresh tokens, password security, no-show)
 - **Frontend:** 44 Vitest-теста (helpers, hooks, Modal, MessageBar, Pagination, FilterBar)
 - 100% покрытие всех эндпоинтов
 - In-memory SQLite для изоляции тестов
@@ -353,12 +353,13 @@ RefreshToken (id, master_id, token_jti, token_hash, expires_at, is_revoked, crea
 
 ## 🔒 Безопасность
 
-1. **Пароли:** Bcrypt hashing (passlib), валидация: min 8 символов, 1 заглавная, 1 строчная, 1 цифра, 1 спецсимвол (!@#$%^&* и т.д.), 4 уникальных символа
-2. **Аутентификация:** JWT токены (python-jose, HS256) + refresh token rotation
-3. **Cookies:** access_token — `httponly=False` (читается JS), refresh_token — `httponly=True` (только HTTP)
-4. **Rate limiting:** 60 req/min default, 10 req/min для auth-эндпоинтов
-5. **Валидация:** Pydantic schemas с проверкой типов
-6. **SQL-инъекции:** Защищено SQLAlchemy ORM
+ 1. **Пароли:** Bcrypt hashing (passlib), валидация: min 8 символов, 1 заглавная, 1 строчная, 1 цифра, 1 спецсимвол (!@#$%^&* и т.д.), 4 уникальных символа
+ 2. **Аутентификация:** JWT токены (python-jose, HS256) + refresh token rotation
+ 3. **Cookies:** access_token — `httponly=False` (читается JS), refresh_token — `httponly=True` (только HTTP)
+ 4. **Rate limiting:** 60 req/min default, 10 req/min для auth-эндпоинтов
+ 5. **Валидация:** Pydantic schemas с проверкой типов
+ 6. **SQL-инъекции:** Защищено SQLAlchemy ORM
+ 7. **Логирование:** Цветной вывод в консоль (ANSI), SQL-запросы на уровне WARNING, файлы логов с ротацией
 
 ## 🧪 Тесты
 
@@ -366,7 +367,7 @@ RefreshToken (id, master_id, token_jti, token_hash, expires_at, is_revoked, crea
 # Backend
 cd backend
 $env:PYTHONPATH='.'
-pytest tests/ -v                          # Все тесты (107)
+pytest tests/ -v                          # Все тесты (135)
 pytest tests/test_reviews.py -v           # Только reviews
 pytest tests/ -v --cov=app                # С покрытием
 
@@ -549,6 +550,18 @@ curl -X PATCH http://localhost:8000/api/v1/admin/appointments/1/no-show \
 
 ## 📚 История версий
 
+### [0.11.0] — 2026-09-21
+- **Тесты:** +28 новых тестов (refresh tokens, rate limiting, password security, no-show) — 135 backend + 44 frontend = 179
+- **Логирование:** цветной вывод в консоль (ANSI), SQL-запросы на уровне WARNING, suppress uvicorn access logs
+- **Audit logs:** superadmin видит ВСЕ логи системы, master видит только свои; master_name вместо ID в таблице
+- **Фикс audit log:** log_action теперь вызывается после flush (ID объекта корректно сохраняется)
+- **Константы:** frontend/src/constants.ts — PHONE_PLACEHOLDER, PASSWORD_PLACEHOLDER, EMAIL_PLACEHOLDER, TELEGRAM_PLACEHOLDER
+- **Фикс PATCH:** admin_services.py и masters.py — model_dump(exclude_unset=True) предотвращает потерю данных при обновлении
+- **Фикс auth:** refresh/logout endpoints возвращают Response с cookies (был баг — TokenRefreshResponse вместо Response)
+- **Фикс MastersPage:** пустые query params не вызывают 422
+- **Фикс логина:** точный лог — "Суперпользователь" vs "Мастер"
+- **Фикс bcrypt:** downgrade до 4.3.0 для совместимости с passlib 1.7.4
+
 ### [0.10.0] — 2026-09-21
 - **Отзывы и рейтинги:** CRUD отзывов (Backend: `reviews.py`, Frontend: `ReviewsSection`, `ReviewCard`)
 - **API отзывов:** `GET /api/v1/reviews/`, `GET /average`, `POST`, `PATCH`, `DELETE`
@@ -577,7 +590,7 @@ curl -X PATCH http://localhost:8000/api/v1/admin/appointments/1/no-show \
 - **Фикс маршрутов:** trailing slash / masters endpoint (prefix в router, "" вместо "/")
 - **Фикс фильтров:** query-параметры is_active/is_admin как строки (alias для FastAPI)
 - **Фикс логов:** одна вкладка "Логи" для всех ролей
-- **Тесты:** 107/107 прошли (backend: 107, frontend: 44)
+- **Тесты:** 135 backend + 44 frontend = 179 тестов (все проходят)
 
 ### [0.8.0] — 2026-09-21
 - **Alembic миграции:** поддержка PostgreSQL через Alembic 1.14

@@ -301,6 +301,20 @@ export const adminApi = {
   exportClients() {
     return `${API_BASE}/api/v1/admin/export/clients`
   },
+
+  // Generic HTTP methods (for endpoints without named methods)
+  get(url: string, config?: Record<string, any>) {
+    return apiClient.get(url, config)
+  },
+  post(url: string, data?: any) {
+    return apiClient.post(url, data)
+  },
+  patch(url: string, data?: any, config?: Record<string, any>) {
+    return apiClient.patch(url, data, config)
+  },
+  delete(url: string) {
+    return apiClient.delete(url)
+  },
 }
 
 // ─── SuperAdmin API ────────────────────────────────────────────────
