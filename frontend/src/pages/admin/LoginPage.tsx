@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { authApi } from '../../api/client'
 import type { LoginResponse } from '../../api/types'
+import { EMAIL_PLACEHOLDER } from '../../constants'
 import './LoginPage.css'
 
 function LoginPage() {
@@ -18,7 +19,6 @@ function LoginPage() {
     setLoading(true)
     try {
       const resp = await authApi.login(email, password)
-      // Access token is set via Set-Cookie header from backend
       navigate('/admin/dashboard')
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Ошибка входа')
@@ -36,7 +36,7 @@ function LoginPage() {
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label htmlFor="email">Email</label>
-            <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="master@example.com" required />
+            <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={EMAIL_PLACEHOLDER} required />
           </div>
           <div className="form-group">
             <label htmlFor="password">Пароль</label>

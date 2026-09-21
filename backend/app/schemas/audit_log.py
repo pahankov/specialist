@@ -6,6 +6,7 @@ from datetime import datetime
 class AuditLogResponse(BaseModel):
     id: int
     master_id: Optional[int] = None
+    master_name: Optional[str] = None
     level: Optional[str] = "info"
     action: str
     entity_type: str

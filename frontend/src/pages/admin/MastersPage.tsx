@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { superAdminApi } from '../../api/client'
 import type { Master } from '../../api/types'
 import Modal from '../../components/common/Modal'
+import { PHONE_PLACEHOLDER, PASSWORD_PLACEHOLDER, PASSWORD_EDIT_PLACEHOLDER, TELEGRAM_PLACEHOLDER } from '../../constants'
 import './MastersPage.css'
 
 function MastersPage() {
@@ -16,12 +17,10 @@ function MastersPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null)
 
-  // Create form
   const [createForm, setCreateForm] = useState({
     name: '', email: '', password: '', phone: '', telegram_username: '',
   })
 
-  // Edit form
   const [editForm, setEditForm] = useState({
     name: '', phone: '', telegram_username: '', description: '', password: '',
   })
@@ -41,13 +40,7 @@ function MastersPage() {
       if (filterAdmin === 'admin') params.is_admin = 'true'
       if (filterAdmin === 'user') params.is_admin = 'false'
 
-      // Remove empty params — axios sends them as ?param= which can cause 422
-      const cleanParams: Record<string, string> = {}
-      for (const [key, value] of Object.entries(params)) {
-        if (value && value.trim()) cleanParams[key] = value.trim()
-      }
-
-      const { data } = await superAdminApi.getAllMasters(cleanParams)
+      const { data } = await superAdminApi.getAllMasters(Object.keys(params).length ? params : undefined)
       setMasters(data)
     } catch (err: any) {
       const detail = err.response?.data?.detail
@@ -58,9 +51,7 @@ function MastersPage() {
     }
   }
 
-  useEffect(() => {
-    loadMasters()
-  }, [])
+  useEffect(() => { loadMasters() }, [])
 
   const handleSearch = () => loadMasters()
 
@@ -149,7 +140,6 @@ function MastersPage() {
         </div>
       )}
 
-      {/* Filters */}
       <div className="masters-filters">
         <div className="filter-row">
           <input
@@ -174,7 +164,6 @@ function MastersPage() {
         </div>
       </div>
 
-      {/* Masters table */}
       {loading ? (
         <div className="loading-state">Загрузка...</div>
       ) : masters.length === 0 ? (
@@ -251,58 +240,29 @@ function MastersPage() {
         </div>
       )}
 
-      {/* Create Modal */}
       <Modal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} title="Добавить мастера" actions={[
         { label: 'Отмена', onClick: () => setShowCreateModal(false), variant: 'ghost' },
       ]}>
         <form onSubmit={handleCreate} className="master-form">
           <div className="form-group">
             <label>Имя *</label>
-            <input
-              type="text"
-              value={createForm.name}
-              onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
-              required
-              placeholder="Иван Иванов"
-            />
+            <input type="text" value={createForm.name} onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })} required placeholder="Иван Иванов" />
           </div>
           <div className="form-group">
             <label>Email *</label>
-            <input
-              type="email"
-              value={createForm.email}
-              onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
-              required
-              placeholder="master@example.com"
-            />
+            <input type="email" value={createForm.email} onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })} required placeholder="master@example.com" />
           </div>
           <div className="form-group">
             <label>Пароль *</label>
-            <input
-              type="password"
-              value={createForm.password}
-              onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
-              required
-              placeholder="Минимум 8 символов, заглавная буква, цифра"
-            />
+            <input type="password" value={createForm.password} onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })} required placeholder={PASSWORD_PLACEHOLDER} />
           </div>
           <div className="form-group">
             <label>Телефон</label>
-            <input
-              type="tel"
-              value={createForm.phone}
-              onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })}
-              placeholder="+7 (999) 123-45-67"
-            />
+            <input type="tel" value={createForm.phone} onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })} placeholder={PHONE_PLACEHOLDER} />
           </div>
           <div className="form-group">
             <label>Telegram</label>
-            <input
-              type="text"
-              value={createForm.telegram_username}
-              onChange={(e) => setCreateForm({ ...createForm, telegram_username: e.target.value })}
-              placeholder="@username"
-            />
+            <input type="text" value={createForm.telegram_username} onChange={(e) => setCreateForm({ ...createForm, telegram_username: e.target.value })} placeholder={TELEGRAM_PLACEHOLDER} />
           </div>
           <div className="form-actions">
             <button type="submit" className="btn btn-primary">Создать</button>
@@ -310,7 +270,6 @@ function MastersPage() {
         </form>
       </Modal>
 
-      {/* Edit Modal */}
       <Modal isOpen={showEditModal} onClose={() => setShowEditModal(false)} title="Редактировать мастера" actions={[
         { label: 'Отмена', onClick: () => setShowEditModal(false), variant: 'ghost' },
       ]}>
@@ -318,12 +277,7 @@ function MastersPage() {
           <form onSubmit={handleEdit} className="master-form">
             <div className="form-group">
               <label>Имя *</label>
-              <input
-                type="text"
-                value={editForm.name}
-                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                required
-              />
+              <input type="text" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} required />
             </div>
             <div className="form-group">
               <label>Email</label>
@@ -331,36 +285,19 @@ function MastersPage() {
             </div>
             <div className="form-group">
               <label>Телефон</label>
-              <input
-                type="tel"
-                value={editForm.phone}
-                onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-              />
+              <input type="tel" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} placeholder={PHONE_PLACEHOLDER} />
             </div>
             <div className="form-group">
               <label>Telegram</label>
-              <input
-                type="text"
-                value={editForm.telegram_username}
-                onChange={(e) => setEditForm({ ...editForm, telegram_username: e.target.value })}
-              />
+              <input type="text" value={editForm.telegram_username} onChange={(e) => setEditForm({ ...editForm, telegram_username: e.target.value })} placeholder={TELEGRAM_PLACEHOLDER} />
             </div>
             <div className="form-group">
               <label>Описание</label>
-              <textarea
-                value={editForm.description}
-                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                rows={3}
-              />
+              <textarea value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} rows={3} />
             </div>
             <div className="form-group">
               <label>Новый пароль (оставьте пустым, если не меняете)</label>
-              <input
-                type="password"
-                value={editForm.password}
-                onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
-                placeholder="Минимум 8 символов"
-              />
+              <input type="password" value={editForm.password} onChange={(e) => setEditForm({ ...editForm, password: e.target.value })} placeholder={PASSWORD_EDIT_PLACEHOLDER} />
             </div>
             <div className="form-actions">
               <button type="submit" className="btn btn-primary">Сохранить</button>

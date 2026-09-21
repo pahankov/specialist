@@ -70,7 +70,8 @@ function LogsPage() {
       if (err.response?.status === 401) {
         window.location.href = '/admin/login'
       } else {
-        setError('Ошибка загрузки логов')
+        const detail = err.response?.data?.detail || err.message || 'Ошибка загрузки логов'
+        setError(typeof detail === 'string' ? detail : JSON.stringify(detail))
       }
     } finally {
       setLoading(false)
@@ -171,7 +172,7 @@ function LogsPage() {
                   </td>
                   <td>{entityLabels[log.entity_type] || log.entity_type}</td>
                   <td><code>{log.entity_id || '—'}</code></td>
-                  <td><code>{log.master_id || '—'}</code></td>
+                  <td>{log.master_name || '—'}</td>
                   <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {log.details || '—'}
                   </td>
