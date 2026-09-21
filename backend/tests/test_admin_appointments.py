@@ -295,9 +295,111 @@ class TestAdminAppointmentsByDate:
         resp = await client.get(
             "/api/v1/admin/appointments/by-date",
             params={"date_from": date_from, "date_to": date_to},
-            headers=auth_headers
+            headers=auth_headers,
         )
         assert resp.status_code == 200
         assert len(resp.json()) >= 1
         assert "client_name" in resp.json()[0]
         assert "service_name" in resp.json()[0]
+
+
+class TestMarkNoShow:
+    """Tests for PATCH /api/v1/admin/appointments/{id}/no-show"""
+
+    async def test_mark_no_show_increments_count(self, client, auth_headers, test_master_data, test_service_data):
+        """Marking appointment as no-show increments client's no_show_count."""
+        # Create service + appointment
+        service_resp = await client.post(
+            "/api/v1/services/", json={**test_service_data, "master_id": 1}, headers=auth_headers
+        )
+        service_id = service_resp.json()["id"]
+        future_date = (datetime.now() + timedelta(days=7)).isoformat()
+
+        create_resp = await client.post("/api/v1/admin/appointments", json={
+            "master_id": 1,
+            "service_id": service_id,
+            "client_name": "No Show Client",
+            "client_phone": "+79997770007",
+            "appointment_date": future_date,
+        }, headers=auth_headers)
+        appt_id = create_resp.json()["id"]
+
+        # Verify client has no_show_count = 0
+        client_resp = await client.get("/api/v1/admin/clients", headers=auth_headers)
+        client_before = next(
+            c for c in client_resp.json()
+            if c["name"] == "No Show Client"
+        )
+        assert client_before["no_show_count"] == 0
+
+        # Mark as no-show
+        resp = await client.patch(
+            f"/api/v1/admin/appointments/{appt_id}/no-show",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "cancelled"
+        assert "Неявка" in resp.json()["notes"]
+
+        # Verify client's no_show_count incremented to 1
+        client_resp = await client.get("/api/v1/admin/clients", headers=auth_headers)
+        client_after = next(
+            c for c in client_resp.json()
+            if c["name"] == "No Show Client"
+        )
+        assert client_after["no_show_count"] == 1
+
+    async def test_mark_no_show_multiple_times(self, client, auth_headers, test_master_data, test_service_data):
+        """Multiple no-shows increment count each time."""
+        # Create service + 2 appointments for same client
+        service_resp = await client.post(
+            "/api/v1/services/", json={**test_service_data, "master_id": 1}, headers=auth_headers
+        )
+        service_id = service_resp.json()["id"]
+        future_date = (datetime.now() + timedelta(days=7)).isoformat()
+
+        # First appointment
+        appt1_resp = await client.post("/api/v1/admin/appointments", json={
+            "master_id": 1,
+            "service_id": service_id,
+            "client_name": "Repeat No-Show",
+            "client_phone": "+79998880008",
+            "appointment_date": future_date,
+        }, headers=auth_headers)
+
+        # Second appointment (same client, same phone)
+        appt2_resp = await client.post("/api/v1/admin/appointments", json={
+            "master_id": 1,
+            "service_id": service_id,
+            "client_name": "Repeat No-Show",
+            "client_phone": "+79998880008",
+            "appointment_date": future_date,
+        }, headers=auth_headers)
+
+        # Mark first as no-show
+        await client.patch(
+            f"/api/v1/admin/appointments/{appt1_resp.json()['id']}/no-show",
+            headers=auth_headers,
+        )
+
+        # Mark second as no-show
+        await client.patch(
+            f"/api/v1/admin/appointments/{appt2_resp.json()['id']}/no-show",
+            headers=auth_headers,
+        )
+
+        # Verify no_show_count = 2
+        client_resp = await client.get("/api/v1/admin/clients", headers=auth_headers)
+        client_data = next(
+            c for c in client_resp.json()
+            if c["name"] == "Repeat No-Show"
+        )
+        assert client_data["no_show_count"] == 2
+
+    async def test_mark_no_show_not_found(self, client, auth_headers):
+        """Returns 404 for non-existent appointment."""
+        resp = await client.patch(
+            "/api/v1/admin/appointments/99999/no-show",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 404
