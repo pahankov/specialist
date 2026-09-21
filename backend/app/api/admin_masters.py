@@ -34,6 +34,8 @@ async def get_all_masters(
     db: AsyncSession = Depends(get_db)
 ):
     """Get all masters (superadmin only)."""
+    logger.info("GET /admin/masters: search=%r is_active=%r is_admin=%r limit=%d offset=%d",
+                search, filter_active, filter_admin, limit, offset)
     query = select(Master)
     
     if search:
