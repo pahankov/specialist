@@ -4,7 +4,7 @@ from sqlalchemy.future import select
 from typing import List
 from app.database import get_db
 from app.models.master import Master
-from app.schemas.master import MasterCreate, MasterResponse
+from app.schemas.master import MasterCreate, MasterResponse, MasterUpdate
 from app.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -65,7 +65,7 @@ async def create_master(master: MasterCreate, db: AsyncSession = Depends(get_db)
 @router.patch("/{master_id}", response_model=MasterResponse)
 async def update_master(
     master_id: int,
-    master_update: dict,
+    master_update: MasterUpdate,
     db: AsyncSession = Depends(get_db)
 ):
     result = await db.execute(select(Master).where(Master.id == master_id))
@@ -73,9 +73,13 @@ async def update_master(
     if not master:
         raise HTTPException(status_code=404, detail="Master not found")
 
-    for key, value in master_update.items():
-        if value is not None and hasattr(master, key):
-            setattr(master, key, value)
+    for field, value in master_update.model_dump(exclude_unset=True).items():
+        if field == "password" and value:
+            from passlib.context import CryptContext
+            pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+            master.hashed_password = pwd_context.hash(value)
+        else:
+            setattr(master, field, value)
 
     await db.commit()
     await db.refresh(master)

@@ -69,10 +69,9 @@ async def update_admin_service(
     """Update a service."""
     service = await get_owned_or_404(db, Service, service_id, master.id)
     changes = []
-    for field, value in data.model_dump().items():
-        if value is not None:
-            setattr(service, field, value)
-            changes.append(field)
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(service, field, value)
+        changes.append(field)
     await log_action(db, master.id, "update", "service", service_id, f"Обновлено: {', '.join(changes)}" if changes else "Обновление", level="info")
     await db.commit()
     await db.refresh(service)
