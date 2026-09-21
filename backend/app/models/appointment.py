@@ -24,3 +24,4 @@ class Appointment(Base):
     master = relationship("Master", back_populates="appointments")
     service = relationship("Service", back_populates="appointments")
     client = relationship("Client", back_populates="appointments")
+    reviews = relationship("Review", back_populates="appointment")

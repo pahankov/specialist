@@ -14,6 +14,7 @@ class Client(Base):
     name = Column(String(100), nullable=False)
     phone = Column(String(20), unique=True, nullable=False)
     email = Column(String(255), index=True)
+    no_show_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc))

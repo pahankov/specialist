@@ -5,6 +5,8 @@ import type {
   Appointment,
   AppointmentCreate,
   Review,
+  ReviewCreate,
+  AverageRating,
   WorkingHour,
   BlockedSlot,
   Client,
@@ -135,8 +137,14 @@ export const reviewsApi = {
     apiClient.get<Review[]>('/api/v1/reviews/', {
       params: { master_id: masterId, only_published: onlyPublished },
     }),
-  create: (data: { appointment_id: number; rating: number; comment?: string }) =>
+  getAverage: (masterId: number) =>
+    apiClient.get<AverageRating>('/api/v1/reviews/average', { params: { master_id: masterId } }),
+  create: (data: ReviewCreate) =>
     apiClient.post<Review>('/api/v1/reviews/', data),
+  update: (id: number, data: { comment?: string; is_published?: boolean }) =>
+    apiClient.patch<Review>(`/api/v1/reviews/${id}`, data),
+  delete: (id: number) =>
+    apiClient.delete(`/api/v1/reviews/${id}`),
 }
 
 export const workingHoursApi = {
@@ -202,6 +210,9 @@ export const adminApi = {
   },
   completeAppointment(id: number) {
     return apiClient.patch(`/api/v1/admin/appointments/${id}/complete`)
+  },
+  noShowAppointment(id: number) {
+    return apiClient.patch(`/api/v1/admin/appointments/${id}/no-show`)
   },
   deleteAppointment(id: number) {
     return apiClient.delete(`/api/v1/admin/appointments/${id}`)

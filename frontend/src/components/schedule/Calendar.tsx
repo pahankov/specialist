@@ -12,6 +12,7 @@ interface CalendarProps {
   onNextMonth: () => void
   onSelectDate: (date: Date) => void
   onToggleDay: (date: Date) => void
+  onAddSlot: (date: Date) => void
   longPressTriggered: boolean
 }
 
@@ -26,6 +27,7 @@ export function Calendar({
   onNextMonth,
   onSelectDate,
   onToggleDay,
+  onAddSlot,
   longPressTriggered,
 }: CalendarProps) {
   const monthDays = getMonthDays(currentMonth)
@@ -108,6 +110,18 @@ export function Calendar({
               </div>
               {active && !past && apptCount > 0 && (
                 <div className="calendar-day-count">{apptCount} записей</div>
+              )}
+              {!active && !past && day.isCurrentMonth && (
+                <button
+                  className="calendar-add-slot-btn"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onAddSlot(day.date)
+                  }}
+                  title="Добавить рабочий день"
+                >
+                  +
+                </button>
               )}
             </div>
           )

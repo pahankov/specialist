@@ -65,4 +65,5 @@ class ClientResponse(BaseModel):
     name: str
     phone: str
     email: Optional[str] = None
+    no_show_count: int = 0
     model_config = ConfigDict(from_attributes=True)

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { mastersApi, servicesApi } from '../../api/client'
 import type { Master, Service } from '../../api/types'
 import LoginModal from '../../components/LoginModal'
+import { ReviewsSection } from '../../components/reviews'
 import './HomePage.css'
 
 function HomePage() {
@@ -96,6 +97,9 @@ function HomePage() {
 
       {/* Login Modal */}
       <LoginModal isOpen={showLogin} onClose={() => setShowLogin(false)} />
+
+      {/* Reviews Section */}
+      <ReviewsSection />
     </div>
   )
 }

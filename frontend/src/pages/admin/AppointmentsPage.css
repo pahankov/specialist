@@ -23,6 +23,7 @@
 .btn-confirm { background: #d1fae5; color: #065f46; }
 .btn-cancel { background: #fee2e2; color: #991b1b; }
 .btn-complete { background: #dbeafe; color: #1e40af; }
+.btn-no-show { background: #fff3e0; color: #e65100; }
 .btn-delete { background: #fee2e2; color: #991b1b; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; width: 36px; min-width: 36px; padding: 6px; }
 .btn-complete:disabled { opacity: 0.4; cursor: not-allowed; }
 .text-muted { color: #999; font-size: 13px; }

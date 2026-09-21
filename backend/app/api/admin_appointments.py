@@ -236,3 +236,27 @@ async def delete_appointment(
     await db.delete(appointment)
     await db.commit()
     return None
+
+
+@router.patch("/appointments/{appointment_id}/no-show")
+async def mark_no_show(
+    appointment_id: int,
+    master: Master = Depends(require_master),
+    db: AsyncSession = Depends(get_db)
+):
+    """Mark an appointment as no-show. Increments client's no_show_count."""
+    appointment = await get_owned_or_404(db, Appointment, appointment_id, master.id)
+    appointment.status = "cancelled"
+    appointment.notes = f"{appointment.notes}\n\nНеявка" if appointment.notes else "Неявка"
+    await log_action(db, master.id, "no-show", "appointment", appointment_id, level="warning")
+
+    # Increment no-show count for the client
+    if appointment.client_id:
+        client_result = await db.execute(select(Client).where(Client.id == appointment.client_id))
+        client = client_result.scalar_one_or_none()
+        if client:
+            client.no_show_count = (client.no_show_count or 0) + 1
+
+    await db.commit()
+    await db.refresh(appointment)
+    return appointment

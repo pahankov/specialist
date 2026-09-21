@@ -6,3 +6,4 @@ from app.models.working_hour import WorkingHour
 from app.models.audit_log import AuditLog
 from app.models.blocked_slot import BlockedSlot
 from app.models.refresh_token import RefreshToken
+from app.models.review import Review

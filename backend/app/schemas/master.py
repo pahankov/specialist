@@ -38,8 +38,14 @@ class MasterCreate(BaseModel):
             raise ValueError('Пароль должен содержать минимум 8 символов')
         if not any(c.isupper() for c in v):
             raise ValueError('Пароль должен содержать хотя бы одну заглавную букву')
+        if not any(c.islower() for c in v):
+            raise ValueError('Пароль должен содержать хотя бы одну строчную букву')
         if not any(c.isdigit() for c in v):
             raise ValueError('Пароль должен содержать хотя бы одну цифру')
+        if not any(c in '!@#$%^&*()_+-=[]{}|;:,.<>?' for c in v):
+            raise ValueError('Пароль должен содержать хотя бы один спецсимвол')
+        if len(set(v)) < 4:
+            raise ValueError('Пароль должен содержать минимум 4 уникальных символа')
         return v
 
 
