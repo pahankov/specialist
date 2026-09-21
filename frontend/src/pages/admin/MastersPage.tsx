@@ -34,17 +34,25 @@ function MastersPage() {
   const loadMasters = async () => {
     setLoading(true)
     try {
-      const params: any = {}
-      if (search) params.search = search
+      const params: Record<string, string> = {}
+      if (search?.trim()) params.search = search.trim()
       if (filterActive === 'active') params.is_active = 'true'
       if (filterActive === 'inactive') params.is_active = 'false'
       if (filterAdmin === 'admin') params.is_admin = 'true'
       if (filterAdmin === 'user') params.is_admin = 'false'
 
-      const { data } = await superAdminApi.getAllMasters(params)
+      // Remove empty params — axios sends them as ?param= which can cause 422
+      const cleanParams: Record<string, string> = {}
+      for (const [key, value] of Object.entries(params)) {
+        if (value && value.trim()) cleanParams[key] = value.trim()
+      }
+
+      const { data } = await superAdminApi.getAllMasters(cleanParams)
       setMasters(data)
     } catch (err: any) {
-      showMessage('error', err.response?.data?.detail || 'Ошибка загрузки мастеров')
+      const detail = err.response?.data?.detail
+      const msg = typeof detail === 'string' ? detail : (err.response?.data?.message || 'Ошибка загрузки мастеров')
+      showMessage('error', msg)
     } finally {
       setLoading(false)
     }
