@@ -1,13 +1,31 @@
 import { useEffect, useState } from 'react'
-import { adminApi } from '../../api/client'
+import { adminApi, superAdminApi } from '../../api/client'
 import './LogsPage.css'
 
+function getCookie(name: string): string | null {
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
+  return match ? match[2] : null
+}
+
+function getIsAdmin(): boolean {
+  const token = getCookie('access_token')
+  if (!token) return false
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]))
+    return payload.is_admin === true
+  } catch {
+    return false
+  }
+}
+
 function LogsPage() {
+  const isAdmin = getIsAdmin()
   const [logs, setLogs] = useState<any[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [entityFilter, setEntityFilter] = useState('')
+  const [masterFilter, setMasterFilter] = useState('')
   const [currentPage, setCurrentPage] = useState(0)
   const pageSize = 20
 
@@ -15,7 +33,8 @@ function LogsPage() {
     appointment: '📅 Запись',
     service: '💇 Услуга',
     client: '👤 Клиент',
-    working_hour: '🕐 Расписание'
+    working_hour: '🕐 Расписание',
+    master: '👨‍💼 Мастер'
   }
 
   const actionLabels: Record<string, string> = {
@@ -24,7 +43,10 @@ function LogsPage() {
     complete: '🏁 Завершение',
     delete: '🗑️ Удаление',
     create: '➕ Создание',
-    update: '✏️ Обновление'
+    update: '✏️ Обновление',
+    toggle_active: '🔒 Блокировка',
+    toggle_admin: '👑 Смена прав',
+    'no-show': '⚠️ Неявка'
   }
 
   const levelLabels: Record<string, string> = {
@@ -35,14 +57,16 @@ function LogsPage() {
 
   const fetchLogs = async () => {
     try {
-      const params: any = { limit: pageSize, offset: currentPage * pageSize }
+      const params: Record<string, any> = { limit: pageSize, offset: currentPage * pageSize }
       if (entityFilter) params.entity_type = entityFilter
-      const resp = await adminApi.getAuditLogs(params)
+      if (masterFilter) params.master_id = masterFilter
+
+      const api = isAdmin ? superAdminApi.getAuditLogsAll : adminApi.getAuditLogs
+      const resp = await api(params)
       setLogs(resp.data.logs)
       setTotal(resp.data.total)
     } catch (err: any) {
       if (err.response?.status === 401) {
-        localStorage.removeItem('access_token')
         window.location.href = '/admin/login'
       } else {
         setError('Ошибка загрузки логов')
@@ -55,33 +79,49 @@ function LogsPage() {
   useEffect(() => {
     setLoading(true)
     fetchLogs()
-  }, [entityFilter, currentPage])
+  }, [entityFilter, masterFilter, currentPage])
 
   if (loading) return <div><div className="loading">Загрузка...</div></div>
   if (error) return <div><div className="error-message">{error}</div></div>
 
-  const filters = [
+  const entityFilters = [
     { value: '', label: 'Все' },
     { value: 'appointment', label: '📅 Записи' },
     { value: 'service', label: '💇 Услуги' },
-    { value: 'client', label: '👤 Клиенты' }
+    { value: 'client', label: '👤 Клиенты' },
+    { value: 'master', label: '👨‍💼 Мастера' }
   ]
 
   return (
     <div>
-      <div className="page-header"><h1>📋 Журнал действий</h1><p>История всех операций в админ-панели</p></div>
+      <div className="page-header"><h1>📋 Журнал действий</h1><p>История всех операций в системе</p></div>
 
+      {/* Entity filter */}
       <div className="filters-bar">
-        {filters.map(f => (
+        {entityFilters.map(f => (
           <button
             key={f.value}
             className={`filter-btn ${entityFilter === f.value ? 'active' : ''}`}
-            onClick={() => setEntityFilter(f.value)}
+            onClick={() => { setEntityFilter(f.value); setCurrentPage(0) }}
           >
             {f.label}
           </button>
         ))}
       </div>
+
+      {/* Master filter (superadmin only) */}
+      {isAdmin && (
+        <div className="filters-bar" style={{ marginTop: 8 }}>
+          <input
+            type="text"
+            placeholder="Фильтр по ID мастера..."
+            value={masterFilter}
+            onChange={(e) => { setMasterFilter(e.target.value); setCurrentPage(0) }}
+            className="filter-input"
+            style={{ width: 200 }}
+          />
+        </div>
+      )}
 
       <div className="card">
         {logs.length === 0 ? (
@@ -95,6 +135,7 @@ function LogsPage() {
                 <th>Действие</th>
                 <th>Объект</th>
                 <th>ID объекта</th>
+                <th>Мастер</th>
                 <th>Детали</th>
               </tr>
             </thead>
@@ -129,6 +170,7 @@ function LogsPage() {
                   </td>
                   <td>{entityLabels[log.entity_type] || log.entity_type}</td>
                   <td><code>{log.entity_id || '—'}</code></td>
+                  <td><code>{log.master_id || '—'}</code></td>
                   <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {log.details || '—'}
                   </td>
