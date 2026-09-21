@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { adminApi, superAdminApi } from '../../api/client'
+import { adminApi } from '../../api/client'
 import './LogsPage.css'
 
 function getCookie(name: string): string | null {
@@ -61,8 +61,9 @@ function LogsPage() {
       if (entityFilter) params.entity_type = entityFilter
       if (masterFilter) params.master_id = masterFilter
 
-      const api = isAdmin ? superAdminApi.getAuditLogsAll : adminApi.getAuditLogs
-      const resp = await api(params)
+      // Superadmin uses /audit-logs/all, regular master uses /audit-logs (filtered by master_id)
+      const endpoint = isAdmin ? '/api/v1/admin/audit-logs/all' : '/api/v1/admin/audit-logs'
+      const resp = await adminApi.get(endpoint, { params })
       setLogs(resp.data.logs)
       setTotal(resp.data.total)
     } catch (err: any) {
