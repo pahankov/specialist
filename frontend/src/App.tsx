@@ -40,6 +40,8 @@ function App() {
     { path: '/admin/appointments', label: '📅 Все записи' },
     { path: '/admin/clients', label: '👥 Все клиенты' },
     { path: '/admin/schedule', label: '🕐 Расписание' },
+    { path: '/admin/logs', label: '📋 Логи' },
+    { path: '/admin/global-stats', label: '📈 Статистика' },
   ]
 
   // Regular master navigation items

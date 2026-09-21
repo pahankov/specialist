@@ -279,6 +279,9 @@ export const adminApi = {
   getAuditLogs(params?: Record<string, any>) {
     return apiClient.get('/api/v1/admin/audit-logs', { params })
   },
+  getAuditLogsAll(params?: Record<string, any>) {
+    return apiClient.get('/api/v1/admin/audit-logs/all', { params })
+  },
 
   // Blocked Slots
   getBlockedSlots() {
