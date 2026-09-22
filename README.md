@@ -70,16 +70,19 @@ online-booking/
 │   │   ├── config.py         # Настройки (SQLite/PostgreSQL, JWT, refresh tokens)
 │   │   ├── database.py       # Подключение к БД (aiosqlite / asyncpg)
 │   │   ├── middleware.py     # Rate limiting middleware
-│   │   ├── models/           # SQLAlchemy ORM models (10 сущностей + RefreshToken)
+│   │   ├── models/           # SQLAlchemy ORM (User, MasterProfile, ClientProfile, Country, City, OtpCode + др.)
 │   │   ├── schemas/          # Pydantic schemas (request/response validation)
+│   │   ├── services/         # Сервисы (SMS provider: FakeSmsProvider, Twilio, SMS.ru)
 │   │   └── modules/          # Модульная архитектура (self-contained packages)
-│   │       ├── auth/         # Регистрация, логин, JWT, refresh token rotation
-│   │       │   ├── router.py         # Эндпоинты: register, login, refresh, logout
-│   │       │   ├── service.py        # Бизнес-логика: register_master, login_master
+│   │       ├── auth/         # Регистрация, логин, JWT, OTP, refresh token rotation
+│   │       │   ├── router.py         # Эндпоинты: register, login, send-otp, verify-otp, refresh, logout
+│   │       │   ├── service.py        # Бизнес-логика: register_master, login_master, send_otp, verify_otp
 │   │       │   ├── token.py          # JWT: create_access_token, create_refresh_token
-│   │       │   ├── dependencies.py   # JWT зависимости: get_current_master, require_super_admin
+│   │       │   ├── dependencies.py   # JWT зависимости: get_current_user, require_master, require_admin
 │   │       │   └── schemas.py        # TokenResponse, TokenRefreshResponse
-│   │       ├── user/         # CRUD мастеров и клиентов
+│   │       ├── city/         # Страны и города (CRUD + поиск)
+│   │       │   ├── router.py         # Эндпоинты: get_countries, get_cities
+│   │       ├── user/         # CRUD мастеров и клиентов (через User + MasterProfile/ClientProfile)
 │   │       ├── booking/      # CRUD записей + публичная запись
 │   │       ├── service/      # CRUD услуг
 │   │       ├── schedule/     # Рабочее расписание
@@ -145,7 +148,11 @@ online-booking/
 ## 📋 Что реализовано
 
 ### ✅ Backend
+- **Unified User:** единая таблица `users` с role enum (`master`, `client`, `admin`)
+- **MasterProfile / ClientProfile:** профили привязаны к User через FK
 - Регистрация и аутентификация мастера (JWT + refresh token rotation)
+- **OTP-аутентификация для клиентов:** SMS-код на телефон (FakeSmsProvider, Twilio, SMS.ru)
+- **Многогородность:** Country/City модели, полная поддержка России + СНГ
 - httpOnly cookies для refresh token, readable cookies для access token
 - CRUD мастеров (создание, чтение, обновление, удаление)
 - CRUD услуг (создание, чтение, обновление, soft-delete)
@@ -173,6 +180,7 @@ online-booking/
 ### ✅ Frontend
 - Главная страница (список мастеров и услуг)
 - Страница бронирования с проверкой конфликтов
+- **LoginModal:** регистрация мастера с dropdown городов + OTP flow для клиентов
 - Админ-панель (12 страниц):
   - Дашборд — статистика записей, клиентов, услуг, доход
   - Записи — фильтрация по статусу, пагинация, подтверждение, завершение, отмена, удаление, no-show
@@ -204,10 +212,20 @@ online-booking/
 ### Auth
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
-| `POST` | `/api/v1/auth/register` | Регистрация мастера |
-| `POST` | `/api/v1/auth/login` | Вход (JWT + refresh token в cookies) |
+| `POST` | `/api/v1/auth/register` | Регистрация мастера (с выбором города) |
+| `POST` | `/api/v1/auth/login` | Вход мастера (JWT + refresh token в cookies) |
+| `POST` | `/api/v1/auth/send-otp` | Отправка SMS-кода клиенту |
+| `POST` | `/api/v1/auth/verify-otp` | Проверка кода, вход/регистрация клиента |
 | `POST` | `/api/v1/auth/refresh` | Обновление access token (refresh token rotation) |
 | `POST` | `/api/v1/auth/logout` | Выход (очистка cookies) |
+| `POST` | `/api/v1/auth/client/login` | Legacy вход клиента по телефону |
+
+### Geography
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| `GET` | `/api/v1/countries/` | Список стран |
+| `GET` | `/api/v1/cities/` | Список городов (пагинация, поиск, фильтр по стране) |
+| `GET` | `/api/v1/cities/{id}` | Город по ID |
 
 ### Masters
 | Метод | Endpoint | Описание |
@@ -358,22 +376,39 @@ alembic upgrade head
 ### Сущности
 
 ```
-Master (id, name, email, phone, telegram_username, hashed_password, is_admin, is_active, avatar_url, timezone.utc)
-  ├─ 1:N ──> Service (id, master_id, name, description, duration_minutes, price, is_active, cascade delete)
+User (id, email, phone, hashed_password, name, role[master|client|admin], city_id, is_active, is_verified, created_at, updated_at)
+  ├─ 1:1 ──> MasterProfile (user_id, description, avatar_url, telegram_username, experience_years, is_active)
+  │           ├─ 1:N ──> Service (id, master_id, name, description, duration_minutes, price, is_active, cascade delete)
+  │           │           └─ 1:N ──> Appointment
+  │           ├─ 1:N ──> Appointment (id, master_id, service_id, client_id, appointment_date, status, notes, cascade delete)
+  │           │           └─ N:1 ──> ClientProfile
+  │           │           └─ N:1 ──> Service
+  │           ├─ 1:N ──> WorkingHour (id, master_id, schedule_date[Date], start_time, end_time)
+  │           ├─ 1:N ──> AuditLog (id, master_id, action, entity_type, entity_id, details, ip_address, created_at)
+  │           ├─ 1:N ──> BlockedSlot (id, master_id, start_dt, end_dt, reason, created_at)
+  │           └─ 1:N ──> RefreshToken (id, user_id, token, expires_at, is_revoked, cascade delete)
+  │
+  ├─ 1:1 ──> ClientProfile (user_id, no_show_count, preferred_service_ids)
   │           └─ 1:N ──> Appointment
-  ├─ 1:N ──> Appointment (id, master_id, service_id, client_id, appointment_date, status, notes, cascade delete)
-  │           └─ N:1 ──> Client
-  │           └─ N:1 ──> Service
-  ├─ 1:N ──> WorkingHour (id, master_id, schedule_date[Date], start_time, end_time)
-  ├─ 1:N ──> AuditLog (id, master_id, action, entity_type, entity_id, details, ip_address, created_at)
-  ├─ 1:N ──> BlockedSlot (id, master_id, start_dt, end_dt, reason, created_at)
-  └─ 1:N ──> RefreshToken (id, master_id, token_jti, expires_at, is_revoked, cascade delete)
+  │
+  └─ 1:N ──> RefreshToken (id, user_id, token, expires_at, is_revoked, created_at)
 
-Client (id, name, phone, email, created_at, unique phone)
-  └─ 1:N ──> Appointment
+Country (id, code[ISO], name_ru, name_en, phone_prefix, is_active)
+  └─ 1:N ──> City (id, country_id, name_ru, name_en, slug, is_active)
 
-RefreshToken (id, master_id, token_jti, token_hash, expires_at, is_revoked, created_at, used_for_rotation)
+OtpCode (id, phone, code_hash, expires_at, is_used, created_at)
 ```
+
+### Роли пользователей
+- `master` — мастер услуг (может создавать записи, управлять услугами и расписанием)
+- `client` — клиент (аутентификация по SMS-коду, без пароля)
+- `admin` — суперпользователь (полный доступ ко всей системе)
+
+### Статусы записей
+- `pending` — ожидает подтверждения
+- `confirmed` — подтверждена
+- `cancelled` — отменена
+- `completed` — завершена
 
 ### Статусы записей
 - `pending` — ожидает подтверждения
@@ -385,11 +420,12 @@ RefreshToken (id, master_id, token_jti, token_hash, expires_at, is_revoked, crea
 
  1. **Пароли:** Bcrypt hashing (passlib), валидация: min 8 символов, 1 заглавная, 1 строчная, 1 цифра, 1 спецсимвол (!@#$%^&* и т.д.), 4 уникальных символа
  2. **Аутентификация:** JWT токены (python-jose, HS256) + refresh token rotation
- 3. **Cookies:** access_token — `httponly=False` (читается JS), refresh_token — `httponly=True` (только HTTP)
- 4. **Rate limiting:** 60 req/min default, 10 req/min для auth-эндпоинтов
- 5. **Валидация:** Pydantic schemas с проверкой типов
- 6. **SQL-инъекции:** Защищено SQLAlchemy ORM
- 7. **Логирование:** Цветной вывод в консоль (ANSI), SQL-запросы на уровне WARNING, файлы логов с ротацией
+ 3. **SMS OTP:** 6-значный код на телефон (TTL 5 мин), hash-хранение кода, поддержка Twilio/SMS.ru
+ 4. **Cookies:** refresh_token — `httponly=True` (только HTTP), access_token — `httponly=False` (читается JS)
+ 5. **Rate limiting:** 60 req/min default, 10 req/min для auth-эндпоинтов
+ 6. **Валидация:** Pydantic schemas с проверкой типов
+ 7. **SQL-инъекции:** Защищено SQLAlchemy ORM
+ 8. **Логирование:** Цветной вывод в консоль (ANSI), SQL-запросы на уровне WARNING, файлы логов с ротацией
 
 ## 🧪 Тесты
 
@@ -484,14 +520,28 @@ curl -X POST http://localhost:8000/api/v1/auth/register \
 cd backend
 $env:PYTHONPATH='.'
 python create_superuser.py
-# Создаёт: pahankov@mail.ru / Sug@r2026! (is_admin=true)
+# Создаёт: pahankov@mail.ru / Sug@r2026! (role=admin)
 ```
 
-### Логин (возвращает cookies)
+### Логин мастера (возвращает cookies)
 ```bash
 curl -X POST "http://localhost:8000/api/v1/auth/login" \
   -H "Content-Type: application/json" \
   -d '{"email":"elena@example.com","password":"SecurePass123!"}'
+```
+
+### OTP: отправка кода клиенту
+```bash
+curl -X POST http://localhost:8000/api/v1/auth/send-otp \
+  -H "Content-Type: application/json" \
+  -d '{"phone":"+79991234567"}'
+```
+
+### OTP: проверка кода
+```bash
+curl -X POST http://localhost:8000/api/v1/auth/verify-otp \
+  -H "Content-Type: application/json" \
+  -d '{"phone":"+79991234567","code":"A1B2C3"}'
 ```
 
 ### Обновление токена
@@ -502,6 +552,11 @@ curl -X POST http://localhost:8000/api/v1/auth/refresh
 ### Выход (очистка cookies)
 ```bash
 curl -X POST http://localhost:8000/api/v1/auth/logout
+```
+
+### Список городов
+```bash
+curl -X GET "http://localhost:8000/api/v1/cities/?country_id=1&page=1&page_size=50"
 ```
 
 ### Создание услуги
@@ -579,6 +634,19 @@ curl -X PATCH http://localhost:8000/api/v1/admin/appointments/1/no-show \
 ```
 
 ## 📚 История версий
+
+### [0.13.0] — 2026-09-22
+- **Unified User:** единая таблица `users` вместо раздельных `masters` и `clients`
+- **Role-based access:** role enum (`master`, `client`, `admin`) вместо `is_admin` флага
+- **MasterProfile / ClientProfile:** профили привязаны к User через FK
+- **Многогородность:** `Country` и `City` модели, полная поддержка России + СНГ
+- **OTP-аутентификация:** SMS-код на телефон для клиентов (FakeSmsProvider, Twilio, SMS.ru)
+- **Новые endpoints:** `/api/v1/auth/send-otp`, `/api/v1/auth/verify-otp`, `/api/v1/countries/`, `/api/v1/cities/`
+- **Frontend:** LoginModal с dropdown городов + OTP flow, новые API types
+- **Миграции:** 0004-0009 (countries, cities, unified user, data migration, OTP)
+- **Seed:** полный список городов России + основные города СНГ
+- **Config:** новые settings для SMS (SMS_PROVIDER, TWILIO_*, SMSC_*)
+- **Обновлены модули:** admin (appointments, clients, masters, services, working_hours, blocked_slots, export, global_stats, audit), booking, review, user
 
 ### [0.12.0] — 2026-09-22
 - **Рефакторинг архитектуры:** flat `api/` (22 файла) → модульная `modules/` (7 пакетов)
