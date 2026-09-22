@@ -66,13 +66,25 @@ copy .env.example .env
 sugar-booking/
 ├── backend/
 │   ├── app/
-│   │   ├── api/              # REST endpoints (auth, masters, services, appointments, clients, working_hours, admin, reviews)
-│   │   ├── models/           # SQLAlchemy ORM models (10 сущностей + RefreshToken)
-│   │   ├── schemas/          # Pydantic schemas (request/response validation)
+│   │   ├── main.py           # FastAPI приложение (lifespan, router registration)
 │   │   ├── config.py         # Настройки (SQLite/PostgreSQL, JWT, refresh tokens)
 │   │   ├── database.py       # Подключение к БД (aiosqlite / asyncpg)
 │   │   ├── middleware.py     # Rate limiting middleware
-│   │   └── main.py           # FastAPI приложение (lifespan, create_all для SQLite)
+│   │   ├── models/           # SQLAlchemy ORM models (10 сущностей + RefreshToken)
+│   │   ├── schemas/          # Pydantic schemas (request/response validation)
+│   │   └── modules/          # Модульная архитектура (self-contained packages)
+│   │       ├── auth/         # Регистрация, логин, JWT, refresh token rotation
+│   │       │   ├── router.py         # Эндпоинты: register, login, refresh, logout
+│   │       │   ├── service.py        # Бизнес-логика: register_master, login_master
+│   │       │   ├── token.py          # JWT: create_access_token, create_refresh_token
+│   │       │   ├── dependencies.py   # JWT зависимости: get_current_master, require_super_admin
+│   │       │   └── schemas.py        # TokenResponse, TokenRefreshResponse
+│   │       ├── user/         # CRUD мастеров и клиентов
+│   │       ├── booking/      # CRUD записей + публичная запись
+│   │       ├── service/      # CRUD услуг
+│   │       ├── schedule/     # Рабочее расписание
+│   │       ├── review/       # Отзывы и рейтинги
+│   │       └── admin/        # Админ-панель (12 эндпоинт-модулей)
 │   ├── alembic/              # Alembic миграции для PostgreSQL
 │   ├── alembic.ini           # Конфиг Alembic
 │   ├── tests/                # pytest тесты (135 тестов: auth, masters, services, appointments, clients, reviews, admin CRUD, rate limiting, refresh tokens, password security, no-show)
@@ -95,6 +107,24 @@ sugar-booking/
 ├ start.bat                   # Запуск backend + frontend (Windows)
 ├ run_backend.bat             # Запуск backend только (Windows)
 └── run_frontend.bat          # Запуск frontend только (Windows)
+```
+
+### Модульная архитектура
+
+Проект использует модульную архитектуру — каждый функциональный блок инкапсулирован в отдельный пакет (`modules/<feature>/`).
+
+**Преимущества:**
+- **Изоляция:** добавление нового модуля не затрагивает другие части кода
+- **Масштабируемость:** каждый модуль содержит `router.py` (эндпоинты), `service.py` (бизнес-логика), `dependencies.py` (зависимости)
+- **Чистота:** `main.py` — только импорты модулей (7 строк), без бизнес-логики
+
+**Добавление нового модуля:**
+```
+1. mkdir modules/<feature>/
+2. Создать router.py с эндпоинтами
+3. Создать __init__.py с экспортом router
+4. Добавить одну строку в main.py:
+   app.include_router(feature_router, prefix="/api/v1/feature")
 ```
 
 ## 🛠 Стек технологий
@@ -549,6 +579,15 @@ curl -X PATCH http://localhost:8000/api/v1/admin/appointments/1/no-show \
 ```
 
 ## 📚 История версий
+
+### [0.12.0] — 2026-09-22
+- **Рефакторинг архитектуры:** flat `api/` (22 файла) → модульная `modules/` (7 пакетов)
+- **Модули:** `auth/`, `user/`, `booking/`, `service/`, `schedule/`, `review/`, `admin/`
+- **Auth module:** разделение на `router.py`, `service.py`, `token.py`, `dependencies.py`, `schemas.py`
+- **Зависимости:** `dependencies.py` перенесён в `modules/auth/`, используется всеми модулями
+- **Изоляция:** каждый модуль self-contained, `main.py` — только 7 импортов
+- **135 тестов:** все проходят, 100% покрытие
+- **Документация:** обновлена структура проекта, добавлена секция про модульную архитектуру
 
 ### [0.11.0] — 2026-09-21
 - **Тесты:** +28 новых тестов (refresh tokens, rate limiting, password security, no-show) — 135 backend + 44 frontend = 179
