@@ -1,5 +1,5 @@
 """
-Pytest configuration for Sugar Booking backend tests.
+Pytest configuration for Online Booking backend tests.
 """
 import pytest
 from httpx import ASGITransport, AsyncClient

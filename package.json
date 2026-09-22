@@ -1,5 +1,5 @@
 {
-  "name": "sugar-booking",
+  "name": "online-booking",
   "version": "1.0.0",
   "description": "Приложение для записи клиентов к мастеру шугаринга через мессенджеры (MAX, Telegram, VK).",
   "main": "index.js",

@@ -5,7 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 from datetime import datetime, timedelta
 from app.modules.admin.base import (
-    get_db, Appointment, Client, Service, Master, require_master
+    get_db, Appointment, ClientProfile, Service, User, require_master, MasterProfile
 )
 
 router = APIRouter()
@@ -13,7 +13,7 @@ router = APIRouter()
 
 @router.get("/dashboard")
 async def get_dashboard(
-    master: Master = Depends(require_master),
+    master: User = Depends(require_master),
     db: AsyncSession = Depends(get_db)
 ):
     """Get dashboard statistics.
@@ -28,38 +28,38 @@ async def get_dashboard(
     return await _get_master_stats(master, db)
 
 
-async def _get_master_stats(master: Master, db: AsyncSession):
+async def _get_master_stats(master: User, db: AsyncSession):
     """Get statistics for a specific master."""
     result = await db.execute(
         select(Appointment.status, func.count(Appointment.id))
-        .where(Appointment.master_id == master.id)
+        .where(Appointment.master_id == master.master_profile.id)
         .group_by(Appointment.status)
     )
     status_counts = {row[0]: row[1] for row in result.all()}
 
     total_result = await db.execute(
-        select(func.count(Appointment.id)).where(Appointment.master_id == master.id)
+        select(func.count(Appointment.id)).where(Appointment.master_id == master.master_profile.id)
     )
     total_appointments = total_result.scalar() or 0
 
     client_result = await db.execute(
-        select(func.count(Client.id)).where(
-            Client.id.in_(
-                select(Appointment.client_id).where(Appointment.master_id == master.id)
+        select(func.count(ClientProfile.id)).where(
+            ClientProfile.id.in_(
+                select(Appointment.client_id).where(Appointment.master_id == master.master_profile.id)
             )
         )
     )
     total_clients = client_result.scalar() or 0
 
     service_result = await db.execute(
-        select(func.count(Service.id)).where(Service.master_id == master.id)
+        select(func.count(Service.id)).where(Service.master_id == master.master_profile.id)
     )
     total_services = service_result.scalar() or 0
 
     recent_result = await db.execute(
         select(Appointment)
-        .options(selectinload(Appointment.client), selectinload(Appointment.service))
-        .where(Appointment.master_id == master.id)
+        .options(selectinload(Appointment.client_profile), selectinload(Appointment.service))
+        .where(Appointment.master_id == master.master_profile.id)
         .order_by(Appointment.appointment_date.desc())
         .limit(10)
     )
@@ -68,9 +68,9 @@ async def _get_master_stats(master: Master, db: AsyncSession):
     week_from_now = datetime.now() + timedelta(days=7)
     upcoming_result = await db.execute(
         select(Appointment)
-        .options(selectinload(Appointment.client), selectinload(Appointment.service))
+        .options(selectinload(Appointment.client_profile), selectinload(Appointment.service))
         .where(
-            Appointment.master_id == master.id,
+            Appointment.master_id == master.master_profile.id,
             Appointment.appointment_date >= datetime.now(),
             Appointment.appointment_date <= week_from_now,
             Appointment.status != "cancelled"
@@ -83,7 +83,7 @@ async def _get_master_stats(master: Master, db: AsyncSession):
         select(func.sum(Service.price))
         .select_from(Appointment)
         .join(Service, Appointment.service_id == Service.id)
-        .where(Appointment.master_id == master.id, Appointment.status == "completed")
+        .where(Appointment.master_id == master.master_profile.id, Appointment.status == "completed")
     )
     total_revenue = revenue_result.scalar() or 0
 
@@ -96,8 +96,8 @@ async def _get_master_stats(master: Master, db: AsyncSession):
         "recent_appointments": [
             {
                 "id": a.id, "client_id": a.client_id,
-                "client_name": a.client.name if a.client else None,
-                "client_phone": a.client.phone if a.client else None,
+                "client_name": a.client_profile.user.name if a.client_profile else None,
+                "client_phone": a.client_profile.user.phone if a.client_profile else None,
                 "appointment_date": a.appointment_date.isoformat() if a.appointment_date else None,
                 "status": a.status, "service_id": a.service_id,
                 "service_name": a.service.name if a.service else None,
@@ -114,11 +114,11 @@ async def _get_master_stats(master: Master, db: AsyncSession):
 async def _get_global_stats(db: AsyncSession):
     """Get global statistics across all masters (superadmin only)."""
     # Total masters
-    total_masters_result = await db.execute(select(func.count(Master.id)))
+    total_masters_result = await db.execute(select(func.count(MasterProfile.id)))
     total_masters = total_masters_result.scalar() or 0
     
     active_masters_result = await db.execute(
-        select(func.count(Master.id)).where(Master.is_active == True)
+        select(func.count(MasterProfile.id)).where(MasterProfile.is_active == True)
     )
     active_masters = active_masters_result.scalar() or 0
 
@@ -131,7 +131,7 @@ async def _get_global_stats(db: AsyncSession):
     total_appointments = sum(status_counts.values())
 
     # Total clients
-    total_clients_result = await db.execute(select(func.count(Client.id)))
+    total_clients_result = await db.execute(select(func.count(ClientProfile.id)))
     total_clients = total_clients_result.scalar() or 0
 
     # Total services
@@ -150,7 +150,7 @@ async def _get_global_stats(db: AsyncSession):
     # Recent appointments
     recent_result = await db.execute(
         select(Appointment)
-        .options(selectinload(Appointment.client), selectinload(Appointment.service), selectinload(Appointment.master))
+        .options(selectinload(Appointment.client_profile), selectinload(Appointment.service), selectinload(Appointment.master_profile))
         .order_by(Appointment.appointment_date.desc())
         .limit(10)
     )
@@ -180,9 +180,9 @@ async def _get_global_stats(db: AsyncSession):
         "recent_appointments": [
             {
                 "id": a.id,
-                "master_name": a.master.name if a.master else None,
-                "client_name": a.client.name if a.client else None,
-                "client_phone": a.client.phone if a.client else None,
+                "master_name": a.master_profile.user.name if a.master_profile else None,
+                "client_name": a.client_profile.user.name if a.client_profile else None,
+                "client_phone": a.client_profile.user.phone if a.client_profile else None,
                 "appointment_date": a.appointment_date.isoformat() if a.appointment_date else None,
                 "status": a.status,
                 "service_name": a.service.name if a.service else None,
@@ -192,7 +192,7 @@ async def _get_global_stats(db: AsyncSession):
         "upcoming_appointments": [
             {
                 "id": a.id,
-                "master_name": a.master.name if a.master else None,
+                "master_name": a.master_profile.user.name if a.master_profile else None,
                 "appointment_date": a.appointment_date.isoformat() if a.appointment_date else None,
                 "status": a.status
             } for a in upcoming_appointments
@@ -204,7 +204,7 @@ async def _get_global_stats(db: AsyncSession):
 async def get_monthly_stats(
     year: int = Query(..., description="Year"),
     month: int = Query(..., description="Month (1-12)"),
-    master: Master = Depends(require_master),
+    master: User = Depends(require_master),
     db: AsyncSession = Depends(get_db)
 ):
     """Get statistics for a specific month."""
@@ -213,7 +213,7 @@ async def get_monthly_stats(
 
     confirmed_result = await db.execute(
         select(func.count(Appointment.id))
-        .where(Appointment.master_id == master.id, Appointment.appointment_date >= start_dt,
+        .where(Appointment.master_id == master.master_profile.id, Appointment.appointment_date >= start_dt,
                Appointment.appointment_date < end_dt, Appointment.status.in_(["confirmed", "completed"]))
     )
     confirmed_count = confirmed_result.scalar() or 0
@@ -221,7 +221,7 @@ async def get_monthly_stats(
     duration_result = await db.execute(
         select(func.sum(Service.duration_minutes))
         .select_from(Appointment).join(Service, Appointment.service_id == Service.id)
-        .where(Appointment.master_id == master.id, Appointment.appointment_date >= start_dt,
+        .where(Appointment.master_id == master.master_profile.id, Appointment.appointment_date >= start_dt,
                Appointment.appointment_date < end_dt, Appointment.status.in_(["confirmed", "completed"]))
     )
     total_minutes = duration_result.scalar() or 0
@@ -229,7 +229,7 @@ async def get_monthly_stats(
     revenue_result = await db.execute(
         select(func.sum(Service.price))
         .select_from(Appointment).join(Service, Appointment.service_id == Service.id)
-        .where(Appointment.master_id == master.id, Appointment.appointment_date >= start_dt,
+        .where(Appointment.master_id == master.master_profile.id, Appointment.appointment_date >= start_dt,
                Appointment.appointment_date < end_dt, Appointment.status == "completed")
     )
     month_revenue = revenue_result.scalar() or 0

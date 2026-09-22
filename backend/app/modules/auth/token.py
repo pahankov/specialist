@@ -18,9 +18,9 @@ def create_access_token(data: dict, expires_delta: timedelta = None) -> str:
     return __encode_jwt(to_encode, SECRET_KEY)
 
 
-def create_refresh_token_payload(master_id: int, email: str) -> tuple[str, datetime]:
+def create_refresh_token_payload(user_id: int, email: str) -> tuple[str, datetime]:
     to_encode = {
-        "sub": str(master_id),
+        "sub": str(user_id),
         "email": email,
         "type": "refresh",
         "jti": secrets.token_urlsafe(32),

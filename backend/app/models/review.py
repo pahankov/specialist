@@ -11,7 +11,7 @@ class Review(Base):
     appointment_id = Column(
         Integer, ForeignKey("appointments.id", ondelete="CASCADE"), nullable=False, unique=True, index=True
     )
-    master_id = Column(Integer, ForeignKey("masters.id", ondelete="CASCADE"), nullable=False, index=True)
+    master_id = Column(Integer, ForeignKey("master_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
     client_name = Column(String(100), nullable=False)
     client_phone = Column(String(20), nullable=False)
     rating = Column(Float, nullable=False)  # 1.0 — 5.0
@@ -21,7 +21,7 @@ class Review(Base):
 
     # Relationships
     appointment = relationship("Appointment", back_populates="reviews")
-    master = relationship("Master", back_populates="reviews")
+    master_profile = relationship("MasterProfile", back_populates="reviews")
 
     __table_args__ = (
         Index("ix_reviews_master_published", "master_id", "is_published"),

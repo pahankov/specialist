@@ -9,9 +9,10 @@ import csv
 import io
 from app.database import get_db
 from app.models.appointment import Appointment
-from app.models.client import Client
+from app.models.client_profile import ClientProfile
 from app.models.service import Service
-from app.models.master import Master
+from app.models.user import User
+from app.models.master_profile import MasterProfile
 from app.models.working_hour import WorkingHour
 from app.models.blocked_slot import BlockedSlot
 from app.models.audit_log import AuditLog

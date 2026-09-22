@@ -11,11 +11,11 @@ class WorkingHour(Base):
     )
 
     id = Column(Integer, primary_key=True)
-    master_id = Column(Integer, ForeignKey("masters.id", ondelete="CASCADE"), nullable=False, index=True)
+    master_id = Column(Integer, ForeignKey("master_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
     schedule_date = Column(Date, nullable=False)
     start_time = Column(Time, nullable=False)
     end_time = Column(Time, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc))
-    master = relationship("Master", back_populates="working_hours")
+    master_profile = relationship("MasterProfile", back_populates="working_hours")

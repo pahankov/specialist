@@ -11,7 +11,7 @@ class Service(Base):
     )
 
     id = Column(Integer, primary_key=True)
-    master_id = Column(Integer, ForeignKey("masters.id", ondelete="CASCADE"), nullable=False, index=True)
+    master_id = Column(Integer, ForeignKey("master_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
     name = Column(String(200), nullable=False)
     description = Column(Text)
     duration_minutes = Column(Integer, nullable=False)
@@ -20,5 +20,5 @@ class Service(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc))
-    master = relationship("Master", back_populates="services")
+    master_profile = relationship("MasterProfile", back_populates="services")
     appointments = relationship("Appointment", back_populates="service")

@@ -15,7 +15,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 async def seed_superuser():
-    engine = create_async_engine("sqlite+aiosqlite:///./sugar_booking.db", echo=False)
+    engine = create_async_engine("sqlite+aiosqlite:///./online_booking.db", echo=False)
 
     # Create tables if they don't exist
     async with engine.begin() as conn:

@@ -12,14 +12,14 @@ class RefreshToken(Base):
     )
 
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("masters.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     token = Column(String(512), unique=True, nullable=False)
     expires_at = Column(DateTime, nullable=False)
     is_revoked = Column(Boolean, default=False, nullable=False)
     revoked_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
-    master = relationship("Master")
+    user = relationship("User", back_populates="refresh_tokens")
 
     def __repr__(self):
         return f"<RefreshToken user_id={self.user_id} revoked={self.is_revoked}>"

@@ -1,5 +1,43 @@
 // API type definitions
 
+export type UserRole = 'master' | 'client' | 'admin';
+
+export interface User {
+  id: number
+  name: string
+  email?: string
+  phone?: string
+  role: UserRole
+  city_id?: number
+  is_active: boolean
+  is_verified: boolean
+  created_at?: string
+  updated_at?: string
+  master_profile?: MasterProfile
+  client_profile?: ClientProfile
+}
+
+export interface MasterProfile {
+  id: number
+  user_id: number
+  description?: string
+  avatar_url?: string
+  telegram_username?: string
+  experience_years?: number
+  is_active: boolean
+  created_at?: string
+  updated_at?: string
+}
+
+export interface ClientProfile {
+  id: number
+  user_id: number
+  no_show_count: number
+  preferred_service_ids?: number[]
+  created_at?: string
+  updated_at?: string
+}
+
 export interface Master {
   id: number
   name: string
@@ -10,6 +48,7 @@ export interface Master {
   avatar_url?: string
   is_active: boolean
   is_admin: boolean
+  city_id?: number
   created_at: string
   updated_at?: string
 }
@@ -198,4 +237,31 @@ export interface BookingFormState {
   serviceId: number | null
   status: 'pending' | 'confirmed'
   notes: string
+}
+
+// ─── Geography ───────────────────────────────────────────────────────
+
+export interface Country {
+  id: number
+  code: string
+  name_ru: string
+  name_en: string
+  phone_prefix: string
+  is_active: boolean
+}
+
+export interface City {
+  id: number
+  country_id: number
+  name_ru: string
+  name_en?: string
+  slug: string
+  is_active: boolean
+}
+
+export interface PaginatedCities {
+  cities: City[]
+  total: number
+  page: number
+  page_size: number
 }
