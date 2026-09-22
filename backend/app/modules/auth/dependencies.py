@@ -1,9 +1,18 @@
-"""JWT authentication dependency for FastAPI."""
+"""JWT authentication dependencies for FastAPI.
+
+Shared dependencies used across all modules:
+- get_current_master    — validates JWT, returns Master
+- get_current_client    — validates JWT, returns Client
+- require_master        — requires valid master token
+- require_super_admin   — requires master with is_admin=True
+- require_client        — requires valid client token
+"""
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+
 from app.database import get_db
 from app.models.master import Master
 from app.models.client import Client

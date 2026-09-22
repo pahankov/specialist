@@ -47,14 +47,22 @@ app.add_middleware(RateLimitMiddleware)
 async def health_check():
     return {"status": "ok", "app": settings.APP_NAME}
 
-# Import and include routers
-from app.api import auth, masters, services, appointments, clients, working_hours, reviews, admin
+# ─── Import and include module routers ────────────────────────────────
+# Each module is a self-contained package with its own router.
+# Adding a new feature: create modules/<feature>/ and include here.
 
-app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
-app.include_router(masters.router, prefix="/api/v1/masters", tags=["masters"])
-app.include_router(services.router, prefix="/api/v1/services", tags=["services"])
-app.include_router(working_hours.router, prefix="/api/v1/working-hours", tags=["working-hours"])
-app.include_router(appointments.router, prefix="/api/v1/appointments", tags=["appointments"])
-app.include_router(clients.router, prefix="/api/v1/clients", tags=["clients"])
-app.include_router(reviews.router, prefix="/api/v1/reviews", tags=["reviews"])
-app.include_router(admin.router)
+from app.modules.auth import router as auth_router
+from app.modules.user import router as user_router
+from app.modules.booking import router as booking_router
+from app.modules.service import router as service_router
+from app.modules.schedule import router as schedule_router
+from app.modules.review import router as review_router
+from app.modules.admin import router as admin_router
+
+app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
+app.include_router(user_router, prefix="/api/v1", tags=["users"])
+app.include_router(booking_router, prefix="/api/v1/appointments", tags=["appointments"])
+app.include_router(service_router, prefix="/api/v1/services", tags=["services"])
+app.include_router(schedule_router, prefix="/api/v1/working-hours", tags=["working-hours"])
+app.include_router(review_router, prefix="/api/v1/reviews", tags=["reviews"])
+app.include_router(admin_router)
