@@ -58,8 +58,10 @@ from app.modules.service import router as service_router
 from app.modules.schedule import router as schedule_router
 from app.modules.review import router as review_router
 from app.modules.admin import router as admin_router
+from app.modules.city import router as city_router
 
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
+app.include_router(city_router, prefix="/api/v1", tags=["cities"])
 app.include_router(user_router, prefix="/api/v1", tags=["users"])
 app.include_router(booking_router, prefix="/api/v1/appointments", tags=["appointments"])
 app.include_router(service_router, prefix="/api/v1/services", tags=["services"])

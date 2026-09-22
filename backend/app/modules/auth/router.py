@@ -1,4 +1,4 @@
-"""Authentication API endpoints — register, login, refresh, logout."""
+"""Authentication API endpoints — register, login, OTP, refresh, logout."""
 from fastapi import APIRouter, HTTPException, Depends, status, Response, Request
 from fastapi.security import HTTPBearer
 from jose import jwt, JWTError
@@ -9,9 +9,11 @@ from datetime import datetime, timezone as dt_timezone
 from pydantic import BaseModel
 
 from app.database import get_db
-from app.models.master import Master
+from app.models.user import User, UserRole
 from app.models.refresh_token import RefreshToken
-from app.schemas.master import MasterCreate
+from app.models.country import Country
+from app.schemas.user import UserCreate, UserLoginByEmail, UserLoginByPhone
+from app.schemas.otp import SendOtpRequest, VerifyOtpRequest, OtpResponse
 from app.schemas.auth import TokenResponse, TokenRefreshResponse, TokenRefreshRequest
 from app.config import settings
 from app.logging_config import get_logger
@@ -60,20 +62,29 @@ def _set_auth_cookies(
 
 @router.post("/register", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def register_master(
-    master: MasterCreate,
+    user_data: UserCreate,
     db: AsyncSession = Depends(get_db)
 ):
-    new_master = await service.register_master(master, db)
+    """Register a new master. Requires city_id."""
+    if user_data.role != UserRole.MASTER:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Только мастера могут зарегистрироваться через этот endpoint"
+        )
+
+    new_user = await service.register_master(user_data, db)
+
     return {
-        "id": new_master.id,
-        "name": new_master.name,
-        "email": new_master.email,
-        "phone": new_master.phone,
-        "telegram_username": new_master.telegram_username,
-        "is_active": new_master.is_active,
-        "is_admin": new_master.is_admin,
-        "created_at": new_master.created_at.isoformat() if new_master.created_at else None,
-        "updated_at": new_master.updated_at.isoformat() if new_master.updated_at else None,
+        "id": new_user.id,
+        "name": new_user.name,
+        "email": new_user.email,
+        "phone": new_user.phone,
+        "role": new_user.role.value,
+        "city_id": new_user.city_id,
+        "is_active": new_user.is_active,
+        "is_verified": new_user.is_verified,
+        "created_at": new_user.created_at.isoformat() if new_user.created_at else None,
+        "updated_at": new_user.updated_at.isoformat() if new_user.updated_at else None,
     }
 
 
@@ -81,14 +92,14 @@ async def register_master(
 
 @router.post("/login", response_model=TokenResponse)
 async def login(response: Response, req: LoginRequest, db: AsyncSession = Depends(get_db)):
-    """Login master — returns access token in response body, refresh token in httpOnly cookie."""
-    access_token, master = await service.login_master(req.email, req.password, db)
+    """Login master by email+password — returns access token in response body, refresh token in httpOnly cookie."""
+    access_token, user = await service.login_master(req.email, req.password, db)
 
-    # Get the most recent refresh token for this master
+    # Get the most recent refresh token for this user
     result = await db.execute(
         select(RefreshToken)
         .where(
-            RefreshToken.user_id == master.id,
+            RefreshToken.user_id == user.id,
             RefreshToken.is_revoked == False
         )
         .order_by(RefreshToken.id.desc())
@@ -103,7 +114,28 @@ async def login(response: Response, req: LoginRequest, db: AsyncSession = Depend
 
 @router.post("/client/login", response_model=TokenResponse)
 async def client_login(req: ClientLoginRequest, db: AsyncSession = Depends(get_db)):
-    access_token, client = await service.login_client(req.phone, db)
+    """Legacy client login by phone (no password)."""
+    access_token, user = await service.login_client_legacy(req.phone, db)
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
+# ─── OTP Authentication ──────────────────────────────────────────────
+
+@router.post("/send-otp", response_model=OtpResponse)
+async def send_otp(req: SendOtpRequest, db: AsyncSession = Depends(get_db)):
+    """Send OTP code to phone number."""
+    try:
+        await service.send_otp(req.phone, db)
+        return {"message": "Код отправлен"}
+    except Exception as e:
+        logger.error("Error sending OTP: %s", e)
+        raise HTTPException(status_code=500, detail="Не удалось отправить код")
+
+
+@router.post("/verify-otp", response_model=TokenResponse)
+async def verify_otp(req: VerifyOtpRequest, db: AsyncSession = Depends(get_db)):
+    """Verify OTP code and login/create user."""
+    access_token, user = await service.verify_otp(req.phone, req.code, db)
     return {"access_token": access_token, "token_type": "bearer"}
 
 
@@ -136,19 +168,21 @@ async def refresh_token(request: Request, db: AsyncSession = Depends(get_db)):
     if not stored_token or stored_token.expires_at < datetime.now(dt_timezone.utc).replace(tzinfo=None):
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 
-    result = await db.execute(select(Master).where(Master.id == user_id))
-    master = result.scalar_one_or_none()
-    if not master:
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
         raise HTTPException(status_code=401, detail="User not found")
 
     stored_token.is_revoked = True
     stored_token.revoked_at = datetime.now(dt_timezone.utc)
 
     new_access = create_access_token({
-        "sub": str(master.id), "is_admin": master.is_admin, "name": master.name
+        "sub": str(user.id),
+        "role": user.role.value,
+        "name": user.name,
     })
-    new_refresh_value, new_expires = create_refresh_token_payload(master.id, master.email)
-    db.add(RefreshToken(user_id=master.id, token=new_refresh_value, expires_at=new_expires))
+    new_refresh_value, new_expires = create_refresh_token_payload(user.id, user.email or "")
+    db.add(RefreshToken(user_id=user.id, token=new_refresh_value, expires_at=new_expires))
 
     await db.commit()
 

@@ -6,9 +6,10 @@ from sqlalchemy.orm import selectinload
 from datetime import datetime, timedelta
 
 from app.database import get_db
-from app.models.master import Master
+from app.models.user import User
+from app.models.master_profile import MasterProfile
 from app.models.appointment import Appointment
-from app.models.client import Client
+from app.models.client_profile import ClientProfile
 from app.models.service import Service
 from app.modules.auth.dependencies import require_super_admin
 from app.logging_config import get_logger
@@ -20,21 +21,21 @@ router = APIRouter()
 
 @router.get("/global-stats")
 async def get_global_stats(
-    super_admin: Master = Depends(require_super_admin),
+    super_admin: User = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Get global statistics across all masters (superadmin only)."""
     # Total masters (active and admin counts)
-    total_masters_result = await db.execute(select(func.count(Master.id)))
+    total_masters_result = await db.execute(select(func.count(MasterProfile.id)))
     total_masters = total_masters_result.scalar() or 0
     
     active_masters_result = await db.execute(
-        select(func.count(Master.id)).where(Master.is_active == True)
+        select(func.count(MasterProfile.id)).where(MasterProfile.is_active == True)
     )
     active_masters = active_masters_result.scalar() or 0
     
     admin_masters_result = await db.execute(
-        select(func.count(Master.id)).where(Master.is_admin == True)
+        select(func.count(MasterProfile.id)).where(MasterProfile.user.has(role='admin'))
     )
     admin_masters = admin_masters_result.scalar() or 0
     
@@ -48,7 +49,7 @@ async def get_global_stats(
     total_appointments = sum(status_counts.values())
     
     # Total clients
-    total_clients_result = await db.execute(select(func.count(Client.id)))
+    total_clients_result = await db.execute(select(func.count(ClientProfile.id)))
     total_clients = total_clients_result.scalar() or 0
     
     # Total services
@@ -67,7 +68,7 @@ async def get_global_stats(
     # Recent appointments (last 10 across all masters)
     recent_result = await db.execute(
         select(Appointment)
-        .options(selectinload(Appointment.client), selectinload(Appointment.service), selectinload(Appointment.master))
+        .options(selectinload(Appointment.client_profile), selectinload(Appointment.service), selectinload(Appointment.master_profile))
         .order_by(Appointment.appointment_date.desc())
         .limit(10)
     )
@@ -108,8 +109,8 @@ async def get_global_stats(
         "recent_appointments": [
             {
                 "id": a.id,
-                "master_name": a.master.name if a.master else None,
-                "client_name": a.client.name if a.client else None,
+                "master_name": a.master_profile.user.name if a.master_profile else None,
+                "client_name": a.client_profile.user.name if a.client_profile else None,
                 "appointment_date": a.appointment_date.isoformat() if a.appointment_date else None,
                 "status": a.status,
                 "service_name": a.service.name if a.service else None,
@@ -119,7 +120,7 @@ async def get_global_stats(
         "upcoming_appointments": [
             {
                 "id": a.id,
-                "master_name": a.master.name if a.master else None,
+                "master_name": a.master_profile.user.name if a.master_profile else None,
                 "appointment_date": a.appointment_date.isoformat() if a.appointment_date else None,
                 "status": a.status
             } for a in upcoming_appointments

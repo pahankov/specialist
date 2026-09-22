@@ -1,15 +1,23 @@
-"""Authentication business logic — registration, login, password verification."""
+"""Authentication business logic — registration, login, password verification.
+
+Updated to use the unified User model with role-based access.
+"""
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from passlib.context import CryptContext
-from app.models.master import Master
-from app.models.client import Client
+from app.models.user import User, UserRole
+from app.models.master_profile import MasterProfile
+from app.models.client_profile import ClientProfile
 from app.models.refresh_token import RefreshToken
-from app.schemas.master import MasterCreate
+from app.models.otp_code import OtpCode
+from app.schemas.user import UserCreate, UserLoginByEmail, UserLoginByPhone
+from app.schemas.otp import SendOtpRequest
 from app.logging_config import get_logger
 from app.config import settings
-from datetime import datetime, timezone as dt_timezone
+from datetime import datetime, timezone as dt_timezone, timedelta
+import hashlib
+import secrets
 
 logger = get_logger(__name__)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -26,40 +34,72 @@ def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
 
-async def register_master(master_data: MasterCreate, db: AsyncSession) -> Master:
-    """Register a new master. Returns Master instance."""
-    logger.info("Регистрация мастера: %s", master_data.email)
+def hash_otp_code(code: str) -> str:
+    """Hash an OTP code for secure storage."""
+    return hashlib.sha256(code.encode()).hexdigest()
 
-    result = await db.execute(select(Master).where(Master.email == master_data.email))
-    if result.scalar_one_or_none():
-        logger.warning("Регистрация заблокирована — мастер уже существует: %s", master_data.email)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Мастер с таким email уже существует"
-        )
 
-    new_master = Master(
-        name=master_data.name,
-        email=master_data.email,
-        hashed_password=hash_password(master_data.password),
-        phone=master_data.phone,
-        telegram_username=master_data.telegram_username
+# ─── Registration ─────────────────────────────────────────────────────
+
+async def register_master(user_data: UserCreate, db: AsyncSession) -> User:
+    """Register a new master. Returns User instance with MasterProfile."""
+    logger.info("Регистрация мастера: %s", user_data.email)
+
+    # Check email uniqueness
+    if user_data.email:
+        result = await db.execute(select(User).where(User.email == user_data.email))
+        if result.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Мастер с таким email уже существует"
+            )
+
+    # Check phone uniqueness
+    if user_data.phone:
+        result = await db.execute(select(User).where(User.phone == user_data.phone))
+        if result.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Мастер с таким телефоном уже существует"
+            )
+
+    # Create user
+    new_user = User(
+        name=user_data.name,
+        email=user_data.email,
+        phone=user_data.phone,
+        hashed_password=hash_password(user_data.password) if user_data.password else None,
+        role=UserRole.MASTER,
+        city_id=user_data.city_id,
+        is_verified=bool(user_data.email),  # auto-verify if email provided
     )
-    db.add(new_master)
+    db.add(new_user)
+
+    # Create master profile
+    master_profile = MasterProfile(
+        user_id=new_user.id,
+        telegram_username=None,  # will be set later
+    )
+    db.add(master_profile)
+
     await db.commit()
-    await db.refresh(new_master)
-    logger.info("Мастер успешно зарегистрирован: %s", master_data.email)
-    return new_master
+    await db.refresh(new_user)
+    await db.refresh(master_profile)
+
+    logger.info("Мастер успешно зарегистрирован: %s", user_data.email)
+    return new_user
 
 
-async def login_master(email: str, password: str, db: AsyncSession):
-    """Login master. Returns (access_token, master) or raises HTTPException."""
-    logger.info("Запрос на вход: %s", email)
+# ─── Login ────────────────────────────────────────────────────────────
 
-    result = await db.execute(select(Master).where(Master.email == email))
-    master = result.scalar_one_or_none()
+async def login_master(email: str, password: str, db: AsyncSession) -> tuple[str, User]:
+    """Login master by email+password. Returns (access_token, user)."""
+    logger.info("Запрос на вход мастера: %s", email)
 
-    if not master or not verify_password(password, master.hashed_password):
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+
+    if not user or not user.hashed_password or not verify_password(password, user.hashed_password):
         logger.warning("Неудачная попытка входа: %s", email)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -67,34 +107,134 @@ async def login_master(email: str, password: str, db: AsyncSession):
         )
 
     from app.modules.auth.token import create_access_token
-    from app.models.refresh_token import RefreshToken
+    from app.modules.auth.token import create_refresh_token_payload
 
-    role = "Суперпользователь" if master.is_admin else "Мастер"
     access_token = create_access_token({
-        "sub": str(master.id), "is_admin": master.is_admin, "name": master.name
+        "sub": str(user.id),
+        "role": user.role.value,
+        "name": user.name,
     })
 
-    from app.modules.auth.token import create_refresh_token_payload
-    refresh_token_value, expires_at = create_refresh_token_payload(master.id, master.email)
-    db.add(RefreshToken(user_id=master.id, token=refresh_token_value, expires_at=expires_at))
+    refresh_token_value, expires_at = create_refresh_token_payload(user.id, user.email or "")
+    db.add(RefreshToken(user_id=user.id, token=refresh_token_value, expires_at=expires_at))
     await db.commit()
 
-    logger.info("%s успешно вошёл в систему: %s", role, email)
-    return access_token, master
+    logger.info("Мастер успешно вошёл в систему: %s", email)
+    return access_token, user
 
 
-async def login_client(phone: str, db: AsyncSession):
-    """Login client by phone. Returns (access_token, client) or raises HTTPException."""
-    logger.info("Запрос на вход клиента: %s", phone)
+# ─── OTP Authentication ──────────────────────────────────────────────
 
-    result = await db.execute(select(Client).where(Client.phone == phone))
-    client = result.scalar_one_or_none()
+async def send_otp(phone: str, db: AsyncSession) -> None:
+    """Send OTP code to phone. Creates OtpCode record."""
+    logger.info("Запрос OTP на номер: %s", phone)
 
-    if not client:
+    # Generate 6-digit code
+    code = secrets.token_hex(3).upper()  # 6 chars
+
+    # Hash and store
+    code_hash = hash_otp_code(code)
+    expires_at = datetime.now(dt_timezone.utc) + timedelta(minutes=5)
+
+    otp = OtpCode(
+        phone=phone,
+        code_hash=code_hash,
+        expires_at=expires_at,
+        is_used=False,
+    )
+    db.add(otp)
+    await db.commit()
+
+    # Send via SMS provider
+    from app.services.sms.provider import get_sms_provider
+    provider = get_sms_provider()
+    await provider.send(phone, code)
+
+    logger.info("OTP отправлен на %s", phone)
+
+
+async def verify_otp(phone: str, code: str, db: AsyncSession) -> tuple[str, User]:
+    """Verify OTP code and login/create user. Returns (access_token, user)."""
+    logger.info("Проверка OTP для номера: %s", phone)
+
+    # Find latest unused OTP
+    result = await db.execute(
+        select(OtpCode)
+        .where(OtpCode.phone == phone, OtpCode.is_used == False)
+        .order_by(OtpCode.created_at.desc())
+        .limit(1)
+    )
+    otp = result.scalar_one_or_none()
+
+    if not otp:
+        raise HTTPException(status_code=400, detail="Код не найден. Запросите новый.")
+
+    if datetime.now(dt_timezone.utc).replace(tzinfo=None) > otp.expires_at:
+        raise HTTPException(status_code=410, detail="Код истёк. Запросите новый.")
+
+    if hashlib.sha256(code.encode()).hexdigest() != otp.code_hash:
+        raise HTTPException(status_code=400, detail="Неверный код")
+
+    # Mark as used
+    otp.is_used = True
+    await db.commit()
+
+    # Find or create user
+    result = await db.execute(select(User).where(User.phone == phone))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        # Create new client user
+        user = User(
+            name="",  # will be set later
+            phone=phone,
+            role=UserRole.CLIENT,
+            hashed_password=None,  # OTP-only auth
+            is_verified=False,
+        )
+        db.add(user)
+        await db.flush()
+
+        client_profile = ClientProfile(user_id=user.id)
+        db.add(client_profile)
+        await db.commit()
+        await db.refresh(user)
+
+    from app.modules.auth.token import create_access_token
+    from app.modules.auth.token import create_refresh_token_payload
+
+    access_token = create_access_token({
+        "sub": str(user.id),
+        "role": user.role.value,
+        "name": user.name,
+    })
+
+    refresh_token_value, expires_at = create_refresh_token_payload(user.id, user.email or "")
+    db.add(RefreshToken(user_id=user.id, token=refresh_token_value, expires_at=expires_at))
+    await db.commit()
+
+    logger.info("Клиент успешно вошёл через OTP: %s", phone)
+    return access_token, user
+
+
+# ─── Legacy compatibility ────────────────────────────────────────────
+
+async def login_client_legacy(phone: str, db: AsyncSession) -> tuple[str, User]:
+    """Legacy client login by phone (no password). Returns (access_token, user)."""
+    logger.info("Запрос на вход клиента (legacy): %s", phone)
+
+    result = await db.execute(select(User).where(User.phone == phone))
+    user = result.scalar_one_or_none()
+
+    if not user:
         logger.warning("Клиент не найден: %s", phone)
         raise HTTPException(status_code=404, detail="Клиент не найден")
 
     from app.modules.auth.token import create_access_token
-    access_token = create_access_token({"sub": str(client.id), "type": "client"})
+    access_token = create_access_token({
+        "sub": str(user.id),
+        "role": user.role.value,
+        "name": user.name,
+    })
     logger.info("Клиент успешно вошёл в систему: %s", phone)
-    return access_token, client
+    return access_token, user

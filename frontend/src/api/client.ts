@@ -15,6 +15,9 @@ import type {
   AppointmentWithClient,
   AdminLoginResponse,
   AdminStats,
+  Country,
+  City,
+  PaginatedCities,
 } from './types'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -182,11 +185,24 @@ export const clientsPublicApi = {
 export const authApi = {
   login: (email: string, password: string) =>
     apiClient.post<LoginResponse>('/api/v1/auth/login', { email, password }),
-  register: (data: { name: string; email: string; password: string; phone?: string; telegram_username?: string }) =>
-    apiClient.post<Master>('/api/v1/auth/register', data),
+  register: (data: { name: string; email: string; password: string; phone?: string; telegram_username?: string; role: string; city_id?: number }) =>
+    apiClient.post('/api/v1/auth/register', data),
   clientLogin: (phone: string) =>
     apiClient.post<LoginResponse>('/api/v1/auth/client/login', { phone }),
+  sendOtp: (phone: string) =>
+    apiClient.post('/api/v1/auth/send-otp', { phone }),
+  verifyOtp: (phone: string, code: string) =>
+    apiClient.post<LoginResponse>('/api/v1/auth/verify-otp', { phone, code }),
   logout: () => apiClient.post('/api/v1/auth/logout'),
+}
+
+// ─── Geography API ─────────────────────────────────────────────────
+
+export const citiesApi = {
+  getCountries: () => apiClient.get<Country[]>('/api/v1/countries/'),
+  getCities: (params?: { country_id?: number; search?: string; page?: number; page_size?: number }) =>
+    apiClient.get<City[]>('/api/v1/cities/', { params }),
+  getCity: (id: number) => apiClient.get<City>(`/api/v1/cities/${id}`),
 }
 
 export const adminApi = {

@@ -4,7 +4,7 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: sugar_booking
+      POSTGRES_DB: online_booking
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:

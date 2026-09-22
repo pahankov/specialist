@@ -9,8 +9,9 @@ from pydantic import BaseModel
 from app.database import get_db
 from app.models.appointment import Appointment
 from app.models.service import Service
-from app.models.client import Client
-from app.models.master import Master
+from app.models.client_profile import ClientProfile
+from app.models.user import User, UserRole
+from app.models.master_profile import MasterProfile
 from app.schemas.appointment import AppointmentCreate, AppointmentResponse, PublicBookingCreate, AvailableDay, AvailableSlot
 from app.logging_config import get_logger
 from app.modules.auth.dependencies import require_master
@@ -28,44 +29,51 @@ router = APIRouter()
 
 @router.get("/", response_model=List[AppointmentResponse])
 async def get_appointments(
-    master: Master = Depends(require_master),
+    master: User = Depends(require_master),
     db: AsyncSession = Depends(get_db)
 ):
     """Get appointments for the authenticated master."""
-    logger.info("Запрос списка записей мастером id=%s", master.id)
+    logger.info("Запрос списка записей мастером id=%s", master.master_profile.id)
     result = await db.execute(
-        select(Appointment).where(Appointment.master_id == master.id)
+        select(Appointment).where(Appointment.master_id == master.master_profile.id)
     )
     appointments = result.scalars().all()
-    logger.info("Найдено %d записей для мастера id=%s", len(appointments), master.id)
+    logger.info("Найдено %d записей для мастера id=%s", len(appointments), master.master_profile.id)
     return appointments
 
 
 @router.post("/", response_model=AppointmentResponse, status_code=201)
 async def create_appointment(
     appointment: AppointmentCreate,
-    master: Master = Depends(require_master),
+    master: User = Depends(require_master),
     db: AsyncSession = Depends(get_db)
 ):
     """Create appointment (authenticated master only)."""
     logger.info("Создание записи мастером id=%s: клиент=%s, время=%s",
-                master.id, appointment.client_phone, appointment.appointment_date)
+                master.master_profile.id, appointment.client_phone, appointment.appointment_date)
 
-    if appointment.master_id != master.id:
+    if appointment.master_id != master.master_profile.id:
         logger.warning("Попытка создать чужую запись: мастер=%s, запрошенный=%s",
-                       master.id, appointment.master_id)
+                       master.master_profile.id, appointment.master_id)
         raise HTTPException(status_code=403, detail="Not your master")
 
     # Check or create client
-    client_result = await db.execute(select(Client).where(Client.phone == appointment.client_phone))
+    client_result = await db.execute(select(ClientProfile).where(ClientProfile.user.has(phone=appointment.client_phone)))
     client = client_result.scalar_one_or_none()
 
     if not client:
         logger.info("Создание нового клиента для записи: %s", appointment.client_phone)
-        client = Client(
+        from app.models.user import User
+        new_user = User(
             name=appointment.client_name,
-            phone=appointment.client_phone
+            phone=appointment.client_phone,
+            role=UserRole.CLIENT
         )
+        db.add(new_user)
+        await db.flush()
+        await db.refresh(new_user)
+        
+        client = ClientProfile(user_id=new_user.id)
         db.add(client)
         await db.flush()
         await db.refresh(client)
@@ -83,22 +91,22 @@ async def create_appointment(
     await db.flush()
     await db.refresh(new_appointment)
 
-    logger.info("Запись создана: id=%s, мастер=%s", new_appointment.id, master.id)
+    logger.info("Запись создана: id=%s, мастер=%s", new_appointment.id, master.master_profile.id)
     return new_appointment
 
 
 @router.delete("/{appointment_id}", status_code=204)
 async def delete_appointment(
     appointment_id: int,
-    master: Master = Depends(require_master),
+    master: User = Depends(require_master),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete appointment (authenticated master only)."""
-    logger.info("Удаление записи: id=%s, мастер=%s", appointment_id, master.id)
+    logger.info("Удаление записи: id=%s, мастер=%s", appointment_id, master.master_profile.id)
     result = await db.execute(
         select(Appointment).where(
             Appointment.id == appointment_id,
-            Appointment.master_id == master.id
+            Appointment.master_id == master.master_profile.id
         )
     )
     appointment = result.scalar_one_or_none()
@@ -181,10 +189,13 @@ async def public_booking(booking: PublicBookingCreate, db: AsyncSession = Depend
 
     # Verify master exists and is active
     master_result = await db.execute(
-        select(Master).where(Master.id == booking.master_id, Master.is_active == True)
+        select(MasterProfile).join(MasterProfile.user).where(
+            MasterProfile.id == booking.master_id,
+            MasterProfile.is_active == True
+        )
     )
-    master = master_result.scalar_one_or_none()
-    if not master:
+    master_profile = master_result.scalar_one_or_none()
+    if not master_profile:
         logger.warning("Мастер не найден или неактивен: id=%s", booking.master_id)
         raise HTTPException(status_code=404, detail="Master not found or inactive")
 
@@ -216,15 +227,21 @@ async def public_booking(booking: PublicBookingCreate, db: AsyncSession = Depend
         raise HTTPException(status_code=409, detail="Это время уже занято")
 
     # Check or create client
-    client_result = await db.execute(select(Client).where(Client.phone == booking.client_phone))
+    client_result = await db.execute(select(ClientProfile).where(ClientProfile.user.has(phone=booking.client_phone)))
     client = client_result.scalar_one_or_none()
 
     if not client:
         logger.info("Создание нового клиента для записи: %s", booking.client_phone)
-        client = Client(
+        new_user = User(
             name=booking.client_name,
-            phone=booking.client_phone
+            phone=booking.client_phone,
+            role=UserRole.CLIENT
         )
+        db.add(new_user)
+        await db.flush()
+        await db.refresh(new_user)
+        
+        client = ClientProfile(user_id=new_user.id)
         db.add(client)
         await db.flush()
         await db.refresh(client)
