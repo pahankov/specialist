@@ -10,7 +10,6 @@ All admin endpoints are split into separate modules:
 - admin_export.py         — CSV exports
 - admin_blocked_slots.py  — blocked slots
 - admin_masters.py        — master management (superadmin only)
-- admin_global_stats.py   — global statistics (superadmin only)
 """
 from fastapi import APIRouter
 from app.api.admin_dashboard import router as dashboard_router
@@ -22,7 +21,6 @@ from app.api.admin_audit import router as audit_router
 from app.api.admin_export import router as export_router
 from app.api.admin_blocked_slots import router as blocked_slots_router
 from app.api.admin_masters import router as masters_router
-from app.api.admin_global_stats import router as global_stats_router
 from app.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -39,7 +37,6 @@ router.include_router(blocked_slots_router)
 
 # Superadmin-only endpoints
 router.include_router(masters_router)
-router.include_router(global_stats_router)
 
 # Shared endpoints (audit logs, exports)
 router.include_router(audit_router)

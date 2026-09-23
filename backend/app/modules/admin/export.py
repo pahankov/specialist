@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import Optional
 from app.modules.admin.base import (
-    get_db, Appointment, Client, Service, Master, require_master
+    get_db, Appointment, ClientProfile, User, Service, MasterProfile, require_master
 )
 
 router = APIRouter()
@@ -12,17 +12,18 @@ router = APIRouter()
 
 @router.get("/export/appointments")
 async def export_appointments_csv(
-    master: Master = Depends(require_master),
+    master: User = Depends(require_master),
     status: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db)
 ):
     """Export appointments to CSV."""
     query = (
-        select(Appointment, Client.name.label('client_name'), Client.phone.label('client_phone'),
+        select(Appointment, User.name.label('client_name'), User.phone.label('client_phone'),
                Service.name.label('service_name'), Service.price.label('service_price'))
-        .join(Client, Appointment.client_id == Client.id, isouter=True)
+        .join(ClientProfile, Appointment.client_id == ClientProfile.id, isouter=True)
+        .join(User, ClientProfile.user_id == User.id, isouter=True)
         .join(Service, Appointment.service_id == Service.id, isouter=True)
-        .where(Appointment.master_id == master.id)
+        .where(Appointment.master_id == master.master_profile.id)
     )
     if status:
         query = query.where(Appointment.status == status)
@@ -46,15 +47,19 @@ async def export_appointments_csv(
 
 @router.get("/export/clients")
 async def export_clients_csv(
-    master: Master = Depends(require_master),
+    master: User = Depends(require_master),
     db: AsyncSession = Depends(get_db)
 ):
     """Export all clients to CSV."""
-    result = await db.execute(select(Client).order_by(Client.name))
-    clients = result.scalars().all()
+    result = await db.execute(
+        select(User, ClientProfile).join(ClientProfile, User.id == ClientProfile.user_id)
+        .where(User.role == "CLIENT")
+        .order_by(User.name)
+    )
+    rows = result.all()
     lines = ["ID,Имя,Телефон,Email"]
-    for client in clients:
-        lines.append(f"{client.id},{client.name},{client.phone},{client.email or ''}")
+    for user, cp in rows:
+        lines.append(f"{user.id},{user.name},{user.phone},{user.email or ''}")
     return Response(
         content="\n".join(lines) + "\n",
         media_type='text/csv; charset=utf-8',

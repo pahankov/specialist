@@ -29,7 +29,7 @@ function SchedulePage() {
     status: 'pending', notes: '',
   })
   const [activeHours, setActiveHours] = useState<Record<string, boolean>>({})
-  const [longPressTriggered, setLongPressTriggered] = useState(false)
+  const [longPressTriggered] = useState(false)
   const [monthlyStats, setMonthlyStats] = useState<MonthlyStats | null>(null)
 
   useEffect(() => {

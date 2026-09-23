@@ -23,12 +23,14 @@ class MasterCreate(BaseModel):
     name: str
     email: EmailStr
     password: str
-    phone: str
+    phone: Optional[str] = None
     telegram_username: Optional[str] = None
 
     @field_validator('phone')
     @classmethod
-    def validate_phone(cls, v: str) -> str:
+    def validate_phone(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or v.strip() == '':
+            return None
         return normalize_phone(v)
 
     @field_validator('password')
@@ -77,7 +79,8 @@ class MasterUpdate(BaseModel):
 
 
 class MasterResponse(BaseModel):
-    id: int
+    id: int  # master_profile.id
+    user_id: int  # user.id
     name: str
     email: str
     phone: Optional[str]

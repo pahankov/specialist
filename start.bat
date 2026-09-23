@@ -1,31 +1,56 @@
 @echo off
-echo === Запуск Online Booking ===
+setlocal EnableDelayedExpansion
+
+echo.
+echo ========================================
+echo   Online Booking — Запуск
+echo ========================================
 echo.
 
 set "PROJECT_DIR=%~dp0"
 set "BACKEND_DIR=%PROJECT_DIR%backend"
 set "FRONTEND_DIR=%PROJECT_DIR%frontend"
 
-echo Убиваем старые процессы...
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8000 "') do taskkill /F /PID %%a 2>nul
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":3000 "') do taskkill /F /PID %%a 2>nul
-timeout /t 2 /nobreak >nul
+:: ─── Проверка зависимостей ─────────────────────────────────────
+python --version >nul 2>&1 || (echo [ERROR] Python не найден && pause && exit /b 1)
+node --version >nul 2>&1 || (echo [ERROR] Node.js не найден && pause && exit /b 1)
 
-echo Очищаем кэш Vite...
-if exist "%FRONTEND_DIR%\node_modules\.vite" rmdir /s /q "%FRONTEND_DIR%\node_modules\.vite" 2>nul
+:: ─── Убиваем старые процессы ─────────────────────────────────────
+echo [1/4] Освобождаем порты...
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8000 " 2^>nul') do taskkill /F /PID %%a 2>nul
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":3000 " 2^>nul') do taskkill /F /PID %%a 2>nul
+timeout /t 1 /nobreak >nul
 
-echo Запуск бэкенда (порт 8000)...
-start "Online Booking - Backend" cmd /k "cd /d %BACKEND_DIR% && python -m uvicorn app.main:app --host 0.0.0.0 --port 8000"
+:: ─── Запуск бэкенда в фоновой консоли ───────────────────────────
+echo [2/4] Запускаю бэкенд (port 8000)...
+start "OB-Backend" /min cmd /k "cd /d %BACKEND_DIR% && python -m uvicorn app.main:app --host 0.0.0.0 --port 8000"
 
-timeout /t 3 /nobreak >nul
+:: ─── Health-check бэкенда ────────────────────────────────────────
+echo [3/4] Ожидание бэкенда...
+set /a retries=0
+:wait_backend
+timeout /t 1 /nobreak >nul
+curl -s http://localhost:8000/docs >nul 2>&1
+if !errorlevel! equ 0 (
+    echo       ✓ Бэкенд готов
+) else (
+    set /a retries+=1
+    if !retries! lss 15 goto wait_backend
+    echo       [WARN] Бэкенд не запустился за 15 секунд
+)
 
-echo Запуск фронтенда (порт 3000)...
-start "Online Booking - Frontend" cmd /k "cd /d %FRONTEND_DIR% && npx.cmd vite --host 0.0.0.0 --port 3000"
+:: ─── Запуск фронтенда в фоновой консоли ─────────────────────────
+echo [4/4] Запускаю фронтенд (port 3000)...
+start "OB-Frontend" /min cmd /k "cd /d %FRONTEND_DIR% && npx vite --host 0.0.0.0 --port 3000"
 
 echo.
-echo Готово!
+echo ========================================
+echo   ✓ Готово!
 echo   Бэкенд:  http://localhost:8000
 echo   Фронтенд: http://localhost:3000
+echo ========================================
 echo.
-echo Окна не закрывай!
+echo Консоли бэкенда и фронтенда свёрнуты.
+echo Чтобы остановить — закройте их из панели задач.
+echo.
 pause

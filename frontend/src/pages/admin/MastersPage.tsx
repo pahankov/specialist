@@ -51,9 +51,32 @@ function MastersPage() {
     }
   }
 
+  const formatPhone = (value: string) => {
+    const raw = value.replace(/\D/g, '').slice(0, 10)
+    let formatted = raw
+    if (raw.length > 0) formatted = '+7'
+    if (raw.length > 1) formatted += ` (${raw.slice(1, 4)}`
+    if (raw.length > 4) formatted += `) ${raw.slice(4, 7)}`
+    if (raw.length > 7) formatted += `-${raw.slice(7, 9)}`
+    if (raw.length > 9) formatted += `-${raw.slice(9, 11)}`
+    return formatted
+  }
+
   useEffect(() => { loadMasters() }, [])
 
   const handleSearch = () => loadMasters()
+
+  const handleError = (err: any): string => {
+    const detail = err.response?.data?.detail
+    if (typeof detail === 'string') return detail
+    if (Array.isArray(detail)) {
+      return detail.map((e: any) => e.msg || e.message).join(', ')
+    }
+    if (typeof detail === 'object' && detail !== null) {
+      return detail.msg || detail.message || 'Ошибка сервера'
+    }
+    return err.response?.data?.message || 'Ошибка сервера'
+  }
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -64,7 +87,7 @@ function MastersPage() {
       setCreateForm({ name: '', email: '', password: '', phone: '', telegram_username: '' })
       loadMasters()
     } catch (err: any) {
-      showMessage('error', err.response?.data?.detail || 'Ошибка создания мастера')
+      showMessage('error', handleError(err))
     }
   }
 
@@ -80,7 +103,7 @@ function MastersPage() {
       setEditingMaster(null)
       loadMasters()
     } catch (err: any) {
-      showMessage('error', err.response?.data?.detail || 'Ошибка обновления мастера')
+      showMessage('error', handleError(err))
     }
   }
 
@@ -90,7 +113,7 @@ function MastersPage() {
       showMessage('success', 'Статус мастера изменён')
       loadMasters()
     } catch (err: any) {
-      showMessage('error', err.response?.data?.detail || 'Ошибка изменения статуса')
+      showMessage('error', handleError(err))
     }
   }
 
@@ -100,7 +123,7 @@ function MastersPage() {
       showMessage('success', 'Права суперпользователя изменены')
       loadMasters()
     } catch (err: any) {
-      showMessage('error', err.response?.data?.detail || 'Ошибка изменения прав')
+      showMessage('error', handleError(err))
     }
   }
 
@@ -111,7 +134,7 @@ function MastersPage() {
       setDeleteConfirm(null)
       loadMasters()
     } catch (err: any) {
-      showMessage('error', err.response?.data?.detail || 'Ошибка удаления мастера')
+      showMessage('error', handleError(err))
     }
   }
 
@@ -258,7 +281,7 @@ function MastersPage() {
           </div>
           <div className="form-group">
             <label>Телефон</label>
-            <input type="tel" value={createForm.phone} onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })} placeholder={PHONE_PLACEHOLDER} />
+            <input type="tel" value={createForm.phone} onChange={(e) => setCreateForm({ ...createForm, phone: formatPhone(e.target.value) })} placeholder={PHONE_PLACEHOLDER} />
           </div>
           <div className="form-group">
             <label>Telegram</label>
@@ -285,7 +308,7 @@ function MastersPage() {
             </div>
             <div className="form-group">
               <label>Телефон</label>
-              <input type="tel" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} placeholder={PHONE_PLACEHOLDER} />
+              <input type="tel" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: formatPhone(e.target.value) })} placeholder={PHONE_PLACEHOLDER} />
             </div>
             <div className="form-group">
               <label>Telegram</label>

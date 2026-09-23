@@ -1,10 +1,9 @@
-"""Alembic environment configuration for async SQLAlchemy."""
+"""Alembic environment configuration."""
 import os
 import sys
 from logging.config import fileConfig
 
-from sqlalchemy import pool
-from sqlalchemy.ext.asyncio import async_engine_from_config
+from sqlalchemy import engine_from_config, pool, text, MetaData
 
 from alembic import context
 
@@ -15,15 +14,25 @@ from app.database import Base
 from app.config import settings
 
 # Import all models so Alembic can detect them
-from app.models import Master, Service, Appointment, Client, WorkingHour, AuditLog, BlockedSlot  # noqa: F401
+from app.models.user import User  # noqa: F401
+from app.models.master_profile import MasterProfile  # noqa: F401
+from app.models.client_profile import ClientProfile  # noqa: F401
+from app.models.service import Service  # noqa: F401
+from app.models.appointment import Appointment  # noqa: F401
+from app.models.working_hour import WorkingHour  # noqa: F401
+from app.models.audit_log import AuditLog  # noqa: F401
+from app.models.blocked_slot import BlockedSlot  # noqa: F401
+from app.models.country import Country  # noqa: F401
+from app.models.city import City  # noqa: F401
+from app.models.refresh_token import RefreshToken  # noqa: F401
+from app.models.otp_code import OtpCode  # noqa: F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
 
-# Override URL from alembic.ini with settings
-if settings.DATABASE_URL:
-    config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# Use URL from alembic.ini (sync sqlite:///, not aiosqlite:///)
+# Do NOT override with settings.DATABASE_URL (that's async)
 
 # Interpret the config file for Python logging.
 if config.config_file_name is not None:
@@ -39,8 +48,8 @@ def run_migrations_offline() -> None:
         url=url,
         target_metadata=target_metadata,
         literal_binds=True,
-        dialect_opts={"paramstyle": "named"},
         render_as_batch=True,  # For SQLite compatibility
+        compare_type=True,
     )
 
     with context.begin_transaction():
@@ -49,28 +58,22 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
-    connectable = async_engine_from_config(
+    connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
 
-    async def do_migrations():
-        async with connectable.connect() as connection:
-            await connection.run_sync(target_metadata.create_all)
-            await connection.execute(
-                # Mark initial migration as applied
-                """
-                INSERT OR IGNORE INTO alembic_version (version_num)
-                VALUES ('initial')
-                """ if "sqlite" in str(connectable.url) else None
-            )
+    with connectable.connect() as connection:
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            render_as_batch=True,  # For SQLite compatibility
+            compare_type=True,
+        )
 
-        async with connectable.begin_transaction():
+        with context.begin_transaction():
             context.run_migrations()
-
-    import asyncio
-    asyncio.run(do_migrations())
 
 
 if context.is_offline_mode():

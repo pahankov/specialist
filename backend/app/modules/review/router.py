@@ -8,7 +8,8 @@ from typing import List, Optional
 from app.database import get_db
 from app.models.review import Review
 from app.models.appointment import Appointment
-from app.models.client import Client
+from app.models.client_profile import ClientProfile
+from app.models.user import User
 from app.schemas.review import ReviewCreate, ReviewUpdate
 from app.logging_config import get_logger
 
@@ -79,7 +80,7 @@ async def create_review(
     result = await db.execute(
         select(Appointment)
         .where(Appointment.id == review_data.appointment_id)
-        .options(selectinload(Appointment.client))
+        .options(selectinload(Appointment.client_profile).joinedload(ClientProfile.user))
     )
     appointment = result.scalar_one_or_none()
     if not appointment:
@@ -103,9 +104,9 @@ async def create_review(
         is_published=True,
     )
 
-    if appointment.client:
-        new_review.client_name = appointment.client.name or "Client"
-        new_review.client_phone = appointment.client.phone or ""
+    if appointment.client_profile and appointment.client_profile.user:
+        new_review.client_name = appointment.client_profile.user.name or "Client"
+        new_review.client_phone = appointment.client_profile.user.phone or ""
 
     db.add(new_review)
     await db.commit()

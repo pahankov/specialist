@@ -1,7 +1,9 @@
-"""User module — master and client CRUD endpoints."""
+"""User module — master and client CRUD endpoints (updated for unified user model)."""
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy import func
+from sqlalchemy.orm import joinedload
 from typing import List
 from pydantic import BaseModel
 from passlib.context import CryptContext
@@ -15,7 +17,6 @@ from app.schemas.client import ClientCreate
 from app.logging_config import get_logger
 
 logger = get_logger(__name__)
-
 router = APIRouter()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -29,20 +30,28 @@ async def get_masters(
     offset: int = Query(0, ge=0),
 ):
     result = await db.execute(
-        select(MasterProfile).join(MasterProfile.user).where(User.role == UserRole.MASTER)
+        select(MasterProfile)
+        .join(MasterProfile.user)
+        .options(joinedload(MasterProfile.user))
+        .where(User.role == UserRole.MASTER)  # exclude superadmins
+        .order_by(User.name)
         .offset(offset).limit(limit)
     )
-    master_profiles = result.scalars().all()
-    return [_master_profile_to_dict(m) for m in master_profiles]
+    profiles = result.scalars().all()
+    return [_master_profile_to_dict(mp) for mp in profiles]
 
 
 @router.get("/masters/{master_id}", response_model=dict)
 async def get_master(master_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(MasterProfile).where(MasterProfile.id == master_id))
-    master_profile = result.scalar_one_or_none()
-    if not master_profile:
+    result = await db.execute(
+        select(MasterProfile)
+        .where(MasterProfile.id == master_id)
+        .options(joinedload(MasterProfile.user))
+    )
+    mp = result.scalar_one_or_none()
+    if not mp:
         raise HTTPException(status_code=404, detail="Master not found")
-    return _master_profile_to_dict(master_profile)
+    return _master_profile_to_dict(mp)
 
 
 @router.post("/masters/", response_model=dict, status_code=201)
@@ -64,12 +73,12 @@ async def create_master(
     db.add(new_user)
     await db.flush()
     await db.refresh(new_user)
-    
-    new_master_profile = MasterProfile(user_id=new_user.id)
-    db.add(new_master_profile)
+
+    new_mp = MasterProfile(user_id=new_user.id)
+    db.add(new_mp)
     await db.flush()
-    await db.refresh(new_master_profile)
-    return _master_profile_to_dict(new_master_profile)
+    await db.refresh(new_mp)
+    return _master_profile_to_dict(new_mp)
 
 
 @router.patch("/masters/{master_id}", response_model=dict)
@@ -78,40 +87,46 @@ async def update_master(
     master_update: MasterUpdate,
     db: AsyncSession = Depends(get_db)
 ):
-    result = await db.execute(select(MasterProfile).where(MasterProfile.id == master_id))
-    master_profile = result.scalar_one_or_none()
-    if not master_profile:
+    result = await db.execute(
+        select(MasterProfile)
+        .where(MasterProfile.id == master_id)
+        .options(joinedload(MasterProfile.user))
+    )
+    mp = result.scalar_one_or_none()
+    if not mp:
         raise HTTPException(status_code=404, detail="Master not found")
 
     for field, value in master_update.model_dump(exclude_unset=True).items():
         if field == "password" and value:
-            master_profile.user.hashed_password = pwd_context.hash(value)
+            mp.user.hashed_password = pwd_context.hash(value)
         elif field == "name":
-            master_profile.user.name = value
-        elif field == "email":
-            master_profile.user.email = value
+            mp.user.name = value
         elif field == "phone":
-            master_profile.user.phone = value
+            mp.user.phone = value
         elif field == "telegram_username":
-            master_profile.telegram_username = value
+            mp.telegram_username = value
         else:
-            setattr(master_profile, field, value)
+            setattr(mp, field, value)
 
     await db.commit()
-    await db.refresh(master_profile)
-    return _master_profile_to_dict(master_profile)
+    await db.refresh(mp)
+    return _master_profile_to_dict(mp)
 
 
 @router.delete("/masters/{master_id}", status_code=200)
 async def delete_master(master_id: int, db: AsyncSession = Depends(get_db)):
     logger.info("Удаление мастера: id=%s", master_id)
-    result = await db.execute(select(MasterProfile).where(MasterProfile.id == master_id))
-    master_profile = result.scalar_one_or_none()
-    if not master_profile:
+    result = await db.execute(
+        select(MasterProfile)
+        .where(MasterProfile.id == master_id)
+        .options(joinedload(MasterProfile.user))
+    )
+    mp = result.scalar_one_or_none()
+    if not mp:
         logger.warning("Мастер не найден для удаления: id=%s", master_id)
         raise HTTPException(status_code=404, detail="Master not found")
 
-    await db.delete(master_profile)
+    await db.delete(mp)
     await db.commit()
     logger.info("Мастер успешно удалён: id=%s", master_id)
     return {"detail": "Master deleted"}
@@ -126,20 +141,27 @@ async def get_clients(
     offset: int = Query(0, ge=0),
 ):
     result = await db.execute(
-        select(ClientProfile).join(ClientProfile.user).where(User.role == UserRole.CLIENT)
+        select(ClientProfile)
+        .join(ClientProfile.user)
+        .options(joinedload(ClientProfile.user))
+        .order_by(User.name)
         .offset(offset).limit(limit)
     )
-    client_profiles = result.scalars().all()
-    return [_client_profile_to_dict(c) for c in client_profiles]
+    profiles = result.scalars().all()
+    return [_client_profile_to_dict(cp) for cp in profiles]
 
 
 @router.get("/clients/{client_id}", response_model=dict)
 async def get_client(client_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(ClientProfile).where(ClientProfile.id == client_id))
-    client_profile = result.scalar_one_or_none()
-    if not client_profile:
+    result = await db.execute(
+        select(ClientProfile)
+        .where(ClientProfile.id == client_id)
+        .options(joinedload(ClientProfile.user))
+    )
+    cp = result.scalar_one_or_none()
+    if not cp:
         raise HTTPException(status_code=404, detail="Client not found")
-    return _client_profile_to_dict(client_profile)
+    return _client_profile_to_dict(cp)
 
 
 @router.post("/clients/", response_model=dict, status_code=201)
@@ -154,28 +176,33 @@ async def create_client(
     new_user = User(
         name=client.name,
         phone=client.phone,
-        role=UserRole.CLIENT
+        email=client.email,
+        role=UserRole.CLIENT,
     )
     db.add(new_user)
     await db.flush()
     await db.refresh(new_user)
-    
-    new_client_profile = ClientProfile(user_id=new_user.id)
-    db.add(new_client_profile)
+
+    new_cp = ClientProfile(user_id=new_user.id)
+    db.add(new_cp)
     await db.flush()
-    await db.refresh(new_client_profile)
-    return _client_profile_to_dict(new_client_profile)
+    await db.refresh(new_cp)
+    return _client_profile_to_dict(new_cp)
 
 
 @router.delete("/clients/{client_id}", status_code=204)
 async def delete_client(client_id: int, db: AsyncSession = Depends(get_db)):
     logger.info("Удаление клиента: id=%s", client_id)
-    result = await db.execute(select(ClientProfile).where(ClientProfile.id == client_id))
-    client_profile = result.scalar_one_or_none()
-    if not client_profile:
+    result = await db.execute(
+        select(ClientProfile)
+        .where(ClientProfile.id == client_id)
+        .options(joinedload(ClientProfile.user))
+    )
+    cp = result.scalar_one_or_none()
+    if not cp:
         logger.warning("Клиент не найден для удаления: id=%s", client_id)
         raise HTTPException(status_code=404, detail="Client not found")
-    await db.delete(client_profile)
+    await db.delete(cp)
     await db.commit()
     logger.info("Клиент успешно удалён: id=%s", client_id)
     return None
@@ -183,31 +210,31 @@ async def delete_client(client_id: int, db: AsyncSession = Depends(get_db)):
 
 # ─── Helpers ──────────────────────────────────────────────────────────
 
-def _master_profile_to_dict(m):
+def _master_profile_to_dict(mp):
     return {
-        "id": m.id,
-        "user_id": m.user_id,
-        "name": m.user.name,
-        "email": m.user.email,
-        "phone": m.user.phone,
-        "telegram_username": m.telegram_username,
-        "description": m.description,
-        "avatar_url": m.avatar_url,
-        "is_active": m.is_active,
-        "is_admin": m.user.is_admin,
-        "created_at": m.created_at.isoformat() if m.created_at else None,
-        "updated_at": m.updated_at.isoformat() if m.updated_at else None,
+        "id": mp.id,
+        "user_id": mp.user_id,
+        "name": mp.user.name,
+        "email": mp.user.email,
+        "phone": mp.user.phone,
+        "telegram_username": mp.telegram_username,
+        "description": mp.description,
+        "avatar_url": mp.avatar_url,
+        "is_active": mp.is_active,
+        "is_admin": mp.user.is_admin,
+        "created_at": mp.created_at.isoformat() if mp.created_at else None,
+        "updated_at": mp.updated_at.isoformat() if mp.updated_at else None,
     }
 
 
-def _client_profile_to_dict(c):
+def _client_profile_to_dict(cp):
     return {
-        "id": c.id,
-        "user_id": c.user_id,
-        "name": c.user.name,
-        "phone": c.user.phone,
-        "email": c.user.email,
-        "no_show_count": c.no_show_count,
-        "created_at": c.created_at.isoformat() if c.created_at else None,
-        "updated_at": c.updated_at.isoformat() if c.updated_at else None,
+        "id": cp.id,
+        "user_id": cp.user_id,
+        "name": cp.user.name,
+        "phone": cp.user.phone,
+        "email": cp.user.email,
+        "no_show_count": cp.no_show_count,
+        "created_at": cp.created_at.isoformat() if cp.created_at else None,
+        "updated_at": cp.updated_at.isoformat() if cp.updated_at else None,
     }

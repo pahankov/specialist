@@ -67,4 +67,4 @@ app.include_router(booking_router, prefix="/api/v1/appointments", tags=["appoint
 app.include_router(service_router, prefix="/api/v1/services", tags=["services"])
 app.include_router(schedule_router, prefix="/api/v1/working-hours", tags=["working-hours"])
 app.include_router(review_router, prefix="/api/v1/reviews", tags=["reviews"])
-app.include_router(admin_router)
+app.include_router(admin_router)  # admin endpoints (User model, modules/admin/)

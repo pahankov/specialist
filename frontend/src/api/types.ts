@@ -265,3 +265,34 @@ export interface PaginatedCities {
   page: number
   page_size: number
 }
+
+// ─── Unified Auth ────────────────────────────────────────────────────
+
+export interface UnifiedLoginRequest {
+  identifier: string  // email or phone
+  password: string
+}
+
+export interface UnifiedRegisterRequest {
+  name: string
+  email: string
+  phone: string
+  password: string
+  city_id?: number | null
+  telegram_username?: string | null
+  is_master: boolean
+}
+
+export interface UnifiedRegisterResponse {
+  id: number
+  name: string
+  email: string
+  phone: string
+  role: string
+  city_id?: number | null
+  is_master: boolean
+  telegram_username?: string | null
+  is_active: boolean
+  is_verified: boolean
+  created_at?: string
+}

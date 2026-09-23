@@ -6,7 +6,7 @@ import './AppointmentsPage.css'
 type SortField = 'appointment_date' | 'client_name' | 'service_name' | 'service_price' | 'status'
 type SortDirection = 'asc' | 'desc'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+
 
 function AppointmentsPage() {
   const [appointments, setAppointments] = useState<(Appointment & { client_name?: string; client_phone?: string; service_name?: string; service_price?: number })[]>([])
@@ -154,8 +154,7 @@ function AppointmentsPage() {
         <button
           className="btn btn-ghost"
           onClick={() => {
-            const statusParam = filter ? `?status=${filter}` : ''
-            window.open(exportUrl('/api/v1/admin/export/appointments', filter), '_blank')
+            window.open(adminApi.exportAppointments(filter), '_blank')
           }}
         >
           📥 Экспорт CSV

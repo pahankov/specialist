@@ -1,5 +1,5 @@
-import type { Appointment, Client, Service, DaySchedule, MonthlyStats, BookingFormState } from '../../api/types'
-import { formatDate, getAppointmentsForSlot, getSlotStatus, isPast } from './helpers'
+import type { Appointment, Client, DaySchedule, BookingFormState } from '../../api/types'
+import { formatDate } from './helpers'
 import { adminApi } from '../../api/client'
 
 export async function toggleDayWork(
@@ -73,7 +73,7 @@ export function closeBookingForm(
   setBookingForm: (fn: (prev: BookingFormState) => BookingFormState) => void,
   setBookingClients: (clients: Client[]) => void
 ) {
-  setBookingForm({ open: false, date: null, hour: null, clientId: null, serviceId: null, status: 'pending', notes: '' })
+  setBookingForm(() => ({ open: false, date: null, hour: null, clientId: null, serviceId: null, status: 'pending', notes: '' }))
   setBookingClients([])
 }
 

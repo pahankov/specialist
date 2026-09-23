@@ -66,7 +66,8 @@ def test_master_data():
         "email": "test_master@example.com",
         "password": "SecurePass123!",
         "phone": "+79990001122",
-        "telegram_username": "test_master"
+        "telegram_username": "test_master",
+        "role": "master"
     }
 
 

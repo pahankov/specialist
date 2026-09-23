@@ -77,7 +77,7 @@ function generateHourSlots(
   hours: { start: number; end: number },
   appointments: Appointment[],
   activeHours: Record<string, boolean>,
-  dayPast: boolean,
+  _dayPast: boolean,
   onToggle: (dateStr: string, hour: number) => void,
   onOpenBooking: (date: Date, hour: number) => void
 ): React.ReactNode[] {
@@ -87,7 +87,6 @@ function generateHourSlots(
   for (let h = hours.start; h < hours.end; h++) {
     const slotsForHour = getAppointmentsForSlot(appointments, date, h)
     const status = getSlotStatus(slotsForHour)
-    const cfg = STATUS_CONFIG[status]
     const past = isSlotPast(date, h)
     const hourActive = !!activeHours[`${dateStr}-${h}`]
 

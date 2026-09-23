@@ -14,9 +14,9 @@ from app.database import Base
 
 class UserRole(str, PyEnum):
     """User roles in the system."""
-    MASTER = "master"
-    CLIENT = "client"
-    ADMIN = "admin"
+    MASTER = "MASTER"
+    CLIENT = "CLIENT"
+    ADMIN = "ADMIN"
 
 
 class User(Base):

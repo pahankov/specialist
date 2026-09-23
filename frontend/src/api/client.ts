@@ -1,4 +1,4 @@
-import axios, { AxiosInstance, InternalAxiosRequestConfig, AxiosResponse } from 'axios'
+import axios, { AxiosInstance, InternalAxiosRequestConfig } from 'axios'
 import type {
   Master,
   Service,
@@ -12,12 +12,11 @@ import type {
   Client,
   LoginResponse,
   DashboardStats,
-  AppointmentWithClient,
   AdminLoginResponse,
   AdminStats,
   Country,
   City,
-  PaginatedCities,
+  UnifiedRegisterResponse,
 } from './types'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -194,6 +193,18 @@ export const authApi = {
   verifyOtp: (phone: string, code: string) =>
     apiClient.post<LoginResponse>('/api/v1/auth/verify-otp', { phone, code }),
   logout: () => apiClient.post('/api/v1/auth/logout'),
+  loginUnified: (identifier: string, password: string) =>
+    apiClient.post<LoginResponse>('/api/v1/auth/login-unified', { identifier, password }),
+  registerUnified: (data: {
+    name: string
+    email: string
+    phone: string
+    password: string
+    city_id?: number | null
+    telegram_username?: string | null
+    is_master: boolean
+  }) =>
+    apiClient.post<UnifiedRegisterResponse>('/api/v1/auth/register-unified', data),
 }
 
 // ─── Geography API ─────────────────────────────────────────────────
@@ -202,6 +213,8 @@ export const citiesApi = {
   getCountries: () => apiClient.get<Country[]>('/api/v1/countries/'),
   getCities: (params?: { country_id?: number; search?: string; page?: number; page_size?: number }) =>
     apiClient.get<City[]>('/api/v1/cities/', { params }),
+  searchCities: (q: string, countryId?: number, limit = 20) =>
+    apiClient.get<City[]>('/api/v1/cities/search/', { params: { q, country_id: countryId, limit } }),
   getCity: (id: number) => apiClient.get<City>(`/api/v1/cities/${id}`),
 }
 

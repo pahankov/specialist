@@ -113,12 +113,18 @@ async def _get_master_stats(master: User, db: AsyncSession):
 
 async def _get_global_stats(db: AsyncSession):
     """Get global statistics across all masters (superadmin only)."""
-    # Total masters
-    total_masters_result = await db.execute(select(func.count(MasterProfile.id)))
+    # Total masters (exclude superadmins — they are platform admins, not service providers)
+    total_masters_result = await db.execute(
+        select(func.count(MasterProfile.id))
+        .join(MasterProfile.user)
+        .where(User.role == "MASTER")
+    )
     total_masters = total_masters_result.scalar() or 0
     
     active_masters_result = await db.execute(
-        select(func.count(MasterProfile.id)).where(MasterProfile.is_active == True)
+        select(func.count(MasterProfile.id))
+        .join(MasterProfile.user)
+        .where(MasterProfile.is_active == True, User.role == "MASTER")
     )
     active_masters = active_masters_result.scalar() or 0
 
