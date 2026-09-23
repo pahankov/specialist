@@ -1,8 +1,7 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { HomePage, BookingPage } from './pages/public'
-import { LoginPage, AdminLayout, DashboardPage, AppointmentsPage, ServicesPage, ClientsPage, SchedulePage, LogsPage } from './pages/admin'
+import { AdminLayout, DashboardPage, AppointmentsPage, ServicesPage, ClientsPage, SchedulePage, LogsPage } from './pages/admin'
 import MastersPage from './pages/admin/MastersPage'
-import GlobalStatsPage from './pages/admin/GlobalStatsPage'
 import ErrorBoundary from './components/ErrorBoundary'
 import './App.css'
 
@@ -41,7 +40,6 @@ function App() {
     { path: '/admin/clients', label: '👥 Все клиенты' },
     { path: '/admin/schedule', label: '🕐 Расписание' },
     { path: '/admin/logs', label: '📋 Логи' },
-    { path: '/admin/global-stats', label: '📈 Статистика' },
   ]
 
   // Regular master navigation items
@@ -63,8 +61,8 @@ function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/booking" element={<BookingPage />} />
 
-        {/* Master/Superadmin login */}
-        <Route path="/admin/login" element={<LoginPage />} />
+        {/* Master/Superadmin login — redirect to home (LoginModal opens from there) */}
+        <Route path="/admin/login" element={<Navigate to="/" replace />} />
 
         {/* Protected admin routes */}
         <Route
@@ -84,10 +82,7 @@ function App() {
           <Route path="logs" element={<LogsPage />} />
           {/* Superadmin-only routes */}
           {isAdminUser && (
-            <>
-              <Route path="masters" element={<MastersPage />} />
-              <Route path="global-stats" element={<GlobalStatsPage />} />
-            </>
+            <Route path="masters" element={<MastersPage />} />
           )}
         </Route>
 

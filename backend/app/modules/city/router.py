@@ -79,6 +79,23 @@ async def get_cities(
     return cities
 
 
+@router.get("/cities/search/", response_model=List[CityResponse])
+async def search_cities(
+    q: str = Query(..., min_length=1, description="Search query"),
+    country_id: Optional[int] = Query(None, description="Filter by country ID"),
+    limit: int = Query(20, ge=1, le=100, description="Max results"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Search cities by name with optional country filter."""
+    query = select(City).where(func.lower(City.name_ru).like(f"%{q.lower()}%"))
+    if country_id is not None:
+        query = query.where(City.country_id == country_id)
+    query = query.where(City.is_active == True)
+    query = query.order_by(City.name_ru).limit(limit)
+    result = await db.execute(query)
+    return result.scalars().all()
+
+
 @router.get("/cities/{city_id}", response_model=CityResponse)
 async def get_city(city_id: int, db: AsyncSession = Depends(get_db)):
     """Get a single city by ID."""

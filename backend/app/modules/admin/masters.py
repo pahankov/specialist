@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, joinedload
 from typing import List, Optional
 from passlib.context import CryptContext
 from datetime import datetime, timezone
@@ -35,7 +35,6 @@ async def get_all_masters(
     db: AsyncSession = Depends(get_db)
 ):
     """Get all masters (superadmin only)."""
-    # Reject empty strings — they cause 422 in some FastAPI/axios combos
     if search == '':
         search = None
     if filter_active == '':
@@ -45,7 +44,15 @@ async def get_all_masters(
 
     logger.info("GET /admin/masters: search=%r is_active=%r is_admin=%r limit=%d offset=%d",
                 search, filter_active, filter_admin, limit, offset)
-    query = select(MasterProfile).join(MasterProfile.user).where(User.role == UserRole.MASTER)
+    
+    # Query Users with their MasterProfile using joinedload
+    from sqlalchemy.orm import joinedload
+    query = (
+        select(User)
+        .join(MasterProfile)
+        .options(joinedload(User.master_profile))
+        .where(User.role == UserRole.MASTER)
+    )
     
     if search:
         search_term = f"%{search}%"
@@ -61,7 +68,25 @@ async def get_all_masters(
     
     query = query.order_by(MasterProfile.created_at.desc()).offset(offset).limit(limit)
     result = await db.execute(query)
-    return result.scalars().all()
+    users = result.scalars().unique().all()
+    
+    # Convert User + MasterProfile to response dict
+    return [
+        {
+            "id": u.master_profile.id,
+            "user_id": u.id,
+            "name": u.name,
+            "email": u.email,
+            "phone": u.phone,
+            "telegram_username": u.master_profile.telegram_username,
+            "description": u.master_profile.description,
+            "is_active": u.master_profile.is_active,
+            "is_admin": u.is_admin,
+            "created_at": u.master_profile.created_at,
+            "updated_at": u.master_profile.updated_at,
+        }
+        for u in users
+    ]
 
 
 @router.get("/{master_id}", response_model=MasterResponse)
@@ -71,24 +96,44 @@ async def get_master(
     db: AsyncSession = Depends(get_db)
 ):
     """Get a specific master by ID."""
-    result = await db.execute(select(MasterProfile).where(MasterProfile.id == master_id))
+    result = await db.execute(
+        select(MasterProfile)
+        .options(joinedload(MasterProfile.user))
+        .where(MasterProfile.id == master_id)
+    )
     master_profile = result.scalar_one_or_none()
     if not master_profile:
         raise HTTPException(status_code=404, detail="Мастер не найден")
-    return master_profile
+    
+    user = master_profile.user
+    return {
+        "id": master_profile.id,
+        "user_id": user.id,
+        "name": user.name,
+        "email": user.email,
+        "phone": user.phone,
+        "telegram_username": master_profile.telegram_username,
+        "description": master_profile.description,
+        "is_active": master_profile.is_active,
+        "is_admin": user.is_admin,
+        "created_at": master_profile.created_at,
+        "updated_at": master_profile.updated_at,
+    }
 
 
-@router.post("", response_model=MasterResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def create_master(
     data: MasterCreate,
     super_admin: User = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new master (superadmin only)."""
+    # Check if master with this email already exists
     result = await db.execute(select(User).where(User.email == data.email, User.role == UserRole.MASTER))
     if result.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Мастер с таким email уже существует")
     
+    # Create user
     new_user = User(
         name=data.name,
         email=data.email,
@@ -100,14 +145,29 @@ async def create_master(
     await db.flush()
     await db.refresh(new_user)
     
+    # Create master profile
     new_master_profile = MasterProfile(user_id=new_user.id)
     db.add(new_master_profile)
     await db.flush()
     await db.refresh(new_master_profile)
-    await log_action(db, super_admin.id, "create", "master", new_master_profile.id, data.email, level="info")
+    
     await db.commit()
     logger.info("Суперпользователь %s создал мастера: %s", super_admin.email, data.email)
-    return new_master_profile
+    
+    # Return combined response
+    return {
+        "id": new_master_profile.id,
+        "user_id": new_user.id,
+        "name": new_user.name,
+        "email": new_user.email,
+        "phone": new_user.phone,
+        "telegram_username": new_master_profile.telegram_username,
+        "description": new_master_profile.description,
+        "is_active": new_master_profile.is_active,
+        "is_admin": new_user.is_admin,
+        "created_at": new_master_profile.created_at,
+        "updated_at": new_master_profile.updated_at,
+    }
 
 
 @router.patch("/{master_id}", response_model=MasterResponse)
@@ -118,7 +178,11 @@ async def update_master(
     db: AsyncSession = Depends(get_db)
 ):
     """Update a master (superadmin only)."""
-    result = await db.execute(select(MasterProfile).where(MasterProfile.id == master_id))
+    result = await db.execute(
+        select(MasterProfile)
+        .options(joinedload(MasterProfile.user))
+        .where(MasterProfile.id == master_id)
+    )
     master_profile = result.scalar_one_or_none()
     if not master_profile:
         raise HTTPException(status_code=404, detail="Мастер не найден")
@@ -144,12 +208,24 @@ async def update_master(
             setattr(master_profile, field, value)
             updated_fields.append(field)
     
-    await log_action(db, super_admin.id, "update", "master", master_id, 
-                     f"Обновлены поля: {', '.join(updated_fields)}", level="info")
     await db.commit()
     await db.refresh(master_profile)
     logger.info("Суперпользователь %s обновил мастера %s", super_admin.email, master_profile.user.email)
-    return master_profile
+    
+    user = master_profile.user
+    return {
+        "id": master_profile.id,
+        "user_id": user.id,
+        "name": user.name,
+        "email": user.email,
+        "phone": user.phone,
+        "telegram_username": master_profile.telegram_username,
+        "description": master_profile.description,
+        "is_active": master_profile.is_active,
+        "is_admin": user.is_admin,
+        "created_at": master_profile.created_at,
+        "updated_at": master_profile.updated_at,
+    }
 
 
 @router.delete("/{master_id}", status_code=200)
@@ -168,7 +244,7 @@ async def delete_master(
     if master_profile.user.id == super_admin.id:
         raise HTTPException(status_code=400, detail="Нельзя удалить себя")
     
-    await log_action(db, super_admin.id, "delete", "master", master_id, master_profile.user.email, level="warning")
+    await log_action(db, super_admin.master_profile.id, "delete", "master", master_id, master_profile.user.email, level="warning")
     await db.delete(master_profile)
     await db.commit()
     logger.info("Суперпользователь %s удалил мастера: %s", super_admin.email, master_profile.user.email)
@@ -182,7 +258,11 @@ async def toggle_master_active(
     db: AsyncSession = Depends(get_db)
 ):
     """Toggle master active/inactive status (superadmin only)."""
-    result = await db.execute(select(MasterProfile).where(MasterProfile.id == master_id))
+    result = await db.execute(
+        select(MasterProfile)
+        .options(joinedload(MasterProfile.user))
+        .where(MasterProfile.id == master_id)
+    )
     master_profile = result.scalar_one_or_none()
     if not master_profile:
         raise HTTPException(status_code=404, detail="Мастер не найден")
@@ -192,12 +272,24 @@ async def toggle_master_active(
     
     master_profile.is_active = not master_profile.is_active
     status_str = "заблокирован" if not master_profile.is_active else "разблокирован"
-    await log_action(db, super_admin.id, "toggle_active", "master", master_id, 
-                     f"Мастер {status_str}", level="warning")
     await db.commit()
     await db.refresh(master_profile)
     logger.info("Суперпользователь %s %s мастера: %s", super_admin.email, status_str, master_profile.user.email)
-    return master_profile
+    
+    user = master_profile.user
+    return {
+        "id": master_profile.id,
+        "user_id": user.id,
+        "name": user.name,
+        "email": user.email,
+        "phone": user.phone,
+        "telegram_username": master_profile.telegram_username,
+        "description": master_profile.description,
+        "is_active": master_profile.is_active,
+        "is_admin": user.is_admin,
+        "created_at": master_profile.created_at,
+        "updated_at": master_profile.updated_at,
+    }
 
 
 @router.post("/{master_id}/toggle-admin", response_model=MasterResponse)
@@ -207,7 +299,11 @@ async def toggle_master_admin(
     db: AsyncSession = Depends(get_db)
 ):
     """Toggle master admin status (superadmin only)."""
-    result = await db.execute(select(MasterProfile).where(MasterProfile.id == master_id))
+    result = await db.execute(
+        select(MasterProfile)
+        .options(joinedload(MasterProfile.user))
+        .where(MasterProfile.id == master_id)
+    )
     master_profile = result.scalar_one_or_none()
     if not master_profile:
         raise HTTPException(status_code=404, detail="Мастер не найден")
@@ -223,12 +319,24 @@ async def toggle_master_admin(
         master_profile.user.role = UserRole.ADMIN
         role_str = "наделён правами суперпользователя"
     
-    await log_action(db, super_admin.id, "toggle_admin", "master", master_id, 
-                     f"Мастер {role_str}", level="warning")
     await db.commit()
     await db.refresh(master_profile)
     logger.info("Суперпользователь %s %s мастера: %s", super_admin.email, role_str, master_profile.user.email)
-    return master_profile
+    
+    user = master_profile.user
+    return {
+        "id": master_profile.id,
+        "user_id": user.id,
+        "name": user.name,
+        "email": user.email,
+        "phone": user.phone,
+        "telegram_username": master_profile.telegram_username,
+        "description": master_profile.description,
+        "is_active": master_profile.is_active,
+        "is_admin": user.is_admin,
+        "created_at": master_profile.created_at,
+        "updated_at": master_profile.updated_at,
+    }
 
 
 @router.get("/{master_id}/stats")
@@ -238,7 +346,11 @@ async def get_master_stats(
     db: AsyncSession = Depends(get_db)
 ):
     """Get statistics for a specific master (superadmin only)."""
-    result = await db.execute(select(MasterProfile).where(MasterProfile.id == master_id))
+    result = await db.execute(
+        select(MasterProfile)
+        .options(joinedload(MasterProfile.user))
+        .where(MasterProfile.id == master_id)
+    )
     master_profile = result.scalar_one_or_none()
     if not master_profile:
         raise HTTPException(status_code=404, detail="Мастер не найден")

@@ -92,7 +92,7 @@ async def get_current_client(
         user_id: int = int(payload.get("sub"))
         token_role = payload.get("role")
 
-        if user_id is None or token_role != "client":
+        if user_id is None or token_role != "CLIENT":
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid token payload"

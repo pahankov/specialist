@@ -2,59 +2,78 @@
 from fastapi import APIRouter, Depends, Query, Response, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import aliased
 from typing import List, Optional
 from datetime import datetime, timedelta
 from app.modules.admin.base import (
-    get_db, Appointment, Client, Service, Master, require_master,
+    get_db, Appointment, ClientProfile, User, Service, MasterProfile, require_master,
     get_owned_or_404, log_action, AppointmentWithDetails, AdminBookingCreate,
     AppointmentResponse, AppointmentCreate
 )
+from app.models.user import UserRole
 from sqlalchemy.orm import selectinload
 
 router = APIRouter()
 
+# Aliases for the same table joined multiple times
+_ClientUser = aliased(User, name="client_user")
+_MasterUser = aliased(User, name="master_user")
 
-async def _find_or_create_client(db: AsyncSession, phone: str, name: str) -> Client:
+
+async def _find_or_create_client(db: AsyncSession, phone: str, name: str) -> User:
     """Helper: find existing client by phone or create new one."""
     from app.schemas.client import normalize_phone
     normalized = normalize_phone(phone)
-    result = await db.execute(select(Client).where(Client.phone == normalized))
-    client = result.scalar_one_or_none()
-    if not client:
-        client = Client(name=name, phone=normalized)
-        db.add(client)
+    result = await db.execute(select(User).where(User.phone == normalized))
+    user = result.scalar_one_or_none()
+    if not user:
+        user = User(name=name, phone=normalized, role="CLIENT")
+        db.add(user)
+        client_profile = ClientProfile(user_id=user.id)
+        db.add(client_profile)
         await db.commit()
-        await db.refresh(client)
-    return client
+        await db.refresh(user)
+    return user
 
 
 @router.get("/appointments", response_model=List[AppointmentWithDetails])
 async def get_admin_appointments(
-    master: Master = Depends(require_master),
+    master: User = Depends(require_master),
     status: Optional[str] = Query(None),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get appointments with client and service details.
-    Superadmins see all appointments; regular masters see only their own.
-    """
-    if master.is_admin:
+    """Get appointments with client and service details."""
+    is_admin = master.role == UserRole.ADMIN
+    
+    if is_admin:
         query = (
-            select(Appointment, Client.name.label('client_name'), Client.phone.label('client_phone'),
+            select(Appointment, _ClientUser.name.label('client_name'), _ClientUser.phone.label('client_phone'),
                    Service.name.label('service_name'), Service.price.label('service_price'),
-                   Master.name.label('master_name'))
-            .join(Client, Appointment.client_id == Client.id, isouter=True)
+                   _MasterUser.name.label('master_name'))
+            .join(ClientProfile, Appointment.client_id == ClientProfile.id, isouter=True)
+            .join(_ClientUser, ClientProfile.user_id == _ClientUser.id, isouter=True)
             .join(Service, Appointment.service_id == Service.id, isouter=True)
-            .join(Master, Appointment.master_id == Master.id, isouter=True)
+            .join(MasterProfile, Appointment.master_id == MasterProfile.id, isouter=True)
+            .join(_MasterUser, MasterProfile.user_id == _MasterUser.id, isouter=True)
         )
     else:
+        # Regular master — get their master_profile first
+        result = await db.execute(
+            select(MasterProfile).where(MasterProfile.user_id == master.id)
+        )
+        mp = result.scalar_one_or_none()
+        if not mp:
+            return []
+        
         query = (
-            select(Appointment, Client.name.label('client_name'), Client.phone.label('client_phone'),
+            select(Appointment, User.name.label('client_name'), User.phone.label('client_phone'),
                    Service.name.label('service_name'), Service.price.label('service_price'))
-            .join(Client, Appointment.client_id == Client.id, isouter=True)
+            .join(ClientProfile, Appointment.client_id == ClientProfile.id, isouter=True)
+            .join(User, ClientProfile.user_id == User.id, isouter=True)
             .join(Service, Appointment.service_id == Service.id, isouter=True)
-            .where(Appointment.master_id == master.id)
+            .where(Appointment.master_id == mp.id)
         )
     if status:
         query = query.where(Appointment.status == status)
@@ -85,11 +104,15 @@ async def get_admin_appointments(
 @router.post("/appointments", response_model=AppointmentResponse, status_code=201)
 async def create_appointment(
     data: AppointmentCreate,
-    master: Master = Depends(require_master),
+    master: User = Depends(require_master),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new appointment."""
-    if data.master_id != master.id:
+    result = await db.execute(
+        select(MasterProfile).where(MasterProfile.user_id == master.id)
+    )
+    mp = result.scalar_one_or_none()
+    if not mp or data.master_id != mp.id:
         raise HTTPException(status_code=403, detail="Not your master")
     client = await _find_or_create_client(db, data.client_phone, data.client_name)
     new_appointment = Appointment(
@@ -107,27 +130,34 @@ async def create_appointment(
 @router.post("/appointments/book", response_model=AppointmentResponse, status_code=201)
 async def book_appointment(
     data: AdminBookingCreate,
-    master: Master = Depends(require_master),
+    master: User = Depends(require_master),
     db: AsyncSession = Depends(get_db)
 ):
     """Book an appointment from admin panel (select client from DB)."""
+    result = await db.execute(
+        select(MasterProfile).where(MasterProfile.user_id == master.id)
+    )
+    mp = result.scalar_one_or_none()
+    if not mp:
+        raise HTTPException(status_code=403, detail="Not a master")
+    
     service_result = await db.execute(
-        select(Service).where(Service.id == data.service_id, Service.master_id == master.id)
+        select(Service).where(Service.id == data.service_id, Service.master_id == mp.id)
     )
     service = service_result.scalar_one_or_none()
     if not service:
         raise HTTPException(status_code=404, detail="Услуга не найдена")
 
-    client_result = await db.execute(select(Client).where(Client.id == data.client_id))
-    client = client_result.scalar_one_or_none()
-    if not client:
+    client_result = await db.execute(select(User).where(User.id == data.client_id))
+    user = client_result.scalar_one_or_none()
+    if not user or user.role.value != "CLIENT":
         raise HTTPException(status_code=404, detail="Клиент не найден")
 
     service_end = data.appointment_date + timedelta(minutes=service.duration_minutes)
     conflict_result = await db.execute(
         select(Appointment).join(Service, Appointment.service_id == Service.id)
         .where(
-            Appointment.master_id == master.id, Appointment.status != "cancelled",
+            Appointment.master_id == mp.id, Appointment.status != "cancelled",
             Appointment.appointment_date < service_end,
             Appointment.appointment_date + timedelta(minutes=service.duration_minutes) > data.appointment_date
         ).limit(1)
@@ -140,7 +170,7 @@ async def book_appointment(
         notes = f"{notes}. {data.notes}"
 
     new_appointment = Appointment(
-        master_id=master.id, service_id=data.service_id, client_id=data.client_id,
+        master_id=mp.id, service_id=data.service_id, client_id=user.client_profile.id,
         appointment_date=data.appointment_date, status=data.status, notes=notes
     )
     db.add(new_appointment)
@@ -153,7 +183,7 @@ async def book_appointment(
 async def get_appointments_by_date(
     date_from: str = Query(...),
     date_to: str = Query(...),
-    master: Master = Depends(require_master),
+    master: User = Depends(require_master),
     db: AsyncSession = Depends(get_db)
 ):
     """Get appointments for a date range."""
@@ -161,16 +191,17 @@ async def get_appointments_by_date(
     end_dt = datetime.strptime(date_to, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=None)
     query = (
         select(Appointment)
-        .options(selectinload(Appointment.client), selectinload(Appointment.service))
-        .where(Appointment.master_id == master.id,
+        .options(selectinload(Appointment.client_profile).joinedload(ClientProfile.user))
+        .options(selectinload(Appointment.service))
+        .where(Appointment.master_id == master.master_profile.id,
                Appointment.appointment_date >= start_dt, Appointment.appointment_date <= end_dt)
         .order_by(Appointment.appointment_date)
     )
     result = await db.execute(query)
     appointments = result.scalars().all()
     return [
-        {"id": a.id, "client_name": a.client.name if a.client else "Unknown",
-         "client_phone": a.client.phone if a.client else "",
+        {"id": a.id, "client_name": a.client_profile.user.name if a.client_profile else "Unknown",
+         "client_phone": a.client_profile.user.phone if a.client_profile else "",
          "service_name": a.service.name if a.service else "",
          "appointment_date": a.appointment_date.isoformat(), "status": a.status}
         for a in appointments
@@ -180,11 +211,18 @@ async def get_appointments_by_date(
 @router.patch("/appointments/{appointment_id}/confirm")
 async def confirm_appointment(
     appointment_id: int,
-    master: Master = Depends(require_master),
+    master: User = Depends(require_master),
     db: AsyncSession = Depends(get_db)
 ):
     """Confirm an appointment."""
-    appointment = await get_owned_or_404(db, Appointment, appointment_id, master.id)
+    result = await db.execute(
+        select(MasterProfile).where(MasterProfile.user_id == master.id)
+    )
+    mp = result.scalar_one_or_none()
+    if not mp:
+        raise HTTPException(status_code=403, detail="Not a master")
+    
+    appointment = await get_owned_or_404(db, Appointment, appointment_id, mp.id)
     appointment.status = "confirmed"
     await log_action(db, master.id, "confirm", "appointment", appointment.id, "Статус изменён на confirmed", level="info")
     await db.commit()
@@ -196,11 +234,18 @@ async def confirm_appointment(
 async def cancel_appointment(
     appointment_id: int,
     reason: Optional[str] = Query(None),
-    master: Master = Depends(require_master),
+    master: User = Depends(require_master),
     db: AsyncSession = Depends(get_db)
 ):
     """Cancel an appointment."""
-    appointment = await get_owned_or_404(db, Appointment, appointment_id, master.id)
+    result = await db.execute(
+        select(MasterProfile).where(MasterProfile.user_id == master.id)
+    )
+    mp = result.scalar_one_or_none()
+    if not mp:
+        raise HTTPException(status_code=403, detail="Not a master")
+    
+    appointment = await get_owned_or_404(db, Appointment, appointment_id, mp.id)
     appointment.status = "cancelled"
     if reason:
         appointment.notes = f"{appointment.notes}\nОтмена: {reason}" if appointment.notes else f"Отмена: {reason}"
@@ -213,11 +258,18 @@ async def cancel_appointment(
 @router.patch("/appointments/{appointment_id}/complete")
 async def complete_appointment(
     appointment_id: int,
-    master: Master = Depends(require_master),
+    master: User = Depends(require_master),
     db: AsyncSession = Depends(get_db)
 ):
     """Mark an appointment as completed."""
-    appointment = await get_owned_or_404(db, Appointment, appointment_id, master.id)
+    result = await db.execute(
+        select(MasterProfile).where(MasterProfile.user_id == master.id)
+    )
+    mp = result.scalar_one_or_none()
+    if not mp:
+        raise HTTPException(status_code=403, detail="Not a master")
+    
+    appointment = await get_owned_or_404(db, Appointment, appointment_id, mp.id)
     appointment.status = "completed"
     await log_action(db, master.id, "complete", "appointment", appointment.id, level="info")
     await db.commit()
@@ -228,11 +280,18 @@ async def complete_appointment(
 @router.delete("/appointments/{appointment_id}", status_code=204)
 async def delete_appointment(
     appointment_id: int,
-    master: Master = Depends(require_master),
+    master: User = Depends(require_master),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete an appointment."""
-    appointment = await get_owned_or_404(db, Appointment, appointment_id, master.id)
+    result = await db.execute(
+        select(MasterProfile).where(MasterProfile.user_id == master.id)
+    )
+    mp = result.scalar_one_or_none()
+    if not mp:
+        raise HTTPException(status_code=403, detail="Not a master")
+    
+    appointment = await get_owned_or_404(db, Appointment, appointment_id, mp.id)
     await log_action(db, master.id, "delete", "appointment", appointment_id, level="warning")
     await db.delete(appointment)
     await db.commit()
@@ -242,18 +301,26 @@ async def delete_appointment(
 @router.patch("/appointments/{appointment_id}/no-show")
 async def mark_no_show(
     appointment_id: int,
-    master: Master = Depends(require_master),
+    master: User = Depends(require_master),
     db: AsyncSession = Depends(get_db)
 ):
     """Mark an appointment as no-show. Increments client's no_show_count."""
-    appointment = await get_owned_or_404(db, Appointment, appointment_id, master.id)
+    result = await db.execute(
+        select(MasterProfile).where(MasterProfile.user_id == master.id)
+    )
+    mp = result.scalar_one_or_none()
+    if not mp:
+        raise HTTPException(status_code=403, detail="Not a master")
+    
+    appointment = await get_owned_or_404(db, Appointment, appointment_id, mp.id)
     appointment.status = "cancelled"
     appointment.notes = f"{appointment.notes}\n\nНеявка" if appointment.notes else "Неявка"
     await log_action(db, master.id, "no-show", "appointment", appointment_id, level="warning")
 
-    # Increment no-show count for the client
     if appointment.client_id:
-        client_result = await db.execute(select(Client).where(Client.id == appointment.client_id))
+        client_result = await db.execute(
+            select(ClientProfile).where(ClientProfile.id == appointment.client_id)
+        )
         client = client_result.scalar_one_or_none()
         if client:
             client.no_show_count = (client.no_show_count or 0) + 1

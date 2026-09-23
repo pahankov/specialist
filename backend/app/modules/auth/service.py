@@ -113,6 +113,7 @@ async def login_master(email: str, password: str, db: AsyncSession) -> tuple[str
         "sub": str(user.id),
         "role": user.role.value,
         "name": user.name,
+        "is_admin": user.role == UserRole.ADMIN,
     })
 
     refresh_token_value, expires_at = create_refresh_token_payload(user.id, user.email or "")
@@ -207,6 +208,7 @@ async def verify_otp(phone: str, code: str, db: AsyncSession) -> tuple[str, User
         "sub": str(user.id),
         "role": user.role.value,
         "name": user.name,
+        "is_admin": user.role == UserRole.ADMIN,
     })
 
     refresh_token_value, expires_at = create_refresh_token_payload(user.id, user.email or "")
@@ -237,4 +239,51 @@ async def login_client_legacy(phone: str, db: AsyncSession) -> tuple[str, User]:
         "name": user.name,
     })
     logger.info("Клиент успешно вошёл в систему: %s", phone)
+    return access_token, user
+
+
+# ─── Unified Login ───────────────────────────────────────────────────
+
+async def login_unified(identifier: str, password: str, db: AsyncSession) -> tuple[str, User]:
+    """Login with email OR phone + password. Works for both clients and masters."""
+    logger.info("Unified login attempt: %s", identifier)
+
+    # Try to find user by email
+    result = await db.execute(select(User).where(User.email == identifier))
+    user = result.scalar_one_or_none()
+
+    # If not found by email, try by phone
+    if not user:
+        result = await db.execute(select(User).where(User.phone == identifier))
+        user = result.scalar_one_or_none()
+
+    if not user:
+        logger.warning("User not found: %s", identifier)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Неверный email/телефон или пароль"
+        )
+
+    if not user.hashed_password or not verify_password(password, user.hashed_password):
+        logger.warning("Invalid password for: %s", identifier)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Неверный email/телефон или пароль"
+        )
+
+    from app.modules.auth.token import create_access_token
+    from app.modules.auth.token import create_refresh_token_payload
+
+    access_token = create_access_token({
+        "sub": str(user.id),
+        "role": user.role.value,
+        "name": user.name,
+        "is_admin": user.role == UserRole.ADMIN,
+    })
+
+    refresh_token_value, expires_at = create_refresh_token_payload(user.id, user.email or "")
+    db.add(RefreshToken(user_id=user.id, token=refresh_token_value, expires_at=expires_at))
+    await db.commit()
+
+    logger.info("User successfully logged in: %s", identifier)
     return access_token, user

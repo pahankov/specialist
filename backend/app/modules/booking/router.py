@@ -58,7 +58,9 @@ async def create_appointment(
         raise HTTPException(status_code=403, detail="Not your master")
 
     # Check or create client
-    client_result = await db.execute(select(ClientProfile).where(ClientProfile.user.has(phone=appointment.client_phone)))
+    client_result = await db.execute(
+        select(ClientProfile).join(ClientProfile.user).where(User.phone == appointment.client_phone)
+    )
     client = client_result.scalar_one_or_none()
 
     if not client:
@@ -227,7 +229,9 @@ async def public_booking(booking: PublicBookingCreate, db: AsyncSession = Depend
         raise HTTPException(status_code=409, detail="Это время уже занято")
 
     # Check or create client
-    client_result = await db.execute(select(ClientProfile).where(ClientProfile.user.has(phone=booking.client_phone)))
+    client_result = await db.execute(
+        select(ClientProfile).join(ClientProfile.user).where(User.phone == booking.client_phone)
+    )
     client = client_result.scalar_one_or_none()
 
     if not client:

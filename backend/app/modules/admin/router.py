@@ -15,7 +15,6 @@ from app.modules.admin.audit import router as audit_router
 from app.modules.admin.export import router as export_router
 from app.modules.admin.blocked_slots import router as blocked_slots_router
 from app.modules.admin.masters import router as masters_router
-from app.modules.admin.global_stats import router as global_stats_router
 
 router.include_router(dashboard_router)
 router.include_router(appointments_router)
@@ -24,6 +23,5 @@ router.include_router(clients_router)
 router.include_router(working_hours_router)
 router.include_router(blocked_slots_router)
 router.include_router(masters_router)
-router.include_router(global_stats_router)
 router.include_router(audit_router)
 router.include_router(export_router)

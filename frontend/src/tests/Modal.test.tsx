@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import Modal from '../components/common/Modal'
 
 describe('Modal', () => {
@@ -44,8 +44,8 @@ describe('Modal', () => {
         Content
       </Modal>
     )
-    const overlay = document.querySelector('.modal-overlay')
-    overlay?.click()
+    const overlay = document.querySelector('.modal-overlay') as HTMLElement
+    overlay.click()
     expect(onClose).toHaveBeenCalled()
   })
 
@@ -63,8 +63,8 @@ describe('Modal', () => {
         </div>
       </Modal>
     )
-    const modalBody = document.querySelector('.modal-body')
-    modalBody?.click()
+    const modalBody = document.querySelector('.modal-body') as HTMLElement
+    modalBody.click()
     expect(onClose).not.toHaveBeenCalled()
   })
 })

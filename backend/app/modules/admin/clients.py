@@ -54,7 +54,7 @@ async def create_admin_client(
         if result.scalar_one_or_none():
             raise HTTPException(status_code=400, detail="Клиент с таким email уже существует")
     
-    user = User(name=data.name, phone=data.phone, email=data.email, role="client")
+    user = User(name=data.name, phone=data.phone, email=data.email, role="CLIENT")
     db.add(user)
     await db.flush()
     

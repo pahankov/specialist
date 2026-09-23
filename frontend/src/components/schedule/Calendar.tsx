@@ -36,7 +36,7 @@ export function Calendar({
   const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pressDateRef = useRef<Date | null>(null)
 
-  const handlePointerDown = useCallback((e: PointerEvent, date: Date) => {
+  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLElement>, date: Date) => {
     const tile = (e.target as HTMLElement).closest('.calendar-day')
     if (!tile || isPast(date)) return
 
