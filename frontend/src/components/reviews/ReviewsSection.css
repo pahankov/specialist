@@ -1,0 +1,42 @@
+.reviews-section {
+  padding: 4rem 0;
+  background: #f7fafc;
+}
+
+.reviews-section h2 {
+  font-size: 2rem;
+  margin-bottom: 1.5rem;
+  text-align: center;
+  color: #2d3748;
+}
+
+.reviews-summary {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.reviews-average {
+  font-size: 1.5rem;
+  color: #f6c23e;
+  letter-spacing: 2px;
+}
+
+.reviews-count {
+  font-size: 1rem;
+  color: #718096;
+}
+
+.reviews-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+@media (max-width: 768px) {
+  .reviews-grid {
+    grid-template-columns: 1fr;
+  }
+}

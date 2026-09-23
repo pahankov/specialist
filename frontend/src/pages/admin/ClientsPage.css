@@ -1,0 +1,6 @@
+.clients-table { width: 100%; border-collapse: collapse; }
+.clients-table th, .clients-table td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #f0f0f0; }
+.clients-table th { font-weight: 600; color: #666; font-size: 13px; text-transform: uppercase; }
+.clients-table td { font-size: 14px; color: #333; }
+.clients-table td a { color: #667eea; text-decoration: none; }
+.clients-table td a:hover { text-decoration: underline; }
