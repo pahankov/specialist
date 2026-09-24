@@ -1,3 +1,10 @@
+/* ─── Dashboard layout ─── */
+.dashboard-page {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* ─── Stats grid ─── */
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -9,11 +16,39 @@
   text-align: center;
   padding: 24px;
   transition: transform 0.2s, box-shadow 0.2s;
+  cursor: default;
 }
 
-.stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+.stat-card.clickable {
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card.clickable::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(117, 106, 234, 0.05) 100%);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.stat-card.clickable:hover::before {
+  opacity: 1;
+}
+
+.stat-card.clickable:hover {
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.stat-card.clickable:active {
+  transform: translateY(-2px) scale(1.01);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 .stat-icon {
@@ -33,6 +68,162 @@
   color: #666;
 }
 
+.card-hint {
+  font-size: 11px;
+  color: #667eea;
+  opacity: 0;
+  transition: opacity 0.2s;
+  margin-top: 6px;
+  font-weight: 500;
+}
+
+.stat-card.clickable:hover .card-hint {
+  opacity: 1;
+}
+
+/* ─── Revenue section ─── */
+.revenue-section {
+  margin-bottom: 24px;
+}
+
+.section-title {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.section-title h2 {
+  margin: 0;
+  font-size: 22px;
+  color: #1a1a2e;
+  font-weight: 700;
+}
+
+.section-subtitle {
+  font-size: 13px;
+  color: #999;
+  font-weight: 400;
+}
+
+.revenue-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.revenue-card {
+  padding: 20px;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.revenue-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.revenue-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.revenue-card-icon {
+  font-size: 24px;
+}
+
+.revenue-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #666;
+}
+
+.revenue-card-value {
+  font-size: 36px;
+  font-weight: 700;
+  color: #1a1a2e;
+  margin-bottom: 4px;
+}
+
+.revenue-card-amount {
+  font-size: 18px;
+  font-weight: 600;
+  color: #4caf50;
+  margin-bottom: 4px;
+}
+
+.revenue-card-detail {
+  font-size: 12px;
+  color: #999;
+}
+
+/* ─── Funnel ─── */
+.full-width {
+  grid-column: 1 / -1;
+}
+
+.funnel-container {
+  padding: 8px 0;
+}
+
+.funnel-step {
+  margin-bottom: 10px;
+}
+
+.funnel-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: #f8f9fb;
+  border-radius: 10px;
+  min-width: 200px;
+  transition: background 0.2s;
+}
+
+.funnel-bar:hover {
+  background: #f0f4ff;
+}
+
+.funnel-bar.confirmed-bar {
+  background: #e8f5e9;
+}
+
+.funnel-bar.confirmed-bar:hover {
+  background: #d4edda;
+}
+
+.funnel-bar.completed-bar {
+  background: #dbeafe;
+}
+
+.funnel-bar.completed-bar:hover {
+  background: #bfdbfe;
+}
+
+.funnel-bar.cancelled-bar {
+  background: #fee2e2;
+}
+
+.funnel-bar.cancelled-bar:hover {
+  background: #fecaca;
+}
+
+.funnel-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+}
+
+.funnel-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1a1a2e;
+}
+
+/* ─── Dashboard grid (status + recent) ─── */
 .dashboard-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -189,6 +380,7 @@
   font-size: 16px;
 }
 
+/* ─── Responsive ─── */
 @media (max-width: 768px) {
   .dashboard-grid {
     grid-template-columns: 1fr;
@@ -198,7 +390,25 @@
     grid-template-columns: repeat(2, 1fr);
   }
 
+  .revenue-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
   .stat-value {
     font-size: 24px;
+  }
+
+  .revenue-card-value {
+    font-size: 28px;
+  }
+}
+
+@media (max-width: 480px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .revenue-grid {
+    grid-template-columns: 1fr;
   }
 }
