@@ -809,6 +809,36 @@ curl -X GET "http://localhost:8000/api/v1/admin/audit-logs?master_id=1&page=1&pa
 
 ## 📚 История версий
 
+### [1.3.0] — 2026-09-24
+- **Swiper carousel:** главная страница с бесконечной прокруткой (Services → Masters → Reviews)
+  - Swiper v9 с `loop: true` (виртуальные слайды без клонов)
+  - Автоплей каждые 4 секунды, пауза при наведении на карточки
+  - Навигация стрелками, точки-индикаторы, пагинация
+  - Адаптивный дизайн, поддержка свайпов на мобильных
+- **Комплексная фильтрация:** все страницы админ-панели с фильтрами
+  - **Записи:** фильтрация по мастеру, клиенту, услуге, дате (date range)
+  - **Клиенты:** поиск по имени/телефону, фильтр по мастеру (клиенты конкретного мастера)
+  - **Доход:** breakdown по мастерам/услугам, date range, master filter
+  - **Расписание:** фильтр по мастеру (суперпользователь видит всех)
+  - **Рабочие часы:** master_id filter для суперпользователя
+  - **Экспорт CSV:** все фильтры передаются в экспорт
+- **Seed-скрипт с защитой:** `seed_test_data.py` теперь защищает суперпользователя
+  - При очистке базы сохраняет всех ADMIN (role=ADMIN)
+  - Проверка существования перед созданием (no duplicates)
+  - 20 мастеров, 86 услуг, 60 клиентов, 200 рабочих часов, 508 записей, 168 отзывов
+  - Логин: `master0@beauty.ru`...`master19@beauty.ru`, пароль: `password123`
+- **Фикс MissingGreenlet:** все lazy-load исправлены
+  - `dashboard.py`: joinedload для `master_profile.user` и `client_profile.user`
+  - `services.py`: извлечение `mp_id` перед query
+  - `clients.py`, `appointments.py`: selectinload для вложенных отношений
+- **API:** новые эндпоинты для фильтрации
+  - `GET /admin/appointments?master_id=X&client_id=X&service_id=X&date_from=X&date_to=X`
+  - `GET /admin/clients?search=X&master_id=X`
+  - `GET /admin/revenue-breakdown?by_master=true&by_service=true&date_from=X&date_to=X`
+  - `GET /admin/working-hours?master_id=X` (суперпользователь)
+- **Frontend:** API client обновлён с новыми параметрами фильтров
+- **Фикс bcrypt:** downgrade до 4.3.0 для совместимости с passlib 1.7.4
+
 ### [1.2.0] — 2026-09-24
 - **UX/UI улучшения:**
   - Адаптивный sidebar: collapsible (кнопка сворачивания), hamburger menu на мобильных
