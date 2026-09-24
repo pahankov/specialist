@@ -41,6 +41,132 @@ async def _find_or_create_client(db: AsyncSession, phone: str, name: str) -> Use
     return user
 
 
+# ─── Specific routes MUST come before generic /appointments ───
+
+@router.patch("/appointments/{appointment_id}/confirm")
+async def confirm_appointment(
+    appointment_id: int,
+    master: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db)
+):
+    """Confirm an appointment."""
+    result = await db.execute(
+        select(MasterProfile).where(MasterProfile.user_id == master.id)
+    )
+    mp = result.scalar_one_or_none()
+    if not mp:
+        raise HTTPException(status_code=403, detail="Not a master")
+    
+    appointment = await get_owned_or_404(db, Appointment, appointment_id, mp.id)
+    appointment.status = "confirmed"
+    await log_action(db, master.id, "confirm", "appointment", appointment.id, "Статус изменён на confirmed", level="info")
+    await db.commit()
+    await db.refresh(appointment)
+    return appointment
+
+
+@router.patch("/appointments/{appointment_id}/cancel")
+async def cancel_appointment(
+    appointment_id: int,
+    reason: Optional[str] = Query(None),
+    master: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db)
+):
+    """Cancel an appointment."""
+    result = await db.execute(
+        select(MasterProfile).where(MasterProfile.user_id == master.id)
+    )
+    mp = result.scalar_one_or_none()
+    if not mp:
+        raise HTTPException(status_code=403, detail="Not a master")
+    
+    appointment = await get_owned_or_404(db, Appointment, appointment_id, mp.id)
+    appointment.status = "cancelled"
+    if reason:
+        appointment.notes = f"{appointment.notes}\nОтмена: {reason}" if appointment.notes else f"Отмена: {reason}"
+    await log_action(db, master.id, "cancel", "appointment", appointment.id, f"Причина: {reason}", level="warning")
+    await db.commit()
+    await db.refresh(appointment)
+    return appointment
+
+
+@router.patch("/appointments/{appointment_id}/complete")
+async def complete_appointment(
+    appointment_id: int,
+    master: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db)
+):
+    """Mark an appointment as completed."""
+    result = await db.execute(
+        select(MasterProfile).where(MasterProfile.user_id == master.id)
+    )
+    mp = result.scalar_one_or_none()
+    if not mp:
+        raise HTTPException(status_code=403, detail="Not a master")
+    
+    appointment = await get_owned_or_404(db, Appointment, appointment_id, mp.id)
+    appointment.status = "completed"
+    await log_action(db, master.id, "complete", "appointment", appointment.id, level="info")
+    await db.commit()
+    await db.refresh(appointment)
+    return appointment
+
+
+@router.delete("/appointments/{appointment_id}", status_code=204)
+async def delete_appointment(
+    appointment_id: int,
+    master: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete an appointment."""
+    result = await db.execute(
+        select(MasterProfile).where(MasterProfile.user_id == master.id)
+    )
+    mp = result.scalar_one_or_none()
+    if not mp:
+        raise HTTPException(status_code=403, detail="Not a master")
+    
+    appointment = await get_owned_or_404(db, Appointment, appointment_id, mp.id)
+    await log_action(db, master.id, "delete", "appointment", appointment_id, level="warning")
+    await db.delete(appointment)
+    await db.commit()
+    return None
+
+
+@router.patch("/appointments/{appointment_id}/no-show")
+async def mark_no_show(
+    appointment_id: int,
+    master: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db)
+):
+    """Mark an appointment as no-show. Increments client's no_show_count."""
+    result = await db.execute(
+        select(MasterProfile).where(MasterProfile.user_id == master.id)
+    )
+    mp = result.scalar_one_or_none()
+    if not mp:
+        raise HTTPException(status_code=403, detail="Not a master")
+    
+    appointment = await get_owned_or_404(db, Appointment, appointment_id, mp.id)
+    appointment.status = "cancelled"
+    appointment.notes = f"{appointment.notes}\n\nНеявка" if appointment.notes else "Неявка"
+    await log_action(db, master.id, "no-show", "appointment", appointment_id, level="warning")
+
+    if appointment.client_id:
+        client_result = await db.execute(
+            select(ClientProfile).where(ClientProfile.id == appointment.client_id)
+        )
+        client = client_result.scalar_one_or_none()
+        if client:
+            client.no_show_count = (client.no_show_count or 0) + 1
+
+    await db.commit()
+    await db.refresh(appointment)
+    return appointment
+
+
+# ─── Generic routes ───
+
 @router.get("/appointments", response_model=PaginatedResponse[AppointmentWithDetails])
 async def get_admin_appointments(
     master: User = Depends(require_master),
@@ -281,129 +407,7 @@ async def get_appointments_by_date(
     return [
         {"id": a.id, "client_name": a.client_profile.user.name if a.client_profile else "Unknown",
          "client_phone": a.client_profile.user.phone if a.client_profile else "",
-         "service_name": a.service.name if a.service else "",
-         "appointment_date": a.appointment_date.isoformat(), "status": a.status}
-        for a in appointments
+          "service_name": a.service.name if a.service else "",
+          "appointment_date": a.appointment_date.isoformat(), "status": a.status}
+         for a in appointments
     ]
-
-
-@router.patch("/appointments/{appointment_id}/confirm")
-async def confirm_appointment(
-    appointment_id: int,
-    master: User = Depends(require_master),
-    db: AsyncSession = Depends(get_db)
-):
-    """Confirm an appointment."""
-    result = await db.execute(
-        select(MasterProfile).where(MasterProfile.user_id == master.id)
-    )
-    mp = result.scalar_one_or_none()
-    if not mp:
-        raise HTTPException(status_code=403, detail="Not a master")
-    
-    appointment = await get_owned_or_404(db, Appointment, appointment_id, mp.id)
-    appointment.status = "confirmed"
-    await log_action(db, master.id, "confirm", "appointment", appointment.id, "Статус изменён на confirmed", level="info")
-    await db.commit()
-    await db.refresh(appointment)
-    return appointment
-
-
-@router.patch("/appointments/{appointment_id}/cancel")
-async def cancel_appointment(
-    appointment_id: int,
-    reason: Optional[str] = Query(None),
-    master: User = Depends(require_master),
-    db: AsyncSession = Depends(get_db)
-):
-    """Cancel an appointment."""
-    result = await db.execute(
-        select(MasterProfile).where(MasterProfile.user_id == master.id)
-    )
-    mp = result.scalar_one_or_none()
-    if not mp:
-        raise HTTPException(status_code=403, detail="Not a master")
-    
-    appointment = await get_owned_or_404(db, Appointment, appointment_id, mp.id)
-    appointment.status = "cancelled"
-    if reason:
-        appointment.notes = f"{appointment.notes}\nОтмена: {reason}" if appointment.notes else f"Отмена: {reason}"
-    await log_action(db, master.id, "cancel", "appointment", appointment.id, f"Причина: {reason}", level="warning")
-    await db.commit()
-    await db.refresh(appointment)
-    return appointment
-
-
-@router.patch("/appointments/{appointment_id}/complete")
-async def complete_appointment(
-    appointment_id: int,
-    master: User = Depends(require_master),
-    db: AsyncSession = Depends(get_db)
-):
-    """Mark an appointment as completed."""
-    result = await db.execute(
-        select(MasterProfile).where(MasterProfile.user_id == master.id)
-    )
-    mp = result.scalar_one_or_none()
-    if not mp:
-        raise HTTPException(status_code=403, detail="Not a master")
-    
-    appointment = await get_owned_or_404(db, Appointment, appointment_id, mp.id)
-    appointment.status = "completed"
-    await log_action(db, master.id, "complete", "appointment", appointment.id, level="info")
-    await db.commit()
-    await db.refresh(appointment)
-    return appointment
-
-
-@router.delete("/appointments/{appointment_id}", status_code=204)
-async def delete_appointment(
-    appointment_id: int,
-    master: User = Depends(require_master),
-    db: AsyncSession = Depends(get_db)
-):
-    """Delete an appointment."""
-    result = await db.execute(
-        select(MasterProfile).where(MasterProfile.user_id == master.id)
-    )
-    mp = result.scalar_one_or_none()
-    if not mp:
-        raise HTTPException(status_code=403, detail="Not a master")
-    
-    appointment = await get_owned_or_404(db, Appointment, appointment_id, mp.id)
-    await log_action(db, master.id, "delete", "appointment", appointment_id, level="warning")
-    await db.delete(appointment)
-    await db.commit()
-    return None
-
-
-@router.patch("/appointments/{appointment_id}/no-show")
-async def mark_no_show(
-    appointment_id: int,
-    master: User = Depends(require_master),
-    db: AsyncSession = Depends(get_db)
-):
-    """Mark an appointment as no-show. Increments client's no_show_count."""
-    result = await db.execute(
-        select(MasterProfile).where(MasterProfile.user_id == master.id)
-    )
-    mp = result.scalar_one_or_none()
-    if not mp:
-        raise HTTPException(status_code=403, detail="Not a master")
-    
-    appointment = await get_owned_or_404(db, Appointment, appointment_id, mp.id)
-    appointment.status = "cancelled"
-    appointment.notes = f"{appointment.notes}\n\nНеявка" if appointment.notes else "Неявка"
-    await log_action(db, master.id, "no-show", "appointment", appointment_id, level="warning")
-
-    if appointment.client_id:
-        client_result = await db.execute(
-            select(ClientProfile).where(ClientProfile.id == appointment.client_id)
-        )
-        client = client_result.scalar_one_or_none()
-        if client:
-            client.no_show_count = (client.no_show_count or 0) + 1
-
-    await db.commit()
-    await db.refresh(appointment)
-    return appointment
