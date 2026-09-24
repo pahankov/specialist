@@ -366,8 +366,8 @@ utils/
 - **Мастера** — управление мастерами:
   - Поиск и фильтрация (по имени/email, статус, роль)
   - Создание, редактирование, удаление мастеров
-  - Блокировка/разблокировка мастеров
-  - Назначение/снятие прав суперпользователя
+  - Блокировка/разблокировка мастеров (active/inactive)
+  - Блокировка/разблокировка (suspended)
   - Просмотр статистики по каждому мастеру
 - **Записи** — видит все записи всех мастеров
 - **Клиенты** — видит всех клиентов системы
@@ -402,7 +402,7 @@ alembic upgrade head
 
 ```
 User (id, email, phone, hashed_password, name, role[master|client|admin], city_id, is_active, is_verified, created_at, updated_at)
-  ├─ 1:1 ──> MasterProfile (user_id, description, avatar_url, telegram_username, experience_years, is_active)
+  ├─ 1:1 ──> MasterProfile (user_id, description, avatar_url, telegram_username, experience_years, status[active|inactive|suspended], is_active)
   │           ├─ 1:N ──> Service (id, master_id, name, description, duration_minutes, price, is_active, cascade delete)
   │           │           └─ 1:N ──> Appointment
   │           ├─ 1:N ──> Appointment (id, master_id, service_id, client_id, appointment_date, status, notes, cascade delete)
