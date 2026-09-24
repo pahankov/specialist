@@ -129,7 +129,10 @@ function HomePage() {
             ‹
           </button>
 
-          <div className="carousel-track">
+          <div 
+            className="carousel-track"
+            style={{ transform: `translateX(-${currentSlide * 100}%)` }}
+          >
             {/* Slide 1: Services */}
             <div className={`carousel-slide ${currentSlide === 0 ? 'active' : ''}`}>
               {randomServices.length > 0 && (
