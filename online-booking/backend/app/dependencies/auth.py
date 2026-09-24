@@ -13,9 +13,11 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy.orm import joinedload
 
 from app.database import get_db
 from app.models.user import User, UserRole
+from app.models.master_profile import MasterProfile
 from app.config import settings
 
 security = HTTPBearer()
@@ -62,7 +64,12 @@ async def get_current_master(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: AsyncSession = Depends(get_db)
 ) -> User:
-    """Extract and validate JWT token, return current master."""
+    """Extract and validate JWT token, return current master.
+    
+    Uses joinedload to eagerly load master_profile, preventing
+    MissingGreenlet errors when accessing master.master_profile.id
+    in async endpoints.
+    """
     user = await get_current_user(credentials, db)
 
     if user.role not in (UserRole.MASTER, UserRole.ADMIN):
@@ -71,7 +78,13 @@ async def get_current_master(
             detail="Invalid token — not a master"
         )
 
-    return user
+    # Eagerly load master_profile to avoid lazy-load in async context
+    result = await db.execute(
+        select(User)
+        .options(joinedload(User.master_profile))
+        .where(User.id == user.id)
+    )
+    return result.scalar_one_or_none()
 
 
 async def get_current_client(
