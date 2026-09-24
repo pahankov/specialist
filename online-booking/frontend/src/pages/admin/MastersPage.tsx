@@ -103,16 +103,6 @@ function MastersPage() {
     }
   }
 
-  const handleToggleAdmin = async (id: number) => {
-    try {
-      await superAdminApi.toggleMasterAdmin(id)
-      addToast('Права суперпользователя изменены', 'success')
-      loadMasters()
-    } catch (err: any) {
-      addToast(handleError(err), 'error')
-    }
-  }
-
   const handleDelete = async (id: number) => {
     try {
       await superAdminApi.deleteMaster(id)
@@ -213,13 +203,6 @@ function MastersPage() {
                       title={master.is_active ? 'Заблокировать' : 'Разблокировать'}
                     >
                       {master.is_active ? '🔒' : '🔓'}
-                    </button>
-                    <button
-                      className={`btn btn-sm ${master.is_admin ? 'btn-warn' : 'btn-info'}`}
-                      onClick={() => handleToggleAdmin(master.id)}
-                      title={master.is_admin ? 'Убрать права' : 'Дать права'}
-                    >
-                      {master.is_admin ? '👑' : '👤'}
                     </button>
                     {deleteConfirm === master.id ? (
                       <div className="delete-confirm">
