@@ -8,6 +8,7 @@ from typing import List, Optional
 from app.database import get_db
 from app.models.client_profile import ClientProfile
 from app.models.user import User
+from app.models.appointment import Appointment
 from app.schemas.client import ClientCreate, ClientUpdate, ClientResponse
 from app.schemas.pagination import PaginatedResponse
 from app.dependencies.auth import require_master
@@ -23,6 +24,7 @@ async def get_admin_clients(
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=200, description="Items per page"),
     search: Optional[str] = Query(None, description="Search by name or phone"),
+    master_id: Optional[int] = Query(None, description="Filter by master ID (clients who booked with this master)"),
     db: AsyncSession = Depends(get_db)
 ):
     """Get all clients (paginated with total count)."""
@@ -34,6 +36,16 @@ async def get_admin_clients(
         .join(ClientProfile.user)
         .options(joinedload(ClientProfile.user))
     )
+
+    is_admin = master.role == User.Role.ADMIN if hasattr(User, 'Role') else master.role.value == "ADMIN" if hasattr(master.role, 'value') else master.role == "ADMIN"
+    
+    # If master_id filter is specified, only return clients who have appointments with this master
+    if master_id is not None:
+        base_query = base_query.where(
+            ClientProfile.id.in_(
+                select(Appointment.client_id).where(Appointment.master_id == master_id)
+            )
+        )
 
     # Search filter
     if search:

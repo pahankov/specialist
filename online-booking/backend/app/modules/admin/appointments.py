@@ -44,7 +44,12 @@ async def _find_or_create_client(db: AsyncSession, phone: str, name: str) -> Use
 @router.get("/appointments", response_model=PaginatedResponse[AppointmentWithDetails])
 async def get_admin_appointments(
     master: User = Depends(require_master),
-    status: Optional[str] = Query(None),
+    status: Optional[str] = Query(None, description="Filter by status"),
+    master_id: Optional[int] = Query(None, description="Filter by master ID (superadmin only)"),
+    client_id: Optional[int] = Query(None, description="Filter by client ID"),
+    service_id: Optional[int] = Query(None, description="Filter by service ID"),
+    date_from: Optional[str] = Query(None, description="Filter by date from (YYYY-MM-DD)"),
+    date_to: Optional[str] = Query(None, description="Filter by date to (YYYY-MM-DD)"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     db: AsyncSession = Depends(get_db)
@@ -52,6 +57,16 @@ async def get_admin_appointments(
     """Get appointments with client and service details (paginated with total count)."""
     offset = (page - 1) * page_size
     is_admin = master.role == UserRole.ADMIN
+    
+    # Parse date filters
+    dt_from = None
+    dt_to = None
+    if date_from:
+        from datetime import datetime as dt_datetime
+        dt_from = dt_datetime.strptime(date_from, "%Y-%m-%d").replace(tzinfo=None)
+    if date_to:
+        from datetime import datetime as dt_datetime
+        dt_to = dt_datetime.strptime(date_to, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=None)
     
     if is_admin:
         query = (
@@ -94,9 +109,33 @@ async def get_admin_appointments(
             .where(Appointment.master_id == mp.id)
         )
 
+    # Apply status filter
     if status:
         query = query.where(Appointment.status == status)
         count_query = count_query.where(Appointment.status == status)
+    
+    # Apply master_id filter (superadmin only)
+    if master_id is not None:
+        query = query.where(Appointment.master_id == master_id)
+        count_query = count_query.where(Appointment.master_id == master_id)
+    
+    # Apply client_id filter
+    if client_id is not None:
+        query = query.where(Appointment.client_id == client_id)
+        count_query = count_query.where(Appointment.client_id == client_id)
+    
+    # Apply service_id filter
+    if service_id is not None:
+        query = query.where(Appointment.service_id == service_id)
+        count_query = count_query.where(Appointment.service_id == service_id)
+    
+    # Apply date range filters
+    if dt_from is not None:
+        query = query.where(Appointment.appointment_date >= dt_from)
+        count_query = count_query.where(Appointment.appointment_date >= dt_from)
+    if dt_to is not None:
+        query = query.where(Appointment.appointment_date <= dt_to)
+        count_query = count_query.where(Appointment.appointment_date <= dt_to)
 
     # Get total count
     total_result = await db.execute(count_query)
@@ -208,20 +247,35 @@ async def book_appointment(
 async def get_appointments_by_date(
     date_from: str = Query(...),
     date_to: str = Query(...),
+    master_id: Optional[int] = Query(None, description="Filter by master ID (superadmin only)"),
     master: User = Depends(require_master),
     db: AsyncSession = Depends(get_db)
 ):
     """Get appointments for a date range."""
     start_dt = datetime.strptime(date_from, "%Y-%m-%d").replace(tzinfo=None)
     end_dt = datetime.strptime(date_to, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=None)
-    query = (
-        select(Appointment)
-        .options(selectinload(Appointment.client_profile).joinedload(ClientProfile.user))
-        .options(selectinload(Appointment.service))
-        .where(Appointment.master_id == master.master_profile.id,
-               Appointment.appointment_date >= start_dt, Appointment.appointment_date <= end_dt)
-        .order_by(Appointment.appointment_date)
-    )
+    
+    is_admin = master.role == UserRole.ADMIN
+    
+    if is_admin and master_id is not None:
+        query = (
+            select(Appointment)
+            .options(selectinload(Appointment.client_profile).joinedload(ClientProfile.user))
+            .options(selectinload(Appointment.service))
+            .where(Appointment.master_id == master_id,
+                   Appointment.appointment_date >= start_dt, Appointment.appointment_date <= end_dt)
+            .order_by(Appointment.appointment_date)
+        )
+    else:
+        query = (
+            select(Appointment)
+            .options(selectinload(Appointment.client_profile).joinedload(ClientProfile.user))
+            .options(selectinload(Appointment.service))
+            .where(Appointment.master_id == master.master_profile.id,
+                   Appointment.appointment_date >= start_dt, Appointment.appointment_date <= end_dt)
+            .order_by(Appointment.appointment_date)
+        )
+    
     result = await db.execute(query)
     appointments = result.scalars().all()
     return [

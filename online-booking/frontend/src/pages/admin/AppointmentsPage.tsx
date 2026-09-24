@@ -11,7 +11,12 @@ type SortDirection = 'asc' | 'desc'
 function AppointmentsPage() {
   const { addToast } = useToast()
   const [appointments, setAppointments] = useState<(Appointment & { client_name?: string; client_phone?: string; service_name?: string; service_price?: number })[]>([])
-  const [filter, setFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [masterIdFilter, setMasterIdFilter] = useState<number | ''>('')
+  const [clientIdFilter, setClientIdFilter] = useState<number | ''>('')
+  const [serviceIdFilter, setServiceIdFilter] = useState<number | ''>('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [deletingId, setDeletingId] = useState<number | null>(null)
@@ -23,11 +28,48 @@ function AppointmentsPage() {
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
   const [showCompleted, setShowCompleted] = useState(false)
   const [totalPages, setTotalPages] = useState(1)
+  const [allMasters, setAllMasters] = useState<Array<{ id: number; name: string }>>([])
+  const [allClients, setAllClients] = useState<Array<{ id: number; name: string }>>([])
+  const [allServices, setAllServices] = useState<Array<{ id: number; name: string }>>([])
+  const [showFilters, setShowFilters] = useState(false)
   const pageSize = 20
 
-  const fetch = async () => {
+  const fetchOptions = async () => {
     try {
-      const resp = await adminApi.getAppointments(filter, pageSize, currentPage + 1)
+      // Fetch masters (superadmin only)
+      try {
+        const mastersResp = await adminApi.get('/api/v1/admin/masters')
+        setAllMasters(mastersResp.data.map((m: any) => ({ id: m.id, name: m.name })))
+      } catch { /* not superadmin */ }
+      
+      // Fetch clients for filter dropdown
+      try {
+        const clientsResp = await adminApi.getClients({ page: 1, page_size: 500 })
+        setAllClients(clientsResp.data.items.map((c: any) => ({ id: c.id, name: c.name })))
+      } catch { /* ignore */ }
+      
+      // Fetch services for filter dropdown
+      try {
+        const servicesResp = await adminApi.getServices({ page: 1, page_size: 500, active_only: false })
+        setAllServices(servicesResp.data.items.map((s: any) => ({ id: s.id, name: s.name })))
+      } catch { /* ignore */ }
+    } catch { /* ignore */ }
+  }
+
+  useEffect(() => { fetchOptions() }, [])
+
+  const fetch = async () => {
+    setLoading(true)
+    try {
+      const params: Record<string, any> = { page: currentPage + 1, page_size: pageSize }
+      if (statusFilter) params.status = statusFilter
+      if (masterIdFilter !== '') params.master_id = masterIdFilter
+      if (clientIdFilter !== '') params.client_id = clientIdFilter
+      if (serviceIdFilter !== '') params.service_id = serviceIdFilter
+      if (dateFrom) params.date_from = dateFrom
+      if (dateTo) params.date_to = dateTo
+      
+      const resp = await adminApi.getAppointments(params)
       setAppointments(resp.data.items)
       setTotalPages(resp.data.total_pages)
     } catch (err: any) {
@@ -36,7 +78,7 @@ function AppointmentsPage() {
     } finally { setLoading(false) }
   }
 
-  useEffect(() => { setCurrentPage(0); fetch() }, [filter])
+  useEffect(() => { setCurrentPage(0); fetch() }, [statusFilter, masterIdFilter, clientIdFilter, serviceIdFilter, dateFrom, dateTo])
 
   const showError = (err: any) => {
     const detail = err.response?.data?.detail
@@ -160,22 +202,89 @@ function AppointmentsPage() {
           <h1>Управление записями</h1>
           <p>Подтверждение, завершение и отмена записей</p>
         </div>
-        <button
-          className="btn btn-ghost"
-          onClick={() => {
-            const { VITE_API_URL = 'http://localhost:8000' } = import.meta.env
-            window.open(`${VITE_API_URL}/api/v1/admin/export/appointments${filter ? `?status=${filter}` : ''}`, '_blank')
-          }}
-        >
-          📥 Экспорт CSV
-        </button>
+          <button
+            className="btn btn-ghost"
+            onClick={() => {
+              const { VITE_API_URL = 'http://localhost:8000' } = import.meta.env
+              const params = new URLSearchParams()
+              if (statusFilter) params.set('status', statusFilter)
+              if (masterIdFilter !== '') params.set('master_id', String(masterIdFilter))
+              if (clientIdFilter !== '') params.set('client_id', String(clientIdFilter))
+              if (serviceIdFilter !== '') params.set('service_id', String(serviceIdFilter))
+              if (dateFrom) params.set('date_from', dateFrom)
+              if (dateTo) params.set('date_to', dateTo)
+              window.open(`${VITE_API_URL}/api/v1/admin/export/appointments?${params.toString()}`, '_blank')
+            }}
+          >
+            📥 Экспорт CSV
+          </button>
       </div>
 
       {error && <div className="error-message">{error}</div>}
 
       <div className="filters-bar">
-        {filters.map(f => (<button key={f.value} className={`filter-btn ${filter === f.value ? 'active' : ''}`} onClick={() => setFilter(f.value)}>{f.label}</button>))}
+        {filters.map(f => (<button key={f.value} className={`filter-btn ${statusFilter === f.value ? 'active' : ''}`} onClick={() => setStatusFilter(f.value)}>{f.label}</button>))}
       </div>
+
+      {/* Advanced filters toggle */}
+      <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center' }}>
+        <button className="btn btn-ghost" onClick={() => setShowFilters(p => !p)} style={{ fontSize: 13 }}>
+          {showFilters ? '▲ Скрыть фильтры' : '▼ Расширенные фильтры'}
+        </button>
+      </div>
+
+      {/* Advanced filters */}
+      {showFilters && (
+        <div className="card" style={{ marginBottom: 16, padding: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+            {/* Master filter */}
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label style={{ fontSize: 12, color: '#666', marginBottom: 4, display: 'block' }}>Мастер</label>
+              <select value={masterIdFilter} onChange={(e) => setMasterIdFilter(e.target.value as any)} style={{ width: '100%', padding: 8, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }}>
+                <option value="">Все мастера</option>
+                {allMasters.map(m => (<option key={m.id} value={m.id}>{m.name}</option>))}
+              </select>
+            </div>
+
+            {/* Client filter */}
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label style={{ fontSize: 12, color: '#666', marginBottom: 4, display: 'block' }}>Клиент</label>
+              <select value={clientIdFilter} onChange={(e) => setClientIdFilter(e.target.value as any)} style={{ width: '100%', padding: 8, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }}>
+                <option value="">Все клиенты</option>
+                {allClients.map(c => (<option key={c.id} value={c.id}>{c.name}</option>))}
+              </select>
+            </div>
+
+            {/* Service filter */}
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label style={{ fontSize: 12, color: '#666', marginBottom: 4, display: 'block' }}>Услуга</label>
+              <select value={serviceIdFilter} onChange={(e) => setServiceIdFilter(e.target.value as any)} style={{ width: '100%', padding: 8, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }}>
+                <option value="">Все услуги</option>
+                {allServices.map(s => (<option key={s.id} value={s.id}>{s.name}</option>))}
+              </select>
+            </div>
+
+            {/* Date from */}
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label style={{ fontSize: 12, color: '#666', marginBottom: 4, display: 'block' }}>Дата от</label>
+              <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} style={{ width: '100%', padding: 8, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }} />
+            </div>
+
+            {/* Date to */}
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label style={{ fontSize: 12, color: '#666', marginBottom: 4, display: 'block' }}>Дата до</label>
+              <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} style={{ width: '100%', padding: 8, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }} />
+            </div>
+
+            {/* Reset filters button */}
+            <div className="form-group" style={{ marginBottom: 0, display: 'flex', alignItems: 'flex-end' }}>
+              <button className="btn btn-ghost" onClick={() => { setStatusFilter(''); setMasterIdFilter(''); setClientIdFilter(''); setServiceIdFilter(''); setDateFrom(''); setDateTo('') }} style={{ width: '100%', fontSize: 13 }}>
+                ✕ Сбросить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14, color: '#666' }}>

@@ -31,16 +31,26 @@ function SchedulePage() {
   const [activeHours, setActiveHours] = useState<Record<string, boolean>>({})
   const [longPressTriggered] = useState(false)
   const [monthlyStats, setMonthlyStats] = useState<MonthlyStats | null>(null)
+  const [selectedMasterId, setSelectedMasterId] = useState<number | ''>('')
+  const [allMasters, setAllMasters] = useState<Array<{ id: number; name: string }>>([])
+
+  // Fetch masters for filter
+  useEffect(() => {
+    adminApi.get('/api/v1/admin/masters')
+      .then(r => setAllMasters(r.data.map((m: any) => ({ id: m.id, name: m.name }))))
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     let cancelled = false
     async function init() {
       try {
         const [scheduleResp, apptsResp, statsResp] = await Promise.all([
-          adminApi.getWorkingHours(),
+          adminApi.getWorkingHours(selectedMasterId !== '' ? selectedMasterId : undefined),
           adminApi.getAppointmentsByDate(
             `${currentMonth.getFullYear()}-01-01`,
-            `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-28`
+            `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-28`,
+            selectedMasterId !== '' ? selectedMasterId : undefined
           ),
           adminApi.getMonthlyStats(currentMonth.getFullYear(), currentMonth.getMonth() + 1),
         ])
@@ -173,6 +183,17 @@ function SchedulePage() {
       <div style={{ marginBottom: 8, textAlign: 'center' }}>
         <h1 style={{ fontSize: 24, margin: 0, color: '#1a1a2e' }}>📅 Рабочее расписание</h1>
         <p style={{ margin: '4px 0 0', color: '#666', fontSize: 14 }}>Нажмите на день чтобы увидеть бронирования</p>
+      </div>
+
+      {/* Master filter */}
+      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'center', gap: 12, alignItems: 'center' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: '#333' }}>
+          <span>Мастер:</span>
+          <select value={selectedMasterId} onChange={(e) => setSelectedMasterId(e.target.value as any)} style={{ padding: '6px 12px', border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }}>
+            <option value="">Все мастера</option>
+            {allMasters.map(m => (<option key={m.id} value={m.id}>{m.name}</option>))}
+          </select>
+        </label>
       </div>
 
       {/* Legend */}

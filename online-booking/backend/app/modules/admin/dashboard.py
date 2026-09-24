@@ -276,3 +276,87 @@ async def clear_dashboard_cache(
     
     cache_service.invalidate_pattern("admin:dashboard:*")
     return {"detail": "Dashboard cache cleared"}
+
+
+@router.get("/revenue-breakdown")
+async def get_revenue_breakdown(
+    master: User = Depends(require_master),
+    by_master: bool = Query(False, description="Group by master"),
+    by_service: bool = Query(False, description="Group by service"),
+    date_from: Optional[str] = Query(None, description="Filter by date from (YYYY-MM-DD)"),
+    date_to: Optional[str] = Query(None, description="Filter by date to (YYYY-MM-DD)"),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get revenue breakdown grouped by master, service, or overall."""
+    from datetime import datetime as dt_datetime
+    
+    # Base filter: completed appointments with their services
+    base_conditions = [Appointment.status == "completed"]
+    
+    if date_from:
+        dt_from = dt_datetime.strptime(date_from, "%Y-%m-%d").replace(tzinfo=None)
+        base_conditions.append(Appointment.appointment_date >= dt_from)
+    if date_to:
+        dt_to = dt_datetime.strptime(date_to, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=None)
+        base_conditions.append(Appointment.appointment_date <= dt_to)
+    
+    # For non-admin masters, filter by their master_id
+    if not master.is_admin:
+        result = await db.execute(
+            select(MasterProfile).where(MasterProfile.user_id == master.id)
+        )
+        mp = result.scalar_one_or_none()
+        if not mp:
+            return {"breakdown": [], "total_revenue": 0}
+        base_conditions.append(Appointment.master_id == mp.id)
+    
+    # Build query based on grouping
+    if by_master:
+        # Group by master
+        query = (
+            select(
+                _MasterUser.name.label('name'),
+                func.sum(Service.price).label('revenue'),
+                func.count(Appointment.id).label('count')
+            )
+            .select_from(Appointment)
+            .join(Service, Appointment.service_id == Service.id)
+            .join(MasterProfile, Appointment.master_id == MasterProfile.id)
+            .join(_MasterUser, MasterProfile.user_id == _MasterUser.id)
+            .where(*base_conditions)
+            .group_by(_MasterUser.name)
+            .order_by(func.sum(Service.price).desc())
+        )
+    elif by_service:
+        # Group by service
+        query = (
+            select(
+                Service.name.label('name'),
+                func.sum(Service.price).label('revenue'),
+                func.count(Appointment.id).label('count')
+            )
+            .select_from(Appointment)
+            .join(Service, Appointment.service_id == Service.id)
+            .where(*base_conditions)
+            .group_by(Service.id, Service.name)
+            .order_by(func.sum(Service.price).desc())
+        )
+    else:
+        # Overall revenue
+        total_result = await db.execute(
+            select(func.sum(Service.price))
+            .select_from(Appointment)
+            .join(Service, Appointment.service_id == Service.id)
+            .where(*base_conditions)
+        )
+        total_revenue = float(total_result.scalar() or 0)
+        return {"breakdown": [], "total_revenue": total_revenue}
+    
+    result = await db.execute(query)
+    breakdown = [
+        {"name": row[0], "revenue": float(row[1]), "count": row[2]}
+        for row in result.all()
+    ]
+    
+    total_revenue = sum(item['revenue'] for item in breakdown)
+    return {"breakdown": breakdown, "total_revenue": total_revenue}
