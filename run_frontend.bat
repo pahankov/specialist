@@ -3,12 +3,12 @@ REM Автоопределение worktree или корневого катал
 set "PROJECT_DIR=%~dp0"
 set "WORKTREE_DIR=%PROJECT_DIR%.gigacode_vsc\worktrees\open-brick"
 
-if exist "%WORKTREE_DIR%\frontend\" (
+if exist "%WORKTREE_DIR%\online-booking\frontend\" (
     echo Using worktree: %WORKTREE_DIR%
-    cd "%WORKTREE_DIR%\frontend"
+    cd "%WORKTREE_DIR%\online-booking\frontend"
 ) else (
     echo Using main project
-    cd "%PROJECT_DIR%frontend"
+    cd "%PROJECT_DIR%online-booking\frontend"
 )
 
 npm run dev

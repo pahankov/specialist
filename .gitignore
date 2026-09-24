@@ -54,6 +54,13 @@ frontend/dist/
 frontend/.vite/
 *.local
 
+# Backend and Frontend are in online-booking/ (not in root)
+# Track them inside online-booking/, ignore at root level
+backend/
+frontend/
+!online-booking/backend/
+!online-booking/frontend/
+
 # Database
 *.db
 *.sqlite
