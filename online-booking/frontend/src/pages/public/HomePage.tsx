@@ -39,25 +39,6 @@ function HomePage() {
   const randomServices = useMemo(() => pickRandom(allServices, 6), [allServices])
   const randomMasters = useMemo(() => pickRandom(allMasters, 6), [allMasters])
 
-  // Handle infinite loop — when reaching cloned slide 3, jump to 0 instantly
-  useEffect(() => {
-    if (currentSlide === 3) {
-      // Disable transition for instant jump
-      const track = document.querySelector('.carousel-track') as HTMLElement
-      if (track) {
-        track.style.transition = 'none'
-        track.style.transform = 'translateX(0)'
-        // Force reflow
-        void track.offsetHeight
-        // Re-enable transition
-        requestAnimationFrame(() => {
-          track.style.transition = 'transform 0.6s cubic-bezier(0.4, 0, 0.2, 1)'
-          setCurrentSlide(0)
-        })
-      }
-    }
-  }, [currentSlide])
-
   const goToSlide = useCallback((index: number) => {
     setCurrentSlide(index)
   }, [])
@@ -67,7 +48,7 @@ function HomePage() {
   }, [])
 
   const prevSlide = useCallback(() => {
-    setCurrentSlide((prev) => (prev - 1 + totalSlides) % totalSlides)
+    setCurrentSlide((prev) => prev - 1)
   }, [])
 
   // Auto-play
@@ -80,6 +61,26 @@ function HomePage() {
       }
     }
   }, [nextSlide])
+
+  // Handle infinite loop — when reaching cloned slide 3, jump to 0 instantly
+  useEffect(() => {
+    if (currentSlide === 3) {
+      // Use CSS transitionend to detect when animation completes
+      const track = document.querySelector('.carousel-track')
+      if (!track) return
+
+      const handleTransitionEnd = () => {
+        track.removeEventListener('transitionend', handleTransitionEnd)
+        // Instantly reset to first slide
+        ;(track as HTMLElement).style.transition = 'none'
+        ;(track as HTMLElement).style.transform = 'translateX(0)'
+        setCurrentSlide(0)
+      }
+
+      track.addEventListener('transitionend', handleTransitionEnd)
+      return () => track.removeEventListener('transitionend', handleTransitionEnd)
+    }
+  }, [currentSlide])
 
   useEffect(() => {
     const fetchData = async () => {
@@ -131,7 +132,10 @@ function HomePage() {
 
           <div 
             className="carousel-track"
-            style={{ transform: `translateX(-${currentSlide * 100}%)` }}
+            style={{ 
+              transform: `translateX(-${currentSlide * 100}%)`,
+              transition: 'transform 0.6s cubic-bezier(0.4, 0, 0.2, 1)'
+            }}
           >
             {/* Slide 1: Services */}
             <div className={`carousel-slide ${currentSlide === 0 ? 'active' : ''}`}>
