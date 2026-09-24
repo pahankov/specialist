@@ -32,6 +32,7 @@ function HomePage() {
   const [currentSlide, setCurrentSlide] = useState(0)
   const [isTransitioning, setIsTransitioning] = useState(false)
   const slideIntervalRef = useRef<number | null>(null)
+  const trackRef = useRef<HTMLDivElement>(null)
   const totalSlides = 3 // services, masters, reviews
 
   const SLIDE_DURATION = 4000 // 4 seconds
@@ -39,6 +40,21 @@ function HomePage() {
   // Random selection on each page load (memoized)
   const randomServices = useMemo(() => pickRandom(allServices, 6), [allServices])
   const randomMasters = useMemo(() => pickRandom(allMasters, 6), [allMasters])
+
+  // Handle infinite loop — reset position when going from last to first
+  useEffect(() => {
+    const track = trackRef.current
+    if (!track) return
+
+    // When going from last slide to first, instant jump without animation
+    if (currentSlide === 0) {
+      track.style.transition = 'none'
+      track.style.transform = 'translateX(0)'
+      // Force reflow
+      void track.offsetHeight
+      track.style.transition = 'transform 0.6s cubic-bezier(0.4, 0, 0.2, 1)'
+    }
+  }, [currentSlide])
 
   const goToSlide = useCallback((index: number) => {
     if (isTransitioning) return
@@ -65,17 +81,6 @@ function HomePage() {
       }
     }
   }, [nextSlide])
-
-  // Pause on hover
-  const handleMouseEnter = () => {
-    if (slideIntervalRef.current) {
-      clearInterval(slideIntervalRef.current)
-    }
-  }
-
-  const handleMouseLeave = () => {
-    slideIntervalRef.current = setInterval(nextSlide, SLIDE_DURATION)
-  }
 
   useEffect(() => {
     const fetchData = async () => {
@@ -115,11 +120,7 @@ function HomePage() {
       </header>
 
       {/* Carousel Section */}
-      <div 
-        className="carousel-container"
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-      >
+      <div className="carousel-container">
         <div className="carousel-wrapper">
           <button 
             className="carousel-btn carousel-btn-prev" 
@@ -130,6 +131,7 @@ function HomePage() {
           </button>
 
           <div 
+            ref={trackRef}
             className="carousel-track"
             style={{ transform: `translateX(-${currentSlide * 100}%)` }}
           >
@@ -141,7 +143,12 @@ function HomePage() {
                     <h2>Наши услуги</h2>
                     <div className="services-grid">
                       {randomServices.map((service) => (
-                        <div key={service.id} className="service-card card">
+                        <div 
+                          key={service.id} 
+                          className="service-card card"
+                          onMouseEnter={() => { if (slideIntervalRef.current) clearInterval(slideIntervalRef.current) }}
+                          onMouseLeave={() => { slideIntervalRef.current = setInterval(nextSlide, SLIDE_DURATION) }}
+                        >
                           <h3>{service.name}</h3>
                           {service.description && <p>{service.description}</p>}
                           <div className="service-meta">
@@ -167,7 +174,12 @@ function HomePage() {
                     <h2>Наши мастера</h2>
                     <div className="masters-grid">
                       {randomMasters.map((master) => (
-                        <div key={master.id} className="master-card card">
+                        <div 
+                          key={master.id} 
+                          className="master-card card"
+                          onMouseEnter={() => { if (slideIntervalRef.current) clearInterval(slideIntervalRef.current) }}
+                          onMouseLeave={() => { slideIntervalRef.current = setInterval(nextSlide, SLIDE_DURATION) }}
+                        >
                           <h3>{master.name}</h3>
                           {master.description && <p>{master.description}</p>}
                           {master.phone && <p className="phone">📱 {master.phone}</p>}
