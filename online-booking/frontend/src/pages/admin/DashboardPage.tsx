@@ -71,22 +71,20 @@ function DashboardPage() {
           {/* ─── Main stat cards — clickable ─── */}
           <div className="stats-grid">
             {isGlobal && (
-              <>
-                <div className="stat-card clickable" onClick={() => handleCardClick('/admin/masters')}>
-                  <div className="stat-icon">👨‍💼</div>
-                  <div className="stat-value">{g.total_masters || 0}</div>
-                  <div className="stat-label">Всего мастеров</div>
-                  <div className="card-hint">Нажмите для перехода →</div>
+              <div className="stat-card clickable" onClick={() => handleCardClick('/admin/masters')}>
+                <div className="stat-icon">👨‍💼</div>
+                <div className="stat-value">{g.total_masters || 0}</div>
+                <div className="stat-label">
+                  Всего мастеров
+                  {g.active_masters != null && (
+                    <span className="stat-sub">
+                      {' '}
+                      <span className="stat-active">{g.active_masters}</span> активных
+                    </span>
+                  )}
                 </div>
-                {g.active_masters != null && (
-                  <div className="stat-card clickable" onClick={() => handleCardClick('/admin/masters?is_active=true')}>
-                    <div className="stat-icon">✅</div>
-                    <div className="stat-value">{g.active_masters}</div>
-                    <div className="stat-label">Активных мастеров</div>
-                    <div className="card-hint">Нажмите для перехода →</div>
-                  </div>
-                )}
-              </>
+                <div className="card-hint">Нажмите для перехода →</div>
+              </div>
             )}
             <div className="stat-card clickable" onClick={() => handleCardClick('/admin/appointments')}>
               <div className="stat-icon">📅</div>

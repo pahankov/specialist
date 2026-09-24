@@ -68,6 +68,19 @@
   color: #666;
 }
 
+.stat-sub {
+  display: block;
+  font-size: 13px;
+  color: #999;
+  margin-top: 2px;
+}
+
+.stat-active {
+  font-weight: 700;
+  color: #4caf50;
+  font-size: 15px;
+}
+
 .card-hint {
   font-size: 11px;
   color: #667eea;

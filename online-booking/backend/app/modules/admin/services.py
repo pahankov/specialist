@@ -23,14 +23,15 @@ async def create_admin_service(
     db: AsyncSession = Depends(get_db)
 ):
     """Create a service for the authenticated master."""
+    mp_id = master.master_profile.id
     new_service = Service(
-        master_id=master.master_profile.id, name=data.name, description=data.description,
+        master_id=mp_id, name=data.name, description=data.description,
         duration_minutes=data.duration_minutes, price=data.price, is_active=True
     )
     db.add(new_service)
     await db.flush()
     await db.refresh(new_service)
-    await log_action(db, master.master_profile.id, "create", "service", new_service.id, data.name, level="info")
+    await log_action(db, mp_id, "create", "service", new_service.id, data.name, level="info")
     await db.commit()
     return new_service
 
@@ -46,9 +47,12 @@ async def get_admin_services(
     """Get active services (paginated with total count)."""
     offset = (page - 1) * page_size
 
-    # Base query
-    base_query = select(Service).where(Service.master_id == master.master_profile.id)
-    count_query = select(func.count(Service.id)).where(Service.master_id == master.master_profile.id)
+    # Extract master_profile.id BEFORE building query to avoid lazy-load
+    mp_id = master.master_profile.id
+
+    # Base query — use scalar mp_id, not master.master_profile.id
+    base_query = select(Service).where(Service.master_id == mp_id)
+    count_query = select(func.count(Service.id)).where(Service.master_id == mp_id)
 
     if active_only:
         base_query = base_query.where(Service.is_active == True)
@@ -82,15 +86,18 @@ async def get_all_admin_services(
     """Get all services including inactive (paginated with total count)."""
     offset = (page - 1) * page_size
 
+    # Extract master_profile.id BEFORE building query
+    mp_id = master.master_profile.id
+
     # Get total
     total_result = await db.execute(
-        select(func.count(Service.id)).where(Service.master_id == master.master_profile.id)
+        select(func.count(Service.id)).where(Service.master_id == mp_id)
     )
     total = total_result.scalar() or 0
 
     # Get data
     result = await db.execute(
-        select(Service).where(Service.master_id == master.master_profile.id)
+        select(Service).where(Service.master_id == mp_id)
         .order_by(Service.name).offset(offset).limit(page_size)
     )
     services = result.scalars().all()
@@ -112,12 +119,13 @@ async def update_admin_service(
     db: AsyncSession = Depends(get_db)
 ):
     """Update a service."""
-    service = await get_owned_or_404(db, Service, service_id, master.master_profile.id)
+    mp_id = master.master_profile.id
+    service = await get_owned_or_404(db, Service, service_id, mp_id)
     changes = []
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(service, field, value)
         changes.append(field)
-    await log_action(db, master.master_profile.id, "update", "service", service_id, f"Обновлено: {', '.join(changes)}" if changes else "Обновление", level="info")
+    await log_action(db, mp_id, "update", "service", service_id, f"Обновлено: {', '.join(changes)}" if changes else "Обновление", level="info")
     await db.commit()
     await db.refresh(service)
     return service
@@ -130,8 +138,9 @@ async def delete_admin_service(
     db: AsyncSession = Depends(get_db)
 ):
     """Soft-delete a service."""
-    service = await get_owned_or_404(db, Service, service_id, master.master_profile.id)
-    await log_action(db, master.master_profile.id, "delete", "service", service_id, service.name, level="warning")
+    mp_id = master.master_profile.id
+    service = await get_owned_or_404(db, Service, service_id, mp_id)
+    await log_action(db, mp_id, "delete", "service", service_id, service.name, level="warning")
     service.is_active = False
     await db.commit()
     return None
