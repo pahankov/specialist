@@ -10,7 +10,7 @@ from passlib.context import CryptContext
 
 from app.database import get_db
 from app.models.user import User, UserRole
-from app.models.master_profile import MasterProfile
+from app.models.master_profile import MasterProfile, MasterStatus
 from app.models.client_profile import ClientProfile
 from app.schemas.master import MasterCreate, MasterUpdate
 from app.schemas.client import ClientCreate
@@ -29,11 +29,15 @@ async def get_masters(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ):
+    """Get all active masters (public endpoint)."""
     result = await db.execute(
         select(MasterProfile)
         .join(MasterProfile.user)
         .options(joinedload(MasterProfile.user))
-        .where(User.role == UserRole.MASTER)  # exclude superadmins
+        .where(
+            User.role == UserRole.MASTER,
+            MasterProfile.status == MasterStatus.ACTIVE
+        )
         .order_by(User.name)
         .offset(offset).limit(limit)
     )
@@ -220,6 +224,7 @@ def _master_profile_to_dict(mp):
         "telegram_username": mp.telegram_username,
         "description": mp.description,
         "avatar_url": mp.avatar_url,
+        "status": mp.status.value if mp.status else "active",
         "is_active": mp.is_active,
         "is_admin": mp.user.is_admin,
         "created_at": mp.created_at.isoformat() if mp.created_at else None,

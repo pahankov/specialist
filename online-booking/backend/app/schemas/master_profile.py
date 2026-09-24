@@ -25,6 +25,7 @@ class MasterProfileUpdate(BaseModel):
 class MasterProfileResponse(MasterProfileBase):
     id: int
     user_id: int
+    status: str
     is_active: bool
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None

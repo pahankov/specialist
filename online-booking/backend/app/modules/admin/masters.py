@@ -9,13 +9,14 @@ from datetime import datetime, timezone
 
 from app.database import get_db
 from app.models.user import User, UserRole
-from app.models.master_profile import MasterProfile
+from app.models.master_profile import MasterProfile, MasterStatus
 from app.models.appointment import Appointment
 from app.models.client_profile import ClientProfile
 from app.models.service import Service
 from app.schemas.master import MasterCreate, MasterResponse, MasterUpdate
 from app.dependencies.auth import require_admin, require_super_admin
 from app.services.audit import log_action
+from app.services.master_status import update_master_status_from_working_hours
 from app.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -79,6 +80,7 @@ async def get_all_masters(
             "phone": u.phone,
             "telegram_username": u.master_profile.telegram_username,
             "description": u.master_profile.description,
+            "status": u.master_profile.status.value if u.master_profile.status else "active",
             "is_active": u.master_profile.is_active,
             "is_admin": u.is_admin,
             "created_at": u.master_profile.created_at,
@@ -275,8 +277,14 @@ async def toggle_master_active(
     if master_profile.user.id == super_admin.id:
         raise HTTPException(status_code=400, detail="Нельзя заблокировать себя")
     
-    master_profile.is_active = not master_profile.is_active
-    status_str = "заблокирован" if not master_profile.is_active else "разблокирован"
+    # Toggle between active and inactive
+    if master_profile.status == MasterStatus.ACTIVE:
+        master_profile.status = MasterStatus.INACTIVE
+        status_str = "отключён"
+    else:
+        master_profile.status = MasterStatus.ACTIVE
+        status_str = "включён"
+    
     await db.commit()
     await db.refresh(master_profile)
     logger.info("Суперпользователь %s %s мастера: %s", super_admin.email, status_str, master_profile.user.email)
@@ -290,6 +298,86 @@ async def toggle_master_active(
         "phone": user.phone,
         "telegram_username": master_profile.telegram_username,
         "description": master_profile.description,
+        "status": master_profile.status.value,
+        "is_active": master_profile.is_active,
+        "is_admin": user.is_admin,
+        "created_at": master_profile.created_at,
+        "updated_at": master_profile.updated_at,
+    }
+
+
+@router.post("/{master_id}/suspend", response_model=MasterResponse)
+async def suspend_master(
+    master_id: int,
+    super_admin: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Suspend master (superadmin only). Suspended masters cannot work."""
+    result = await db.execute(
+        select(MasterProfile)
+        .options(joinedload(MasterProfile.user))
+        .where(MasterProfile.id == master_id)
+    )
+    master_profile = result.scalar_one_or_none()
+    if not master_profile:
+        raise HTTPException(status_code=404, detail="Мастер не найден")
+    
+    if master_profile.user.id == super_admin.id:
+        raise HTTPException(status_code=400, detail="Нельзя заблокировать себя")
+    
+    master_profile.status = MasterStatus.SUSPENDED
+    await db.commit()
+    await db.refresh(master_profile)
+    logger.info("Суперпользователь %s заблокировал мастера: %s", super_admin.email, master_profile.user.email)
+    
+    user = master_profile.user
+    return {
+        "id": master_profile.id,
+        "user_id": user.id,
+        "name": user.name,
+        "email": user.email,
+        "phone": user.phone,
+        "telegram_username": master_profile.telegram_username,
+        "description": master_profile.description,
+        "status": master_profile.status.value,
+        "is_active": master_profile.is_active,
+        "is_admin": user.is_admin,
+        "created_at": master_profile.created_at,
+        "updated_at": master_profile.updated_at,
+    }
+
+
+@router.post("/{master_id}/unsuspend", response_model=MasterResponse)
+async def unsuspend_master(
+    master_id: int,
+    super_admin: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Unsuspend master (superadmin only)."""
+    result = await db.execute(
+        select(MasterProfile)
+        .options(joinedload(MasterProfile.user))
+        .where(MasterProfile.id == master_id)
+    )
+    master_profile = result.scalar_one_or_none()
+    if not master_profile:
+        raise HTTPException(status_code=404, detail="Мастер не найден")
+    
+    master_profile.status = MasterStatus.ACTIVE
+    await db.commit()
+    await db.refresh(master_profile)
+    logger.info("Суперпользователь %s разблокировал мастера: %s", super_admin.email, master_profile.user.email)
+    
+    user = master_profile.user
+    return {
+        "id": master_profile.id,
+        "user_id": user.id,
+        "name": user.name,
+        "email": user.email,
+        "phone": user.phone,
+        "telegram_username": master_profile.telegram_username,
+        "description": master_profile.description,
+        "status": master_profile.status.value,
         "is_active": master_profile.is_active,
         "is_admin": user.is_admin,
         "created_at": master_profile.created_at,
@@ -337,6 +425,43 @@ async def toggle_master_admin(
         "phone": user.phone,
         "telegram_username": master_profile.telegram_username,
         "description": master_profile.description,
+        "is_active": master_profile.is_active,
+        "is_admin": user.is_admin,
+        "created_at": master_profile.created_at,
+        "updated_at": master_profile.updated_at,
+    }
+
+
+@router.post("/{master_id}/refresh-status", response_model=MasterResponse)
+async def refresh_master_status(
+    master_id: int,
+    super_admin: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Refresh master status based on working hours (superadmin only)."""
+    result = await db.execute(
+        select(MasterProfile)
+        .options(joinedload(MasterProfile.user))
+        .where(MasterProfile.id == master_id)
+    )
+    master_profile = result.scalar_one_or_none()
+    if not master_profile:
+        raise HTTPException(status_code=404, detail="Мастер не найден")
+    
+    new_status = await update_master_status_from_working_hours(db, master_profile)
+    await db.commit()
+    await db.refresh(master_profile)
+    
+    user = master_profile.user
+    return {
+        "id": master_profile.id,
+        "user_id": user.id,
+        "name": user.name,
+        "email": user.email,
+        "phone": user.phone,
+        "telegram_username": master_profile.telegram_username,
+        "description": master_profile.description,
+        "status": master_profile.status.value,
         "is_active": master_profile.is_active,
         "is_admin": user.is_admin,
         "created_at": master_profile.created_at,

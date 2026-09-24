@@ -12,6 +12,7 @@ from app.schemas.working_hour import WorkingHourCreate, WorkingHourUpdate, Worki
 from app.dependencies.auth import require_master
 from app.dependencies.crud import get_owned_or_404
 from app.services.audit import log_action
+from app.services.master_status import update_master_status_from_working_hours
 
 router = APIRouter()
 
@@ -46,6 +47,11 @@ async def create_working_hour(
     await db.refresh(hour)
     await log_action(db, master.master_profile.id, "create", "working_hour", hour.id, f"{data.schedule_date}: {data.start_time}-{data.end_time}", level="info")
     await db.commit()
+    
+    # Auto-update master status based on working hours
+    await update_master_status_from_working_hours(db, master.master_profile)
+    await db.commit()
+    
     return hour
 
 
@@ -68,9 +74,17 @@ async def update_working_hour(
     if data.end_time is not None:
         hour.end_time = data.end_time
         changes.append(f"конец: {data.end_time}")
+    if data.is_active is not None:
+        hour.is_active = data.is_active
+        changes.append(f"активность: {data.is_active}")
     await log_action(db, master.master_profile.id, "update", "working_hour", hour_id, ", ".join(changes) if changes else "Обновление", level="info")
     await db.commit()
     await db.refresh(hour)
+    
+    # Auto-update master status based on working hours
+    await update_master_status_from_working_hours(db, master.master_profile)
+    await db.commit()
+    
     return hour
 
 
@@ -85,4 +99,28 @@ async def delete_working_hour(
     await log_action(db, master.master_profile.id, "delete", "working_hour", hour_id, f"{hour.schedule_date}: {hour.start_time}-{hour.end_time}", level="warning")
     await db.delete(hour)
     await db.commit()
+    
+    # Auto-update master status based on working hours
+    await update_master_status_from_working_hours(db, master.master_profile)
+    await db.commit()
+    
     return None
+
+
+@router.post("/working-hours/{hour_id}/toggle-active", response_model=WorkingHourResponse)
+async def toggle_working_hour_active(
+    hour_id: int,
+    master: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db)
+):
+    """Toggle working hour active/inactive status."""
+    hour = await get_owned_or_404(db, WorkingHour, hour_id, master.master_profile.id)
+    hour.is_active = not hour.is_active
+    await db.commit()
+    await db.refresh(hour)
+    
+    # Auto-update master status based on working hours
+    await update_master_status_from_working_hours(db, master.master_profile)
+    await db.commit()
+    
+    return hour

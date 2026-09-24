@@ -1,8 +1,16 @@
 """Master profile — stores master-specific data separate from User."""
-from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, DateTime, Index
+from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, DateTime, Index, Enum as SAEnum
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
+from enum import Enum
 from app.database import Base
+
+
+class MasterStatus(str, Enum):
+    """Master availability status."""
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    SUSPENDED = "suspended"
 
 
 class MasterProfile(Base):
@@ -14,7 +22,8 @@ class MasterProfile(Base):
     avatar_url = Column(String(500))
     telegram_username = Column(String(100))
     experience_years = Column(Integer, nullable=True)
-    is_active = Column(Boolean, default=True)
+    status = Column(SAEnum(MasterStatus), default=MasterStatus.ACTIVE, nullable=False)
+    is_active = Column(Boolean, default=True)  # soft-delete flag
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc))
