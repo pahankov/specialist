@@ -2,12 +2,13 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, joinedload
 from typing import Optional
 
 from app.database import get_db
 from app.models.audit_log import AuditLog
 from app.models.user import User
+from app.models.master_profile import MasterProfile
 from app.schemas.audit_log import AuditLogListResponse, AuditLogResponse
 from app.dependencies.auth import require_master, require_super_admin
 
@@ -46,7 +47,7 @@ async def get_audit_logs(
         count_query = count_query.where(AuditLog.entity_type == entity_type)
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
-    query = query.options(selectinload(AuditLog.master_profile)).order_by(AuditLog.created_at.desc()).offset(offset).limit(limit)
+    query = query.options(selectinload(AuditLog.master_profile).joinedload(MasterProfile.user)).order_by(AuditLog.created_at.desc()).offset(offset).limit(limit)
     result = await db.execute(query)
     logs = result.scalars().all()
     return AuditLogListResponse(
@@ -65,7 +66,7 @@ async def get_all_audit_logs(
     db: AsyncSession = Depends(get_db)
 ):
     """Get ALL audit logs (superadmin only)."""
-    query = select(AuditLog).options(selectinload(AuditLog.master_profile))
+    query = select(AuditLog).options(selectinload(AuditLog.master_profile).joinedload(MasterProfile.user))
     count_query = select(func.count(AuditLog.id))
 
     if entity_type:
