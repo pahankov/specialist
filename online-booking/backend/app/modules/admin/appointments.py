@@ -15,7 +15,7 @@ from app.models.master_profile import MasterProfile
 from app.schemas.appointment import AppointmentWithDetails, AdminBookingCreate, AppointmentResponse, AppointmentCreate
 from app.schemas.pagination import PaginatedResponse
 from app.dependencies.auth import require_master
-from app.dependencies.crud import get_owned_or_404
+from app.dependencies.crud import get_owned_or_404, get_or_404
 from app.services.audit import log_action
 
 router = APIRouter()
@@ -50,14 +50,20 @@ async def confirm_appointment(
     db: AsyncSession = Depends(get_db)
 ):
     """Confirm an appointment."""
-    result = await db.execute(
-        select(MasterProfile).where(MasterProfile.user_id == master.id)
-    )
-    mp = result.scalar_one_or_none()
-    if not mp:
-        raise HTTPException(status_code=403, detail="Not a master")
+    is_admin = master.role == UserRole.ADMIN
     
-    appointment = await get_owned_or_404(db, Appointment, appointment_id, mp.id)
+    # Superadmin doesn't need master_profile
+    if not is_admin:
+        result = await db.execute(
+            select(MasterProfile).where(MasterProfile.user_id == master.id)
+        )
+        mp = result.scalar_one_or_none()
+        if not mp:
+            raise HTTPException(status_code=403, detail="Not a master")
+        
+        appointment = await get_owned_or_404(db, Appointment, appointment_id, mp.id)
+    else:
+        appointment = await get_or_404(db, Appointment, appointment_id)
     appointment.status = "confirmed"
     await log_action(db, master.id, "confirm", "appointment", appointment.id, "Статус изменён на confirmed", level="info")
     await db.commit()
@@ -73,14 +79,20 @@ async def cancel_appointment(
     db: AsyncSession = Depends(get_db)
 ):
     """Cancel an appointment."""
-    result = await db.execute(
-        select(MasterProfile).where(MasterProfile.user_id == master.id)
-    )
-    mp = result.scalar_one_or_none()
-    if not mp:
-        raise HTTPException(status_code=403, detail="Not a master")
+    is_admin = master.role == UserRole.ADMIN
     
-    appointment = await get_owned_or_404(db, Appointment, appointment_id, mp.id)
+    # Superadmin doesn't need master_profile
+    if not is_admin:
+        result = await db.execute(
+            select(MasterProfile).where(MasterProfile.user_id == master.id)
+        )
+        mp = result.scalar_one_or_none()
+        if not mp:
+            raise HTTPException(status_code=403, detail="Not a master")
+        
+        appointment = await get_owned_or_404(db, Appointment, appointment_id, mp.id)
+    else:
+        appointment = await get_or_404(db, Appointment, appointment_id)
     appointment.status = "cancelled"
     if reason:
         appointment.notes = f"{appointment.notes}\nОтмена: {reason}" if appointment.notes else f"Отмена: {reason}"
@@ -97,14 +109,20 @@ async def complete_appointment(
     db: AsyncSession = Depends(get_db)
 ):
     """Mark an appointment as completed."""
-    result = await db.execute(
-        select(MasterProfile).where(MasterProfile.user_id == master.id)
-    )
-    mp = result.scalar_one_or_none()
-    if not mp:
-        raise HTTPException(status_code=403, detail="Not a master")
+    is_admin = master.role == UserRole.ADMIN
     
-    appointment = await get_owned_or_404(db, Appointment, appointment_id, mp.id)
+    # Superadmin doesn't need master_profile
+    if not is_admin:
+        result = await db.execute(
+            select(MasterProfile).where(MasterProfile.user_id == master.id)
+        )
+        mp = result.scalar_one_or_none()
+        if not mp:
+            raise HTTPException(status_code=403, detail="Not a master")
+        
+        appointment = await get_owned_or_404(db, Appointment, appointment_id, mp.id)
+    else:
+        appointment = await get_or_404(db, Appointment, appointment_id)
     appointment.status = "completed"
     await log_action(db, master.id, "complete", "appointment", appointment.id, level="info")
     await db.commit()
@@ -119,14 +137,20 @@ async def delete_appointment(
     db: AsyncSession = Depends(get_db)
 ):
     """Delete an appointment."""
-    result = await db.execute(
-        select(MasterProfile).where(MasterProfile.user_id == master.id)
-    )
-    mp = result.scalar_one_or_none()
-    if not mp:
-        raise HTTPException(status_code=403, detail="Not a master")
+    is_admin = master.role == UserRole.ADMIN
     
-    appointment = await get_owned_or_404(db, Appointment, appointment_id, mp.id)
+    # Superadmin doesn't need master_profile
+    if not is_admin:
+        result = await db.execute(
+            select(MasterProfile).where(MasterProfile.user_id == master.id)
+        )
+        mp = result.scalar_one_or_none()
+        if not mp:
+            raise HTTPException(status_code=403, detail="Not a master")
+        
+        appointment = await get_owned_or_404(db, Appointment, appointment_id, mp.id)
+    else:
+        appointment = await get_or_404(db, Appointment, appointment_id)
     await log_action(db, master.id, "delete", "appointment", appointment_id, level="warning")
     await db.delete(appointment)
     await db.commit()
@@ -140,14 +164,20 @@ async def mark_no_show(
     db: AsyncSession = Depends(get_db)
 ):
     """Mark an appointment as no-show. Increments client's no_show_count."""
-    result = await db.execute(
-        select(MasterProfile).where(MasterProfile.user_id == master.id)
-    )
-    mp = result.scalar_one_or_none()
-    if not mp:
-        raise HTTPException(status_code=403, detail="Not a master")
+    is_admin = master.role == UserRole.ADMIN
     
-    appointment = await get_owned_or_404(db, Appointment, appointment_id, mp.id)
+    # Superadmin doesn't need master_profile
+    if not is_admin:
+        result = await db.execute(
+            select(MasterProfile).where(MasterProfile.user_id == master.id)
+        )
+        mp = result.scalar_one_or_none()
+        if not mp:
+            raise HTTPException(status_code=403, detail="Not a master")
+        
+        appointment = await get_owned_or_404(db, Appointment, appointment_id, mp.id)
+    else:
+        appointment = await get_or_404(db, Appointment, appointment_id)
     appointment.status = "cancelled"
     appointment.notes = f"{appointment.notes}\n\nНеявка" if appointment.notes else "Неявка"
     await log_action(db, master.id, "no-show", "appointment", appointment_id, level="warning")

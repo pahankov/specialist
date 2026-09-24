@@ -255,7 +255,7 @@ async def delete_master(
     if master_profile.user.id == super_admin.id:
         raise HTTPException(status_code=400, detail="Нельзя удалить себя")
     
-    await log_action(db, super_admin.master_profile.id, "delete", "master", master_id, master_profile.user.email, level="warning")
+    await log_action(db, super_admin.master_profile.id if super_admin.master_profile else super_admin.id, "delete", "master", master_id, master_profile.user.email, level="warning")
     await db.delete(master_profile)
     await db.commit()
     logger.info("Суперпользователь %s удалил мастера: %s", super_admin.email, master_profile.user.email)

@@ -92,7 +92,7 @@ function AdminLayout({ navItems, isAdmin }: AdminLayoutProps) {
   const breadcrumbs = location.pathname.split('/').filter(Boolean).map((segment, index, array) => {
     const path = '/' + array.slice(0, index + 1).join('/')
     const label = segment.charAt(0).toUpperCase() + segment.slice(1)
-    return { label, path: path === '/admin' ? '/admin/dashboard' : path }
+    return { label, path }
   })
 
   return (
