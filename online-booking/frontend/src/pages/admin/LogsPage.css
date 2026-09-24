@@ -57,12 +57,17 @@
 
 /* Action badges with different colors */
 .status-badge {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 4px 10px;
   border-radius: 6px;
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
+  min-width: 120px;
+  text-align: center;
+  box-sizing: border-box;
 }
 
 .status-pending {
