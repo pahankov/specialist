@@ -32,6 +32,7 @@ function HomePage() {
   const [currentSlide, setCurrentSlide] = useState(0)
   const slideIntervalRef = useRef<number | null>(null)
   const totalSlides = 3 // services, masters, reviews
+  const [isAutoPlaying, setIsAutoPlaying] = useState(true)
 
   const SLIDE_DURATION = 4000 // 4 seconds
 
@@ -41,46 +42,48 @@ function HomePage() {
 
   const goToSlide = useCallback((index: number) => {
     setCurrentSlide(index)
+    if (index < totalSlides - 1) {
+      setIsAutoPlaying(true)
+    } else {
+      setIsAutoPlaying(false)
+    }
   }, [])
 
   const nextSlide = useCallback(() => {
-    setCurrentSlide((prev) => prev + 1)
+    setCurrentSlide((prev) => {
+      if (prev >= totalSlides - 1) {
+        setIsAutoPlaying(false)
+        return prev
+      }
+      return prev + 1
+    })
   }, [])
 
   const prevSlide = useCallback(() => {
-    setCurrentSlide((prev) => prev - 1)
+    setCurrentSlide((prev) => Math.max(0, prev - 1))
+    setIsAutoPlaying(true)
   }, [])
 
   // Auto-play
   useEffect(() => {
-    slideIntervalRef.current = setInterval(nextSlide, SLIDE_DURATION)
+    if (!isAutoPlaying) return
+    
+    slideIntervalRef.current = setInterval(() => {
+      setCurrentSlide((prev) => {
+        if (prev >= totalSlides - 1) {
+          setIsAutoPlaying(false)
+          return prev
+        }
+        return prev + 1
+      })
+    }, SLIDE_DURATION)
     
     return () => {
       if (slideIntervalRef.current) {
         clearInterval(slideIntervalRef.current)
       }
     }
-  }, [nextSlide])
-
-  // Handle infinite loop — when reaching cloned slide 3, jump to 0 instantly
-  useEffect(() => {
-    if (currentSlide === 3) {
-      // Use CSS transitionend to detect when animation completes
-      const track = document.querySelector('.carousel-track')
-      if (!track) return
-
-      const handleTransitionEnd = () => {
-        track.removeEventListener('transitionend', handleTransitionEnd)
-        // Instantly reset to first slide
-        ;(track as HTMLElement).style.transition = 'none'
-        ;(track as HTMLElement).style.transform = 'translateX(0)'
-        setCurrentSlide(0)
-      }
-
-      track.addEventListener('transitionend', handleTransitionEnd)
-      return () => track.removeEventListener('transitionend', handleTransitionEnd)
-    }
-  }, [currentSlide])
+  }, [isAutoPlaying, totalSlides])
 
   useEffect(() => {
     const fetchData = async () => {
@@ -202,37 +205,6 @@ function HomePage() {
                 <ReviewsSection />
               </div>
             </div>
-
-            {/* Slide 4: Cloned Services for infinite loop */}
-            <div className={`carousel-slide ${currentSlide === 3 ? 'active' : ''}`}>
-              {randomServices.length > 0 && (
-                <section className="services-section">
-                  <div className="container">
-                    <h2>Наши услуги</h2>
-                    <div className="services-grid">
-                      {randomServices.map((service) => (
-                        <div 
-                          key={`clone-${service.id}`} 
-                          className="service-card card"
-                          onMouseEnter={() => { if (slideIntervalRef.current) clearInterval(slideIntervalRef.current) }}
-                          onMouseLeave={() => { slideIntervalRef.current = setInterval(nextSlide, SLIDE_DURATION) }}
-                        >
-                          <h3>{service.name}</h3>
-                          {service.description && <p>{service.description}</p>}
-                          <div className="service-meta">
-                            <span className="duration">⏱️ {service.duration_minutes} мин</span>
-                            <span className="price">₽{service.price}</span>
-                          </div>
-                          <Link to={`/booking?master_id=${service.master_id}`} className="btn btn-primary">
-                            Записаться
-                          </Link>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </section>
-              )}
-            </div>
           </div>
 
           <button 
@@ -249,7 +221,7 @@ function HomePage() {
           {[0, 1, 2].map((index) => (
             <button
               key={index}
-              className={`carousel-indicator ${currentSlide % totalSlides === index ? 'active' : ''}`}
+              className={`carousel-indicator ${currentSlide === index ? 'active' : ''}`}
               onClick={() => goToSlide(index)}
               aria-label={`Перейти к слайду ${index + 1}`}
             />
@@ -258,9 +230,9 @@ function HomePage() {
 
         {/* Slide labels */}
         <div className="carousel-labels">
-          <span className={`carousel-label ${currentSlide % totalSlides === 0 ? 'active' : ''}`}>Услуги</span>
-          <span className={`carousel-label ${currentSlide % totalSlides === 1 ? 'active' : ''}`}>Мастера</span>
-          <span className={`carousel-label ${currentSlide % totalSlides === 2 ? 'active' : ''}`}>Отзывы</span>
+          <span className={`carousel-label ${currentSlide === 0 ? 'active' : ''}`}>Услуги</span>
+          <span className={`carousel-label ${currentSlide === 1 ? 'active' : ''}`}>Мастера</span>
+          <span className={`carousel-label ${currentSlide === 2 ? 'active' : ''}`}>Отзывы</span>
         </div>
       </div>
 
