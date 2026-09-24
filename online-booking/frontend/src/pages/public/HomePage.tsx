@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { mastersApi, servicesApi } from '../../api/client'
 import type { Master, Service } from '../../api/types'
@@ -6,9 +6,24 @@ import LoginModal from '../../components/LoginModal'
 import { ReviewsSection } from '../../components/reviews'
 import './HomePage.css'
 
+// Helper: shuffle array (Fisher-Yates)
+function shuffleArray<T>(array: T[]): T[] {
+  const shuffled = [...array]
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+  }
+  return shuffled
+}
+
+// Helper: pick random N items
+function pickRandom<T>(array: T[], count: number): T[] {
+  return shuffleArray(array).slice(0, count)
+}
+
 function HomePage() {
-  const [masters, setMasters] = useState<Master[]>([])
-  const [services, setServices] = useState<Service[]>([])
+  const [allMasters, setAllMasters] = useState<Master[]>([])
+  const [allServices, setAllServices] = useState<Service[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showLogin, setShowLogin] = useState(false)
@@ -20,6 +35,10 @@ function HomePage() {
   const totalSlides = 3 // services, masters, reviews
 
   const SLIDE_DURATION = 4000 // 4 seconds
+
+  // Random selection on each page load (memoized)
+  const randomServices = useMemo(() => pickRandom(allServices, 6), [allServices])
+  const randomMasters = useMemo(() => pickRandom(allMasters, 6), [allMasters])
 
   const goToSlide = useCallback((index: number) => {
     if (isTransitioning) return
@@ -66,8 +85,8 @@ function HomePage() {
           mastersApi.getAll(),
           servicesApi.getAll(),
         ])
-        setMasters(mastersRes.data)
-        setServices(servicesRes.data)
+        setAllMasters(mastersRes.data)
+        setAllServices(servicesRes.data)
       } catch (err) {
         setError('Не удалось загрузить данные')
         console.error(err)
@@ -113,12 +132,12 @@ function HomePage() {
           <div className="carousel-track">
             {/* Slide 1: Services */}
             <div className={`carousel-slide ${currentSlide === 0 ? 'active' : ''}`}>
-              {services.length > 0 && (
+              {randomServices.length > 0 && (
                 <section className="services-section">
                   <div className="container">
                     <h2>Наши услуги</h2>
                     <div className="services-grid">
-                      {services.map((service) => (
+                      {randomServices.map((service) => (
                         <div key={service.id} className="service-card card">
                           <h3>{service.name}</h3>
                           {service.description && <p>{service.description}</p>}
@@ -139,12 +158,12 @@ function HomePage() {
 
             {/* Slide 2: Masters */}
             <div className={`carousel-slide ${currentSlide === 1 ? 'active' : ''}`}>
-              {masters.length > 0 && (
+              {randomMasters.length > 0 && (
                 <section className="masters-section">
                   <div className="container">
                     <h2>Наши мастера</h2>
                     <div className="masters-grid">
-                      {masters.map((master) => (
+                      {randomMasters.map((master) => (
                         <div key={master.id} className="master-card card">
                           <h3>{master.name}</h3>
                           {master.description && <p>{master.description}</p>}
