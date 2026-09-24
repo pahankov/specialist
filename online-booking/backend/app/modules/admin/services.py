@@ -40,11 +40,12 @@ async def create_admin_service(
 async def get_admin_services(
     master: User = Depends(require_master),
     page: int = Query(1, ge=1, description="Page number"),
-    page_size: int = Query(20, ge=1, le=200, description="Items per page"),
-    active_only: bool = Query(True, description="Return only active services"),
+    page_size: int = Query(20, ge=1, le=500, description="Items per page"),
+    active_only_raw: Optional[str] = Query(None, description="Return only active services (true/false)"),
     db: AsyncSession = Depends(get_db)
 ):
     """Get active services (paginated with total count)."""
+    active_only = active_only_raw is None or active_only_raw.lower() in ("true", "1", "yes")
     offset = (page - 1) * page_size
 
     # Extract master_profile.id BEFORE building query to avoid lazy-load

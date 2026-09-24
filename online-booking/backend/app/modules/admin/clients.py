@@ -22,7 +22,7 @@ router = APIRouter()
 async def get_admin_clients(
     master: User = Depends(require_master),
     page: int = Query(1, ge=1, description="Page number"),
-    page_size: int = Query(20, ge=1, le=200, description="Items per page"),
+    page_size: int = Query(20, ge=1, le=500, description="Items per page"),
     search: Optional[str] = Query(None, description="Search by name or phone"),
     master_id: Optional[int] = Query(None, description="Filter by master ID (clients who booked with this master)"),
     db: AsyncSession = Depends(get_db)
