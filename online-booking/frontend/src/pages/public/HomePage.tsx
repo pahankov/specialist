@@ -30,7 +30,6 @@ function HomePage() {
   
   // Carousel state
   const [currentSlide, setCurrentSlide] = useState(0)
-  const [isTransitioning, setIsTransitioning] = useState(false)
   const slideIntervalRef = useRef<number | null>(null)
   const totalSlides = 3 // services, masters, reviews
 
@@ -43,20 +42,25 @@ function HomePage() {
   // Handle infinite loop — when reaching cloned slide 3, jump to 0 instantly
   useEffect(() => {
     if (currentSlide === 3) {
-      setIsTransitioning(true)
-      setTimeout(() => {
-        setCurrentSlide(0)
-        setTimeout(() => setIsTransitioning(false), 50)
-      }, 600)
+      // Disable transition for instant jump
+      const track = document.querySelector('.carousel-track') as HTMLElement
+      if (track) {
+        track.style.transition = 'none'
+        track.style.transform = 'translateX(0)'
+        // Force reflow
+        void track.offsetHeight
+        // Re-enable transition
+        requestAnimationFrame(() => {
+          track.style.transition = 'transform 0.6s cubic-bezier(0.4, 0, 0.2, 1)'
+          setCurrentSlide(0)
+        })
+      }
     }
   }, [currentSlide])
 
   const goToSlide = useCallback((index: number) => {
-    if (isTransitioning) return
-    setIsTransitioning(true)
     setCurrentSlide(index)
-    setTimeout(() => setIsTransitioning(false), 600)
-  }, [isTransitioning])
+  }, [])
 
   const nextSlide = useCallback(() => {
     setCurrentSlide((prev) => prev + 1)
