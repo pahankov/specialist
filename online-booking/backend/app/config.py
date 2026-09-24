@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     ALLOWED_ORIGINS: str = "http://localhost:3000"
     APP_ENV: str = "development"
 
+    # Redis
+    REDIS_URL: str = "redis://localhost:6379/0"
+
     # SMS settings
     SMS_PROVIDER: str = "fake"  # "fake" | "twilio" | "smsc"
     SMS_CODE_TTL_SECONDS: int = 300  # 5 minutes

@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom'
 import { adminApi } from '../../api/client'
+import { Breadcrumb, KeyboardShortcutsHint } from '../../components/common'
 import './AdminLayout.css'
 
 interface MasterInfo {
@@ -37,6 +38,8 @@ function AdminLayout({ navItems, isAdmin }: AdminLayoutProps) {
   const navigate = useNavigate()
   const location = useLocation()
   const [master, setMaster] = useState<MasterInfo | null>(null)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   useEffect(() => {
     const token = getCookie('access_token')
@@ -55,13 +58,28 @@ function AdminLayout({ navItems, isAdmin }: AdminLayoutProps) {
     }
   }, [])
 
+  // Close mobile menu on route change
+  useEffect(() => {
+    setMobileMenuOpen(false)
+  }, [location.pathname])
+
+  // Close mobile menu on resize to desktop
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth > 1024) {
+        setMobileMenuOpen(false)
+      }
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
   const handleLogout = async () => {
     try {
-      await adminApi.getDashboard() // just to trigger, won't be used
+      await adminApi.getDashboard()
     } catch { /* ignore */ }
     
     document.cookie = 'access_token=; path=/; max-age=0'
-    // Backend will also clear refresh_token cookie via /api/v1/auth/logout
     navigate('/')
   }
 
@@ -70,25 +88,85 @@ function AdminLayout({ navItems, isAdmin }: AdminLayoutProps) {
   const layoutTitle = isAdmin ? '🍬 Панель суперпользователя' : '🍬 Мастерская'
   const userRole = isAdmin ? 'Суперпользователь' : 'Мастер'
 
+  // Build breadcrumb from current path
+  const breadcrumbs = location.pathname.split('/').filter(Boolean).map((segment, index, array) => {
+    const path = '/' + array.slice(0, index + 1).join('/')
+    const label = segment.charAt(0).toUpperCase() + segment.slice(1)
+    return { label, path: path === '/admin' ? '/admin/dashboard' : path }
+  })
+
   return (
     <div className="admin-layout">
-      <aside className="admin-sidebar">
+      {/* Mobile hamburger button */}
+      <button
+        className="hamburger-btn"
+        onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+        aria-label="Меню"
+      >
+        <span className="hamburger-line"></span>
+        <span className="hamburger-line"></span>
+        <span className="hamburger-line"></span>
+      </button>
+
+      {/* Mobile overlay */}
+      {mobileMenuOpen && (
+        <div className="sidebar-overlay" onClick={() => setMobileMenuOpen(false)} />
+      )}
+
+      <aside className={`admin-sidebar ${sidebarCollapsed ? 'collapsed' : ''} ${mobileMenuOpen ? 'mobile-open' : ''}`}>
         <div className="sidebar-header">
-          <h2>{layoutTitle}</h2>
-          <p className="sidebar-subtitle">{userRole}</p>
-          {master && <p className="sidebar-user">👤 {master.name}</p>}
+          <div className="sidebar-header-top">
+            <button
+              className="collapse-btn"
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              aria-label="Свернуть меню"
+              title={sidebarCollapsed ? 'Развернуть меню' : 'Свернуть меню'}
+            >
+              {sidebarCollapsed ? '›' : '‹'}
+            </button>
+            <div className="sidebar-brand">
+              <h2>{layoutTitle}</h2>
+              {!sidebarCollapsed && <p className="sidebar-subtitle">{userRole}</p>}
+            </div>
+          </div>
+          {master && !sidebarCollapsed && (
+            <p className="sidebar-user">👤 {master.name}</p>
+          )}
         </div>
         <nav className="sidebar-nav">
           {navItems.map((item) => (
-            <Link key={item.path} to={item.path} className={`nav-item ${isActive(item.path) ? 'active' : ''}`}>{item.label}</Link>
+            <Link
+              key={item.path}
+              to={item.path}
+              className={`nav-item ${isActive(item.path) ? 'active' : ''}`}
+              onClick={() => setMobileMenuOpen(false)}
+              title={sidebarCollapsed ? item.label : undefined}
+            >
+              <span className="nav-icon">{item.label.split(' ')[0]}</span>
+              {!sidebarCollapsed && <span className="nav-label">{item.label.split(' ').slice(1).join(' ')}</span>}
+            </Link>
           ))}
         </nav>
         <div className="sidebar-footer">
-          <button className="btn btn-ghost btn-logout" onClick={handleLogout}>🚪 Выйти</button>
+          <button className="btn btn-ghost btn-logout" onClick={handleLogout} title="Выйти">
+            <span className="nav-icon">🚪</span>
+            {!sidebarCollapsed && <span className="nav-label">Выйти</span>}
+          </button>
         </div>
       </aside>
-      <main className="admin-main"><Outlet /></main>
+
+      <main className="admin-main">
+        {!sidebarCollapsed && breadcrumbs.length > 0 && (
+          <Breadcrumb items={breadcrumbs} />
+        )}
+        <div className="main-content">
+          <Outlet />
+        </div>
+      </main>
+
+      <KeyboardShortcutsHint />
     </div>
   )
 }
+
 export default AdminLayout

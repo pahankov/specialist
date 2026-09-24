@@ -4,6 +4,7 @@ import type { Client } from '../../api/types'
 import { PHONE_PLACEHOLDER, EMAIL_PLACEHOLDER } from '../../constants'
 import { formatPhone } from '../../utils/formatPhone'
 import { useToast } from '../../components/Toast'
+import { Skeleton, EmptyState, Tooltip } from '../../components/common'
 import './ClientsPage.css'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -22,7 +23,7 @@ function ClientsPage() {
   const fetchData = async () => {
     try {
       const c = await adminApi.getClients()
-      setClients(c.data)
+      setClients(c.data.items)
     } catch (err: any) {
       if (err.response?.status === 401) { localStorage.removeItem('access_token'); window.location.href = '/admin/login' }
       else addToast('Ошибка загрузки', 'error')
@@ -61,9 +62,21 @@ function ClientsPage() {
   }
 
   const handleDelete = async (id: number) => {
+    const client = clients.find(c => c.id === id)
+    if (!client) return
+
+    const undoAction = () => {
+      addToast('Удаление отменено', 'info')
+    }
+
     try {
       await adminApi.deleteClient(id)
-      addToast('Клиент удалён', 'success')
+      addToast(
+        'Клиент удалён',
+        'success',
+        undoAction,
+        'Отменить'
+      )
       fetchData()
     } catch (err: any) {
       addToast('Ошибка удаления', 'error')
@@ -73,8 +86,6 @@ function ClientsPage() {
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setPhone(formatPhone(e.target.value))
   }
-
-  if (loading) return <div><div className="loading">Загрузка...</div></div>
 
   return (
     <div>
@@ -108,27 +119,55 @@ function ClientsPage() {
         </div>
       )}
 
-      <div className="card">
-        <div className="card-header"><h3>Список клиентов ({clients.length})</h3><button className="btn btn-primary" onClick={() => setShowForm(true)}>+ Добавить клиента</button></div>
-        {clients.length === 0 ? <p className="empty-state">Нет клиентов</p> : (
-          <table className="clients-table">
-            <thead><tr><th>Имя</th><th>Телефон</th><th>Email</th><th>Действия</th></tr></thead>
-            <tbody>
-              {clients.map(c => (
-                <tr key={c.id}>
-                  <td><strong>{c.name}</strong></td>
-                  <td><a href={`tel:${c.phone}`}>{c.phone}</a></td>
-                  <td>{c.email || '—'}</td>
-                  <td className="actions-cell">
-                    <button className="btn btn-sm btn-edit" onClick={() => handleEdit(c)}>✏️ Редактировать</button>
-                    <button className="btn btn-sm btn-delete" onClick={() => setDeletingId(c.id)}>🗑️ Удалить</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      {loading ? (
+        <div className="card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <Skeleton width="200px" height="24px" />
+            <Skeleton width="140px" height="36px" />
+          </div>
+          <Skeleton rows={5} height="48px" />
+        </div>
+      ) : (
+        <div className="card">
+          <div className="card-header">
+            <h3>Список клиентов <span className="client-count">({clients.length})</span></h3>
+            <Tooltip content="Добавить нового клиента">
+              <button className="btn btn-primary" onClick={() => setShowForm(true)}>+ Добавить клиента</button>
+            </Tooltip>
+          </div>
+
+          {clients.length === 0 ? (
+            <EmptyState
+              icon="👥"
+              title="Клиенты не найдены"
+              description="Добавьте первого клиента или измените параметры поиска"
+              actionLabel="+ Добавить клиента"
+              onAction={() => setShowForm(true)}
+            />
+          ) : (
+            <table className="clients-table">
+              <thead><tr><th>Имя</th><th>Телефон</th><th>Email</th><th>Действия</th></tr></thead>
+              <tbody>
+                {clients.map(c => (
+                  <tr key={c.id}>
+                    <td><strong>{c.name}</strong></td>
+                    <td><a href={`tel:${c.phone}`}>{c.phone}</a></td>
+                    <td>{c.email || '—'}</td>
+                    <td className="actions-cell">
+                      <Tooltip content="Редактировать">
+                        <button className="btn btn-sm btn-edit" onClick={() => handleEdit(c)}>✏️</button>
+                      </Tooltip>
+                      <Tooltip content="Удалить">
+                        <button className="btn btn-sm btn-delete" onClick={() => setDeletingId(c.id)}>🗑️</button>
+                      </Tooltip>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
 
       {deletingId && (
         <div className="modal-overlay" onClick={() => setDeletingId(null)}>

@@ -77,9 +77,13 @@ online-booking/
 │   │   │   └── rate_limit.py # RateLimiter (60 req/min default)
 │   │   ├── services/         # Бизнес-логика (зависят от БД)
 │   │   │   ├── audit.py      # Audit logging (логирование действий)
-│   │   │   └── sms/          # SMS провайдеры (FakeSmsProvider, Twilio, SMS.ru)
+│   │   │   ├── sms/          # SMS провайдеры (FakeSmsProvider, Twilio, SMS.ru)
+│   │   │   ├── cache.py      # Redis cache (dashboard stats, graceful degradation)
+│   │   │   ├── background_tasks.py  # RQ background task queue (CSV export)
+│   │   │   └── export_tasks.py     # Background export functions
 │   │   ├── models/           # SQLAlchemy ORM (User, MasterProfile, ClientProfile, Country, City, OtpCode + др.)
 │   │   ├── schemas/          # Pydantic schemas (request/response validation)
+│   │   │   ├── pagination.py # PaginatedResponse[T] — generic пагинация со total count
 │   │   ├── utils/            # Утилиты (timezone, formatPhone)
 │   │   └── modules/          # Модульная архитектура (self-contained packages)
 │   │       ├── auth/         # Регистрация, логин, JWT, OTP, refresh token rotation
@@ -95,7 +99,7 @@ online-booking/
 │   │       ├── service/      # CRUD услуг
 │   │       ├── schedule/     # Рабочее расписание
 │   │       ├── review/       # Отзывы и рейтинги
-│   │       └── admin/        # Админ-панель (12 эндпоинт-модулей)
+│   │       └── admin/        # Админ-панель (17 эндпоинт-модулей)
 │   ├── alembic/              # Alembic миграции для PostgreSQL
 │   ├── alembic.ini           # Конфиг Alembic
 │   ├── tests/                # pytest тесты (135 тестов: auth, masters, services, appointments, clients, reviews, admin CRUD, rate limiting, refresh tokens, password security, no-show)
@@ -162,6 +166,8 @@ utils/
 | Backend | FastAPI 0.115, SQLAlchemy 2.0 (async), aiosqlite / asyncpg |
 | Auth | JWT (python-jose), bcrypt==4.3.0 (passlib), refresh token rotation, httpOnly cookies |
 | Migrations | Alembic 1.14 |
+| Cache | Redis 7 (optional, graceful degradation) |
+| Background tasks | RQ (Redis Queue, optional, graceful degradation) |
 | Frontend | React 18, TypeScript 5, Vite 6 |
 | HTTP | Axios (interceptors, refresh queue) |
 | Тесты | pytest, pytest-asyncio, httpx, Vitest, @testing-library/react |
@@ -191,29 +197,46 @@ utils/
 - Управление клиентами (автоматическое создание при записи)
 - Журнал действий (audit logs) — фиксация всех операций
 - Экспорт записей и клиентов в CSV
-- Пагинация: мастера, клиенты, услуги (limit/offset, 1-200)
+- **Пагинация:** мастера, клиенты, услуги, записи, отзывы, аудит (PaginatedResponse с total count)
+- **Redis caching:** кэширование дашборд-статистики (TTL 5 мин), graceful degradation
+- **Background tasks (RQ):** фоновый экспорт CSV с job status tracking
+- **Health check:** `/health` (быстрый), `/admin/health` (DB + cache + RQ), `/admin/health/verbose` (метрики)
+- **API Changelog:** `/admin/changelog` — история версий API
+- **OpenAPI docs:** улучшенная документация с markdown-описаниями, examples, custom 422 handler
 - Валидация пароля: min 8 символов, 1 заглавная, 1 строчная, 1 цифра, 1 спецсимвол, 4 уникальных символа
 - Валидация телефона: 10 цифр, автоформатирование в +7 (XXX) XXX-XX-XX
 - Alembic миграции для PostgreSQL
 - Авто-создание таблиц для SQLite через `create_all` в lifespan
 - Swagger UI документация (`/docs`)
-- Health check эндпоинт (`/health`)
 - Rate limiting middleware (60 req/min default, 10 req/min для auth)
 - No-show tracking: счётчик неяв клиентов, эндпоинт `/admin/appointments/{id}/no-show`
 - Отзывы и рейтинги: CRUD отзывов, средний рейтинг, публичная страница отзывов
+- **Admin reviews:** `/admin/reviews` — пагинированный список, approve/unpublish, average rating
+- **Master detail:** `/admin/masters/{id}/full` — полная статистика, рейтинг, отзывы, последние записи
+- **Bulk operations:** `/admin/masters/bulk/toggle-active`, `/bulk/suspend`, `/bulk/unsuspend`
+- **Master import:** `/admin/masters/import` — загрузка из CSV
+- **Master audit:** `/admin/audit-logs?master_id=X` — логи по конкретному мастеру
 
 ### ✅ Frontend
 - Главная страница (список мастеров и услуг)
 - Страница бронирования с проверкой конфликтов
 - **LoginModal:** регистрация мастера с dropdown городов + OTP flow для клиентов
-- Админ-панель (12 страниц):
-  - Дашборд — статистика записей, клиентов, услуг, доход
+- **Адаптивный sidebar:** collapsible (сворачивается по кнопке), hamburger menu на мобильных (<1024px)
+- **Breadcrumb navigation:** навигационная цепочка под sidebar
+- **Skeleton loaders:** анимированные "скелеты" вместо текста "Загрузка..."
+- **Tooltips:** всплывающие подсказки при наведении на кнопки и статусы
+- **Keyboard shortcuts:** `Ctrl+K` — поиск, `?` — подсказка клавиш, `Esc` — закрыть модалку
+- **Undo toast:** уведомления с кнопкой "Отменить" для delete-операций (5 сек)
+- **Empty states:** красивые заглушки с иконками и CTA при отсутствии данных
+- **MasterDetailPage:** детальная карточка мастера с вкладками (Обзор, Отзывы, Логи)
+- Админ-панель (13 страниц):
+  - Дашборд — статистика записей, клиентов, услуг, доход, рейтинг
   - Записи — фильтрация по статусу, пагинация, подтверждение, завершение, отмена, удаление, no-show
   - Услуги — создание, редактирование, soft-delete, пагинация
   - Клиенты — создание, редактирование, удаление, экспорт CSV, пагинация
   - Расписание — Calendar, TimeSlots, BookingModal, MonthlyStats (рефакторинг из монолита)
   - Логи — журнал всех действий с фильтрацией и пагинацией
-  - Мастера — управление мастерами (CRUD, блокировка, назначение прав суперпользователя) [суперпользователь]
+  - Мастера — управление мастерами (CRUD, bulk toggle/suspend, импорт CSV, детальная карточка) [суперпользователь]
   - Глобальная статистика — общая статистика по всей системе [суперпользователь]
 - Cookie-based auth (без localStorage)
 - Axios interceptor с refresh-очередью
@@ -336,9 +359,30 @@ utils/
 | `PATCH` | `/admin/masters/{id}` | Обновить мастера |
 | `DELETE` | `/admin/masters/{id}` | Удалить мастера |
 | `POST` | `/admin/masters/{id}/toggle-active` | Блокировка/разблокировка мастера |
-| `POST` | `/admin/masters/{id}/toggle-admin` | Назначение/снятие прав суперпользователя |
+| `GET` | `/admin/masters/{id}/full` | Полная карточка (статистика, рейтинг, отзывы, записи) |
+| `POST` | `/admin/masters/{id}/suspend` | Заблокировать навсегда |
+| `POST` | `/admin/masters/{id}/unsuspend` | Разблокировать |
 | `GET` | `/admin/masters/{id}/stats` | Статистика по мастеру |
+| `POST` | `/admin/masters/bulk/toggle-active` | Массовая смена статуса |
+| `POST` | `/admin/masters/bulk/suspend` | Массовая блокировка |
+| `POST` | `/admin/masters/bulk/unsuspend` | Массовая разблокировка |
+| `POST` | `/admin/masters/import` | Импорт мастеров из CSV |
+| `GET` | `/admin/reviews` | Все отзывы (пагинация, фильтры: master_id, is_published) |
+| `GET` | `/admin/reviews/average/{master_id}` | Средний рейтинг мастера |
+| `PATCH` | `/admin/reviews/{id}/publish` | Опубликовать отзыв |
+| `PATCH` | `/admin/reviews/{id}/unpublish` | Скрыть отзыв |
+| `DELETE` | `/admin/reviews/{id}` | Удалить отзыв |
+| `GET` | `/admin/audit-logs?master_id=X` | Логи действий (фильтр по мастеру) |
 | `GET` | `/admin/global-stats` | Глобальная статистика по всей системе |
+| `POST` | `/admin/dashboard/cache/clear` | Сброс кэша дашборда |
+
+### Health & Changelog
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| `GET` | `/health` | Быстрая проверка (без БД) |
+| `GET` | `/admin/health` | Полная проверка (DB + Redis cache + RQ) |
+| `GET` | `/admin/health/verbose` | Расширенная (метрики БД, статистика RQ) |
+| `GET` | `/admin/changelog` | История версий API |
 
 ### Reviews (публичные + авторизованные)
 | Метод | Endpoint | Описание |
@@ -366,13 +410,19 @@ utils/
 - **Мастера** — управление мастерами:
   - Поиск и фильтрация (по имени/email, статус, роль)
   - Создание, редактирование, удаление мастеров
-  - Блокировка/разблокировка мастеров (active/inactive)
-  - Блокировка/разблокировка (suspended)
+  - Массовые операции: bulk toggle active, bulk suspend/unsuspend
+  - Импорт из CSV
+  - Детальная карточка: статистика, рейтинг, отзывы, последние записи, история действий
+  - Блокировка/разблокировка мастеров (active/inactive/suspended)
   - Просмотр статистики по каждому мастеру
-- **Записи** — видит все записи всех мастеров
-- **Клиенты** — видит всех клиентов системы
+- **Записи** — видит все записи всех мастеров, пагинация, фильтрация
+- **Клиенты** — видит всех клиентов системы, пагинация, поиск
+- **Услуги** — пагинация, фильтрация по активности
+- **Отзывы** — модерация: approve, unpublish, delete, средний рейтинг
 - **Глобальная статистика** — карточки с метриками, breakdown по статусам, последние записи
-- **Логи** — журнал всех действий
+- **Логи** — журнал всех действий с фильтрацией по мастеру
+- **Экспорт** — CSV с фоновой обработкой (RQ), статус задач
+- **Health check** — проверка DB, Redis cache, RQ queue
 
 **Различие ролей:**
 | Функция | Мастер | Суперпользователь |
@@ -663,7 +713,125 @@ curl -X PATCH http://localhost:8000/api/v1/admin/appointments/1/no-show \
   -H "Authorization: Bearer <token>"
 ```
 
+### Health check
+```bash
+# Быстрая проверка
+curl -X GET http://localhost:8000/health
+
+# Полная проверка (DB + Redis + RQ)
+curl -X GET http://localhost:8000/api/v1/admin/health
+
+# Расширенная (с метриками)
+curl -X GET http://localhost:8000/api/v1/admin/health/verbose
+```
+
+### API Changelog
+```bash
+# История версий API
+curl -X GET http://localhost:8000/api/v1/admin/changelog
+```
+
+### Admin reviews
+```bash
+# Список всех отзывов (пагинация)
+curl -X GET "http://localhost:8000/api/v1/admin/reviews?page=1&page_size=20"
+
+# Фильтр по мастеру
+curl -X GET "http://localhost:8000/api/v1/admin/reviews?master_id=1&is_published=true"
+
+# Опубликовать отзыв
+curl -X PATCH http://localhost:8000/api/v1/admin/reviews/1/publish \
+  -H "Authorization: Bearer <token>"
+
+# Скрыть отзыв
+curl -X PATCH http://localhost:8000/api/v1/admin/reviews/1/unpublish \
+  -H "Authorization: Bearer <token>"
+
+# Удалить отзыв
+curl -X DELETE http://localhost:8000/api/v1/admin/reviews/1 \
+  -H "Authorization: Bearer <token>"
+
+# Средний рейтинг мастера
+curl -X GET "http://localhost:8000/api/v1/admin/reviews/average/1"
+```
+
+### Master detail (full profile)
+```bash
+# Полная карточка мастера (статистика, рейтинг, отзывы, записи)
+curl -X GET http://localhost:8000/api/v1/admin/masters/1/full \
+  -H "Authorization: Bearer <token>"
+```
+
+### Bulk operations
+```bash
+# Массовая смена статуса
+curl -X POST http://localhost:8000/api/v1/admin/masters/bulk/toggle-active \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '[1, 2, 3]'
+
+# Массовая блокировка
+curl -X POST http://localhost:8000/api/v1/admin/masters/bulk/suspend \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '[1, 2, 3]'
+```
+
+### Master import from CSV
+```bash
+# Импорт мастеров из CSV (name,email,password,phone,telegram_username)
+curl -X POST http://localhost:8000/api/v1/admin/masters/import \
+  -H "Authorization: Bearer <token>" \
+  -F "file=@masters.csv"
+```
+
+### Background export
+```bash
+# Запуск фонового экспорта
+curl -X POST "http://localhost:8000/api/v1/admin/export/appointments?background=true&status=pending" \
+  -H "Authorization: Bearer <token>"
+
+# Статус задачи
+curl -X GET http://localhost:8000/api/v1/admin/export/appointments/status/<job_id> \
+  -H "Authorization: Bearer <token>"
+
+# Статистика очереди задач
+curl -X GET http://localhost:8000/api/v1/admin/export/stats \
+  -H "Authorization: Bearer <token>"
+```
+
+### Audit logs by master
+```bash
+# Логи действий по конкретному мастеру
+curl -X GET "http://localhost:8000/api/v1/admin/audit-logs?master_id=1&page=1&page_size=20" \
+  -H "Authorization: Bearer <token>"
+```
+
 ## 📚 История версий
+
+### [1.2.0] — 2026-09-24
+- **UX/UI улучшения:**
+  - Адаптивный sidebar: collapsible (кнопка сворачивания), hamburger menu на мобильных
+  - Breadcrumb navigation: навигационная цепочка под sidebar
+  - Skeleton loaders: анимированные "скелеты" вместо текста "Загрузка..."
+  - Tooltips: всплывающие подсказки при наведении на кнопки и статусы
+  - Keyboard shortcuts: `Ctrl+K` — поиск, `?` — подсказка, `Esc` — закрыть модалку
+  - Undo toast: уведомления с кнопкой "Отменить" для delete-операций (5 сек)
+  - Empty states: красивые заглушки с иконками и CTA
+- **Производительность и архитектура:**
+  - **PaginatedResponse:** пагинация со total count для всех списков (клиенты, записи, услуги, отзывы, аудит)
+  - **Redis caching:** кэширование дашборд-статистики (TTL 5 мин), graceful degradation
+  - **Background tasks (RQ):** фоновый экспорт CSV с job status tracking
+  - **Health check:** `/health` (быстрый), `/admin/health` (DB+cache+RQ), `/admin/health/verbose` (метрики)
+  - **API Changelog:** `/admin/changelog` — история версий API
+  - **OpenAPI docs:** улучшенная документация с markdown, examples, custom 422 handler
+- **Управление мастерами:**
+  - **MasterDetailPage:** детальная карточка с вкладками (Обзор, Отзывы, Логи)
+  - **Admin reviews:** `/admin/reviews` — пагинированный список, approve/unpublish, average rating
+  - **Bulk operations:** `/admin/masters/bulk/toggle-active`, `/bulk/suspend`, `/bulk/unsuspend`
+  - **Master import:** `/admin/masters/import` — загрузка из CSV
+  - **Master audit:** `/admin/audit-logs?master_id=X` — логи по конкретному мастеру
+  - **Full master profile:** `/admin/masters/{id}/full` — статистика, рейтинг, отзывы, записи
 
 ### [0.15.0] — 2026-09-24
 - **Статусы мастеров:** `active`, `inactive`, `suspended`

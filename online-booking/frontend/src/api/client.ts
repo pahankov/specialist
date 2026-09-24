@@ -17,6 +17,13 @@ import type {
   Country,
   City,
   UnifiedRegisterResponse,
+  PaginatedResponse,
+  HealthCheck,
+  Changelog,
+  MasterDetail,
+  BulkResult,
+  AuditLogEntry,
+  ImportResult,
 } from './types'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -259,35 +266,35 @@ export const adminApi = {
     return apiClient.get('/api/v1/admin/appointments/by-date', { params: { date_from: from, date_to: to } })
   },
 
-  // Services
-  getServices() {
-    return apiClient.get('/api/v1/admin/services')
-  },
-  getAllServices() {
-    return apiClient.get('/api/v1/admin/services/all')
-  },
-  createService(data: { name: string; description?: string; duration_minutes: number; price: number }) {
-    return apiClient.post('/api/v1/admin/services', data)
-  },
-  updateService(id: number, data: { name?: string; description?: string; duration_minutes?: number; price?: number }) {
-    return apiClient.patch(`/api/v1/admin/services/${id}`, data)
-  },
-  deleteService(id: number) {
-    return apiClient.delete(`/api/v1/admin/services/${id}`)
-  },
-
   // Clients
-  getClients() {
-    return apiClient.get('/api/v1/admin/clients')
+  getClients(params?: { page?: number; page_size?: number; search?: string }) {
+    return apiClient.get<PaginatedResponse<Client>>('/api/v1/admin/clients', { params })
   },
   createClient(data: { name: string; phone: string; email?: string }) {
-    return apiClient.post('/api/v1/admin/clients', data)
+    return apiClient.post<Client>('/api/v1/admin/clients', data)
   },
   updateClient(id: number, data: { name?: string; phone?: string; email?: string }) {
-    return apiClient.patch(`/api/v1/admin/clients/${id}`, data)
+    return apiClient.patch<Client>(`/api/v1/admin/clients/${id}`, data)
   },
   deleteClient(id: number) {
     return apiClient.delete(`/api/v1/admin/clients/${id}`)
+  },
+
+  // Services
+  getServices(params?: { page?: number; page_size?: number; active_only?: boolean }) {
+    return apiClient.get<PaginatedResponse<Service>>('/api/v1/admin/services', { params })
+  },
+  getAllServices(params?: { page?: number; page_size?: number }) {
+    return apiClient.get<PaginatedResponse<Service>>('/api/v1/admin/services/all', { params })
+  },
+  createService(data: { name: string; description?: string; duration_minutes: number; price: number }) {
+    return apiClient.post<Service>('/api/v1/admin/services', data)
+  },
+  updateService(id: number, data: { name?: string; description?: string; duration_minutes?: number; price?: number }) {
+    return apiClient.patch<Service>(`/api/v1/admin/services/${id}`, data)
+  },
+  deleteService(id: number) {
+    return apiClient.delete(`/api/v1/admin/services/${id}`)
   },
 
   // Working Hours
@@ -323,12 +330,39 @@ export const adminApi = {
     return apiClient.delete(`/api/v1/admin/blocked-slots/${id}`)
   },
 
-  // Exports
-  exportAppointments(status?: string) {
-    return `${API_BASE}/api/v1/admin/export/appointments${status ? `?status=${status}` : ''}`
+  // Health check
+  getHealth() {
+    return apiClient.get<HealthCheck>('/api/v1/admin/health')
   },
-  exportClients() {
-    return `${API_BASE}/api/v1/admin/export/clients`
+  getHealthVerbose() {
+    return apiClient.get<HealthCheck>('/api/v1/admin/health/verbose')
+  },
+
+  // Changelog
+  getChangelog() {
+    return apiClient.get<Changelog>('/api/v1/admin/changelog')
+  },
+
+  // Export with background task support
+  exportAppointmentsBackground(status?: string) {
+    return apiClient.post('/api/v1/admin/export/appointments', null, { params: { background: true, status } })
+  },
+  getExportStatus(jobId: string) {
+    return apiClient.get(`/api/v1/admin/export/appointments/status/${jobId}`)
+  },
+  exportClientsBackground() {
+    return apiClient.post('/api/v1/admin/export/clients', null, { params: { background: true } })
+  },
+  getClientsExportStatus(jobId: string) {
+    return apiClient.get(`/api/v1/admin/export/clients/status/${jobId}`)
+  },
+  getExportStats() {
+    return apiClient.get('/api/v1/admin/export/stats')
+  },
+
+  // Dashboard cache management
+  clearDashboardCache() {
+    return apiClient.post('/api/v1/admin/dashboard/cache/clear')
   },
 
   // Generic HTTP methods (for endpoints without named methods)
@@ -390,6 +424,63 @@ export const superAdminApi = {
   // Global stats
   getGlobalStats() {
     return apiClient.get<AdminStats>('/api/v1/admin/global-stats')
+  },
+
+  // Master detail (full profile)
+  getMasterFull(id: number) {
+    return apiClient.get<MasterDetail>(`/api/v1/admin/masters/${id}/full`)
+  },
+
+  // Bulk operations
+  bulkToggleActive(masterIds: number[]) {
+    return apiClient.post<BulkResult>('/api/v1/admin/masters/bulk/toggle-active', masterIds)
+  },
+  bulkSuspend(masterIds: number[]) {
+    return apiClient.post<BulkResult>('/api/v1/admin/masters/bulk/suspend', masterIds)
+  },
+  bulkUnsuspend(masterIds: number[]) {
+    return apiClient.post<BulkResult>('/api/v1/admin/masters/bulk/unsuspend', masterIds)
+  },
+
+  // Individual master actions
+  suspendMaster(masterId: number) {
+    return apiClient.post(`/api/v1/admin/masters/${masterId}/suspend`)
+  },
+  unsuspendMaster(masterId: number) {
+    return apiClient.post(`/api/v1/admin/masters/${masterId}/unsuspend`)
+  },
+
+  // Import
+  importMasters(file: File) {
+    const formData = new FormData()
+    formData.append('file', file)
+    return apiClient.post<ImportResult>('/api/v1/admin/masters/import', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+
+  // Admin reviews
+  getAdminReviews(params?: { master_id?: number; is_published?: boolean; page?: number; page_size?: number }) {
+    return apiClient.get<PaginatedResponse<Review>>('/api/v1/admin/reviews', { params })
+  },
+  publishReview(reviewId: number) {
+    return apiClient.patch<Review>(`/api/v1/admin/reviews/${reviewId}/publish`)
+  },
+  unpublishReview(reviewId: number) {
+    return apiClient.patch<Review>(`/api/v1/admin/reviews/${reviewId}/unpublish`)
+  },
+  deleteReview(reviewId: number) {
+    return apiClient.delete(`/api/v1/admin/reviews/${reviewId}`)
+  },
+  getMasterAverageRating(masterId: number) {
+    return apiClient.get(`/api/v1/admin/reviews/average/${masterId}`)
+  },
+
+  // Master audit logs
+  getMastersAudit(masterId: number, page?: number, pageSize?: number) {
+    return apiClient.get<PaginatedResponse<AuditLogEntry>>('/api/v1/admin/audit-logs', {
+      params: { master_id: masterId, page, page_size: pageSize },
+    })
   },
 }
 

@@ -1,7 +1,7 @@
-"""Admin appointment CRUD endpoints."""
+"""Admin appointment CRUD endpoints with pagination."""
 from fastapi import APIRouter, Depends, Query, Response, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import aliased, selectinload
 from typing import List, Optional
 from datetime import datetime, timedelta
@@ -13,6 +13,7 @@ from app.models.user import User, UserRole
 from app.models.service import Service
 from app.models.master_profile import MasterProfile
 from app.schemas.appointment import AppointmentWithDetails, AdminBookingCreate, AppointmentResponse, AppointmentCreate
+from app.schemas.pagination import PaginatedResponse
 from app.dependencies.auth import require_master
 from app.dependencies.crud import get_owned_or_404
 from app.services.audit import log_action
@@ -40,15 +41,16 @@ async def _find_or_create_client(db: AsyncSession, phone: str, name: str) -> Use
     return user
 
 
-@router.get("/appointments", response_model=List[AppointmentWithDetails])
+@router.get("/appointments", response_model=PaginatedResponse[AppointmentWithDetails])
 async def get_admin_appointments(
     master: User = Depends(require_master),
     status: Optional[str] = Query(None),
-    limit: int = Query(20, ge=1, le=100),
-    offset: int = Query(0, ge=0),
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get appointments with client and service details."""
+    """Get appointments with client and service details (paginated with total count)."""
+    offset = (page - 1) * page_size
     is_admin = master.role == UserRole.ADMIN
     
     if is_admin:
@@ -62,6 +64,12 @@ async def get_admin_appointments(
             .join(MasterProfile, Appointment.master_id == MasterProfile.id, isouter=True)
             .join(_MasterUser, MasterProfile.user_id == _MasterUser.id, isouter=True)
         )
+        count_query = (
+            select(func.count(Appointment.id))
+            .join(ClientProfile, Appointment.client_id == ClientProfile.id, isouter=True)
+            .join(Service, Appointment.service_id == Service.id, isouter=True)
+            .join(MasterProfile, Appointment.master_id == MasterProfile.id, isouter=True)
+        )
     else:
         # Regular master — get their master_profile first
         result = await db.execute(
@@ -69,7 +77,7 @@ async def get_admin_appointments(
         )
         mp = result.scalar_one_or_none()
         if not mp:
-            return []
+            return PaginatedResponse(items=[], total=0, page=page, page_size=page_size, total_pages=0)
         
         query = (
             select(Appointment, User.name.label('client_name'), User.phone.label('client_phone'),
@@ -79,30 +87,43 @@ async def get_admin_appointments(
             .join(Service, Appointment.service_id == Service.id, isouter=True)
             .where(Appointment.master_id == mp.id)
         )
+        count_query = (
+            select(func.count(Appointment.id))
+            .join(ClientProfile, Appointment.client_id == ClientProfile.id, isouter=True)
+            .join(Service, Appointment.service_id == Service.id, isouter=True)
+            .where(Appointment.master_id == mp.id)
+        )
+
     if status:
         query = query.where(Appointment.status == status)
-    query = query.order_by(Appointment.appointment_date.desc()).offset(offset).limit(limit)
+        count_query = count_query.where(Appointment.status == status)
+
+    # Get total count
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+
+    # Get data
+    query = query.order_by(Appointment.appointment_date.desc()).offset(offset).limit(page_size)
     result = await db.execute(query)
     rows = result.all()
     
-    if master.is_admin and len(rows) > 0 and rows[0][5] is not None:  # has master_name column
-        return [
-            AppointmentWithDetails(
-                id=row[0].id, master_id=row[0].master_id, service_id=row[0].service_id,
-                client_id=row[0].client_id, appointment_date=row[0].appointment_date,
-                status=row[0].status, notes=row[0].notes,
-                client_name=row[1], client_phone=row[2], service_name=row[3], service_price=row[4]
-            ) for row in rows
-        ]
-    else:
-        return [
-            AppointmentWithDetails(
-                id=row[0].id, master_id=row[0].master_id, service_id=row[0].service_id,
-                client_id=row[0].client_id, appointment_date=row[0].appointment_date,
-                status=row[0].status, notes=row[0].notes,
-                client_name=row[1], client_phone=row[2], service_name=row[3], service_price=row[4]
-            ) for row in rows
-        ]
+    items = []
+    for row in rows:
+        appt = row[0]
+        items.append(AppointmentWithDetails(
+            id=appt.id, master_id=appt.master_id, service_id=appt.service_id,
+            client_id=appt.client_id, appointment_date=appt.appointment_date,
+            status=appt.status, notes=appt.notes,
+            client_name=row[1], client_phone=row[2], service_name=row[3], service_price=row[4]
+        ))
+    
+    return PaginatedResponse(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=(total + page_size - 1) // page_size if page_size > 0 else 0
+    )
 
 
 @router.post("/appointments", response_model=AppointmentResponse, status_code=201)

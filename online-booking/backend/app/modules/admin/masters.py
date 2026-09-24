@@ -1,11 +1,13 @@
 """Superadmin master management endpoints."""
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload, joinedload
 from typing import List, Optional
 from passlib.context import CryptContext
 from datetime import datetime, timezone
+import csv
+import io
 
 from app.database import get_db
 from app.models.user import User, UserRole
@@ -13,7 +15,9 @@ from app.models.master_profile import MasterProfile, MasterStatus
 from app.models.appointment import Appointment
 from app.models.client_profile import ClientProfile
 from app.models.service import Service
+from app.models.review import Review
 from app.schemas.master import MasterCreate, MasterResponse, MasterUpdate
+from app.schemas.pagination import PaginatedResponse
 from app.dependencies.auth import require_admin, require_super_admin
 from app.services.audit import log_action
 from app.services.master_status import update_master_status_from_working_hours
@@ -556,3 +560,375 @@ async def get_master_stats(
             } for a in recent_appointments
         ]
     }
+
+
+@router.get("/{master_id}/full")
+async def get_master_full(
+    master_id: int,
+    super_admin: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get complete master profile with stats, rating, reviews, and audit logs."""
+    result = await db.execute(
+        select(MasterProfile)
+        .options(joinedload(MasterProfile.user))
+        .where(MasterProfile.id == master_id)
+    )
+    master_profile = result.scalar_one_or_none()
+    if not master_profile:
+        raise HTTPException(status_code=404, detail="Мастер не найден")
+    
+    user = master_profile.user
+    
+    # --- Appointments stats ---
+    status_result = await db.execute(
+        select(Appointment.status, func.count(Appointment.id))
+        .where(Appointment.master_id == master_id)
+        .group_by(Appointment.status)
+    )
+    status_counts = {row[0]: row[1] for row in status_result.all()}
+    
+    total_appt = await db.execute(
+        select(func.count(Appointment.id)).where(Appointment.master_id == master_id)
+    )
+    total_appointments = total_appt.scalar() or 0
+    
+    # --- Clients ---
+    client_result = await db.execute(
+        select(func.count(ClientProfile.id)).where(
+            ClientProfile.id.in_(
+                select(Appointment.client_id).where(Appointment.master_id == master_id)
+            )
+        )
+    )
+    total_clients = client_result.scalar() or 0
+    
+    # --- Revenue ---
+    revenue_result = await db.execute(
+        select(func.sum(Service.price))
+        .select_from(Appointment)
+        .join(Service, Appointment.service_id == Service.id)
+        .where(Appointment.master_id == master_id, Appointment.status == "completed")
+    )
+    total_revenue = float(revenue_result.scalar() or 0)
+    
+    # --- Average rating ---
+    rating_result = await db.execute(
+        select(
+            func.avg(Review.rating).label("avg_rating"),
+            func.count(Review.id).label("count")
+        ).where(Review.master_id == master_id, Review.is_published == True)
+    )
+    row = rating_result.one()
+    avg_rating = round(float(row.avg_rating), 1) if row.avg_rating else None
+    review_count = row.count
+    
+    # --- Recent reviews ---
+    reviews_result = await db.execute(
+        select(Review)
+        .where(Review.master_id == master_id)
+        .order_by(Review.created_at.desc())
+        .limit(10)
+    )
+    reviews = reviews_result.scalars().all()
+    recent_reviews = [
+        {
+            "id": r.id,
+            "client_name": r.client_name,
+            "client_phone": r.client_phone,
+            "rating": r.rating,
+            "comment": r.comment,
+            "is_published": r.is_published,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in reviews
+    ]
+    
+    # --- Recent appointments ---
+    recent_appt_result = await db.execute(
+        select(Appointment)
+        .options(selectinload(Appointment.client_profile), selectinload(Appointment.service))
+        .where(Appointment.master_id == master_id)
+        .order_by(Appointment.appointment_date.desc())
+        .limit(5)
+    )
+    recent_appts = recent_appt_result.scalars().all()
+    recent_appointments = [
+        {
+            "id": a.id,
+            "client_name": a.client_profile.user.name if a.client_profile else None,
+            "appointment_date": a.appointment_date.isoformat() if a.appointment_date else None,
+            "status": a.status,
+            "service_name": a.service.name if a.service else None,
+            "service_price": float(a.service.price) if a.service else 0
+        } for a in recent_appts
+    ]
+    
+    # --- Build response ---
+    return {
+        "id": master_profile.id,
+        "user_id": user.id,
+        "name": user.name,
+        "email": user.email,
+        "phone": user.phone,
+        "telegram_username": master_profile.telegram_username,
+        "description": master_profile.description,
+        "avatar_url": master_profile.avatar_url,
+        "experience_years": master_profile.experience_years,
+        "status": master_profile.status.value if master_profile.status else "active",
+        "is_active": master_profile.is_active,
+        "is_admin": user.is_admin,
+        "created_at": master_profile.created_at.isoformat() if master_profile.created_at else None,
+        "updated_at": master_profile.updated_at.isoformat() if master_profile.updated_at else None,
+        "stats": {
+            "total_appointments": total_appointments,
+            "status_counts": status_counts,
+            "total_clients": total_clients,
+            "total_services": total_appt.scalar() or 0,  # placeholder
+            "total_revenue": total_revenue,
+            "avg_rating": avg_rating,
+            "review_count": review_count,
+        },
+        "recent_reviews": recent_reviews,
+        "recent_appointments": recent_appointments,
+    }
+
+
+@router.post("/bulk/toggle-active", response_model=dict)
+async def bulk_toggle_active(
+    master_ids: List[int],
+    super_admin: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Toggle active status for multiple masters at once."""
+    results = {"toggled": [], "errors": []}
+    
+    for mid in master_ids:
+        try:
+            result = await db.execute(
+                select(MasterProfile)
+                .options(joinedload(MasterProfile.user))
+                .where(MasterProfile.id == mid)
+            )
+            mp = result.scalar_one_or_none()
+            if not mp:
+                results["errors"].append({"master_id": mid, "error": "Not found"})
+                continue
+            if mp.user.id == super_admin.id:
+                results["errors"].append({"master_id": mid, "error": "Cannot toggle self"})
+                continue
+            
+            mp.status = MasterStatus.INACTIVE if mp.status == MasterStatus.ACTIVE else MasterStatus.ACTIVE
+            results["toggled"].append({
+                "master_id": mid,
+                "name": mp.user.name,
+                "new_status": mp.status.value
+            })
+        except Exception as e:
+            results["errors"].append({"master_id": mid, "error": str(e)})
+    
+    await db.commit()
+    
+    for item in results["toggled"]:
+        logger.info("Bulk toggle: %s -> %s", item["name"], item["new_status"])
+    
+    return results
+
+
+@router.post("/bulk/suspend", response_model=dict)
+async def bulk_suspend(
+    master_ids: List[int],
+    super_admin: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Suspend multiple masters at once."""
+    results = {"suspended": [], "errors": []}
+    
+    for mid in master_ids:
+        try:
+            result = await db.execute(
+                select(MasterProfile)
+                .options(joinedload(MasterProfile.user))
+                .where(MasterProfile.id == mid)
+            )
+            mp = result.scalar_one_or_none()
+            if not mp:
+                results["errors"].append({"master_id": mid, "error": "Not found"})
+                continue
+            if mp.user.id == super_admin.id:
+                results["errors"].append({"master_id": mid, "error": "Cannot suspend self"})
+                continue
+            
+            mp.status = MasterStatus.SUSPENDED
+            results["suspended"].append({
+                "master_id": mid,
+                "name": mp.user.name
+            })
+        except Exception as e:
+            results["errors"].append({"master_id": mid, "error": str(e)})
+    
+    await db.commit()
+    return results
+
+
+@router.post("/bulk/unsuspend", response_model=dict)
+async def bulk_unsuspend(
+    master_ids: List[int],
+    super_admin: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Unsuspend multiple masters at once."""
+    results = {"unsuspended": [], "errors": []}
+    
+    for mid in master_ids:
+        try:
+            result = await db.execute(
+                select(MasterProfile)
+                .options(joinedload(MasterProfile.user))
+                .where(MasterProfile.id == mid)
+            )
+            mp = result.scalar_one_or_none()
+            if not mp:
+                results["errors"].append({"master_id": mid, "error": "Not found"})
+                continue
+            
+            mp.status = MasterStatus.ACTIVE
+            results["unsuspended"].append({
+                "master_id": mid,
+                "name": mp.user.name
+            })
+        except Exception as e:
+            results["errors"].append({"master_id": mid, "error": str(e)})
+    
+    await db.commit()
+    return results
+
+
+@router.post("/import")
+async def import_masters_from_csv(
+    file: UploadFile = File(...),
+    super_admin: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Import masters from CSV file.
+    
+    CSV format: name,email,password,phone,telegram_username
+    """
+    if not file.filename.endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only CSV files are allowed")
+    
+    content = await file.read()
+    text = content.decode("utf-8")
+    reader = csv.DictReader(io.StringIO(text))
+    
+    imported = 0
+    errors = []
+    
+    for i, row in enumerate(reader, start=2):  # start=2 because row 1 is header
+        try:
+            name = row.get("name", "").strip()
+            email = row.get("email", "").strip()
+            password = row.get("password", "").strip()
+            phone = row.get("phone", "").strip() or None
+            telegram = row.get("telegram_username", "").strip() or None
+            
+            if not name or not email or not password:
+                errors.append({"row": i, "error": "name, email, password are required"})
+                continue
+            
+            # Check duplicates
+            existing = await db.execute(
+                select(User).where(User.email == email, User.role == UserRole.MASTER)
+            )
+            if existing.scalar_one_or_none():
+                errors.append({"row": i, "error": f"Email {email} already exists"})
+                continue
+            
+            # Create user
+            user = User(
+                name=name,
+                email=email,
+                hashed_password=pwd_context.hash(password),
+                phone=phone,
+                role=UserRole.MASTER,
+            )
+            db.add(user)
+            await db.flush()
+            await db.refresh(user)
+            
+            # Create master profile
+            mp = MasterProfile(
+                user_id=user.id,
+                telegram_username=telegram,
+            )
+            db.add(mp)
+            imported += 1
+            
+        except Exception as e:
+            errors.append({"row": i, "error": str(e)})
+    
+    await db.commit()
+    
+    return {
+        "imported": imported,
+        "errors": errors,
+        "total_rows": imported + len(errors)
+    }
+
+
+@router.get("/audit-logs")
+async def get_master_audit_logs(
+    master_id: int = Query(None, description="Filter by master ID"),
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(20, ge=1, le=200, description="Items per page"),
+    super_admin: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get audit logs, optionally filtered by master_id."""
+    from app.models.audit_log import AuditLog
+    
+    offset = (page - 1) * page_size
+    
+    base_query = select(AuditLog)
+    count_query = select(func.count(AuditLog.id))
+    
+    if master_id is not None:
+        base_query = base_query.where(AuditLog.master_id == master_id)
+        count_query = count_query.where(AuditLog.master_id == master_id)
+    
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+    
+    data_query = (
+        base_query
+        .options(selectinload(AuditLog.master_profile))
+        .order_by(AuditLog.created_at.desc())
+        .offset(offset)
+        .limit(page_size)
+    )
+    result = await db.execute(data_query)
+    logs = result.scalars().all()
+    
+    items = [
+        {
+            "id": log.id,
+            "master_id": log.master_id,
+            "master_name": log.master_profile.user.name if log.master_profile else None,
+            "level": log.level,
+            "action": log.action,
+            "entity_type": log.entity_type,
+            "entity_id": log.entity_id,
+            "details": log.details,
+            "ip_address": log.ip_address,
+            "created_at": log.created_at.isoformat() if log.created_at else None,
+        }
+        for log in logs
+    ]
+    
+    return PaginatedResponse(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=(total + page_size - 1) // page_size if page_size > 0 else 0
+    )

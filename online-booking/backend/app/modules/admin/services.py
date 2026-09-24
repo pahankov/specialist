@@ -1,13 +1,14 @@
-"""Admin service CRUD endpoints."""
+"""Admin service CRUD endpoints with pagination."""
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from typing import List
 
 from app.database import get_db
 from app.models.service import Service
 from app.models.user import User
 from app.schemas.service import ServiceCreate, ServiceResponse, ServiceUpdate
+from app.schemas.pagination import PaginatedResponse
 from app.dependencies.auth import require_master
 from app.dependencies.crud import get_owned_or_404
 from app.services.audit import log_action
@@ -34,34 +35,73 @@ async def create_admin_service(
     return new_service
 
 
-@router.get("/services", response_model=List[ServiceResponse])
+@router.get("/services", response_model=PaginatedResponse[ServiceResponse])
 async def get_admin_services(
     master: User = Depends(require_master),
-    limit: int = Query(100, ge=1, le=500),
-    offset: int = Query(0, ge=0),
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(20, ge=1, le=200, description="Items per page"),
+    active_only: bool = Query(True, description="Return only active services"),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get active services (paginated)."""
-    result = await db.execute(
-        select(Service).where(Service.master_id == master.master_profile.id, Service.is_active == True)
-        .order_by(Service.name).offset(offset).limit(limit)
+    """Get active services (paginated with total count)."""
+    offset = (page - 1) * page_size
+
+    # Base query
+    base_query = select(Service).where(Service.master_id == master.master_profile.id)
+    count_query = select(func.count(Service.id)).where(Service.master_id == master.master_profile.id)
+
+    if active_only:
+        base_query = base_query.where(Service.is_active == True)
+        count_query = count_query.where(Service.is_active == True)
+
+    # Get total
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+
+    # Get data
+    data_query = base_query.order_by(Service.name).offset(offset).limit(page_size)
+    result = await db.execute(data_query)
+    services = result.scalars().all()
+
+    return PaginatedResponse(
+        items=services,
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=(total + page_size - 1) // page_size if page_size > 0 else 0
     )
-    return result.scalars().all()
 
 
-@router.get("/services/all", response_model=List[ServiceResponse])
+@router.get("/services/all", response_model=PaginatedResponse[ServiceResponse])
 async def get_all_admin_services(
     master: User = Depends(require_master),
-    limit: int = Query(100, ge=1, le=500),
-    offset: int = Query(0, ge=0),
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(20, ge=1, le=200, description="Items per page"),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get all services including inactive (paginated)."""
+    """Get all services including inactive (paginated with total count)."""
+    offset = (page - 1) * page_size
+
+    # Get total
+    total_result = await db.execute(
+        select(func.count(Service.id)).where(Service.master_id == master.master_profile.id)
+    )
+    total = total_result.scalar() or 0
+
+    # Get data
     result = await db.execute(
         select(Service).where(Service.master_id == master.master_profile.id)
-        .order_by(Service.name).offset(offset).limit(limit)
+        .order_by(Service.name).offset(offset).limit(page_size)
     )
-    return result.scalars().all()
+    services = result.scalars().all()
+
+    return PaginatedResponse(
+        items=services,
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=(total + page_size - 1) // page_size if page_size > 0 else 0
+    )
 
 
 @router.patch("/services/{service_id}", response_model=ServiceResponse)

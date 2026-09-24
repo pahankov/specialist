@@ -1,25 +1,349 @@
-.admin-layout { display: flex; min-height: 100vh; }
-.admin-layout .app { background: none !important; }
-.admin-sidebar { width: 260px; background: #1a1a2e; color: white; display: flex; flex-direction: column; position: fixed; top: 0; left: 0; bottom: 0; z-index: 100; }
-.sidebar-header { padding: 24px 20px; border-bottom: 1px solid rgba(255,255,255,0.1); }
-.sidebar-header h2 { margin: 0; font-size: 20px; color: #e94560; }
-.sidebar-subtitle { margin: 4px 0 0; font-size: 12px; color: rgba(255,255,255,0.5); }
-.sidebar-user { margin: 6px 0 0; font-size: 13px; color: #e94560; font-weight: 600; }
-.sidebar-nav { flex: 1; padding: 16px 0; }
-.nav-item { display: block; padding: 12px 20px; color: rgba(255,255,255,0.7); text-decoration: none; font-size: 15px; transition: all 0.2s; border-left: 3px solid transparent; }
-.nav-item:hover { background: rgba(255,255,255,0.05); color: white; }
-.nav-item.active { background: rgba(233,69,96,0.1); color: #e94560; border-left-color: #e94560; }
-.sidebar-divider { height: 1px; background: rgba(255,255,255,0.1); margin: 8px 16px; }
-.nav-item-bottom { margin-top: 4px; }
-.sidebar-footer { padding: 16px 20px; border-top: 1px solid rgba(255,255,255,0.1); }
-.btn-logout { width: 100%; text-align: left; }
-.admin-main { flex: 1; margin-left: 260px; background: white; min-height: 100vh; }
-.btn { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; }
-.btn-primary { background: #667eea; color: white; }
-.btn-ghost { background: transparent; color: rgba(255,255,255,0.7); }
-.card { background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
-.error-message { background: #fee2e2; color: #dc2626; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; font-size: 14px; }
-.page-header { margin-bottom: 24px; text-align: center; }
-.page-header h1 { margin: 0 0 4px; font-size: 24px; color: #1a1a2e; }
-.page-header p { margin: 0; color: #666; font-size: 14px; }
-.filters-bar { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; justify-content: center; }
+.admin-layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+.admin-layout .app {
+  background: none !important;
+}
+
+/* ─── Sidebar ─────────────────────────────────────────────── */
+
+.admin-sidebar {
+  width: 260px;
+  background: #1a1a2e;
+  color: white;
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 200;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.admin-sidebar.collapsed {
+  width: 64px;
+}
+
+/* ─── Sidebar header ──────────────────────────────────────── */
+
+.sidebar-header {
+  padding: 20px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.sidebar-header-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.collapse-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.collapse-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+}
+
+.sidebar-brand h2 {
+  margin: 0;
+  font-size: 16px;
+  color: #e94560;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-subtitle {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-user {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: #e94560;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ─── Sidebar nav ─────────────────────────────────────────── */
+
+.sidebar-nav {
+  flex: 1;
+  padding: 12px 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  color: rgba(255, 255, 255, 0.7);
+  text-decoration: none;
+  font-size: 14px;
+  transition: all 0.2s;
+  border-left: 3px solid transparent;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 2px 0;
+}
+
+.nav-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: white;
+}
+
+.nav-item.active {
+  background: rgba(233, 69, 96, 0.1);
+  color: #e94560;
+  border-left-color: #e94560;
+}
+
+.nav-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+  width: 24px;
+  text-align: center;
+}
+
+.nav-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-sidebar.collapsed .nav-label {
+  display: none;
+}
+
+.admin-sidebar.collapsed .nav-item {
+  justify-content: center;
+  padding: 12px;
+}
+
+/* ─── Sidebar footer ──────────────────────────────────────── */
+
+.sidebar-footer {
+  padding: 16px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.btn-logout {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  border-radius: 6px;
+  font-size: 14px;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.btn-logout:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: white;
+}
+
+.admin-sidebar.collapsed .btn-logout {
+  justify-content: center;
+  padding: 10px;
+}
+
+.admin-sidebar.collapsed .btn-logout .nav-label {
+  display: none;
+}
+
+/* ─── Hamburger button (mobile) ───────────────────────────── */
+
+.hamburger-btn {
+  display: none;
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 300;
+  width: 44px;
+  height: 44px;
+  background: #1a1a2e;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 10px;
+}
+
+.hamburger-line {
+  display: block;
+  width: 22px;
+  height: 2px;
+  background: white;
+  border-radius: 2px;
+  transition: all 0.3s;
+}
+
+.hamburger-btn.active .hamburger-line:nth-child(1) {
+  transform: rotate(45deg) translate(5px, 5px);
+}
+
+.hamburger-btn.active .hamburger-line:nth-child(2) {
+  opacity: 0;
+}
+
+.hamburger-btn.active .hamburger-line:nth-child(3) {
+  transform: rotate(-45deg) translate(5px, -5px);
+}
+
+/* ─── Sidebar overlay (mobile) ────────────────────────────── */
+
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 150;
+}
+
+/* ─── Main content ────────────────────────────────────────── */
+
+.admin-main {
+  flex: 1;
+  margin-left: 260px;
+  background: #f8f9fb;
+  min-height: 100vh;
+  transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-sidebar.collapsed ~ .admin-main,
+.admin-layout:has(.admin-sidebar.collapsed) .admin-main {
+  margin-left: 64px;
+}
+
+.main-content {
+  flex: 1;
+  padding: 24px 32px;
+  max-width: 1200px;
+  width: 100%;
+}
+
+/* ─── Breadcrumb ──────────────────────────────────────────── */
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: #999;
+}
+
+.breadcrumb a {
+  color: #667eea;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.breadcrumb a:hover {
+  color: #5a6fd6;
+  text-decoration: underline;
+}
+
+.breadcrumb-sep {
+  color: #ccc;
+  user-select: none;
+}
+
+.breadcrumb-current {
+  color: #666;
+  font-weight: 500;
+}
+
+/* ─── Responsive ──────────────────────────────────────────── */
+
+@media (max-width: 1024px) {
+  .hamburger-btn {
+    display: flex;
+  }
+
+  .admin-sidebar {
+    transform: translateX(-100%);
+    width: 280px !important;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .admin-sidebar.mobile-open {
+    transform: translateX(0);
+  }
+
+  .admin-sidebar .collapse-btn {
+    display: none;
+  }
+
+  .sidebar-overlay {
+    display: block;
+  }
+
+  .admin-main {
+    margin-left: 0 !important;
+  }
+
+  .main-content {
+    padding: 16px;
+    padding-top: 64px;
+  }
+}
+
+@media (max-width: 640px) {
+  .main-content {
+    padding: 12px;
+    padding-top: 60px;
+  }
+
+  .page-header h1 {
+    font-size: 20px !important;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr 1fr !important;
+  }
+}

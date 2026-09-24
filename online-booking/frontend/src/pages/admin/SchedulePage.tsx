@@ -78,8 +78,8 @@ function SchedulePage() {
       adminApi.getAllServices(),
     ]).then(([clientsResp, servicesResp]) => {
       if (cancelled) return
-      setBookingClients(clientsResp.data || [])
-      setBookingServices(servicesResp.data || [])
+      setBookingClients(clientsResp.data?.items || [])
+      setBookingServices(servicesResp.data?.items || [])
     }).catch(() => {
       if (!cancelled) {
         setBookingClients([])

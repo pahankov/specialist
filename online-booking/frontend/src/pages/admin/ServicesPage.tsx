@@ -19,7 +19,7 @@ function ServicesPage() {
   const fetchData = async () => {
     try {
       const s = await adminApi.getServices()
-      setServices(s.data)
+      setServices(s.data.items)
     } catch (err: any) {
       if (err.response?.status === 401) { localStorage.removeItem('access_token'); window.location.href = '/admin/login' }
       else setError('Ошибка загрузки')
