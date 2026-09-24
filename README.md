@@ -24,14 +24,14 @@ run_frontend.bat       # Только frontend
 
 **Backend:**
 ```powershell
-cd backend
+cd online-booking\backend
 $env:PYTHONPATH='.'
 python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 **Frontend:**
 ```powershell
-cd frontend
+cd online-booking\frontend
 npm run dev
 ```
 
@@ -69,10 +69,18 @@ online-booking/
 │   │   ├── main.py           # FastAPI приложение (lifespan, router registration)
 │   │   ├── config.py         # Настройки (SQLite/PostgreSQL, JWT, refresh tokens)
 │   │   ├── database.py       # Подключение к БД (aiosqlite / asyncpg)
-│   │   ├── middleware.py     # Rate limiting middleware
+│   │   ├── logging_config.py # Цветное логирование (ANSI) + rotating file handler
+│   │   ├── dependencies/     # Общие зависимости (зависят от моделей)
+│   │   │   ├── auth.py       # JWT: get_current_user, require_master, require_admin
+│   │   │   └── crud.py       # CRUD: get_or_404, get_owned_or_404, soft_delete
+│   │   ├── middleware/       # Мидлвари
+│   │   │   └── rate_limit.py # RateLimiter (60 req/min default)
+│   │   ├── services/         # Бизнес-логика (зависят от БД)
+│   │   │   ├── audit.py      # Audit logging (логирование действий)
+│   │   │   └── sms/          # SMS провайдеры (FakeSmsProvider, Twilio, SMS.ru)
 │   │   ├── models/           # SQLAlchemy ORM (User, MasterProfile, ClientProfile, Country, City, OtpCode + др.)
 │   │   ├── schemas/          # Pydantic schemas (request/response validation)
-│   │   ├── services/         # Сервисы (SMS provider: FakeSmsProvider, Twilio, SMS.ru)
+│   │   ├── utils/            # Утилиты (timezone, formatPhone)
 │   │   └── modules/          # Модульная архитектура (self-contained packages)
 │   │       ├── auth/         # Регистрация, логин, JWT, OTP, refresh token rotation
 │   │       │   ├── router.py         # Эндпоинты: register, login, send-otp, verify-otp, refresh, logout
@@ -96,9 +104,10 @@ online-booking/
 ├── frontend/
 │   ├── src/
 │   │   ├── api/              # API клиент (axios с auth-interceptor, refresh queue, httpOnly cookies)
-│   │   ├── components/       # Общие компоненты (Modal, Pagination, FilterBar, MessageBar, ReviewsSection)
+│   │   ├── components/       # Общие компоненты (Modal, Pagination, FilterBar, MessageBar, Toast, ReviewsSection)
 │   │   ├── pages/            # Публичные + админ-панель (12 страниц)
 │   │   ├── tests/            # Vitest автотесты (44 теста)
+│   │   ├── utils/            # Утилиты (formatPhone — единый форматировщик телефонов)
 │   │   ├── App.tsx           # Роутинг
 │   │   └── main.tsx          # Точка входа
 │   ├── package.json
@@ -115,6 +124,22 @@ online-booking/
 ### Модульная архитектура
 
 Проект использует модульную архитектуру — каждый функциональный блок инкапсулирован в отдельный пакет (`modules/<feature>/`).
+
+**Правила зависимостей:**
+```
+main.py
+  ↓
+modules/*
+  ↓
+services/*, dependencies/*, models/*
+  ↓
+utils/
+```
+
+**Никогда:**
+- ❌ `models` не зависит от `modules`
+- ❌ `dependencies` не зависит от `modules`
+- ❌ `services` не зависит от `modules`
 
 **Преимущества:**
 - **Изоляция:** добавление нового модуля не затрагивает другие части кода
@@ -634,6 +659,21 @@ curl -X PATCH http://localhost:8000/api/v1/admin/appointments/1/no-show \
 ```
 
 ## 📚 История версий
+
+### [0.14.0] — 2026-09-24
+- **Рефакторинг модульности:** `modules/admin/base.py` (god-файл) → `dependencies/`, `middleware/`, `services/`
+- **Зависимости:** `dependencies/auth.py` (JWT), `dependencies/crud.py` (get_or_404, soft_delete)
+- **Мидлвари:** `middleware/rate_limit.py` (RateLimiter)
+- **Сервисы:** `services/audit.py` (audit logging)
+- **Чистота:** каждый модуль импортирует только нужные зависимости, никаких god-файлов
+- **Toast уведомления:** `components/Toast.tsx` — всплывающие уведомления с дедупликацией, макс 3 тоста, пауза при наведении
+- **Единый форматер телефонов:** `utils/formatPhone.ts` — все поля телефона используют одну функцию
+- **UTC время:** `utils/__init__.py` — `utcnow()`, `utcnow_naive()`, `ensure_utc()` — единый стандарт времени
+- **Фикс lazy-load:** `clients.py` — добавлен `joinedload` для User при загрузке клиентов
+- **Фикс телефона:** `slice(0, 11)` → `replace(/^7/, '')` — пользователь вводит 10 цифр, +7 добавляется автоматически
+- **Фикс дубликата телефона:** проверка `UNIQUE constraint` → понятная ошибка "Мастер с таким телефоном уже существует"
+- **Фикс бэкапа:** `start.bat` — автоматический бэкап БД перед запуском
+- **Фикс структуры:** `backend/` и `frontend/` перемещены в `online-booking/`
 
 ### [0.13.0] — 2026-09-22
 - **Unified User:** единая таблица `users` вместо раздельных `masters` и `clients`

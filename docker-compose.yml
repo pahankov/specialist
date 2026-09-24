@@ -23,8 +23,8 @@ services:
       - "6379:6379"
 
   backend:
-    build: ./backend
-    env_file: ./backend/.env
+    build: ./online-booking/backend
+    env_file: ./online-booking/backend/.env
     depends_on:
       db:
         condition: service_healthy
@@ -33,10 +33,10 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./backend:/app
+      - ./online-booking/backend:/app
 
   frontend:
-    build: ./frontend
+    build: ./online-booking/frontend
     ports:
       - "3000:3000"
     environment:
@@ -44,7 +44,7 @@ services:
     depends_on:
       - backend
     volumes:
-      - ./frontend:/app
+      - ./online-booking/frontend:/app
       - /app/node_modules
 
 volumes:

@@ -8,25 +8,31 @@ echo ========================================
 echo.
 
 set "PROJECT_DIR=%~dp0"
-set "BACKEND_DIR=%PROJECT_DIR%backend"
-set "FRONTEND_DIR=%PROJECT_DIR%frontend"
+set "BACKEND_DIR=%PROJECT_DIR%online-booking\backend"
+set "FRONTEND_DIR=%PROJECT_DIR%online-booking\frontend"
 
 :: ─── Проверка зависимостей ─────────────────────────────────────
-python --version >nul 2>&1 || (echo [ERROR] Python не найден && pause && exit /b 1)
+py --version >nul 2>&1 || (echo [ERROR] Python не найден && pause && exit /b 1)
 node --version >nul 2>&1 || (echo [ERROR] Node.js не найден && pause && exit /b 1)
 
 :: ─── Убиваем старые процессы ─────────────────────────────────────
-echo [1/4] Освобождаем порты...
+echo [1/5] Освобождаем порты...
 for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8000 " 2^>nul') do taskkill /F /PID %%a 2>nul
 for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":3000 " 2^>nul') do taskkill /F /PID %%a 2>nul
 timeout /t 1 /nobreak >nul
 
+:: ─── Бэкап БД перед запуском ─────────────────────────────────────
+echo [2/5] Бэкап БД...
+if exist "%BACKEND_DIR%\online_booking.db" (
+    call "%BACKEND_DIR%\venv\Scripts\python.exe" "%BACKEND_DIR%\backup_db.py" >nul 2>&1
+)
+
 :: ─── Запуск бэкенда в фоновой консоли ───────────────────────────
-echo [2/4] Запускаю бэкенд (port 8000)...
-start "OB-Backend" /min cmd /k "cd /d %BACKEND_DIR% && python -m uvicorn app.main:app --host 0.0.0.0 --port 8000"
+echo [3/5] Запускаю бэкенд (port 8000)...
+start "OB-Backend" /min cmd /k "cd /d %BACKEND_DIR% && call venv\Scripts\activate.bat && python -m uvicorn app.main:app --host 0.0.0.0 --port 8000"
 
 :: ─── Health-check бэкенда ────────────────────────────────────────
-echo [3/4] Ожидание бэкенда...
+echo [4/5] Ожидание бэкенда...
 set /a retries=0
 :wait_backend
 timeout /t 1 /nobreak >nul
@@ -40,7 +46,7 @@ if !errorlevel! equ 0 (
 )
 
 :: ─── Запуск фронтенда в фоновой консоли ─────────────────────────
-echo [4/4] Запускаю фронтенд (port 3000)...
+echo [5/5] Запускаю фронтенд (port 3000)...
 start "OB-Frontend" /min cmd /k "cd /d %FRONTEND_DIR% && npx vite --host 0.0.0.0 --port 3000"
 
 echo.
