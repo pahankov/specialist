@@ -1,6 +1,6 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { HomePage, BookingPage } from './pages/public'
-import { AdminLayout, DashboardPage, AppointmentsPage, ServicesPage, ClientsPage, SchedulePage, LogsPage, MasterDetailPage } from './pages/admin'
+import { AdminLayout, DashboardPage, AppointmentsPage, ServicesPage, ClientsPage, SchedulePage, LogsPage, MasterDetailPage, RevenuePage } from './pages/admin'
 import MastersPage from './pages/admin/MastersPage'
 import ErrorBoundary from './components/ErrorBoundary'
 import { ToastProvider } from './components/Toast'
@@ -36,6 +36,7 @@ function App() {
   // Superadmin navigation items
   const superadminNavItems = [
     { path: '/admin/dashboard', label: '📊 Дашборд' },
+    { path: '/admin/revenue', label: '💰 Доход' },
     { path: '/admin/masters', label: '👨‍💼 Мастера' },
     { path: '/admin/appointments', label: '📅 Все записи' },
     { path: '/admin/clients', label: '👥 Все клиенты' },
@@ -77,6 +78,7 @@ function App() {
         >
           <Route index element={<Navigate to="/admin/dashboard" replace />} />
           <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="revenue" element={<RevenuePage />} />
           <Route path="masters" element={<MastersPage />} />
           <Route path="masters/:id" element={<MasterDetailPage />} />
           <Route path="appointments" element={<AppointmentsPage />} />

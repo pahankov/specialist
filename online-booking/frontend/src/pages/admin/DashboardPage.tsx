@@ -104,7 +104,7 @@ function DashboardPage() {
               <div className="stat-label">Услуг</div>
               <div className="card-hint">Нажмите для перехода →</div>
             </div>
-            <div className="stat-card clickable" onClick={() => handleCardClick('/admin/appointments?status=completed')}>
+            <div className="stat-card clickable" onClick={() => handleCardClick('/admin/revenue')}>
               <div className="stat-icon">💰</div>
               <div className="stat-value">{stats.total_revenue.toLocaleString('ru-RU')} ₽</div>
               <div className="stat-label">Доход</div>

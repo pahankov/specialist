@@ -85,7 +85,7 @@ function AdminLayout({ navItems, isAdmin }: AdminLayoutProps) {
 
   const isActive = (path: string) => location.pathname === path
 
-  const layoutTitle = isAdmin ? '🍬 Панель суперпользователя' : '🍬 Мастерская'
+  const layoutTitle = isAdmin ? '🍬 Админ-панель' : '🍬 Мастерская'
   const userRole = isAdmin ? 'Суперпользователь' : 'Мастер'
 
   // Build breadcrumb from current path
