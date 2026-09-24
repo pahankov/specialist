@@ -210,12 +210,14 @@ utils/
 - Swagger UI документация (`/docs`)
 - Rate limiting middleware (60 req/min default, 10 req/min для auth)
 - No-show tracking: счётчик неяв клиентов, эндпоинт `/admin/appointments/{id}/no-show`
+- **Superadmin appointment actions:** подтверждение/отмена/завершение/удаление/no-show для ВСЕХ записей (не только своих)
 - Отзывы и рейтинги: CRUD отзывов, средний рейтинг, публичная страница отзывов
 - **Admin reviews:** `/admin/reviews` — пагинированный список, approve/unpublish, average rating
 - **Master detail:** `/admin/masters/{id}/full` — полная статистика, рейтинг, отзывы, последние записи
 - **Bulk operations:** `/admin/masters/bulk/toggle-active`, `/bulk/suspend`, `/bulk/unsuspend`
 - **Master import:** `/admin/masters/import` — загрузка из CSV
 - **Master audit:** `/admin/audit-logs?master_id=X` — логи по конкретному мастеру
+- **Фикс 422 /admin/services:** параметр `active_only` теперь принимает boolean
 
 ### ✅ Frontend
 - Главная страница (список мастеров и услуг)
@@ -808,6 +810,17 @@ curl -X GET "http://localhost:8000/api/v1/admin/audit-logs?master_id=1&page=1&pa
 ```
 
 ## 📚 История версий
+
+### [1.4.0] — 2026-09-24
+- **Фикс суперпользователя:** эндпоинты подтверждения/отмены/завершения записей теперь работают для ADMIN
+  - `confirm`, `cancel`, `complete`, `delete`, `no-show` — проверяют `master.role == UserRole.ADMIN`
+  - Для ADMIN: `get_or_404` (доступ ко всем записям), без требования `MasterProfile`
+  - Для regular master: `get_owned_or_404` (только свои записи)
+- **Фикс 422 /admin/services:** параметр `active_only` изменён с `Optional[str]` на `Optional[bool]`
+  - Фронтенд конвертирует boolean в string перед отправкой
+- **Фикс breadcrumbs:** дублирующиеся ключи `/admin/dashboard` исправлены — уникальные key `breadcrumb-{index}`
+- **Фикс Breadcrumb.jsx:** переименован из `.js` в `.jsx` для корректного JSX-парсинга Vite
+- **Фикс delete_master:** защита от `AttributeError` при отсутствии `MasterProfile` у суперадмина
 
 ### [1.3.0] — 2026-09-24
 - **Swiper carousel:** главная страница с бесконечной прокруткой (Services → Masters → Reviews)

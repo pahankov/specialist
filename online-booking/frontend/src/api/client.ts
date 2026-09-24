@@ -290,8 +290,12 @@ export const adminApi = {
   },
 
   // Services
-  getServices(params?: { page?: number; page_size?: number; active_only?: boolean }) {
-    return apiClient.get<PaginatedResponse<Service>>('/api/v1/admin/services', { params })
+  getServices(params?: { page?: number; page_size?: number; active_only?: string | boolean }) {
+    const processedParams = params ? { ...params } : undefined
+    if (processedParams?.active_only !== undefined) {
+      processedParams.active_only = String(processedParams.active_only)
+    }
+    return apiClient.get<PaginatedResponse<Service>>('/api/v1/admin/services', { params: processedParams })
   },
   getAllServices(params?: { page?: number; page_size?: number }) {
     return apiClient.get<PaginatedResponse<Service>>('/api/v1/admin/services/all', { params })

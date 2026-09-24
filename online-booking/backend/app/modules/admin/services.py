@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
-from typing import List
+from typing import List, Optional
 
 from app.database import get_db
 from app.models.service import Service
@@ -41,11 +41,11 @@ async def get_admin_services(
     master: User = Depends(require_master),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=500, description="Items per page"),
-    active_only_raw: Optional[str] = Query(None, description="Return only active services (true/false)"),
+    active_only_raw: Optional[bool] = Query(None, description="Return only active services (true/false)"),
     db: AsyncSession = Depends(get_db)
 ):
     """Get active services (paginated with total count)."""
-    active_only = active_only_raw is None or active_only_raw.lower() in ("true", "1", "yes")
+    active_only = active_only_raw is None or active_only_raw is True
     offset = (page - 1) * page_size
 
     # Extract master_profile.id BEFORE building query to avoid lazy-load
