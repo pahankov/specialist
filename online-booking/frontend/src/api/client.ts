@@ -235,8 +235,17 @@ export const adminApi = {
   },
 
   // Appointments
-  getAppointments(status?: string, limit = 50, offset = 0) {
-    return apiClient.get('/api/v1/admin/appointments', { params: { status, limit, offset } })
+  getAppointments(params?: {
+    status?: string
+    master_id?: number
+    client_id?: number
+    service_id?: number
+    date_from?: string
+    date_to?: string
+    page?: number
+    page_size?: number
+  }) {
+    return apiClient.get('/api/v1/admin/appointments', { params })
   },
   confirmAppointment(id: number) {
     return apiClient.patch(`/api/v1/admin/appointments/${id}/confirm`)
@@ -262,12 +271,12 @@ export const adminApi = {
   }) {
     return apiClient.post('/api/v1/admin/appointments/book', data)
   },
-  getAppointmentsByDate(from: string, to: string) {
-    return apiClient.get('/api/v1/admin/appointments/by-date', { params: { date_from: from, date_to: to } })
+  getAppointmentsByDate(from: string, to: string, master_id?: number) {
+    return apiClient.get('/api/v1/admin/appointments/by-date', { params: { date_from: from, date_to: to, master_id } })
   },
 
   // Clients
-  getClients(params?: { page?: number; page_size?: number; search?: string }) {
+  getClients(params?: { page?: number; page_size?: number; search?: string; master_id?: number }) {
     return apiClient.get<PaginatedResponse<Client>>('/api/v1/admin/clients', { params })
   },
   createClient(data: { name: string; phone: string; email?: string }) {
@@ -298,8 +307,8 @@ export const adminApi = {
   },
 
   // Working Hours
-  getWorkingHours() {
-    return apiClient.get('/api/v1/admin/working-hours')
+  getWorkingHours(master_id?: number) {
+    return apiClient.get('/api/v1/admin/working-hours', { params: master_id ? { master_id } : undefined })
   },
   createWorkingHour(data: { schedule_date: string; start_time: string; end_time: string }) {
     return apiClient.post('/api/v1/admin/working-hours', data)
@@ -358,6 +367,16 @@ export const adminApi = {
   },
   getExportStats() {
     return apiClient.get('/api/v1/admin/export/stats')
+  },
+
+  // Revenue breakdown
+  getRevenueBreakdown(params?: {
+    by_master?: boolean
+    by_service?: boolean
+    date_from?: string
+    date_to?: string
+  }) {
+    return apiClient.get('/api/v1/admin/revenue-breakdown', { params })
   },
 
   // Dashboard cache management

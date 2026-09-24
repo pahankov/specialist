@@ -19,18 +19,36 @@ function ClientsPage() {
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
+  const [search, setSearch] = useState('')
+  const [masterIdFilter, setMasterIdFilter] = useState<number | ''>('')
+  const [allMasters, setAllMasters] = useState<Array<{ id: number; name: string }>>([])
+  const [totalClients, setTotalClients] = useState(0)
+
+  const fetchOptions = async () => {
+    try {
+      const mastersResp = await adminApi.get('/api/v1/admin/masters')
+      setAllMasters(mastersResp.data.map((m: any) => ({ id: m.id, name: m.name })))
+    } catch { /* not superadmin */ }
+  }
+
+  useEffect(() => { fetchOptions() }, [])
 
   const fetchData = async () => {
+    setLoading(true)
     try {
-      const c = await adminApi.getClients()
+      const params: Record<string, any> = { page: 1, page_size: 200 }
+      if (search?.trim()) params.search = search.trim()
+      if (masterIdFilter !== '') params.master_id = masterIdFilter
+      const c = await adminApi.getClients(params)
       setClients(c.data.items)
+      setTotalClients(c.data.total)
     } catch (err: any) {
       if (err.response?.status === 401) { localStorage.removeItem('access_token'); window.location.href = '/admin/login' }
       else addToast('Ошибка загрузки', 'error')
     } finally { setLoading(false) }
   }
 
-  useEffect(() => { fetchData() }, [])
+  useEffect(() => { fetchData() }, [search, masterIdFilter])
 
   const resetForm = () => { setName(''); setPhone(''); setEmail(''); setEditingId(null); setShowForm(false) }
 
@@ -102,6 +120,36 @@ function ClientsPage() {
         </button>
       </div>
 
+      {/* Search and filter bar */}
+      <div className="card" style={{ marginBottom: 16, padding: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 12 }}>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label style={{ fontSize: 12, color: '#666', marginBottom: 4, display: 'block' }}>🔍 Поиск по имени или телефону</label>
+            <input
+              type="text"
+              placeholder="Введите имя или телефон..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{ width: '100%', padding: 8, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }}
+            />
+          </div>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label style={{ fontSize: 12, color: '#666', marginBottom: 4, display: 'block' }}>👨‍💼 Мастер</label>
+            <select value={masterIdFilter} onChange={(e) => setMasterIdFilter(e.target.value as any)} style={{ width: '100%', padding: 8, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }}>
+              <option value="">Все клиенты</option>
+              {allMasters.map(m => (<option key={m.id} value={m.id}>{m.name}</option>))}
+            </select>
+          </div>
+          {(search || masterIdFilter !== '') && (
+            <div className="form-group" style={{ marginBottom: 0, display: 'flex', alignItems: 'flex-end' }}>
+              <button className="btn btn-ghost" onClick={() => { setSearch(''); setMasterIdFilter('') }} style={{ width: '100%', fontSize: 13 }}>
+                ✕ Сбросить
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
       {showForm && (
         <div className="card form-card">
           <h3>{editingId ? 'Редактировать клиента' : 'Новый клиент'}</h3>
@@ -130,7 +178,7 @@ function ClientsPage() {
       ) : (
         <div className="card">
           <div className="card-header">
-            <h3>Список клиентов <span className="client-count">({clients.length})</span></h3>
+            <h3>Список клиентов <span className="client-count">({clients.length}{totalClients > 200 ? ` из ${totalClients}` : ''})</span></h3>
             <Tooltip content="Добавить нового клиента">
               <button className="btn btn-primary" onClick={() => setShowForm(true)}>+ Добавить клиента</button>
             </Tooltip>

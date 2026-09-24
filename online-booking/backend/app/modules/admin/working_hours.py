@@ -20,13 +20,18 @@ router = APIRouter()
 @router.get("/working-hours", response_model=List[WorkingHourResponse])
 async def get_working_hours(
     master: User = Depends(require_master),
+    master_id: Optional[int] = Query(None, description="Filter by master ID (superadmin only)"),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get working hours for the authenticated master."""
-    result = await db.execute(
-        select(WorkingHour).where(WorkingHour.master_id == master.master_profile.id)
-        .order_by(WorkingHour.schedule_date)
-    )
+    """Get working hours for the authenticated master (or specified master for superadmin)."""
+    is_admin = master.role == "ADMIN"
+    
+    if is_admin and master_id is not None:
+        query = select(WorkingHour).where(WorkingHour.master_id == master_id).order_by(WorkingHour.schedule_date)
+    else:
+        query = select(WorkingHour).where(WorkingHour.master_id == master.master_profile.id).order_by(WorkingHour.schedule_date)
+    
+    result = await db.execute(query)
     return result.scalars().all()
 
 
