@@ -47,11 +47,11 @@ async def get_all_masters(
                 search, filter_active, filter_admin, limit, offset)
     
     # Query Users with their MasterProfile using joinedload
+    # Show ALL users with MasterProfile (regardless of role)
     query = (
         select(User)
         .join(MasterProfile)
         .options(joinedload(User.master_profile))
-        .where(User.role == UserRole.MASTER)
     )
     
     if search:
