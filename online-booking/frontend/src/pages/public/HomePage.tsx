@@ -32,7 +32,6 @@ function HomePage() {
   const [currentSlide, setCurrentSlide] = useState(0)
   const slideIntervalRef = useRef<number | null>(null)
   const totalSlides = 3 // services, masters, reviews
-  const [isAutoPlaying, setIsAutoPlaying] = useState(true)
 
   const SLIDE_DURATION = 4000 // 4 seconds
 
@@ -40,40 +39,37 @@ function HomePage() {
   const randomServices = useMemo(() => pickRandom(allServices, 6), [allServices])
   const randomMasters = useMemo(() => pickRandom(allMasters, 6), [allMasters])
 
+  // Infinite loop: when reaching last slide, reset to first after animation
+  useEffect(() => {
+    if (currentSlide === totalSlides - 1) {
+      // Wait for animation to finish (600ms), then instantly reset
+      const timer = setTimeout(() => {
+        setCurrentSlide(0)
+      }, 600)
+      return () => clearTimeout(timer)
+    }
+  }, [currentSlide, totalSlides])
+
   const goToSlide = useCallback((index: number) => {
     setCurrentSlide(index)
-    if (index < totalSlides - 1) {
-      setIsAutoPlaying(true)
-    } else {
-      setIsAutoPlaying(false)
-    }
   }, [])
 
   const nextSlide = useCallback(() => {
     setCurrentSlide((prev) => {
-      if (prev >= totalSlides - 1) {
-        setIsAutoPlaying(false)
-        return prev
-      }
+      if (prev >= totalSlides - 1) return prev
       return prev + 1
     })
-  }, [])
+  }, [totalSlides])
 
   const prevSlide = useCallback(() => {
     setCurrentSlide((prev) => Math.max(0, prev - 1))
-    setIsAutoPlaying(true)
   }, [])
 
   // Auto-play
   useEffect(() => {
-    if (!isAutoPlaying) return
-    
     slideIntervalRef.current = setInterval(() => {
       setCurrentSlide((prev) => {
-        if (prev >= totalSlides - 1) {
-          setIsAutoPlaying(false)
-          return prev
-        }
+        if (prev >= totalSlides - 1) return prev
         return prev + 1
       })
     }, SLIDE_DURATION)
@@ -83,7 +79,7 @@ function HomePage() {
         clearInterval(slideIntervalRef.current)
       }
     }
-  }, [isAutoPlaying, totalSlides])
+  }, [SLIDE_DURATION, totalSlides])
 
   useEffect(() => {
     const fetchData = async () => {
