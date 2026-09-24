@@ -198,20 +198,11 @@
 .carousel-track {
   display: flex;
   transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
-  will-change: transform;
 }
 
 .carousel-slide {
   min-width: 100%;
   flex-shrink: 0;
-  opacity: 0;
-  transition: opacity 0.4s ease;
-  visibility: hidden;
-}
-
-.carousel-slide.active {
-  opacity: 1;
-  visibility: visible;
 }
 
 /* Navigation buttons */

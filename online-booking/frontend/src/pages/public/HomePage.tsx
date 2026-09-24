@@ -32,7 +32,6 @@ function HomePage() {
   const [currentSlide, setCurrentSlide] = useState(0)
   const [isTransitioning, setIsTransitioning] = useState(false)
   const slideIntervalRef = useRef<number | null>(null)
-  const trackRef = useRef<HTMLDivElement>(null)
   const totalSlides = 3 // services, masters, reviews
 
   const SLIDE_DURATION = 4000 // 4 seconds
@@ -41,18 +40,14 @@ function HomePage() {
   const randomServices = useMemo(() => pickRandom(allServices, 6), [allServices])
   const randomMasters = useMemo(() => pickRandom(allMasters, 6), [allMasters])
 
-  // Handle infinite loop — reset position when going from last to first
+  // Handle infinite loop — when reaching cloned slide 3, jump to 0 instantly
   useEffect(() => {
-    const track = trackRef.current
-    if (!track) return
-
-    // When going from last slide to first, instant jump without animation
-    if (currentSlide === 0) {
-      track.style.transition = 'none'
-      track.style.transform = 'translateX(0)'
-      // Force reflow
-      void track.offsetHeight
-      track.style.transition = 'transform 0.6s cubic-bezier(0.4, 0, 0.2, 1)'
+    if (currentSlide === 3) {
+      setIsTransitioning(true)
+      setTimeout(() => {
+        setCurrentSlide(0)
+        setTimeout(() => setIsTransitioning(false), 50)
+      }, 600)
     }
   }, [currentSlide])
 
@@ -64,7 +59,7 @@ function HomePage() {
   }, [isTransitioning])
 
   const nextSlide = useCallback(() => {
-    setCurrentSlide((prev) => (prev + 1) % totalSlides)
+    setCurrentSlide((prev) => prev + 1)
   }, [])
 
   const prevSlide = useCallback(() => {
@@ -131,7 +126,6 @@ function HomePage() {
           </button>
 
           <div 
-            ref={trackRef}
             className="carousel-track"
             style={{ transform: `translateX(-${currentSlide * 100}%)` }}
           >
@@ -200,6 +194,37 @@ function HomePage() {
                 <ReviewsSection />
               </div>
             </div>
+
+            {/* Slide 4: Cloned Services for infinite loop */}
+            <div className={`carousel-slide ${currentSlide === 3 ? 'active' : ''}`}>
+              {randomServices.length > 0 && (
+                <section className="services-section">
+                  <div className="container">
+                    <h2>Наши услуги</h2>
+                    <div className="services-grid">
+                      {randomServices.map((service) => (
+                        <div 
+                          key={`clone-${service.id}`} 
+                          className="service-card card"
+                          onMouseEnter={() => { if (slideIntervalRef.current) clearInterval(slideIntervalRef.current) }}
+                          onMouseLeave={() => { slideIntervalRef.current = setInterval(nextSlide, SLIDE_DURATION) }}
+                        >
+                          <h3>{service.name}</h3>
+                          {service.description && <p>{service.description}</p>}
+                          <div className="service-meta">
+                            <span className="duration">⏱️ {service.duration_minutes} мин</span>
+                            <span className="price">₽{service.price}</span>
+                          </div>
+                          <Link to={`/booking?master_id=${service.master_id}`} className="btn btn-primary">
+                            Записаться
+                          </Link>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </section>
+              )}
+            </div>
           </div>
 
           <button 
@@ -216,7 +241,7 @@ function HomePage() {
           {[0, 1, 2].map((index) => (
             <button
               key={index}
-              className={`carousel-indicator ${currentSlide === index ? 'active' : ''}`}
+              className={`carousel-indicator ${currentSlide % totalSlides === index ? 'active' : ''}`}
               onClick={() => goToSlide(index)}
               aria-label={`Перейти к слайду ${index + 1}`}
             />
@@ -225,9 +250,9 @@ function HomePage() {
 
         {/* Slide labels */}
         <div className="carousel-labels">
-          <span className={`carousel-label ${currentSlide === 0 ? 'active' : ''}`}>Услуги</span>
-          <span className={`carousel-label ${currentSlide === 1 ? 'active' : ''}`}>Мастера</span>
-          <span className={`carousel-label ${currentSlide === 2 ? 'active' : ''}`}>Отзывы</span>
+          <span className={`carousel-label ${currentSlide % totalSlides === 0 ? 'active' : ''}`}>Услуги</span>
+          <span className={`carousel-label ${currentSlide % totalSlides === 1 ? 'active' : ''}`}>Мастера</span>
+          <span className={`carousel-label ${currentSlide % totalSlides === 2 ? 'active' : ''}`}>Отзывы</span>
         </div>
       </div>
 
