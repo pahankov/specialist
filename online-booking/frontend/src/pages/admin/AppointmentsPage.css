@@ -96,6 +96,14 @@
   box-sizing: border-box;
 }
 
+/* Fixed width for status column */
+.appointments-table th:nth-child(6),
+.appointments-table td:nth-child(6) {
+  width: 140px;
+  min-width: 140px;
+  max-width: 140px;
+}
+
 .status-pending {
   background: #fef3c7;
   color: #92400e;
