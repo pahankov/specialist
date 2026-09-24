@@ -84,11 +84,16 @@
 }
 
 .status-badge {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 4px 12px;
   border-radius: 12px;
   font-size: 12px;
   font-weight: 600;
+  min-width: 120px;
+  text-align: center;
+  box-sizing: border-box;
 }
 
 .status-pending {
