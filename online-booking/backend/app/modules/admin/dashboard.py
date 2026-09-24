@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
-from datetime import timedelta
+from datetime import timedelta, datetime
 
 from app.database import get_db
 from app.models.appointment import Appointment
@@ -13,6 +13,7 @@ from app.models.user import User
 from app.models.master_profile import MasterProfile
 from app.dependencies.auth import require_master
 from app.utils import utcnow
+from app.services.cache import cache_service
 
 router = APIRouter()
 
@@ -25,12 +26,22 @@ async def get_dashboard(
     """Get dashboard statistics.
     For regular masters: returns their own stats.
     For superadmins (is_admin=True): returns global stats across all masters.
-    """
-    # Superadmin gets global stats
-    if master.is_admin:
-        return await _get_global_stats(db)
     
-    # Regular master gets their own stats
+    Uses Redis cache with 5-minute TTL for superadmin stats.
+    """
+    if master.is_admin:
+        cache_key = f"admin:dashboard:global"
+        
+        # Try cache first
+        cached = cache_service.get(cache_key)
+        if cached is not None:
+            return cached
+        
+        # Compute and cache
+        stats = await _get_global_stats(db)
+        cache_service.set(cache_key, stats, ttl=300)  # 5 minutes
+        return stats
+    
     return await _get_master_stats(master, db)
 
 
@@ -252,3 +263,16 @@ async def get_monthly_stats(
         "total_hours": round(total_minutes / 60, 1),
         "revenue": float(month_revenue)
     }
+
+
+@router.post("/dashboard/cache/clear")
+async def clear_dashboard_cache(
+    master: User = Depends(require_master)
+):
+    """Clear dashboard cache (superadmin only)."""
+    if not master.is_admin:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Only superadmin can clear cache")
+    
+    cache_service.invalidate_pattern("admin:dashboard:*")
+    return {"detail": "Dashboard cache cleared"}

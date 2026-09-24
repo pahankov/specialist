@@ -296,3 +296,115 @@ export interface UnifiedRegisterResponse {
   is_verified: boolean
   created_at?: string
 }
+
+// ─── Pagination ────────────────────────────────────────────────
+
+export interface PaginatedResponse<T> {
+  items: T[]
+  total: number
+  page: number
+  page_size: number
+  total_pages: number
+}
+
+// ─── Health ────────────────────────────────────────────────────
+
+export interface HealthCheck {
+  status: 'healthy' | 'degraded'
+  database: string
+  cache: Record<string, unknown>
+  tasks: Record<string, unknown>
+}
+
+// ─── Changelog ─────────────────────────────────────────────────
+
+export interface ChangelogEntry {
+  version: string
+  date: string
+  type: string
+  title: string
+  changes: Array<{
+    type: string
+    description: string
+    impact: string
+  }>
+}
+
+export interface Changelog {
+  current_version: string
+  base_url: string
+  entries: ChangelogEntry[]
+}
+
+// ─── Master Detail ───────────────────────────────────────────
+
+export interface MasterStats {
+  total_appointments: number
+  status_counts: Record<string, number>
+  total_clients: number
+  total_services: number
+  total_revenue: number
+  avg_rating?: number | null
+  review_count: number
+}
+
+export interface MasterDetail {
+  id: number
+  user_id: number
+  name: string
+  email: string
+  phone?: string
+  telegram_username?: string
+  description?: string
+  avatar_url?: string
+  experience_years?: number
+  status: string
+  is_active: boolean
+  is_admin: boolean
+  created_at?: string
+  updated_at?: string
+  stats: MasterStats
+  recent_reviews: Array<{
+    id: number
+    client_name: string
+    client_phone: string
+    rating: number
+    comment?: string
+    is_published: boolean
+    created_at?: string
+  }>
+  recent_appointments: Array<{
+    id: number
+    client_name?: string
+    appointment_date?: string
+    status: string
+    service_name?: string
+    service_price: number
+  }>
+}
+
+export interface BulkResult {
+  toggled?: Array<{ master_id: number; name: string; new_status: string }>
+  suspended?: Array<{ master_id: number; name: string }>
+  unsuspended?: Array<{ master_id: number; name: string }>
+  errors: Array<{ master_id: number; error: string }>
+}
+
+export interface AuditLogEntry {
+  id: number
+  master_id: number
+  master_name?: string
+  level: string
+  action: string
+  entity_type: string
+  entity_id: number
+  details?: string
+  ip_address?: string
+  created_at?: string
+}
+
+export interface ImportResult {
+  imported: number
+  errors: Array<{ row: number; error: string }>
+  total_rows: number
+}

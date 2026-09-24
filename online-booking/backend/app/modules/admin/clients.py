@@ -1,7 +1,7 @@
-"""Admin client CRUD endpoints."""
+"""Admin client CRUD endpoints with pagination."""
 from fastapi import APIRouter, Depends, Query, Response, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import joinedload
 from typing import List, Optional
 
@@ -9,6 +9,7 @@ from app.database import get_db
 from app.models.client_profile import ClientProfile
 from app.models.user import User
 from app.schemas.client import ClientCreate, ClientUpdate, ClientResponse
+from app.schemas.pagination import PaginatedResponse
 from app.dependencies.auth import require_master
 from app.dependencies.crud import get_or_404
 from app.services.audit import log_action
@@ -16,36 +17,67 @@ from app.services.audit import log_action
 router = APIRouter()
 
 
-@router.get("/clients", response_model=List[ClientResponse])
+@router.get("/clients", response_model=PaginatedResponse[ClientResponse])
 async def get_admin_clients(
     master: User = Depends(require_master),
-    limit: int = Query(100, ge=1, le=500),
-    offset: int = Query(0, ge=0),
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(20, ge=1, le=200, description="Items per page"),
+    search: Optional[str] = Query(None, description="Search by name or phone"),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get all clients (paginated)."""
-    result = await db.execute(
+    """Get all clients (paginated with total count)."""
+    offset = (page - 1) * page_size
+
+    # Base query
+    base_query = (
         select(ClientProfile)
         .join(ClientProfile.user)
         .options(joinedload(ClientProfile.user))
+    )
+
+    # Search filter
+    if search:
+        search_term = f"%{search}%"
+        base_query = base_query.where(
+            (User.name.ilike(search_term)) | (User.phone.ilike(search_term))
+        )
+
+    # Count total
+    count_query = select(func.count(ClientProfile.id)).select_from(base_query.subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+
+    # Data query
+    data_query = (
+        base_query
         .order_by(User.name)
         .offset(offset)
-        .limit(limit)
+        .limit(page_size)
     )
+    result = await db.execute(data_query)
     profiles = result.scalars().unique().all()
-    # Return user data wrapped in ClientResponse format
-    return [
+
+    # Build response
+    items = [
         {
             "id": cp.user.id,
             "name": cp.user.name,
             "phone": cp.user.phone,
             "email": cp.user.email,
-            "no_show_count": cp.no_show_count,
+            "no_show_count": cp.no_show_count or 0,
             "created_at": cp.user.created_at.isoformat() if cp.user.created_at else None,
             "updated_at": cp.user.updated_at.isoformat() if cp.user.updated_at else None,
         }
         for cp in profiles
     ]
+
+    return PaginatedResponse(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=(total + page_size - 1) // page_size if page_size > 0 else 0
+    )
 
 
 @router.post("/clients", response_model=ClientResponse, status_code=201)

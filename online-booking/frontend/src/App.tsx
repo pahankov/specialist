@@ -1,6 +1,6 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { HomePage, BookingPage } from './pages/public'
-import { AdminLayout, DashboardPage, AppointmentsPage, ServicesPage, ClientsPage, SchedulePage, LogsPage } from './pages/admin'
+import { AdminLayout, DashboardPage, AppointmentsPage, ServicesPage, ClientsPage, SchedulePage, LogsPage, MasterDetailPage } from './pages/admin'
 import MastersPage from './pages/admin/MastersPage'
 import ErrorBoundary from './components/ErrorBoundary'
 import { ToastProvider } from './components/Toast'
@@ -77,6 +77,8 @@ function App() {
         >
           <Route index element={<Navigate to="/admin/dashboard" replace />} />
           <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="masters" element={<MastersPage />} />
+          <Route path="masters/:id" element={<MasterDetailPage />} />
           <Route path="appointments" element={<AppointmentsPage />} />
           <Route path="services" element={<ServicesPage />} />
           <Route path="clients" element={<ClientsPage />} />

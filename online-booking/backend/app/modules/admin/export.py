@@ -1,4 +1,4 @@
-"""Admin CSV export endpoints."""
+"""Admin CSV export endpoints with background task support."""
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -11,6 +11,8 @@ from app.models.user import User
 from app.models.service import Service
 from app.models.master_profile import MasterProfile
 from app.dependencies.auth import require_master
+from app.services.background_tasks import bg_task_service
+from app.services.export_tasks import export_appointments_csv_task, export_clients_csv_task
 
 router = APIRouter()
 
@@ -19,9 +21,26 @@ router = APIRouter()
 async def export_appointments_csv(
     master: User = Depends(require_master),
     status: Optional[str] = Query(None),
+    background: bool = Query(False, description="Run in background"),
     db: AsyncSession = Depends(get_db)
 ):
-    """Export appointments to CSV."""
+    """Export appointments to CSV.
+    
+    Use ?background=true to run in background and get job_id.
+    """
+    if background:
+        job_id = bg_task_service.enqueue(
+            export_appointments_csv_task,
+            status=status,
+            include_master=master.is_admin,
+        )
+        return {
+            "message": "Export started in background",
+            "job_id": job_id,
+            "status_url": f"/api/v1/admin/export/appointments/status/{job_id}"
+        }
+
+    # Synchronous export
     query = (
         select(Appointment, User.name.label('client_name'), User.phone.label('client_phone'),
                Service.name.label('service_name'), Service.price.label('service_price'))
@@ -50,12 +69,38 @@ async def export_appointments_csv(
     )
 
 
+@router.get("/export/appointments/status/{job_id}")
+async def get_export_status(
+    job_id: str,
+    master: User = Depends(require_master)
+):
+    """Get status of a background export task."""
+    status = bg_task_service.get_job_status(job_id)
+    if status is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Task not found or background tasks disabled")
+    return status
+
+
 @router.get("/export/clients")
 async def export_clients_csv(
     master: User = Depends(require_master),
+    background: bool = Query(False, description="Run in background"),
     db: AsyncSession = Depends(get_db)
 ):
-    """Export all clients to CSV."""
+    """Export all clients to CSV.
+    
+    Use ?background=true to run in background.
+    """
+    if background:
+        job_id = bg_task_service.enqueue(export_clients_csv_task)
+        return {
+            "message": "Export started in background",
+            "job_id": job_id,
+            "status_url": f"/api/v1/admin/export/clients/status/{job_id}"
+        }
+
+    # Synchronous export
     result = await db.execute(
         select(User, ClientProfile).join(ClientProfile, User.id == ClientProfile.user_id)
         .where(User.role == "CLIENT")
@@ -70,3 +115,24 @@ async def export_clients_csv(
         media_type='text/csv; charset=utf-8',
         headers={'Content-Disposition': 'attachment; filename=clients.csv'}
     )
+
+
+@router.get("/export/clients/status/{job_id}")
+async def get_clients_export_status(
+    job_id: str,
+    master: User = Depends(require_master)
+):
+    """Get status of a background clients export task."""
+    status = bg_task_service.get_job_status(job_id)
+    if status is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Task not found or background tasks disabled")
+    return status
+
+
+@router.get("/export/stats")
+async def get_export_stats(
+    master: User = Depends(require_master)
+):
+    """Get background task queue statistics."""
+    return bg_task_service.get_queue_stats()

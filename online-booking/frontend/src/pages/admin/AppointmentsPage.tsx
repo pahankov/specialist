@@ -1,19 +1,19 @@
 import { useEffect, useState } from 'react'
 import { adminApi } from '../../api/client'
 import type { Appointment } from '../../api/types'
+import { Skeleton, EmptyState, Tooltip } from '../../components/common'
+import { useToast } from '../../components/Toast'
 import './AppointmentsPage.css'
 
 type SortField = 'appointment_date' | 'client_name' | 'service_name' | 'service_price' | 'status'
 type SortDirection = 'asc' | 'desc'
 
-
-
 function AppointmentsPage() {
+  const { addToast } = useToast()
   const [appointments, setAppointments] = useState<(Appointment & { client_name?: string; client_phone?: string; service_name?: string; service_price?: number })[]>([])
   const [filter, setFilter] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [successMsg, setSuccessMsg] = useState('')
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [cancelingId, setCancelingId] = useState<number | null>(null)
   const [noShowingId, setNoShowingId] = useState<number | null>(null)
@@ -22,12 +22,14 @@ function AppointmentsPage() {
   const [sortField, setSortField] = useState<SortField>('appointment_date')
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
   const [showCompleted, setShowCompleted] = useState(false)
+  const [totalPages, setTotalPages] = useState(1)
   const pageSize = 20
 
   const fetch = async () => {
     try {
-      const resp = await adminApi.getAppointments(filter, pageSize, currentPage)
-      setAppointments(resp.data)
+      const resp = await adminApi.getAppointments(filter, pageSize, currentPage + 1)
+      setAppointments(resp.data.items)
+      setTotalPages(resp.data.total_pages)
     } catch (err: any) {
       if (err.response?.status === 401) { localStorage.removeItem('access_token'); window.location.href = '/admin/login' }
       else setError('Ошибка загрузки')
@@ -35,8 +37,6 @@ function AppointmentsPage() {
   }
 
   useEffect(() => { setCurrentPage(0); fetch() }, [filter])
-
-  const clearSuccess = () => { setSuccessMsg(''); setError('') }
 
   const showError = (err: any) => {
     const detail = err.response?.data?.detail
@@ -49,29 +49,43 @@ function AppointmentsPage() {
     try {
       await adminApi.confirmAppointment(id)
       fetch()
-      setSuccessMsg('Запись подтверждена')
+      addToast('Запись подтверждена', 'success')
     } catch (err: any) {
       showError(err)
     }
   }
+
   const handleCancel = async (id: number) => {
     setCancelingId(id)
   }
+
   const handleComplete = async (id: number) => {
     try {
       await adminApi.completeAppointment(id)
       fetch()
-      setSuccessMsg('Запись завершена')
+      addToast('Запись завершена', 'success')
     } catch (err: any) {
       showError(err)
     }
   }
+
   const handleDelete = async (id: number) => {
-    clearSuccess()
+    const appointment = appointments.find(a => a.id === id)
+    if (!appointment) return
+
+    const undoAction = () => {
+      addToast('Удаление отменено', 'info')
+    }
+
     try {
       await adminApi.deleteAppointment(id)
+      addToast(
+        'Запись удалена',
+        'success',
+        undoAction,
+        'Отменить'
+      )
       fetch()
-      setSuccessMsg('Запись удалена')
     } catch (err: any) {
       showError(err)
     } finally {
@@ -84,7 +98,7 @@ function AppointmentsPage() {
     try {
       await adminApi.cancelAppointment(cancelingId, cancelReason.trim())
       fetch()
-      setSuccessMsg('Запись отменена')
+      addToast('Запись отменена', 'success')
     } catch (err: any) {
       showError(err)
     } finally {
@@ -96,7 +110,7 @@ function AppointmentsPage() {
   const handleNoShow = async (id: number) => {
     try {
       await adminApi.noShowAppointment(id)
-      setSuccessMsg('Отмечено как неявка')
+      addToast('Отмечено как неявка', 'warning')
       fetch()
     } catch (err: any) {
       showError(err)
@@ -134,15 +148,10 @@ function AppointmentsPage() {
   })
 
   const filteredAppointments = sortedAppointments.filter(a => {
-    // Hide completed unless toggle is on
     if (a.status === 'completed' && !showCompleted) return false
-    // Hide past appointments (pending/confirmed with passed time)
     if (a.status !== 'completed' && a.status !== 'cancelled' && isAppointmentTimePassed(a.appointment_date)) return false
     return true
   })
-
-  if (loading) return <div><div className="loading">Загрузка...</div></div>
-  if (error) return <div><div className="error-message">{error}</div></div>
 
   return (
     <div className="appointments-page">
@@ -154,25 +163,39 @@ function AppointmentsPage() {
         <button
           className="btn btn-ghost"
           onClick={() => {
-            window.open(adminApi.exportAppointments(filter), '_blank')
+            const { VITE_API_URL = 'http://localhost:8000' } = import.meta.env
+            window.open(`${VITE_API_URL}/api/v1/admin/export/appointments${filter ? `?status=${filter}` : ''}`, '_blank')
           }}
         >
           📥 Экспорт CSV
         </button>
       </div>
-      {successMsg && <div className="success-message" style={{ background: '#e8f5e9', color: '#2e7d32', padding: '12px 16px', borderRadius: 8, marginBottom: 20 }}>{successMsg}</div>}
+
       {error && <div className="error-message">{error}</div>}
+
       <div className="filters-bar">
         {filters.map(f => (<button key={f.value} className={`filter-btn ${filter === f.value ? 'active' : ''}`} onClick={() => setFilter(f.value)}>{f.label}</button>))}
       </div>
+
       <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14, color: '#666' }}>
           <input type="checkbox" checked={showCompleted} onChange={() => setShowCompleted(p => !p)} style={{ width: 16, height: 16, accentColor: '#667eea' }} />
           Показать завершённые
         </label>
       </div>
-      <div style={{ background: 'white', borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.08)', padding: 24 }}>
-        {filteredAppointments.length === 0 ? <p className="empty-state">Нет записей</p> : (
+
+      {loading ? (
+        <div className="card">
+          <Skeleton rows={5} height="48px" />
+        </div>
+      ) : filteredAppointments.length === 0 ? (
+        <EmptyState
+          icon="📅"
+          title="Нет записей"
+          description={showCompleted ? 'Завершённые записи не найдены' : 'Активных записей не найдено'}
+        />
+      ) : (
+        <div className="card">
           <table className="appointments-table">
             <thead><tr>
               <th className={`sortable ${sortField === 'appointment_date' ? 'active' : ''}`} onClick={() => handleSort('appointment_date')}>Дата <span className="sort-arrow">{sortField === 'appointment_date' ? (sortDirection === 'asc' ? '↑' : '↓') : '⇅'}</span></th>
@@ -191,21 +214,44 @@ function AppointmentsPage() {
                 <td><a href={`tel:${a.client_phone || ''}`}>{a.client_phone || '—'}</a></td>
                 <td>{a.service_name || '—'}</td>
                 <td>{a.service_price ? `${Number(a.service_price).toLocaleString('ru-RU')} ₽` : '—'}</td>
-                <td><span className={`status-badge status-${a.status}`}>{statusLabels[a.status] || a.status}</span></td>
+                <td>
+                  <Tooltip content={statusLabels[a.status] || a.status} position="top">
+                    <span className={`status-badge status-${a.status}`}>{statusLabels[a.status] || a.status}</span>
+                  </Tooltip>
+                </td>
                 <td className="actions-cell">
-                  {a.status === 'pending' && (<><button className="btn btn-sm btn-confirm" onClick={() => handleConfirm(a.id)}>✅ Подтвердить</button><button className="btn btn-sm btn-cancel" onClick={() => handleCancel(a.id)}>❌ Отменить</button></>)}
-                  {a.status === 'confirmed' && (<><button className="btn btn-sm btn-complete" onClick={() => handleComplete(a.id)} disabled={!isAppointmentTimePassed(a.appointment_date)}>🏁 Завершить</button><button className="btn btn-sm btn-cancel" onClick={() => handleCancel(a.id)}>❌ Отменить</button></>)}
-                  {a.status === 'confirmed' && isAppointmentTimePassed(a.appointment_date) && (<button className="btn btn-sm btn-no-show" onClick={() => setNoShowingId(a.id)}>👤 Неявка</button>)}
+                  {a.status === 'pending' && (
+                    <>
+                      <Tooltip content="Подтвердить запись"><button className="btn btn-sm btn-confirm" onClick={() => handleConfirm(a.id)}>✅</button></Tooltip>
+                      <Tooltip content="Отменить запись"><button className="btn btn-sm btn-cancel" onClick={() => handleCancel(a.id)}>❌</button></Tooltip>
+                    </>
+                  )}
+                  {a.status === 'confirmed' && (
+                    <>
+                      <Tooltip content="Завершить запись">
+                        <button className="btn btn-sm btn-complete" onClick={() => handleComplete(a.id)} disabled={!isAppointmentTimePassed(a.appointment_date)}>🏁</button>
+                      </Tooltip>
+                      <Tooltip content="Отменить запись"><button className="btn btn-sm btn-cancel" onClick={() => handleCancel(a.id)}>❌</button></Tooltip>
+                    </>
+                  )}
+                  {a.status === 'confirmed' && isAppointmentTimePassed(a.appointment_date) && (
+                    <Tooltip content="Отметить неявку"><button className="btn btn-sm btn-no-show" onClick={() => setNoShowingId(a.id)}>👤</button></Tooltip>
+                  )}
                   {a.status === 'completed' && <span className="text-muted">Завершена</span>}
                   {a.status === 'cancelled' && <span className="text-muted">Отменена</span>}
                 </td>
-                <td><button className="btn btn-sm btn-delete" onClick={() => setDeletingId(a.id)}>🗑️</button></td>
+                <td>
+                  <Tooltip content="Удалить запись">
+                    <button className="btn btn-sm btn-delete" onClick={() => setDeletingId(a.id)}>🗑️</button>
+                  </Tooltip>
+                </td>
               </tr>))}
             </tbody>
           </table>
-        )}
-      </div>
+        </div>
+      )}
 
+      {/* Delete confirmation modal */}
       {deletingId && (
         <div className="modal-overlay" onClick={() => setDeletingId(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -219,6 +265,7 @@ function AppointmentsPage() {
         </div>
       )}
 
+      {/* Cancel confirmation modal */}
       {cancelingId && (
         <div className="modal-overlay" onClick={() => setCancelingId(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -241,6 +288,7 @@ function AppointmentsPage() {
         </div>
       )}
 
+      {/* No-show confirmation modal */}
       {noShowingId && (
         <div className="modal-overlay" onClick={() => setNoShowingId(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -270,8 +318,8 @@ function AppointmentsPage() {
         <button
           className="btn btn-ghost"
           onClick={() => setCurrentPage(p => p + 1)}
-          disabled={appointments.length < pageSize}
-          style={{ opacity: appointments.length < pageSize ? 0.5 : 1 }}
+          disabled={currentPage + 1 >= totalPages}
+          style={{ opacity: currentPage + 1 >= totalPages ? 0.5 : 1 }}
         >
           Вперёд →
         </button>
