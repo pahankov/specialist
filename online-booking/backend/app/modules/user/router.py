@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import func
+from sqlalchemy import func, cast, String
 from sqlalchemy.orm import joinedload
 from typing import List
 from pydantic import BaseModel
@@ -36,7 +36,7 @@ async def get_masters(
         .options(joinedload(MasterProfile.user))
         .where(
             User.role == UserRole.MASTER,
-            MasterProfile.status == MasterStatus.ACTIVE
+            cast(MasterProfile.status, String) == 'ACTIVE'
         )
         .order_by(User.name)
         .offset(offset).limit(limit)
