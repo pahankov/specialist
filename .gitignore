@@ -54,6 +54,9 @@ frontend/dist/
 frontend/.vite/
 *.local
 
+# Compiled JS from TS (build artifacts in frontend)
+online-booking/frontend/src/**/*.js
+
 # Backend and Frontend are in online-booking/ (not in root)
 # Track them inside online-booking/, ignore at root level
 backend/
