@@ -87,15 +87,29 @@ async def create_seed_data():
         # Check if data already exists
         result = await db.execute(select(User).limit(1))
         if result.scalar_one_or_none():
-            print("Data already exists. Clearing...")
+            print("Data already exists. Clearing test data (superuser protected)...")
+            
+            # Find protected users (superadmins) before clearing
+            protected_result = await db.execute(select(User).where(User.role == UserRole.ADMIN))
+            protected_users = protected_result.scalars().all()
+            protected_emails = {u.email for u in protected_users}
+            print(f"  Protected superusers: {protected_emails}")
+            
+            # Delete test data (except superusers)
             await db.execute(text("DELETE FROM reviews"))
             await db.execute(text("DELETE FROM appointments"))
             await db.execute(text("DELETE FROM working_hours"))
             await db.execute(text("DELETE FROM services"))
             await db.execute(text("DELETE FROM master_profiles"))
             await db.execute(text("DELETE FROM client_profiles"))
-            await db.execute(text("DELETE FROM users"))
+            # Delete users EXCEPT protected superadmins
+            if protected_emails:
+                placeholders = ','.join([f"'{email}'" for email in protected_emails])
+                await db.execute(text(f"DELETE FROM users WHERE role != 'ADMIN' AND email NOT IN ({placeholders})"))
+            else:
+                await db.execute(text("DELETE FROM users WHERE role != 'ADMIN'"))
             await db.commit()
+            print(f"  Cleared test data, kept {len(protected_users)} superuser(s)")
 
         random.seed(42)
         now = datetime.now(timezone.utc)
@@ -111,6 +125,12 @@ async def create_seed_data():
             email = f"master{i}@beauty.ru"
             phone = f"+7900{1000000 + i:06d}"
             password = pwd_context.hash("password123")
+            
+            # Check if user already exists
+            existing = await db.execute(select(User).where(User.email == email))
+            if existing.scalar_one_or_none():
+                print(f"  Skipping {email} (already exists)")
+                continue
             
             user = User(
                 name=name,
@@ -171,6 +191,12 @@ async def create_seed_data():
             name = f"{first_name} {last_name}"
             phone = f"+7911{2000000 + i:06d}"
             email = f"client{i}@mail.ru"
+            
+            # Check if user already exists
+            existing = await db.execute(select(User).where(User.email == email))
+            if existing.scalar_one_or_none():
+                print(f"  Skipping {email} (already exists)")
+                continue
             
             user = User(
                 name=name,
