@@ -86,6 +86,7 @@ class MasterResponse(BaseModel):
     phone: Optional[str]
     telegram_username: Optional[str]
     description: Optional[str]
+    status: str
     is_active: bool
     is_admin: bool
     created_at: Optional[datetime]

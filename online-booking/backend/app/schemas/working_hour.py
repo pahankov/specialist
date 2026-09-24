@@ -30,6 +30,7 @@ class WorkingHourUpdate(BaseModel):
     schedule_date: Optional[date] = None
     start_time: Optional[time] = None
     end_time: Optional[time] = None
+    is_active: Optional[bool] = None
 
     @field_validator('schedule_date', mode='before')
     @classmethod
@@ -60,6 +61,7 @@ class WorkingHourResponse(BaseModel):
     schedule_date: date
     start_time: time
     end_time: time
+    is_active: bool
     
     @field_serializer('schedule_date')
     def serialize_date(self, value: date) -> str:
