@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 from datetime import timedelta, datetime
+from typing import Optional
 
 from app.database import get_db
 from app.models.appointment import Appointment
@@ -11,11 +12,15 @@ from app.models.client_profile import ClientProfile
 from app.models.service import Service
 from app.models.user import User
 from app.models.master_profile import MasterProfile
+from sqlalchemy.orm import aliased
 from app.dependencies.auth import require_master
 from app.utils import utcnow
 from app.services.cache import cache_service
 
 router = APIRouter()
+
+# Aliases for master user lookups
+_MasterUser = aliased(User, name="master_user")
 
 
 @router.get("/dashboard")
@@ -283,6 +288,7 @@ async def get_revenue_breakdown(
     master: User = Depends(require_master),
     by_master: bool = Query(False, description="Group by master"),
     by_service: bool = Query(False, description="Group by service"),
+    master_id: Optional[int] = Query(None, description="Filter by master ID (superadmin only)"),
     date_from: Optional[str] = Query(None, description="Filter by date from (YYYY-MM-DD)"),
     date_to: Optional[str] = Query(None, description="Filter by date to (YYYY-MM-DD)"),
     db: AsyncSession = Depends(get_db)
@@ -309,6 +315,9 @@ async def get_revenue_breakdown(
         if not mp:
             return {"breakdown": [], "total_revenue": 0}
         base_conditions.append(Appointment.master_id == mp.id)
+    elif master_id is not None:
+        # Superadmin can filter by specific master
+        base_conditions.append(Appointment.master_id == master_id)
     
     # Build query based on grouping
     if by_master:
