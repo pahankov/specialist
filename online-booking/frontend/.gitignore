@@ -1,0 +1,23 @@
+# Node
+node_modules/
+dist/
+
+# Vite
+.vite/
+
+# Compiled JS from TS (never commit .js from src/)
+src/**/*.js
+src/**/*.js.map
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.local
+.env.production
