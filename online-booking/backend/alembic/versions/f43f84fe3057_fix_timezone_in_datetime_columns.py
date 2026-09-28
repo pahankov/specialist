@@ -18,70 +18,6 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-def _table_exists(conn, name: str) -> bool:
-    result = conn.execute(
-        text("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = :n)"),
-        {"n": name}
-    )
-    return result.scalar()
-
-
-def _ensure_timezone_column(conn, table: str, column: str) -> None:
-    """Alter column to TIMESTAMP WITH TIME ZONE only if it isn't already."""
-    # Check column exists and its type
-    result = conn.execute(
-        text("""
-            SELECT data_type, is_nullable
-            FROM information_schema.columns
-            WHERE table_name = :t AND column_name = :c
-        """),
-        {"t": table, "c": column}
-    )
-    row = result.fetchone()
-    if not row:
-        return  # Column doesn't exist, skip
-
-    # Check if it already has timezone
-    result = conn.execute(
-        text("""
-            SELECT EXISTS (
-                SELECT FROM pg_attribute pa
-                JOIN pg_type pt ON pt.oid = pa.atttypid
-                WHERE pa.attrelid = :tbl::regclass
-                AND pa.attname = :col
-                AND pt.typtype = 'p'
-                AND LOWER(pt.typname) IN ('timestamp', 'timestamptz')
-            )
-        """),
-        {"tbl": table, "col": column}
-    )
-    has_ts = result.scalar()
-    if not has_ts:
-        return  # Not a timestamp column, skip
-
-    # Check if it's already timestamptz
-    result = conn.execute(
-        text("""
-            SELECT pt.typname
-            FROM pg_attribute pa
-            JOIN pg_type pt ON pt.oid = pa.atttypid
-            WHERE pa.attrelid = :tbl::regclass
-            AND pa.attname = :col
-        """),
-        {"tbl": table, "col": column}
-    )
-    type_name = result.scalar()
-    if type_name and 'timestamptz' in type_name.lower():
-        return  # Already has timezone
-
-    try:
-        conn.execute(
-            text(f"ALTER TABLE {table} ALTER COLUMN {column} TYPE TIMESTAMP WITH TIME ZONE")
-        )
-    except Exception:
-        pass
-
-
 def upgrade() -> None:
     conn = op.get_bind()
 
@@ -117,35 +53,31 @@ def upgrade() -> None:
         pass
 
     # --- Fix timezone in DateTime columns ---
+    # PostgreSQL silently accepts ALTER COLUMN ... TYPE timestamptz if already that type
+    # Just use raw SQL - no checks needed
     timezone_columns = [
-        ('users', 'created_at'),
-        ('users', 'updated_at'),
-        ('appointments', 'appointment_date'),
-        ('appointments', 'created_at'),
-        ('appointments', 'updated_at'),
-        ('client_profiles', 'created_at'),
-        ('client_profiles', 'updated_at'),
-        ('master_profiles', 'created_at'),
-        ('master_profiles', 'updated_at'),
-        ('services', 'created_at'),
-        ('services', 'updated_at'),
-        ('working_hours', 'created_at'),
-        ('working_hours', 'updated_at'),
-        ('audit_logs', 'created_at'),
-        ('blocked_slots', 'start_dt'),
-        ('blocked_slots', 'end_dt'),
-        ('blocked_slots', 'created_at'),
-        ('blocked_slots', 'updated_at'),
-        ('refresh_tokens', 'expires_at'),
-        ('refresh_tokens', 'revoked_at'),
-        ('refresh_tokens', 'created_at'),
-        ('otp_codes', 'expires_at'),
-        ('otp_codes', 'created_at'),
-        ('reviews', 'created_at'),
+        'users.created_at', 'users.updated_at',
+        'appointments.appointment_date', 'appointments.created_at', 'appointments.updated_at',
+        'client_profiles.created_at', 'client_profiles.updated_at',
+        'master_profiles.created_at', 'master_profiles.updated_at',
+        'services.created_at', 'services.updated_at',
+        'working_hours.created_at', 'working_hours.updated_at',
+        'audit_logs.created_at',
+        'blocked_slots.start_dt', 'blocked_slots.end_dt',
+        'blocked_slots.created_at', 'blocked_slots.updated_at',
+        'refresh_tokens.expires_at', 'refresh_tokens.revoked_at', 'refresh_tokens.created_at',
+        'otp_codes.expires_at', 'otp_codes.created_at',
+        'reviews.created_at',
     ]
 
-    for table, column in timezone_columns:
-        _ensure_timezone_column(conn, table, column)
+    for full_name in timezone_columns:
+        try:
+            table, column = full_name.split('.', 1)
+            conn.execute(
+                text(f"ALTER TABLE {table} ALTER COLUMN {column} TYPE TIMESTAMP WITH TIME ZONE")
+            )
+        except Exception:
+            pass
 
 
 def downgrade() -> None:
@@ -153,34 +85,23 @@ def downgrade() -> None:
 
     # --- Revert timezone changes ---
     timezone_columns = [
-        ('users', 'created_at'),
-        ('users', 'updated_at'),
-        ('appointments', 'appointment_date'),
-        ('appointments', 'created_at'),
-        ('appointments', 'updated_at'),
-        ('client_profiles', 'created_at'),
-        ('client_profiles', 'updated_at'),
-        ('master_profiles', 'created_at'),
-        ('master_profiles', 'updated_at'),
-        ('services', 'created_at'),
-        ('services', 'updated_at'),
-        ('working_hours', 'created_at'),
-        ('working_hours', 'updated_at'),
-        ('audit_logs', 'created_at'),
-        ('blocked_slots', 'start_dt'),
-        ('blocked_slots', 'end_dt'),
-        ('blocked_slots', 'created_at'),
-        ('blocked_slots', 'updated_at'),
-        ('refresh_tokens', 'expires_at'),
-        ('refresh_tokens', 'revoked_at'),
-        ('refresh_tokens', 'created_at'),
-        ('otp_codes', 'expires_at'),
-        ('otp_codes', 'created_at'),
-        ('reviews', 'created_at'),
+        'users.created_at', 'users.updated_at',
+        'appointments.appointment_date', 'appointments.created_at', 'appointments.updated_at',
+        'client_profiles.created_at', 'client_profiles.updated_at',
+        'master_profiles.created_at', 'master_profiles.updated_at',
+        'services.created_at', 'services.updated_at',
+        'working_hours.created_at', 'working_hours.updated_at',
+        'audit_logs.created_at',
+        'blocked_slots.start_dt', 'blocked_slots.end_dt',
+        'blocked_slots.created_at', 'blocked_slots.updated_at',
+        'refresh_tokens.expires_at', 'refresh_tokens.revoked_at', 'refresh_tokens.created_at',
+        'otp_codes.expires_at', 'otp_codes.created_at',
+        'reviews.created_at',
     ]
 
-    for table, column in timezone_columns:
+    for full_name in timezone_columns:
         try:
+            table, column = full_name.split('.', 1)
             conn.execute(
                 text(f"ALTER TABLE {table} ALTER COLUMN {column} TYPE TIMESTAMP WITHOUT TIME ZONE")
             )
@@ -190,10 +111,10 @@ def downgrade() -> None:
     # --- Restore removed columns ---
     try:
         conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_user_id INTEGER"))
-        try:
-            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_users_telegram_user_id ON users (telegram_user_id)"))
-        except Exception:
-            pass
+    except Exception:
+        pass
+    try:
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_users_telegram_user_id ON users (telegram_user_id)"))
     except Exception:
         pass
 
@@ -210,55 +131,48 @@ def downgrade() -> None:
             pass
 
     # --- Restore removed tables ---
-    if not _table_exists(conn, 'social_accounts'):
-        try:
-            conn.execute(text("""
-                CREATE TABLE social_accounts (
-                    id SERIAL PRIMARY KEY,
-                    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                    provider VARCHAR(50) NOT NULL,
-                    provider_user_id VARCHAR(255) NOT NULL,
-                    provider_email VARCHAR(255),
-                    provider_phone VARCHAR(20),
-                    display_name VARCHAR(100),
-                    avatar_url VARCHAR(500),
-                    access_token VARCHAR(2000),
-                    refresh_token VARCHAR(2000),
-                    token_expires_at TIMESTAMP,
-                    is_active BOOLEAN,
-                    linked_at TIMESTAMP,
-                    last_used_at TIMESTAMP,
-                    CONSTRAINT uq_social_provider_user UNIQUE (provider, provider_user_id)
-                )
-            """))
-            try:
-                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_social_accounts_user_id ON social_accounts (user_id)"))
-                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_social_accounts_provider ON social_accounts (provider)"))
-            except Exception:
-                pass
-        except Exception:
-            pass
+    try:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS social_accounts (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                provider VARCHAR(50) NOT NULL,
+                provider_user_id VARCHAR(255) NOT NULL,
+                provider_email VARCHAR(255),
+                provider_phone VARCHAR(20),
+                display_name VARCHAR(100),
+                avatar_url VARCHAR(500),
+                access_token VARCHAR(2000),
+                refresh_token VARCHAR(2000),
+                token_expires_at TIMESTAMP,
+                is_active BOOLEAN,
+                linked_at TIMESTAMP,
+                last_used_at TIMESTAMP,
+                CONSTRAINT uq_social_provider_user UNIQUE (provider, provider_user_id)
+            )
+        """))
+    except Exception:
+        pass
 
-    if not _table_exists(conn, 'locations'):
-        try:
-            conn.execute(text("""
-                CREATE TABLE locations (
-                    id SERIAL PRIMARY KEY,
-                    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-                    city_id INTEGER REFERENCES cities(id) ON DELETE SET NULL,
-                    value VARCHAR(500),
-                    unrestricted_value VARCHAR(500),
-                    lat FLOAT,
-                    lon FLOAT,
-                    street VARCHAR(300),
-                    building VARCHAR(50),
-                    apartment VARCHAR(50),
-                    location_type VARCHAR(20),
-                    is_active BOOLEAN,
-                    created_at TIMESTAMP,
-                    updated_at TIMESTAMP,
-                    CONSTRAINT uq_user_location UNIQUE (user_id)
-                )
-            """))
-        except Exception:
-            pass
+    try:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS locations (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                city_id INTEGER REFERENCES cities(id) ON DELETE SET NULL,
+                value VARCHAR(500),
+                unrestricted_value VARCHAR(500),
+                lat FLOAT,
+                lon FLOAT,
+                street VARCHAR(300),
+                building VARCHAR(50),
+                apartment VARCHAR(50),
+                location_type VARCHAR(20),
+                is_active BOOLEAN,
+                created_at TIMESTAMP,
+                updated_at TIMESTAMP,
+                CONSTRAINT uq_user_location UNIQUE (user_id)
+            )
+        """))
+    except Exception:
+        pass
