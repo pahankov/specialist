@@ -32,9 +32,9 @@ jobs:
             # DATABASE_URL from env
             alembic upgrade head
 
-            # Create/update superuser
+            # Create/update superuser (uses bcrypt directly, not passlib)
             python3.12 -c "
-import sys, os
+import sys, os, bcrypt
 sys.path.insert(0, '.')
 os.environ['DATABASE_URL'] = '${DATABASE_URL}'
 os.environ['APP_ENV'] = 'production'
@@ -45,22 +45,23 @@ from sqlalchemy import create_engine
 from app.models.user import User, UserRole
 from app.models.master_profile import MasterProfile
 from app.database import Base
-from passlib.context import CryptContext
 
 engine = create_engine('${DATABASE_URL}')
 Base.metadata.create_all(engine)
 SessionLocal = sessionmaker(engine)
-pwd_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
 
 SUPERUSER_EMAIL = 'pahankov@mail.ru'
 SUPERUSER_PASSWORD = 'REDACTED_SUPERUSER_PASSWORD'
 SUPERUSER_NAME = 'Павел'
 TELEGRAM_USERNAME = 'pahankov'
 
+def _hash_pw(plain):
+    return bcrypt.hashpw(plain.encode('utf-8'), bcrypt.gensalt(rounds=12)).decode('utf-8')
+
 with SessionLocal() as session:
     user = session.execute(select(User).where(User.email == SUPERUSER_EMAIL)).scalar_one_or_none()
     if user:
-        user.hashed_password = pwd_context.hash(SUPERUSER_PASSWORD)
+        user.hashed_password = _hash_pw(SUPERUSER_PASSWORD)
         user.role = UserRole.ADMIN
         user.is_active = True
         print('Superuser updated:')
@@ -68,7 +69,7 @@ with SessionLocal() as session:
         user = User(
             name=SUPERUSER_NAME,
             email=SUPERUSER_EMAIL,
-            hashed_password=pwd_context.hash(SUPERUSER_PASSWORD),
+            hashed_password=_hash_pw(SUPERUSER_PASSWORD),
             phone='+79615202311',
             role=UserRole.ADMIN,
             is_active=True,
