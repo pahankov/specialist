@@ -2,6 +2,24 @@
 
 Приложение для онлайн-записи клиентов на услуги через веб-интерфейс. Клиент выбирает мастера, услугу и время — мастер управляет записями через админ-панель.
 
+
+### [1.5.0] — 2026-09-28
+- **Автоматический деплой:** GitHub Actions workflow полностью автоматизирует развёртывание
+  - lembic upgrade head — автоприменение миграций при каждом push в main
+  - Создание/обновление суперпользователя pahankov@mail.ru (sync SQLAlchemy, без timezone-ошибок)
+  - seed_production.py — заполнение БД тестовыми данными только если пуста
+  - Сборка frontend + перезапуск сервисов
+- **Timezone fix:** все DateTime колонки в моделях теперь DateTime(timezone=True)
+  - 11 моделей, 31 колонка: created_at, updated_at, appointment_date, start_dt, end_dt, expires_at, revoked_at
+  - Миграция 43f84fe3057 конвертирует колонки в TIMESTAMP WITH TIME ZONE на PostgreSQL
+- **GitHub Secrets:** один секрет DATABASE_URL вместо пяти (DB_USER, DB_PASSWORD, DB_HOST, DB_NAME, DB_PORT)
+  - Формат: postgresql+psycopg2://user:pass@host:port/dbname
+- **Новые файлы:** seed_production.py — безопасный seed только для пустой БД
+- **Исправления:**
+  - lembic.ini — URL берётся из переменной окружения DATABASE_URL
+  - create_superuser.py — заменён sync SQLAlchemy в deploy workflow (async вызывал timezone-ошибки)
+  - Удалены удалённые таблицы/колонки из миграции (locations, social_accounts, telegram_user_id и др.)
+
 ## 🚀 Быстрый старт
 
 ### Требования

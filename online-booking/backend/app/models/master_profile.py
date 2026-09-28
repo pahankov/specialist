@@ -24,8 +24,8 @@ class MasterProfile(Base):
     experience_years = Column(Integer, nullable=True)
     status = Column(SAEnum(MasterStatus), default=MasterStatus.ACTIVE, nullable=False)
     is_active = Column(Boolean, default=True)  # soft-delete flag
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc))
 
     # Relationships
