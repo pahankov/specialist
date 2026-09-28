@@ -48,7 +48,7 @@ def run_migrations_offline() -> None:
         url=url,
         target_metadata=target_metadata,
         literal_binds=True,
-        render_as_batch=True,  # For SQLite compatibility
+        render_as_batch=True,
         compare_type=True,
     )
 
@@ -57,7 +57,11 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    """Run migrations in 'online' mode."""
+    """Run migrations in 'online' mode with AUTOCOMMIT.
+
+    PostgreSQL requires each DDL statement to be in its own transaction.
+    AUTOCOMMIT mode prevents one failed SQL from blocking the entire migration.
+    """
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
@@ -65,20 +69,18 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        # Disable transaction wrapping - each migration runs in its own
-        # autocommit mode to prevent one failed SQL from blocking the rest
+        # Set AUTOCOMMIT - each statement commits immediately
         connection = connection.execution_options(
             isolation_level="AUTOCOMMIT"
         )
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
-            render_as_batch=True,  # For SQLite compatibility
+            render_as_batch=True,
             compare_type=True,
-            transaction_per_migration=False,
         )
 
-        # Don't use context.begin_transaction() - we want autocommit
+        # No context.begin_transaction() - we want autocommit
         context.run_migrations()
 
 
