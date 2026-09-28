@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload, joinedload
 from typing import List, Optional
-from passlib.context import CryptContext
+import bcrypt
 from datetime import datetime, timezone
 import csv
 import io
@@ -24,7 +24,11 @@ from app.services.master_status import update_master_status_from_working_hours
 from app.logging_config import get_logger
 
 logger = get_logger(__name__)
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def _hash_pw(plain: str) -> str:
+    return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode("utf-8")
+
 
 router = APIRouter(prefix="/masters")
 
@@ -930,5 +934,4 @@ async def get_master_audit_logs(
         total=total,
         page=page,
         page_size=page_size,
-        total_pages=(total + page_size - 1) // page_size if page_size > 0 else 0
-    )
+        total_pa                                                                         

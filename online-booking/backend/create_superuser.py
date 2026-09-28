@@ -4,18 +4,20 @@ Usage:
     python create_superuser.py
 """
 import asyncio
+import bcrypt
 from sqlalchemy import select
 from app.database import engine, AsyncSessionLocal, Base
 from app.models.user import User, UserRole
 from app.models.master_profile import MasterProfile
-from passlib.context import CryptContext
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 SUPERUSER_EMAIL = "pahankov@mail.ru"
 SUPERUSER_PASSWORD = "REDACTED_SUPERUSER_PASSWORD"
 SUPERUSER_NAME = "Павел"
 TELEGRAM_USERNAME = "pahankov"
+
+
+def _hash_pw(plain: str) -> str:
+    return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode("utf-8")
 
 
 async def main():
@@ -30,7 +32,7 @@ async def main():
 
         if user:
             # Update password and ensure admin role
-            user.hashed_password = pwd_context.hash(SUPERUSER_PASSWORD)
+            user.hashed_password = _hash_pw(SUPERUSER_PASSWORD)
             user.role = UserRole.ADMIN
             user.is_active = True
             print("Superuser updated:")
@@ -39,7 +41,7 @@ async def main():
             user = User(
                 name=SUPERUSER_NAME,
                 email=SUPERUSER_EMAIL,
-                hashed_password=pwd_context.hash(SUPERUSER_PASSWORD),
+                hashed_password=_hash_pw(SUPERUSER_PASSWORD),
                 phone="+79615202311",
                 role=UserRole.ADMIN,
                 is_active=True,
