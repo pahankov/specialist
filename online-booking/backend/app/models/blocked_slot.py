@@ -12,11 +12,11 @@ class BlockedSlot(Base):
 
     id = Column(Integer, primary_key=True)
     master_id = Column(Integer, ForeignKey("master_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
-    start_dt = Column(DateTime, nullable=False)
-    end_dt = Column(DateTime, nullable=False)
+    start_dt = Column(DateTime(timezone=True), nullable=False)
+    end_dt = Column(DateTime(timezone=True), nullable=False)
     reason = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc))
 
     master_profile = relationship("MasterProfile", back_populates="blocked_slots")

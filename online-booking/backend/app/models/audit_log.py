@@ -19,7 +19,7 @@ class AuditLog(Base):
     entity_id = Column(Integer, nullable=True)
     details = Column(Text, nullable=True)
     ip_address = Column(String(45), nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     master_profile = relationship("MasterProfile", back_populates="audit_logs")
 

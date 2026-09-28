@@ -17,7 +17,7 @@ class Review(Base):
     rating = Column(Float, nullable=False)  # 1.0 — 5.0
     comment = Column(Text)
     is_published = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     appointment = relationship("Appointment", back_populates="reviews")
