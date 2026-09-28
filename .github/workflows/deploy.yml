@@ -20,6 +20,7 @@ jobs:
             DATABASE_URL
           script: |
             cd /var/www/beauty-specialist
+            git config --global --add safe.directory /var/www/beauty-specialist
             git pull origin main
             git reset --hard HEAD
 
@@ -43,8 +44,8 @@ jobs:
             cd ../frontend
             npm ci
             npm run build
-            cp -r dist/* /var/www/beauty-specialist/frontend/dist/
+            sudo cp -r dist/* /var/www/beauty-specialist/frontend/dist/
 
             # Restart
-            systemctl restart beauty-backend
-            systemctl restart nginx
+            sudo systemctl restart beauty-backend
+            sudo systemctl restart nginx
