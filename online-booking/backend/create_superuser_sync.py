@@ -22,14 +22,12 @@ from sqlalchemy import (
     String,
     Boolean,
     DateTime,
-    Enum,
+    Enum as SAEnum,
     ForeignKey,
-    Table,
-    MetaData,
     create_engine,
     select,
 )
-from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy.orm import sessionmaker, declarative_base
 from passlib.context import CryptContext
 import enum
 import datetime
@@ -38,13 +36,16 @@ import datetime
 # Minimal model definitions (mirrors app.models without importing them)
 # ---------------------------------------------------------------------------
 
+Base = declarative_base()
+
+
 class UserRole(str, enum.Enum):
     ADMIN = "admin"
     MASTER = "master"
     CLIENT = "client"
 
 
-class UserBase:
+class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -52,14 +53,14 @@ class UserBase:
     email = Column(String, unique=True, index=True, nullable=True)
     hashed_password = Column(String, nullable=False)
     phone = Column(String, nullable=True)
-    role = Column(Enum(UserRole), default=UserRole.CLIENT, nullable=False)
+    role = Column(SAEnum(UserRole), default=UserRole.CLIENT, nullable=False)
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 
 
-class MasterProfileBase:
+class MasterProfile(Base):
     __tablename__ = "master_profiles"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -89,13 +90,15 @@ def main():
     print(f"Connecting to: {DATABASE_URL}")
 
     engine = create_engine(DATABASE_URL)
+    Base.metadata.create_all(engine)
     SessionLocal = sessionmaker(engine)
     pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
     with SessionLocal() as session:
         # Check if user exists
-        user_stmt = select(UserBase).where(UserBase.email == SUPERUSER_EMAIL)
-        user = session.execute(user_stmt).scalar_one_or_none()
+        user = session.execute(
+            select(User).where(User.email == SUPERUSER_EMAIL)
+        ).scalar_one_or_none()
 
         if user:
             user.hashed_password = pwd_context.hash(SUPERUSER_PASSWORD)
@@ -103,7 +106,7 @@ def main():
             user.is_active = True
             print("Superuser updated:")
         else:
-            user = UserBase(
+            user = User(
                 name=SUPERUSER_NAME,
                 email=SUPERUSER_EMAIL,
                 hashed_password=pwd_context.hash(SUPERUSER_PASSWORD),
@@ -115,7 +118,7 @@ def main():
             session.add(user)
             session.flush()
 
-            master_profile = MasterProfileBase(
+            master_profile = MasterProfile(
                 user_id=user.id,
                 telegram_username=TELEGRAM_USERNAME,
                 description="Суперпользователь",
