@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload, joinedload
 from typing import List, Optional
-import bcrypt
+from passlib.context import CryptContext
 from datetime import datetime, timezone
 import csv
 import io
@@ -24,11 +24,7 @@ from app.services.master_status import update_master_status_from_working_hours
 from app.logging_config import get_logger
 
 logger = get_logger(__name__)
-
-
-def _hash_pw(plain: str) -> str:
-    return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode("utf-8")
-
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 router = APIRouter(prefix="/masters")
 
@@ -259,7 +255,7 @@ async def delete_master(
     if master_profile.user.id == super_admin.id:
         raise HTTPException(status_code=400, detail="Нельзя удалить себя")
     
-    await log_action(db, super_admin.master_profile.id if super_admin.master_profile else super_admin.id, "delete", "master", master_id, master_profile.user.email, level="warning")
+    await log_action(db, super_admin.master_profile.id, "delete", "master", master_id, master_profile.user.email, level="warning")
     await db.delete(master_profile)
     await db.commit()
     logger.info("Суперпользователь %s удалил мастера: %s", super_admin.email, master_profile.user.email)
@@ -934,4 +930,5 @@ async def get_master_audit_logs(
         total=total,
         page=page,
         page_size=page_size,
-        total_pa
+        total_pages=(total + page_size - 1) // page_size if page_size > 0 else 0
+    )
