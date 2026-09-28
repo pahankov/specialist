@@ -934,4 +934,4 @@ async def get_master_audit_logs(
         total=total,
         page=page,
         page_size=page_size,
-        total_pa                                                                         
+        total_pa
