@@ -9,6 +9,7 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy import text
 
 # revision identifiers, used by Alembic.
 revision: str = 'f43f84fe3057'
@@ -17,16 +18,71 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-def _safe_drop_table(table_name: str) -> None:
-    """Drop table if exists without requiring ownership."""
-    conn = op.get_bind()
+def _table_exists(conn, name: str) -> bool:
     result = conn.execute(
-        sa.text(f"SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = '{table_name}')")
+        text("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = :n)"),
+        {"n": name}
     )
-    exists = result.scalar()
-    if exists:
+    return result.scalar()
+
+
+def _column_exists(conn, table: str, name: str) -> bool:
+    result = conn.execute(
+        text("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.columns
+                WHERE table_name = :t AND column_name = :c
+            )
+        """),
+        {"t": table, "c": name}
+    )
+    return result.scalar()
+
+
+def _column_type(conn, table: str, name: str) -> str:
+    """Return 'timestamp with time zone' or 'timestamp without time zone' or None."""
+    result = conn.execute(
+        text("""
+            SELECT data_type || CASE WHEN datetime_precision IS NOT NULL
+                THEN '(' || datetime_precision::text || ')'
+                ELSE '' END || CASE WHEN is_nullable = 'YES' THEN '' ELSE '' END
+            FROM information_schema.columns
+            WHERE table_name = :t AND column_name = :c
+        """),
+        {"t": table, "c": name}
+    )
+    row = result.scalar()
+    if not row:
+        return None
+    # Just check if it has timezone
+    if 'timezone' in row.lower():
+        return 'with_timezone'
+    return 'without_timezone'
+
+
+def _ensure_timezone_column(conn, table: str, column: str) -> None:
+    """Alter column to TIMESTAMP WITH TIME ZONE only if it isn't already."""
+    if not _column_exists(conn, table, column):
+        return
+    current = _column_type(conn, table, column)
+    if current == 'with_timezone':
+        return  # Already correct
+    try:
+        conn.execute(
+            text(f"ALTER TABLE {table} ALTER COLUMN {column} TYPE TIMESTAMP WITH TIME ZONE")
+        )
+    except Exception:
+        pass
+
+
+def _drop_index(conn, name: str) -> None:
+    result = conn.execute(
+        text("SELECT EXISTS (SELECT FROM pg_indexes WHERE indexname = :n)"),
+        {"n": name}
+    )
+    if result.scalar():
         try:
-            conn.execute(sa.text(f"DROP TABLE IF EXISTS {table_name} CASCADE"))
+            conn.execute(text(f"DROP INDEX IF EXISTS {name}"))
         except Exception:
             pass
 
@@ -35,37 +91,41 @@ def upgrade() -> None:
     conn = op.get_bind()
 
     # --- Clean up removed tables ---
-    _safe_drop_table('locations')
-    _safe_drop_table('social_accounts')
+    if _table_exists(conn, 'locations'):
+        try:
+            conn.execute(text("DROP TABLE IF EXISTS locations CASCADE"))
+        except Exception:
+            pass
+
+    if _table_exists(conn, 'social_accounts'):
+        try:
+            conn.execute(text("DROP TABLE IF EXISTS social_accounts CASCADE"))
+        except Exception:
+            pass
 
     # --- Clean up removed columns from client_profiles ---
     for col in ['location_lat', 'location_lon', 'preferred_location']:
         try:
-            conn.execute(sa.text(f"ALTER TABLE client_profiles DROP COLUMN IF EXISTS {col}"))
+            conn.execute(text(f"ALTER TABLE client_profiles DROP COLUMN IF EXISTS {col}"))
         except Exception:
             pass
 
     # --- Clean up removed columns from master_profiles ---
     for col in ['cabinet_lat', 'cabinet_lon', 'cabinet_address']:
         try:
-            conn.execute(sa.text(f"ALTER TABLE master_profiles DROP COLUMN IF EXISTS {col}"))
+            conn.execute(text(f"ALTER TABLE master_profiles DROP COLUMN IF EXISTS {col}"))
         except Exception:
             pass
 
     # --- Clean up removed columns/index from users ---
+    _drop_index(conn, 'ix_users_telegram_user_id')
     try:
-        conn.execute(sa.text("DROP INDEX IF EXISTS ix_users_telegram_user_id"))
-    except Exception:
-        pass
-    try:
-        conn.execute(sa.text("ALTER TABLE users DROP COLUMN IF EXISTS telegram_user_id"))
+        conn.execute(text("ALTER TABLE users DROP COLUMN IF EXISTS telegram_user_id"))
     except Exception:
         pass
 
-    # --- Fix timezone in DateTime columns (PostgreSQL) ---
-    # Use direct SQL ALTER TABLE to avoid batch_alter_table ownership requirement
-    timezone_alters = [
-        # (table, column)
+    # --- Fix timezone in DateTime columns ---
+    timezone_columns = [
         ('users', 'created_at'),
         ('users', 'updated_at'),
         ('appointments', 'appointment_date'),
@@ -92,20 +152,15 @@ def upgrade() -> None:
         ('reviews', 'created_at'),
     ]
 
-    for table, column in timezone_alters:
-        try:
-            conn.execute(
-                sa.text(f"ALTER TABLE {table} ALTER COLUMN {column} TYPE TIMESTAMP WITH TIME ZONE")
-            )
-        except Exception:
-            pass
+    for table, column in timezone_columns:
+        _ensure_timezone_column(conn, table, column)
 
 
 def downgrade() -> None:
-    # --- Revert timezone changes (PostgreSQL) ---
     conn = op.get_bind()
 
-    timezone_downgrades = [
+    # --- Revert timezone changes ---
+    timezone_columns = [
         ('users', 'created_at'),
         ('users', 'updated_at'),
         ('appointments', 'appointment_date'),
@@ -132,78 +187,93 @@ def downgrade() -> None:
         ('reviews', 'created_at'),
     ]
 
-    for table, column in timezone_downgrades:
-        try:
-            conn.execute(
-                sa.text(f"ALTER TABLE {table} ALTER COLUMN {column} TYPE TIMESTAMP WITHOUT TIME ZONE")
-            )
-        except Exception:
-            pass
+    for table, column in timezone_columns:
+        if _column_exists(conn, table, column):
+            current = _column_type(conn, table, column)
+            if current == 'without_timezone':
+                continue  # Already reverted
+            try:
+                conn.execute(
+                    text(f"ALTER TABLE {table} ALTER COLUMN {column} TYPE TIMESTAMP WITHOUT TIME ZONE")
+                )
+            except Exception:
+                pass
 
     # --- Restore removed columns ---
     try:
-        conn.execute(sa.text("ALTER TABLE users ADD COLUMN telegram_user_id INTEGER"))
-        conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_users_telegram_user_id ON users (telegram_user_id)"))
+        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_user_id INTEGER"))
+        _drop_index(conn, 'ix_users_telegram_user_id')
+        try:
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_users_telegram_user_id ON users (telegram_user_id)"))
+        except Exception:
+            pass
     except Exception:
         pass
 
     for col in ['cabinet_address', 'cabinet_lon', 'cabinet_lat']:
         try:
-            conn.execute(sa.text(f"ALTER TABLE master_profiles ADD COLUMN {col} VARCHAR(500)"))
+            conn.execute(text(f"ALTER TABLE master_profiles ADD COLUMN IF NOT EXISTS {col} VARCHAR(500)"))
         except Exception:
             pass
 
     for col in ['preferred_location', 'location_lon', 'location_lat']:
         try:
-            conn.execute(sa.text(f"ALTER TABLE client_profiles ADD COLUMN {col} VARCHAR(500)"))
+            conn.execute(text(f"ALTER TABLE client_profiles ADD COLUMN IF NOT EXISTS {col} VARCHAR(500)"))
         except Exception:
             pass
 
     # --- Restore removed tables ---
-    try:
-        conn.execute(sa.text("""
-            CREATE TABLE IF NOT EXISTS social_accounts (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                provider VARCHAR(50) NOT NULL,
-                provider_user_id VARCHAR(255) NOT NULL,
-                provider_email VARCHAR(255),
-                provider_phone VARCHAR(20),
-                display_name VARCHAR(100),
-                avatar_url VARCHAR(500),
-                access_token VARCHAR(2000),
-                refresh_token VARCHAR(2000),
-                token_expires_at TIMESTAMP,
-                is_active BOOLEAN,
-                linked_at TIMESTAMP,
-                last_used_at TIMESTAMP,
-                CONSTRAINT uq_social_provider_user UNIQUE (provider, provider_user_id)
-            )
-        """))
-        conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_social_accounts_user_id ON social_accounts (user_id)"))
-        conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_social_accounts_provider ON social_accounts (provider)"))
-    except Exception:
-        pass
+    if not _table_exists(conn, 'social_accounts'):
+        try:
+            conn.execute(text("""
+                CREATE TABLE social_accounts (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    provider VARCHAR(50) NOT NULL,
+                    provider_user_id VARCHAR(255) NOT NULL,
+                    provider_email VARCHAR(255),
+                    provider_phone VARCHAR(20),
+                    display_name VARCHAR(100),
+                    avatar_url VARCHAR(500),
+                    access_token VARCHAR(2000),
+                    refresh_token VARCHAR(2000),
+                    token_expires_at TIMESTAMP,
+                    is_active BOOLEAN,
+                    linked_at TIMESTAMP,
+                    last_used_at TIMESTAMP,
+                    CONSTRAINT uq_social_provider_user UNIQUE (provider, provider_user_id)
+                )
+            """))
+            _drop_index(conn, 'ix_social_accounts_user_id')
+            _drop_index(conn, 'ix_social_accounts_provider')
+            try:
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_social_accounts_user_id ON social_accounts (user_id)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_social_accounts_provider ON social_accounts (provider)"))
+            except Exception:
+                pass
+        except Exception:
+            pass
 
-    try:
-        conn.execute(sa.text("""
-            CREATE TABLE IF NOT EXISTS locations (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-                city_id INTEGER REFERENCES cities(id) ON DELETE SET NULL,
-                value VARCHAR(500),
-                unrestricted_value VARCHAR(500),
-                lat FLOAT,
-                lon FLOAT,
-                street VARCHAR(300),
-                building VARCHAR(50),
-                apartment VARCHAR(50),
-                location_type VARCHAR(20),
-                is_active BOOLEAN,
-                created_at TIMESTAMP,
-                updated_at TIMESTAMP,
-                CONSTRAINT uq_user_location UNIQUE (user_id)
-            )
-        """))
-    except Exception:
-        pass
+    if not _table_exists(conn, 'locations'):
+        try:
+            conn.execute(text("""
+                CREATE TABLE locations (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                    city_id INTEGER REFERENCES cities(id) ON DELETE SET NULL,
+                    value VARCHAR(500),
+                    unrestricted_value VARCHAR(500),
+                    lat FLOAT,
+                    lon FLOAT,
+                    street VARCHAR(300),
+                    building VARCHAR(50),
+                    apartment VARCHAR(50),
+                    location_type VARCHAR(20),
+                    is_active BOOLEAN,
+                    created_at TIMESTAMP,
+                    updated_at TIMESTAMP,
+                    CONSTRAINT uq_user_location UNIQUE (user_id)
+                )
+            """))
+        except Exception:
+            pass
