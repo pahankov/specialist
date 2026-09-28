@@ -70,6 +70,7 @@ def run_migrations_online() -> None:
             target_metadata=target_metadata,
             render_as_batch=True,  # For SQLite compatibility
             compare_type=True,
+            transaction_per_migration=True,
         )
 
         with context.begin_transaction():
