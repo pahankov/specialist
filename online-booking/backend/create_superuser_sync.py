@@ -4,37 +4,24 @@ This script is fully self-contained — it does NOT import from app.database
 (because app.database always creates an async engine, which fails when
 DATABASE_URL uses psycopg2).
 
+Uses bcrypt directly (not passlib) to avoid passlib/bcrypt >= 4.0 incompatibility.
+
 Usage:
     python create_superuser_sync.py
-
-Uses synchronous SQLAlchemy (create_engine + psycopg2) to avoid
-timezone-aware datetime errors on PostgreSQL.
 """
 import sys
 import os
 
-# Add backend directory to path
 sys.path.insert(0, os.path.dirname(__file__))
 
 from sqlalchemy import (
-    Column,
-    Integer,
-    String,
-    Boolean,
-    DateTime,
-    Enum as SAEnum,
-    ForeignKey,
-    create_engine,
-    select,
+    Column, Integer, String, Boolean, DateTime,
+    Enum as SAEnum, ForeignKey, create_engine, select,
 )
 from sqlalchemy.orm import sessionmaker, declarative_base
-from passlib.context import CryptContext
+import bcrypt
 import enum
 import datetime
-
-# ---------------------------------------------------------------------------
-# Minimal model definitions (mirrors app.models without importing them)
-# ---------------------------------------------------------------------------
 
 Base = declarative_base()
 
@@ -71,10 +58,6 @@ class MasterProfile(Base):
     is_available = Column(Boolean, default=True)
 
 
-# ---------------------------------------------------------------------------
-# Database setup
-# ---------------------------------------------------------------------------
-
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "postgresql+psycopg2://postgres:postgres@localhost:5432/online_booking"
@@ -86,22 +69,28 @@ SUPERUSER_NAME = "Павел"
 TELEGRAM_USERNAME = "pahankov"
 
 
+def hash_password(plain: str) -> str:
+    """Hash password using bcrypt directly."""
+    return bcrypt.hashpw(
+        plain.encode("utf-8"),
+        bcrypt.gensalt(rounds=12)
+    ).decode("utf-8")
+
+
 def main():
     print(f"Connecting to: {DATABASE_URL}")
 
     engine = create_engine(DATABASE_URL)
     Base.metadata.create_all(engine)
     SessionLocal = sessionmaker(engine)
-    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
     with SessionLocal() as session:
-        # Check if user exists
         user = session.execute(
             select(User).where(User.email == SUPERUSER_EMAIL)
         ).scalar_one_or_none()
 
         if user:
-            user.hashed_password = pwd_context.hash(SUPERUSER_PASSWORD)
+            user.hashed_password = hash_password(SUPERUSER_PASSWORD)
             user.role = UserRole.ADMIN
             user.is_active = True
             print("Superuser updated:")
@@ -109,7 +98,7 @@ def main():
             user = User(
                 name=SUPERUSER_NAME,
                 email=SUPERUSER_EMAIL,
-                hashed_password=pwd_context.hash(SUPERUSER_PASSWORD),
+                hashed_password=hash_password(SUPERUSER_PASSWORD),
                 phone="+79615202311",
                 role=UserRole.ADMIN,
                 is_active=True,
@@ -133,6 +122,7 @@ def main():
         print(f"   ID: {user.id}")
         print(f"   Role: {user.role.value}")
         print(f"   Admin: {user.role == UserRole.ADMIN}")
+        print(f"   Hashed: {user.hashed_password[:30]}...")
         print("\nGo to https://beauty-specialist.ru and login!")
 
 

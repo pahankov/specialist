@@ -5,8 +5,8 @@ from sqlalchemy.future import select
 from sqlalchemy import func, cast, String
 from sqlalchemy.orm import joinedload
 from typing import List
+import bcrypt
 from pydantic import BaseModel
-from passlib.context import CryptContext
 
 from app.database import get_db
 from app.models.user import User, UserRole

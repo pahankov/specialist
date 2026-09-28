@@ -124,7 +124,7 @@ async def create_seed_data():
             name = MASTER_NAMES[i]
             email = f"master{i}@beauty.ru"
             phone = f"+7900{1000000 + i:06d}"
-            password = pwd_context.hash("password123")
+            password = _hash_pw("password123")
             
             # Check if user already exists
             existing = await db.execute(select(User).where(User.email == email))
