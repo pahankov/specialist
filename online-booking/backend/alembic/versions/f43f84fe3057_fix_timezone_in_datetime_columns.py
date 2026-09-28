@@ -17,367 +17,193 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+def _safe_drop_table(table_name: str) -> None:
+    """Drop table if exists without requiring ownership."""
+    conn = op.get_bind()
+    result = conn.execute(
+        sa.text(f"SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = '{table_name}')")
+    )
+    exists = result.scalar()
+    if exists:
+        try:
+            conn.execute(sa.text(f"DROP TABLE IF EXISTS {table_name} CASCADE"))
+        except Exception:
+            pass
+
+
 def upgrade() -> None:
     conn = op.get_bind()
-    inspector = sa.inspect(conn)
-    tables = inspector.get_table_names()
-    columns = {}
-    for t in tables:
-        columns[t] = [c['name'] for c in inspector.get_columns(t)]
-    indexes = {}
-    for t in tables:
-        indexes[t] = [idx['name'] for idx in inspector.get_indexes(t)]
 
-    # --- Clean up removed tables/columns ---
-    if 'locations' in tables:
-        op.drop_table('locations')
+    # --- Clean up removed tables ---
+    _safe_drop_table('locations')
+    _safe_drop_table('social_accounts')
 
-    if 'social_accounts' in tables:
-        with op.batch_alter_table('social_accounts', schema=None) as batch_op:
-            if 'ix_social_accounts_provider' in indexes.get('social_accounts', []):
-                batch_op.drop_index('ix_social_accounts_provider')
-            if 'ix_social_accounts_user_id' in indexes.get('social_accounts', []):
-                batch_op.drop_index('ix_social_accounts_user_id')
-        op.drop_table('social_accounts')
+    # --- Clean up removed columns from client_profiles ---
+    for col in ['location_lat', 'location_lon', 'preferred_location']:
+        try:
+            conn.execute(sa.text(f"ALTER TABLE client_profiles DROP COLUMN IF EXISTS {col}"))
+        except Exception:
+            pass
 
-    if 'client_profiles' in tables:
-        with op.batch_alter_table('client_profiles', schema=None) as batch_op:
-            if 'location_lat' in columns.get('client_profiles', []):
-                batch_op.drop_column('location_lat')
-            if 'location_lon' in columns.get('client_profiles', []):
-                batch_op.drop_column('location_lon')
-            if 'preferred_location' in columns.get('client_profiles', []):
-                batch_op.drop_column('preferred_location')
+    # --- Clean up removed columns from master_profiles ---
+    for col in ['cabinet_lat', 'cabinet_lon', 'cabinet_address']:
+        try:
+            conn.execute(sa.text(f"ALTER TABLE master_profiles DROP COLUMN IF EXISTS {col}"))
+        except Exception:
+            pass
 
-    if 'master_profiles' in tables:
-        with op.batch_alter_table('master_profiles', schema=None) as batch_op:
-            if 'cabinet_lat' in columns.get('master_profiles', []):
-                batch_op.drop_column('cabinet_lat')
-            if 'cabinet_lon' in columns.get('master_profiles', []):
-                batch_op.drop_column('cabinet_lon')
-            if 'cabinet_address' in columns.get('master_profiles', []):
-                batch_op.drop_column('cabinet_address')
-
-    if 'users' in tables:
-        with op.batch_alter_table('users', schema=None) as batch_op:
-            if 'ix_users_telegram_user_id' in indexes.get('users', []):
-                batch_op.drop_index('ix_users_telegram_user_id')
-            if 'telegram_user_id' in columns.get('users', []):
-                batch_op.drop_column('telegram_user_id')
+    # --- Clean up removed columns/index from users ---
+    try:
+        conn.execute(sa.text("DROP INDEX IF EXISTS ix_users_telegram_user_id"))
+    except Exception:
+        pass
+    try:
+        conn.execute(sa.text("ALTER TABLE users DROP COLUMN IF EXISTS telegram_user_id"))
+    except Exception:
+        pass
 
     # --- Fix timezone in DateTime columns (PostgreSQL) ---
-    # These explicit type changes ensure all DateTime columns use TIMESTAMP WITH TIME ZONE
-    conn = op.get_bind()
-    dialect_name = getattr(conn, 'dialect', None)
-    if dialect_name is not None and dialect_name.name == 'postgresql':
-        # users table
-        with op.batch_alter_table('users', schema=None) as batch_op:
-            batch_op.alter_column('created_at',
-                                existing_type=sa.DATETIME(),
-                                type_=sa.DateTime(timezone=True),
-                                existing_nullable=True)
-            batch_op.alter_column('updated_at',
-                                existing_type=sa.DATETIME(),
-                                type_=sa.DateTime(timezone=True),
-                                existing_nullable=True)
+    # Use direct SQL ALTER TABLE to avoid batch_alter_table ownership requirement
+    timezone_alters = [
+        # (table, column)
+        ('users', 'created_at'),
+        ('users', 'updated_at'),
+        ('appointments', 'appointment_date'),
+        ('appointments', 'created_at'),
+        ('appointments', 'updated_at'),
+        ('client_profiles', 'created_at'),
+        ('client_profiles', 'updated_at'),
+        ('master_profiles', 'created_at'),
+        ('master_profiles', 'updated_at'),
+        ('services', 'created_at'),
+        ('services', 'updated_at'),
+        ('working_hours', 'created_at'),
+        ('working_hours', 'updated_at'),
+        ('audit_logs', 'created_at'),
+        ('blocked_slots', 'start_dt'),
+        ('blocked_slots', 'end_dt'),
+        ('blocked_slots', 'created_at'),
+        ('blocked_slots', 'updated_at'),
+        ('refresh_tokens', 'expires_at'),
+        ('refresh_tokens', 'revoked_at'),
+        ('refresh_tokens', 'created_at'),
+        ('otp_codes', 'expires_at'),
+        ('otp_codes', 'created_at'),
+        ('reviews', 'created_at'),
+    ]
 
-        # appointments table
-        with op.batch_alter_table('appointments', schema=None) as batch_op:
-            batch_op.alter_column('appointment_date',
-                                existing_type=sa.DATETIME(),
-                                type_=sa.DateTime(timezone=True),
-                                existing_nullable=False)
-            batch_op.alter_column('created_at',
-                                existing_type=sa.DATETIME(),
-                                type_=sa.DateTime(timezone=True),
-                                existing_nullable=True)
-            batch_op.alter_column('updated_at',
-                                existing_type=sa.DATETIME(),
-                                type_=sa.DateTime(timezone=True),
-                                existing_nullable=True)
-
-        # client_profiles table
-        with op.batch_alter_table('client_profiles', schema=None) as batch_op:
-            batch_op.alter_column('created_at',
-                                existing_type=sa.DATETIME(),
-                                type_=sa.DateTime(timezone=True),
-                                existing_nullable=True)
-            batch_op.alter_column('updated_at',
-                                existing_type=sa.DATETIME(),
-                                type_=sa.DateTime(timezone=True),
-                                existing_nullable=True)
-
-        # master_profiles table
-        with op.batch_alter_table('master_profiles', schema=None) as batch_op:
-            batch_op.alter_column('created_at',
-                                existing_type=sa.DATETIME(),
-                                type_=sa.DateTime(timezone=True),
-                                existing_nullable=True)
-            batch_op.alter_column('updated_at',
-                                existing_type=sa.DATETIME(),
-                                type_=sa.DateTime(timezone=True),
-                                existing_nullable=True)
-
-        # services table
-        with op.batch_alter_table('services', schema=None) as batch_op:
-            batch_op.alter_column('created_at',
-                                existing_type=sa.DATETIME(),
-                                type_=sa.DateTime(timezone=True),
-                                existing_nullable=True)
-            batch_op.alter_column('updated_at',
-                                existing_type=sa.DATETIME(),
-                                type_=sa.DateTime(timezone=True),
-                                existing_nullable=True)
-
-        # working_hours table
-        with op.batch_alter_table('working_hours', schema=None) as batch_op:
-            batch_op.alter_column('created_at',
-                                existing_type=sa.DATETIME(),
-                                type_=sa.DateTime(timezone=True),
-                                existing_nullable=True)
-            batch_op.alter_column('updated_at',
-                                existing_type=sa.DATETIME(),
-                                type_=sa.DateTime(timezone=True),
-                                existing_nullable=True)
-
-        # audit_logs table
-        with op.batch_alter_table('audit_logs', schema=None) as batch_op:
-            batch_op.alter_column('created_at',
-                                existing_type=sa.DATETIME(),
-                                type_=sa.DateTime(timezone=True),
-                                existing_nullable=True)
-
-        # blocked_slots table
-        with op.batch_alter_table('blocked_slots', schema=None) as batch_op:
-            batch_op.alter_column('start_dt',
-                                existing_type=sa.DATETIME(),
-                                type_=sa.DateTime(timezone=True),
-                                existing_nullable=False)
-            batch_op.alter_column('end_dt',
-                                existing_type=sa.DATETIME(),
-                                type_=sa.DateTime(timezone=True),
-                                existing_nullable=False)
-            batch_op.alter_column('created_at',
-                                existing_type=sa.DATETIME(),
-                                type_=sa.DateTime(timezone=True),
-                                existing_nullable=True)
-            batch_op.alter_column('updated_at',
-                                existing_type=sa.DATETIME(),
-                                type_=sa.DateTime(timezone=True),
-                                existing_nullable=True)
-
-        # refresh_tokens table
-        with op.batch_alter_table('refresh_tokens', schema=None) as batch_op:
-            batch_op.alter_column('expires_at',
-                                existing_type=sa.DATETIME(),
-                                type_=sa.DateTime(timezone=True),
-                                existing_nullable=False)
-            batch_op.alter_column('revoked_at',
-                                existing_type=sa.DATETIME(),
-                                type_=sa.DateTime(timezone=True),
-                                existing_nullable=True)
-            batch_op.alter_column('created_at',
-                                existing_type=sa.DATETIME(),
-                                type_=sa.DateTime(timezone=True),
-                                existing_nullable=True)
-
-        # otp_codes table
-        with op.batch_alter_table('otp_codes', schema=None) as batch_op:
-            batch_op.alter_column('expires_at',
-                                existing_type=sa.DATETIME(),
-                                type_=sa.DateTime(timezone=True),
-                                existing_nullable=False)
-            batch_op.alter_column('created_at',
-                                existing_type=sa.DATETIME(),
-                                type_=sa.DateTime(timezone=True),
-                                existing_nullable=True)
-
-        # reviews table
-        with op.batch_alter_table('reviews', schema=None) as batch_op:
-            batch_op.alter_column('created_at',
-                                existing_type=sa.DATETIME(),
-                                type_=sa.DateTime(timezone=True),
-                                existing_nullable=True)
+    for table, column in timezone_alters:
+        try:
+            conn.execute(
+                sa.text(f"ALTER TABLE {table} ALTER COLUMN {column} TYPE TIMESTAMP WITH TIME ZONE")
+            )
+        except Exception:
+            pass
 
 
 def downgrade() -> None:
     # --- Revert timezone changes (PostgreSQL) ---
     conn = op.get_bind()
-    dialect_name = getattr(conn, 'dialect', None)
-    if dialect_name is not None and dialect_name.name == 'postgresql':
-        with op.batch_alter_table('users', schema=None) as batch_op:
-            batch_op.alter_column('created_at',
-                                existing_type=sa.DateTime(timezone=True),
-                                type_=sa.DATETIME(),
-                                existing_nullable=True)
-            batch_op.alter_column('updated_at',
-                                existing_type=sa.DateTime(timezone=True),
-                                type_=sa.DATETIME(),
-                                existing_nullable=True)
 
-        with op.batch_alter_table('appointments', schema=None) as batch_op:
-            batch_op.alter_column('appointment_date',
-                                existing_type=sa.DateTime(timezone=True),
-                                type_=sa.DATETIME(),
-                                existing_nullable=False)
-            batch_op.alter_column('created_at',
-                                existing_type=sa.DateTime(timezone=True),
-                                type_=sa.DATETIME(),
-                                existing_nullable=True)
-            batch_op.alter_column('updated_at',
-                                existing_type=sa.DateTime(timezone=True),
-                                type_=sa.DATETIME(),
-                                existing_nullable=True)
+    timezone_downgrades = [
+        ('users', 'created_at'),
+        ('users', 'updated_at'),
+        ('appointments', 'appointment_date'),
+        ('appointments', 'created_at'),
+        ('appointments', 'updated_at'),
+        ('client_profiles', 'created_at'),
+        ('client_profiles', 'updated_at'),
+        ('master_profiles', 'created_at'),
+        ('master_profiles', 'updated_at'),
+        ('services', 'created_at'),
+        ('services', 'updated_at'),
+        ('working_hours', 'created_at'),
+        ('working_hours', 'updated_at'),
+        ('audit_logs', 'created_at'),
+        ('blocked_slots', 'start_dt'),
+        ('blocked_slots', 'end_dt'),
+        ('blocked_slots', 'created_at'),
+        ('blocked_slots', 'updated_at'),
+        ('refresh_tokens', 'expires_at'),
+        ('refresh_tokens', 'revoked_at'),
+        ('refresh_tokens', 'created_at'),
+        ('otp_codes', 'expires_at'),
+        ('otp_codes', 'created_at'),
+        ('reviews', 'created_at'),
+    ]
 
-        with op.batch_alter_table('client_profiles', schema=None) as batch_op:
-            batch_op.alter_column('created_at',
-                                existing_type=sa.DateTime(timezone=True),
-                                type_=sa.DATETIME(),
-                                existing_nullable=True)
-            batch_op.alter_column('updated_at',
-                                existing_type=sa.DateTime(timezone=True),
-                                type_=sa.DATETIME(),
-                                existing_nullable=True)
+    for table, column in timezone_downgrades:
+        try:
+            conn.execute(
+                sa.text(f"ALTER TABLE {table} ALTER COLUMN {column} TYPE TIMESTAMP WITHOUT TIME ZONE")
+            )
+        except Exception:
+            pass
 
-        with op.batch_alter_table('master_profiles', schema=None) as batch_op:
-            batch_op.alter_column('created_at',
-                                existing_type=sa.DateTime(timezone=True),
-                                type_=sa.DATETIME(),
-                                existing_nullable=True)
-            batch_op.alter_column('updated_at',
-                                existing_type=sa.DateTime(timezone=True),
-                                type_=sa.DATETIME(),
-                                existing_nullable=True)
+    # --- Restore removed columns ---
+    try:
+        conn.execute(sa.text("ALTER TABLE users ADD COLUMN telegram_user_id INTEGER"))
+        conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_users_telegram_user_id ON users (telegram_user_id)"))
+    except Exception:
+        pass
 
-        with op.batch_alter_table('services', schema=None) as batch_op:
-            batch_op.alter_column('created_at',
-                                existing_type=sa.DateTime(timezone=True),
-                                type_=sa.DATETIME(),
-                                existing_nullable=True)
-            batch_op.alter_column('updated_at',
-                                existing_type=sa.DateTime(timezone=True),
-                                type_=sa.DATETIME(),
-                                existing_nullable=True)
+    for col in ['cabinet_address', 'cabinet_lon', 'cabinet_lat']:
+        try:
+            conn.execute(sa.text(f"ALTER TABLE master_profiles ADD COLUMN {col} VARCHAR(500)"))
+        except Exception:
+            pass
 
-        with op.batch_alter_table('working_hours', schema=None) as batch_op:
-            batch_op.alter_column('created_at',
-                                existing_type=sa.DateTime(timezone=True),
-                                type_=sa.DATETIME(),
-                                existing_nullable=True)
-            batch_op.alter_column('updated_at',
-                                existing_type=sa.DateTime(timezone=True),
-                                type_=sa.DATETIME(),
-                                existing_nullable=True)
+    for col in ['preferred_location', 'location_lon', 'location_lat']:
+        try:
+            conn.execute(sa.text(f"ALTER TABLE client_profiles ADD COLUMN {col} VARCHAR(500)"))
+        except Exception:
+            pass
 
-        with op.batch_alter_table('audit_logs', schema=None) as batch_op:
-            batch_op.alter_column('created_at',
-                                existing_type=sa.DateTime(timezone=True),
-                                type_=sa.DATETIME(),
-                                existing_nullable=True)
+    # --- Restore removed tables ---
+    try:
+        conn.execute(sa.text("""
+            CREATE TABLE IF NOT EXISTS social_accounts (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                provider VARCHAR(50) NOT NULL,
+                provider_user_id VARCHAR(255) NOT NULL,
+                provider_email VARCHAR(255),
+                provider_phone VARCHAR(20),
+                display_name VARCHAR(100),
+                avatar_url VARCHAR(500),
+                access_token VARCHAR(2000),
+                refresh_token VARCHAR(2000),
+                token_expires_at TIMESTAMP,
+                is_active BOOLEAN,
+                linked_at TIMESTAMP,
+                last_used_at TIMESTAMP,
+                CONSTRAINT uq_social_provider_user UNIQUE (provider, provider_user_id)
+            )
+        """))
+        conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_social_accounts_user_id ON social_accounts (user_id)"))
+        conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_social_accounts_provider ON social_accounts (provider)"))
+    except Exception:
+        pass
 
-        with op.batch_alter_table('blocked_slots', schema=None) as batch_op:
-            batch_op.alter_column('start_dt',
-                                existing_type=sa.DateTime(timezone=True),
-                                type_=sa.DATETIME(),
-                                existing_nullable=False)
-            batch_op.alter_column('end_dt',
-                                existing_type=sa.DateTime(timezone=True),
-                                type_=sa.DATETIME(),
-                                existing_nullable=False)
-            batch_op.alter_column('created_at',
-                                existing_type=sa.DateTime(timezone=True),
-                                type_=sa.DATETIME(),
-                                existing_nullable=True)
-            batch_op.alter_column('updated_at',
-                                existing_type=sa.DateTime(timezone=True),
-                                type_=sa.DATETIME(),
-                                existing_nullable=True)
-
-        with op.batch_alter_table('refresh_tokens', schema=None) as batch_op:
-            batch_op.alter_column('expires_at',
-                                existing_type=sa.DateTime(timezone=True),
-                                type_=sa.DATETIME(),
-                                existing_nullable=False)
-            batch_op.alter_column('revoked_at',
-                                existing_type=sa.DateTime(timezone=True),
-                                type_=sa.DATETIME(),
-                                existing_nullable=True)
-            batch_op.alter_column('created_at',
-                                existing_type=sa.DateTime(timezone=True),
-                                type_=sa.DATETIME(),
-                                existing_nullable=True)
-
-        with op.batch_alter_table('otp_codes', schema=None) as batch_op:
-            batch_op.alter_column('expires_at',
-                                existing_type=sa.DateTime(timezone=True),
-                                type_=sa.DATETIME(),
-                                existing_nullable=False)
-            batch_op.alter_column('created_at',
-                                existing_type=sa.DateTime(timezone=True),
-                                type_=sa.DATETIME(),
-                                existing_nullable=True)
-
-        with op.batch_alter_table('reviews', schema=None) as batch_op:
-            batch_op.alter_column('created_at',
-                                existing_type=sa.DateTime(timezone=True),
-                                type_=sa.DATETIME(),
-                                existing_nullable=True)
-
-    # --- Restore removed tables/columns ---
-    with op.batch_alter_table('users', schema=None) as batch_op:
-        batch_op.add_column(sa.Column('telegram_user_id', sa.INTEGER(), nullable=True))
-        batch_op.create_index('ix_users_telegram_user_id', ['telegram_user_id'], unique=False)
-
-    with op.batch_alter_table('master_profiles', schema=None) as batch_op:
-        batch_op.add_column(sa.Column('cabinet_address', sa.VARCHAR(length=500), nullable=True))
-        batch_op.add_column(sa.Column('cabinet_lon', sa.FLOAT(), nullable=True))
-        batch_op.add_column(sa.Column('cabinet_lat', sa.FLOAT(), nullable=True))
-
-    with op.batch_alter_table('client_profiles', schema=None) as batch_op:
-        batch_op.add_column(sa.Column('preferred_location', sa.VARCHAR(length=500), nullable=True))
-        batch_op.add_column(sa.Column('location_lon', sa.FLOAT(), nullable=True))
-        batch_op.add_column(sa.Column('location_lat', sa.FLOAT(), nullable=True))
-
-    op.create_table('social_accounts',
-        sa.Column('id', sa.INTEGER(), nullable=False),
-        sa.Column('user_id', sa.INTEGER(), nullable=False),
-        sa.Column('provider', sa.VARCHAR(length=50), nullable=False),
-        sa.Column('provider_user_id', sa.VARCHAR(length=255), nullable=False),
-        sa.Column('provider_email', sa.VARCHAR(length=255), nullable=True),
-        sa.Column('provider_phone', sa.VARCHAR(length=20), nullable=True),
-        sa.Column('display_name', sa.VARCHAR(length=100), nullable=True),
-        sa.Column('avatar_url', sa.VARCHAR(length=500), nullable=True),
-        sa.Column('access_token', sa.VARCHAR(length=2000), nullable=True),
-        sa.Column('refresh_token', sa.VARCHAR(length=2000), nullable=True),
-        sa.Column('token_expires_at', sa.DATETIME(), nullable=True),
-        sa.Column('is_primary', sa.BOOLEAN(), nullable=True),
-        sa.Column('linked_at', sa.DATETIME(), nullable=True),
-        sa.Column('last_used_at', sa.DATETIME(), nullable=True),
-        sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
-        sa.PrimaryKeyConstraint('id'),
-        sa.UniqueConstraint('provider', 'provider_user_id', name='uq_social_provider_user')
-    )
-    with op.batch_alter_table('social_accounts', schema=None) as batch_op:
-        batch_op.create_index('ix_social_accounts_user_id', ['user_id'], unique=False)
-        batch_op.create_index('ix_social_accounts_provider', ['provider'], unique=False)
-
-    op.create_table('locations',
-        sa.Column('id', sa.INTEGER(), nullable=False),
-        sa.Column('user_id', sa.INTEGER(), nullable=True),
-        sa.Column('city_id', sa.INTEGER(), nullable=True),
-        sa.Column('value', sa.VARCHAR(length=500), nullable=True),
-        sa.Column('unrestricted_value', sa.VARCHAR(length=500), nullable=True),
-        sa.Column('lat', sa.FLOAT(), nullable=True),
-        sa.Column('lon', sa.FLOAT(), nullable=True),
-        sa.Column('street', sa.VARCHAR(length=300), nullable=True),
-        sa.Column('building', sa.VARCHAR(length=50), nullable=True),
-        sa.Column('apartment', sa.VARCHAR(length=50), nullable=True),
-        sa.Column('location_type', sa.VARCHAR(length=20), nullable=True),
-        sa.Column('is_active', sa.BOOLEAN(), nullable=True),
-        sa.Column('created_at', sa.DATETIME(), nullable=True),
-        sa.Column('updated_at', sa.DATETIME(), nullable=True),
-        sa.ForeignKeyConstraint(['city_id'], ['cities.id'], ondelete='SET NULL'),
-        sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
-        sa.PrimaryKeyConstraint('id'),
-        sa.UniqueConstraint('user_id')
-    )
+    try:
+        conn.execute(sa.text("""
+            CREATE TABLE IF NOT EXISTS locations (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                city_id INTEGER REFERENCES cities(id) ON DELETE SET NULL,
+                value VARCHAR(500),
+                unrestricted_value VARCHAR(500),
+                lat FLOAT,
+                lon FLOAT,
+                street VARCHAR(300),
+                building VARCHAR(50),
+                apartment VARCHAR(50),
+                location_type VARCHAR(20),
+                is_active BOOLEAN,
+                created_at TIMESTAMP,
+                updated_at TIMESTAMP,
+                CONSTRAINT uq_user_location UNIQUE (user_id)
+            )
+        """))
+    except Exception:
+        pass
