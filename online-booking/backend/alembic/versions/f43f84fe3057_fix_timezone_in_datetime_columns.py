@@ -18,26 +18,52 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    tables = inspector.get_table_names()
+    columns = {}
+    for t in tables:
+        columns[t] = [c['name'] for c in inspector.get_columns(t)]
+    indexes = {}
+    for t in tables:
+        indexes[t] = [idx['name'] for idx in inspector.get_indexes(t)]
+
     # --- Clean up removed tables/columns ---
-    op.drop_table('locations')
-    with op.batch_alter_table('social_accounts', schema=None) as batch_op:
-        batch_op.drop_index('ix_social_accounts_provider')
-        batch_op.drop_index('ix_social_accounts_user_id')
-    op.drop_table('social_accounts')
+    if 'locations' in tables:
+        op.drop_table('locations')
 
-    with op.batch_alter_table('client_profiles', schema=None) as batch_op:
-        batch_op.drop_column('location_lat')
-        batch_op.drop_column('location_lon')
-        batch_op.drop_column('preferred_location')
+    if 'social_accounts' in tables:
+        with op.batch_alter_table('social_accounts', schema=None) as batch_op:
+            if 'ix_social_accounts_provider' in indexes.get('social_accounts', []):
+                batch_op.drop_index('ix_social_accounts_provider')
+            if 'ix_social_accounts_user_id' in indexes.get('social_accounts', []):
+                batch_op.drop_index('ix_social_accounts_user_id')
+        op.drop_table('social_accounts')
 
-    with op.batch_alter_table('master_profiles', schema=None) as batch_op:
-        batch_op.drop_column('cabinet_lat')
-        batch_op.drop_column('cabinet_lon')
-        batch_op.drop_column('cabinet_address')
+    if 'client_profiles' in tables:
+        with op.batch_alter_table('client_profiles', schema=None) as batch_op:
+            if 'location_lat' in columns.get('client_profiles', []):
+                batch_op.drop_column('location_lat')
+            if 'location_lon' in columns.get('client_profiles', []):
+                batch_op.drop_column('location_lon')
+            if 'preferred_location' in columns.get('client_profiles', []):
+                batch_op.drop_column('preferred_location')
 
-    with op.batch_alter_table('users', schema=None) as batch_op:
-        batch_op.drop_index('ix_users_telegram_user_id')
-        batch_op.drop_column('telegram_user_id')
+    if 'master_profiles' in tables:
+        with op.batch_alter_table('master_profiles', schema=None) as batch_op:
+            if 'cabinet_lat' in columns.get('master_profiles', []):
+                batch_op.drop_column('cabinet_lat')
+            if 'cabinet_lon' in columns.get('master_profiles', []):
+                batch_op.drop_column('cabinet_lon')
+            if 'cabinet_address' in columns.get('master_profiles', []):
+                batch_op.drop_column('cabinet_address')
+
+    if 'users' in tables:
+        with op.batch_alter_table('users', schema=None) as batch_op:
+            if 'ix_users_telegram_user_id' in indexes.get('users', []):
+                batch_op.drop_index('ix_users_telegram_user_id')
+            if 'telegram_user_id' in columns.get('users', []):
+                batch_op.drop_column('telegram_user_id')
 
     # --- Fix timezone in DateTime columns (PostgreSQL) ---
     # These explicit type changes ensure all DateTime columns use TIMESTAMP WITH TIME ZONE

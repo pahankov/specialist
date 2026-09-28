@@ -58,10 +58,7 @@ class MasterProfile(Base):
     is_available = Column(Boolean, default=True)
 
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql+psycopg2://postgres:postgres@localhost:5432/online_booking"
-)
+DATABASE_URL = "postgresql+psycopg2://specialist:REDACTED_DB_PASSWORD@localhost:5432/online_booking"
 
 SUPERUSER_EMAIL = "pahankov@mail.ru"
 SUPERUSER_PASSWORD = "REDACTED_SUPERUSER_PASSWORD"
