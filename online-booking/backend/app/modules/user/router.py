@@ -18,7 +18,10 @@ from app.logging_config import get_logger
 
 logger = get_logger(__name__)
 router = APIRouter()
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def _hash_pw(plain: str) -> str:
+    return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode("utf-8")
 
 
 # ─── Masters ──────────────────────────────────────────────────────────
@@ -70,7 +73,7 @@ async def create_master(
     new_user = User(
         name=master.name,
         email=master.email,
-        hashed_password=pwd_context.hash(master.password),
+        hashed_password=_hash_pw(master.password),
         phone=master.phone,
         role=UserRole.MASTER,
     )
@@ -102,7 +105,7 @@ async def update_master(
 
     for field, value in master_update.model_dump(exclude_unset=True).items():
         if field == "password" and value:
-            mp.user.hashed_password = pwd_context.hash(value)
+            mp.user.hashed_password = _hash_pw(value)
         elif field == "name":
             mp.user.name = value
         elif field == "phone":
