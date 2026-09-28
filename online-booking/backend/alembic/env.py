@@ -65,16 +65,21 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
+        # Disable transaction wrapping - each migration runs in its own
+        # autocommit mode to prevent one failed SQL from blocking the rest
+        connection = connection.execution_options(
+            isolation_level="AUTOCOMMIT"
+        )
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
             render_as_batch=True,  # For SQLite compatibility
             compare_type=True,
-            transaction_per_migration=True,
+            transaction_per_migration=False,
         )
 
-        with context.begin_transaction():
-            context.run_migrations()
+        # Don't use context.begin_transaction() - we want autocommit
+        context.run_migrations()
 
 
 if context.is_offline_mode():
