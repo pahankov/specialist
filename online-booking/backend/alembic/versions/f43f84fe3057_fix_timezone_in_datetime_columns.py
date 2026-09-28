@@ -26,47 +26,54 @@ def _table_exists(conn, name: str) -> bool:
     return result.scalar()
 
 
-def _column_exists(conn, table: str, name: str) -> bool:
+def _ensure_timezone_column(conn, table: str, column: str) -> None:
+    """Alter column to TIMESTAMP WITH TIME ZONE only if it isn't already."""
+    # Check column exists and its type
     result = conn.execute(
         text("""
-            SELECT EXISTS (
-                SELECT FROM information_schema.columns
-                WHERE table_name = :t AND column_name = :c
-            )
-        """),
-        {"t": table, "c": name}
-    )
-    return result.scalar()
-
-
-def _column_type(conn, table: str, name: str) -> str:
-    """Return 'timestamp with time zone' or 'timestamp without time zone' or None."""
-    result = conn.execute(
-        text("""
-            SELECT data_type || CASE WHEN datetime_precision IS NOT NULL
-                THEN '(' || datetime_precision::text || ')'
-                ELSE '' END || CASE WHEN is_nullable = 'YES' THEN '' ELSE '' END
+            SELECT data_type, is_nullable
             FROM information_schema.columns
             WHERE table_name = :t AND column_name = :c
         """),
-        {"t": table, "c": name}
+        {"t": table, "c": column}
     )
-    row = result.scalar()
+    row = result.fetchone()
     if not row:
-        return None
-    # Just check if it has timezone
-    if 'timezone' in row.lower():
-        return 'with_timezone'
-    return 'without_timezone'
+        return  # Column doesn't exist, skip
 
+    # Check if it already has timezone
+    result = conn.execute(
+        text("""
+            SELECT EXISTS (
+                SELECT FROM pg_attribute pa
+                JOIN pg_type pt ON pt.oid = pa.atttypid
+                WHERE pa.attrelid = :tbl::regclass
+                AND pa.attname = :col
+                AND pt.typtype = 'p'
+                AND LOWER(pt.typname) IN ('timestamp', 'timestamptz')
+            )
+        """),
+        {"tbl": table, "col": column}
+    )
+    has_ts = result.scalar()
+    if not has_ts:
+        return  # Not a timestamp column, skip
 
-def _ensure_timezone_column(conn, table: str, column: str) -> None:
-    """Alter column to TIMESTAMP WITH TIME ZONE only if it isn't already."""
-    if not _column_exists(conn, table, column):
-        return
-    current = _column_type(conn, table, column)
-    if current == 'with_timezone':
-        return  # Already correct
+    # Check if it's already timestamptz
+    result = conn.execute(
+        text("""
+            SELECT pt.typname
+            FROM pg_attribute pa
+            JOIN pg_type pt ON pt.oid = pa.atttypid
+            WHERE pa.attrelid = :tbl::regclass
+            AND pa.attname = :col
+        """),
+        {"tbl": table, "col": column}
+    )
+    type_name = result.scalar()
+    if type_name and 'timestamptz' in type_name.lower():
+        return  # Already has timezone
+
     try:
         conn.execute(
             text(f"ALTER TABLE {table} ALTER COLUMN {column} TYPE TIMESTAMP WITH TIME ZONE")
@@ -75,50 +82,35 @@ def _ensure_timezone_column(conn, table: str, column: str) -> None:
         pass
 
 
-def _drop_index(conn, name: str) -> None:
-    result = conn.execute(
-        text("SELECT EXISTS (SELECT FROM pg_indexes WHERE indexname = :n)"),
-        {"n": name}
-    )
-    if result.scalar():
-        try:
-            conn.execute(text(f"DROP INDEX IF EXISTS {name}"))
-        except Exception:
-            pass
-
-
 def upgrade() -> None:
     conn = op.get_bind()
 
     # --- Clean up removed tables ---
-    if _table_exists(conn, 'locations'):
-        try:
-            conn.execute(text("DROP TABLE IF EXISTS locations CASCADE"))
-        except Exception:
-            pass
+    try:
+        conn.execute(text("DROP TABLE IF EXISTS locations CASCADE"))
+    except Exception:
+        pass
+    try:
+        conn.execute(text("DROP TABLE IF EXISTS social_accounts CASCADE"))
+    except Exception:
+        pass
 
-    if _table_exists(conn, 'social_accounts'):
-        try:
-            conn.execute(text("DROP TABLE IF EXISTS social_accounts CASCADE"))
-        except Exception:
-            pass
-
-    # --- Clean up removed columns from client_profiles ---
-    for col in ['location_lat', 'location_lon', 'preferred_location']:
-        try:
-            conn.execute(text(f"ALTER TABLE client_profiles DROP COLUMN IF EXISTS {col}"))
-        except Exception:
-            pass
-
-    # --- Clean up removed columns from master_profiles ---
-    for col in ['cabinet_lat', 'cabinet_lon', 'cabinet_address']:
-        try:
-            conn.execute(text(f"ALTER TABLE master_profiles DROP COLUMN IF EXISTS {col}"))
-        except Exception:
-            pass
+    # --- Clean up removed columns ---
+    for table, cols in [
+        ('client_profiles', ['location_lat', 'location_lon', 'preferred_location']),
+        ('master_profiles', ['cabinet_lat', 'cabinet_lon', 'cabinet_address']),
+    ]:
+        for col in cols:
+            try:
+                conn.execute(text(f"ALTER TABLE {table} DROP COLUMN IF EXISTS {col}"))
+            except Exception:
+                pass
 
     # --- Clean up removed columns/index from users ---
-    _drop_index(conn, 'ix_users_telegram_user_id')
+    try:
+        conn.execute(text("DROP INDEX IF EXISTS ix_users_telegram_user_id"))
+    except Exception:
+        pass
     try:
         conn.execute(text("ALTER TABLE users DROP COLUMN IF EXISTS telegram_user_id"))
     except Exception:
@@ -188,21 +180,16 @@ def downgrade() -> None:
     ]
 
     for table, column in timezone_columns:
-        if _column_exists(conn, table, column):
-            current = _column_type(conn, table, column)
-            if current == 'without_timezone':
-                continue  # Already reverted
-            try:
-                conn.execute(
-                    text(f"ALTER TABLE {table} ALTER COLUMN {column} TYPE TIMESTAMP WITHOUT TIME ZONE")
-                )
-            except Exception:
-                pass
+        try:
+            conn.execute(
+                text(f"ALTER TABLE {table} ALTER COLUMN {column} TYPE TIMESTAMP WITHOUT TIME ZONE")
+            )
+        except Exception:
+            pass
 
     # --- Restore removed columns ---
     try:
         conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_user_id INTEGER"))
-        _drop_index(conn, 'ix_users_telegram_user_id')
         try:
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_users_telegram_user_id ON users (telegram_user_id)"))
         except Exception:
@@ -244,8 +231,6 @@ def downgrade() -> None:
                     CONSTRAINT uq_social_provider_user UNIQUE (provider, provider_user_id)
                 )
             """))
-            _drop_index(conn, 'ix_social_accounts_user_id')
-            _drop_index(conn, 'ix_social_accounts_provider')
             try:
                 conn.execute(text("CREATE INDEX IF NOT EXISTS ix_social_accounts_user_id ON social_accounts (user_id)"))
                 conn.execute(text("CREATE INDEX IF NOT EXISTS ix_social_accounts_provider ON social_accounts (provider)"))
