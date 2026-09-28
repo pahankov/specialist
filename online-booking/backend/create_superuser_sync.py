@@ -66,7 +66,7 @@ DATABASE_URL = os.getenv(
 SUPERUSER_EMAIL = "pahankov@mail.ru"
 SUPERUSER_PASSWORD = "REDACTED_SUPERUSER_PASSWORD"
 SUPERUSER_NAME = "Павел"
-TELEGRAM_USERNAME = "pahankov"
+TELEGRAM_USERNAME = ""
 
 
 def hash_password(plain: str) -> str:

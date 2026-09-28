@@ -19,9 +19,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column('countries', sa.Column('name_ru', sa.String(100), nullable=True))
-    op.execute("UPDATE countries SET name_ru = name WHERE name_ru IS NULL")
-    op.alter_column('countries', 'name_ru', nullable=False)
+    op.add_column('countries', sa.Column('name_ru', sa.String(100), nullable=True, server_default=''))
+    op.execute("UPDATE countries SET name_ru = name WHERE name_ru IS NULL OR name_ru = ''")
 
 
 def downgrade() -> None:
