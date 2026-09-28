@@ -34,64 +34,7 @@ jobs:
             alembic upgrade head
 
             # Create/update superuser (uses bcrypt directly, not passlib)
-            cat > /tmp/create_superuser.py << 'PYEOF'
-import sys, os, bcrypt
-sys.path.insert(0, '/var/www/beauty-specialist/online-booking/backend')
-os.environ['DATABASE_URL'] = '${DATABASE_URL}'
-os.environ['APP_ENV'] = 'production'
-
-from sqlalchemy import select
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy import create_engine
-from app.models.user import User, UserRole
-from app.models.master_profile import MasterProfile
-from app.database import Base
-
-engine = create_engine('${DATABASE_URL}')
-Base.metadata.create_all(engine)
-SessionLocal = sessionmaker(engine)
-
-SUPERUSER_EMAIL = 'pahankov@mail.ru'
-SUPERUSER_PASSWORD = 'REDACTED_SUPERUSER_PASSWORD'
-SUPERUSER_NAME = 'Павел'
-TELEGRAM_USERNAME = 'pahankov'
-
-def _hash_pw(plain):
-    return bcrypt.hashpw(plain.encode('utf-8'), bcrypt.gensalt(rounds=12)).decode('utf-8')
-
-with SessionLocal() as session:
-    user = session.execute(select(User).where(User.email == SUPERUSER_EMAIL)).scalar_one_or_none()
-    if user:
-        user.hashed_password = _hash_pw(SUPERUSER_PASSWORD)
-        user.role = UserRole.ADMIN
-        user.is_active = True
-        print('Superuser updated:')
-    else:
-        user = User(
-            name=SUPERUSER_NAME,
-            email=SUPERUSER_EMAIL,
-            hashed_password=_hash_pw(SUPERUSER_PASSWORD),
-            phone='+79615202311',
-            role=UserRole.ADMIN,
-            is_active=True,
-            is_verified=True,
-        )
-        session.add(user)
-        session.flush()
-        master_profile = MasterProfile(
-            user_id=user.id,
-            telegram_username=TELEGRAM_USERNAME,
-            description='Суперпользователь',
-        )
-        session.add(master_profile)
-        print('Superuser created:')
-    session.commit()
-    print(f'   Email: {user.email}')
-    print(f'   ID: {user.id}')
-    print(f'   Role: {user.role.value}')
-PYEOF
-            cd /var/www/beauty-specialist/online-booking/backend
-            python3.12 /tmp/create_superuser.py
+            python3.12 create_superuser.py
 
             # Seed production data if DB is empty
             python3.12 seed_production.py
