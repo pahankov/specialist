@@ -34,9 +34,9 @@ jobs:
             alembic upgrade head
 
             # Create/update superuser (uses bcrypt directly, not passlib)
-            python3.12 -c "
+            cat > /tmp/create_superuser.py << 'PYEOF'
 import sys, os, bcrypt
-sys.path.insert(0, '.')
+sys.path.insert(0, '/var/www/beauty-specialist/online-booking/backend')
 os.environ['DATABASE_URL'] = '${DATABASE_URL}'
 os.environ['APP_ENV'] = 'production'
 
@@ -89,7 +89,9 @@ with SessionLocal() as session:
     print(f'   Email: {user.email}')
     print(f'   ID: {user.id}')
     print(f'   Role: {user.role.value}')
-"
+PYEOF
+            cd /var/www/beauty-specialist/online-booking/backend
+            python3.12 /tmp/create_superuser.py
 
             # Seed production data if DB is empty
             python3.12 seed_production.py
