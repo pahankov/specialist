@@ -13,9 +13,11 @@ from app.models.service import Service
 from app.models.appointment import Appointment
 from app.models.working_hour import WorkingHour
 from app.models.review import Review
-from passlib.context import CryptContext
+import bcrypt
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def _hash_pw(plain: str) -> str:
+    return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode("utf-8")
 
 # ─── Data pools ────────────────────────────────────────────────────────
 
