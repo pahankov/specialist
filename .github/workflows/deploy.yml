@@ -21,6 +21,9 @@ jobs:
           script: |
             set -ex
 
+            LOGFILE="/tmp/deploy_$(date +%s).log"
+            exec > >(tee -a "$LOGFILE") 2>&1
+
             echo "=========================================="
             echo " DEPLOY STARTED"
             echo "=========================================="
@@ -85,3 +88,11 @@ jobs:
             echo "=========================================="
             echo " DEPLOY SUCCESSFUL"
             echo "=========================================="
+
+      - name: Upload deploy logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-logs
+          path: /tmp/deploy_*.log
+          retention-days: 3
