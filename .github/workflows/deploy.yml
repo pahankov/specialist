@@ -24,6 +24,9 @@ jobs:
             git pull origin main
             git reset --hard HEAD
 
+            # Export DATABASE_URL for migrations and scripts
+            export DATABASE_URL="${DATABASE_URL}"
+
             # Write systemd service
             bash deploy_setup.sh
 
@@ -33,10 +36,10 @@ jobs:
             source venv/bin/activate
             pip install -r requirements.txt
 
-            # Run database migrations (alembic.ini has psycopg2 URL)
+            # Run database migrations
             alembic upgrade head
 
-            # Create/update superuser (uses create_superuser_sync.py with psycopg2 URL)
+            # Create/update superuser
             python3.12 create_superuser_sync.py
 
             # Seed production data if DB is empty

@@ -13,7 +13,7 @@ from sqlalchemy import text
 
 # revision identifiers, used by Alembic.
 revision: str = 'sync_missing_columns'
-down_revision: Union[str, None] = 'aaa7fcc30d47'
+down_revision: Union[str, None] = 'f43f84fe3057'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
