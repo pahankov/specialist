@@ -31,8 +31,11 @@ from app.models.otp_code import OtpCode  # noqa: F401
 # access to the values within the .ini file in use.
 config = context.config
 
-# Use URL from alembic.ini (sync sqlite:///, not aiosqlite:///)
-# Do NOT override with settings.DATABASE_URL (that's async)
+# Use DATABASE_URL from environment (set by deploy.yml or .env)
+# This allows migrations to target the correct database
+db_url = os.environ.get("DATABASE_URL")
+if db_url:
+    config.set_main_option("sqlalchemy.url", db_url)
 
 # Interpret the config file for Python logging.
 if config.config_file_name is not None:

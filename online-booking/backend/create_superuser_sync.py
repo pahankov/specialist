@@ -8,11 +8,21 @@ Uses bcrypt directly (not passlib) to avoid passlib/bcrypt >= 4.0 incompatibilit
 
 Usage:
     python create_superuser_sync.py
+
+Environment:
+    DATABASE_URL - PostgreSQL connection string (reads from .env if not set)
 """
 import sys
 import os
 
 sys.path.insert(0, os.path.dirname(__file__))
+
+# Try to load .env file for local development
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
+except ImportError:
+    pass
 
 from sqlalchemy import (
     Column, Integer, String, Boolean, DateTime,
@@ -58,7 +68,11 @@ class MasterProfile(Base):
     is_available = Column(Boolean, default=True)
 
 
-DATABASE_URL = "postgresql+psycopg2://specialist:REDACTED_DB_PASSWORD@localhost:5432/online_booking"
+# Read DATABASE_URL from environment (set by deploy.yml) or use hardcoded production URL
+DATABASE_URL = os.environ.get(
+    "DATABASE_URL",
+    "postgresql+psycopg2://specialist:REDACTED_DB_PASSWORD@localhost:5432/online_booking"
+)
 
 SUPERUSER_EMAIL = "pahankov@mail.ru"
 SUPERUSER_PASSWORD = "REDACTED_SUPERUSER_PASSWORD"
