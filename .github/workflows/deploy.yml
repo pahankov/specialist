@@ -27,10 +27,10 @@ jobs:
 
             cd /var/www/beauty-specialist
 
-            # Fix git permissions
-            echo ">>> Fixing git permissions..."
-            sudo chown -R deploy:deploy /var/www/beauty-specialist/.git 2>/dev/null || true
-            sudo chmod -R u+rw /var/www/beauty-specialist/.git 2>/dev/null || true
+            # Fix permissions on entire project (GigaCode creates files with different perms)
+            echo ">>> Fixing file permissions..."
+            sudo chown -R deploy:deploy /var/www/beauty-specialist 2>/dev/null || true
+            sudo chmod -R u+rw /var/www/beauty-specialist 2>/dev/null || true
 
             echo ">>> Pulling latest code..."
             git config --global --add safe.directory /var/www/beauty-specialist
