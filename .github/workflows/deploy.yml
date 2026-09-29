@@ -21,6 +21,11 @@ jobs:
           script: |
             set -e
             cd /var/www/beauty-specialist
+
+            # Fix git permissions (deploy user may not own .git after previous deploys)
+            sudo chown -R deploy:deploy /var/www/beauty-specialist/.git 2>/dev/null || true
+            sudo chmod -R u+rw /var/www/beauty-specialist/.git 2>/dev/null || true
+
             git config --global --add safe.directory /var/www/beauty-specialist
             git pull origin main
             git reset --hard HEAD
