@@ -19,6 +19,7 @@ jobs:
           envs: |
             DATABASE_URL
           script: |
+            set -e
             cd /var/www/beauty-specialist
             git config --global --add safe.directory /var/www/beauty-specialist
             git pull origin main
@@ -37,19 +38,29 @@ jobs:
             pip install -r requirements.txt
 
             # Run database migrations
-            alembic upgrade head
+            echo "=== ALEMBIC MIGRATIONS ==="
+            alembic upgrade head 2>&1 | tee /tmp/deploy.log
+            echo "" >> /tmp/deploy.log
 
             # Create/update superuser
-            python3.12 create_superuser_sync.py
+            echo "=== CREATE SUPERUSER ==="
+            python3.12 create_superuser.py 2>&1 | tee -a /tmp/deploy.log
+            echo "" >> /tmp/deploy.log
 
             # Fix any database issues (geography, superuser profile)
-            python3.12 fix_production_db.py
+            echo "=== FIX PRODUCTION DB ==="
+            python3.12 fix_production_db.py 2>&1 | tee -a /tmp/deploy.log
+            echo "" >> /tmp/deploy.log
 
             # Seed production data (geography + reviews)
-            python3.12 seed_production.py
+            echo "=== SEED PRODUCTION ==="
+            python3.12 seed_production.py 2>&1 | tee -a /tmp/deploy.log
+            echo "" >> /tmp/deploy.log
 
             # Create minimal data for reviews carousel (masters, appointments, reviews)
-            python3.12 create_minimal_reviews.py
+            echo "=== CREATE MINIMAL REVIEWS ==="
+            python3.12 create_minimal_reviews.py 2>&1 | tee -a /tmp/deploy.log
+            echo "" >> /tmp/deploy.log
 
             # Frontend
             cd ../frontend
@@ -60,3 +71,8 @@ jobs:
             # Restart
             sudo systemctl restart beauty-backend
             sudo systemctl restart nginx
+
+            # Show deploy log
+            echo "=== DEPLOY LOG ==="
+            cat /tmp/deploy.log
+            echo "=== END LOG ==="

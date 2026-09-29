@@ -1,68 +1,83 @@
-"""Create/update superuser for production.
+"""Create/update superuser using async SQLAlchemy.
+
+Uses the same database connection as the main app — reads DATABASE_URL from .env.
+Never overwrites existing superuser data (only updates role/password).
 
 Usage:
     python create_superuser.py
 
-Uses bcrypt directly (not passlib).
+Environment:
+    DATABASE_URL - PostgreSQL connection string (reads from .env if not set)
 """
-import sys, os, bcrypt
+import sys
+import os
 
 sys.path.insert(0, os.path.dirname(__file__))
-os.environ['DATABASE_URL'] = os.environ.get('DATABASE_URL', '')
-os.environ['APP_ENV'] = 'production'
 
-from sqlalchemy import select, create_engine
-from sqlalchemy.orm import sessionmaker
+from app.database import AsyncSessionLocal
 from app.models.user import User, UserRole
 from app.models.master_profile import MasterProfile
-from app.database import Base
+from app.modules.auth.service import hash_password
 
-engine = create_engine(os.environ['DATABASE_URL'])
-Base.metadata.create_all(engine)
-SessionLocal = sessionmaker(engine)
-
-SUPERUSER_EMAIL = 'pahankov@mail.ru'
-SUPERUSER_PASSWORD = 'Sug@r2026!'
-SUPERUSER_NAME = 'Павел'
-TELEGRAM_USERNAME = 'pahankov'
+SUPERUSER_EMAIL = "pahankov@mail.ru"
+SUPERUSER_PASSWORD = "Sug@r2026!"
+SUPERUSER_NAME = "Павел"
+TELEGRAM_USERNAME = ""
 
 
-def _hash_pw(plain: str) -> str:
-    return bcrypt.hashpw(plain.encode('utf-8'), bcrypt.gensalt(rounds=12)).decode('utf-8')
+async def main():
+    print(f"Creating/updating superuser: {SUPERUSER_EMAIL}")
 
+    async with AsyncSessionLocal() as session:
+        # Find existing user
+        result = await session.execute(
+            select(User).where(User.email == SUPERUSER_EMAIL)
+        )
+        user = result.scalar_one_or_none()
 
-def main():
-    with SessionLocal() as session:
-        user = session.execute(select(User).where(User.email == SUPERUSER_EMAIL)).scalar_one_or_none()
         if user:
-            user.hashed_password = _hash_pw(SUPERUSER_PASSWORD)
+            print(f"  Found existing user (ID: {user.id})")
+            user.hashed_password = hash_password(SUPERUSER_PASSWORD)
             user.role = UserRole.ADMIN
             user.is_active = True
-            print('Superuser updated:')
+            user.is_verified = True
+            print("  Superuser updated:")
         else:
             user = User(
                 name=SUPERUSER_NAME,
                 email=SUPERUSER_EMAIL,
-                hashed_password=_hash_pw(SUPERUSER_PASSWORD),
-                phone='+79615202311',
+                hashed_password=hash_password(SUPERUSER_PASSWORD),
+                phone="+79615202311",
                 role=UserRole.ADMIN,
+                city_id=None,
                 is_active=True,
                 is_verified=True,
             )
             session.add(user)
-            session.flush()
+            await session.flush()
+
             master_profile = MasterProfile(
                 user_id=user.id,
                 telegram_username=TELEGRAM_USERNAME,
-                description='Суперпользователь',
+                description="Суперпользователь",
+                experience_years=10,
+                is_available=True,
             )
             session.add(master_profile)
-            print('Superuser created:')
-        session.commit()
-        print(f'   Email: {user.email}')
-        print(f'   ID: {user.id}')
-        print(f'   Role: {user.role.value}')
+            print("  Superuser created:")
+
+        await session.commit()
+
+        print(f"    Email: {user.email}")
+        print(f"    Password: {SUPERUSER_PASSWORD}")
+        print(f"    ID: {user.id}")
+        print(f"    Role: {user.role.value}")
+        print(f"    Admin: {user.role == UserRole.ADMIN}")
+        print(f"    Hashed: {user.hashed_password[:30]}...")
+        print("\nGo to https://beauty-specialist.ru and login!")
 
 
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+    import asyncio
+    from sqlalchemy import select
+    asyncio.run(main())
