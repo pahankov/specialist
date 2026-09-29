@@ -51,28 +51,19 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE;
 -- Но в БД enum type может быть создан с uppercase значениями
 -- Нужно привести enum к lowercase значениям модели
 
+-- Сначала исправляем данные
+UPDATE master_profiles SET status = 'active' WHERE status = 'ACTIVE';
+UPDATE master_profiles SET status = 'inactive' WHERE status = 'INACTIVE';
+UPDATE master_profiles SET status = 'suspended' WHERE status = 'SUSPENDED';
+
 -- Удаляем старый enum type и создаём новый с правильными значениями
-DO $$
-BEGIN
-    -- Проверяем, есть ли старый enum
-    IF EXISTS (
-        SELECT 1 FROM pg_type t
-        JOIN pg_namespace n ON n.oid = t.typnamespace
-        WHERE t.typname = 'masterstatus'
-        AND n.nspname = 'public'
-    ) THEN
-        -- Удаляем старый enum
-        DROP TYPE masterstatus;
-        
-        -- Создаём новый с lowercase значениями как в модели
-        CREATE TYPE masterstatus AS ENUM ('active', 'inactive', 'suspended');
-        
-        -- Обновляем колонку
-        ALTER TABLE master_profiles ALTER COLUMN status TYPE masterstatus USING status::text;
-        
-        RAISE NOTICE 'masterstatus enum recreated with lowercase values';
-    END IF;
-END $$;
+DROP TYPE IF EXISTS masterstatus CASCADE;
+CREATE TYPE masterstatus AS ENUM ('active', 'inactive', 'suspended');
+
+-- Alter the column with explicit cast (drop default first)
+ALTER TABLE master_profiles ALTER COLUMN status DROP DEFAULT;
+ALTER TABLE master_profiles ALTER COLUMN status TYPE masterstatus USING status::text::masterstatus;
+ALTER TABLE master_profiles ALTER COLUMN status SET DEFAULT 'active'::masterstatus;
 
 -- =============================================================
 -- 6. client_profiles
