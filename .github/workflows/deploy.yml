@@ -21,7 +21,7 @@ jobs:
           script: |
             cd /var/www/beauty-specialist
 
-            # Fix permissions on entire project
+            # Fix permissions
             sudo chown -R deploy:deploy /var/www/beauty-specialist 2>/dev/null || true
             sudo chmod -R u+rw /var/www/beauty-specialist 2>/dev/null || true
 
@@ -33,52 +33,31 @@ jobs:
 
             bash deploy_setup.sh
 
-            # Backend setup
+            # Backend
             cd online-booking/backend
             python3.12 -m venv venv
             source venv/bin/activate
             pip install -r requirements.txt
 
-            # Run database migrations
             echo "=== ALEMBIC ==="
-            alembic upgrade head 2>&1 || { echo "ALEMBIC FAILED"; exit 1; }
+            alembic upgrade head
+            echo "=== ALEMBIC DONE ==="
 
-            # Create/update superuser
             echo "=== SUPERUSER ==="
-            python3.12 create_superuser.py 2>&1 || { echo "SUPERUSER FAILED"; exit 1; }
+            python3.12 create_superuser.py
+            echo "=== SUPERUSER DONE ==="
 
-            # Fix any database issues
             echo "=== FIX DB ==="
-            python3.12 fix_production_db.py 2>&1 || { echo "FIX DB FAILED"; exit 1; }
+            python3.12 fix_production_db.py
+            echo "=== FIX DB DONE ==="
 
-            # Seed production data
             echo "=== SEED ==="
-            python3.12 seed_production.py 2>&1 || { echo "SEED FAILED"; exit 1; }
+            python3.12 seed_production.py
+            echo "=== SEED DONE ==="
 
-            # Create minimal data for reviews carousel
             echo "=== MINIMAL REVIEWS ==="
-            python3.12 create_minimal_reviews.py 2>&1 || { echo "MINIMAL REVIEWS FAILED"; exit 1; }
-
-            # Verify data was created
-            echo "=== VERIFY ==="
-            python3.12 -c "
-import asyncio
-from app.database import AsyncSessionLocal
-from sqlalchemy import select, text
-
-async def verify():
-    async with AsyncSessionLocal() as db:
-        countries = await db.execute(select(text('count(*)').select_from(text('countries'))))
-        cities = await db.execute(select(text('count(*)').select_from(text('cities'))))
-        reviews = await db.execute(select(text('count(*)').select_from(text('reviews'))))
-        masters = await db.execute(select(text('count(*)').select_from(text('users')).where(text(\"role='MASTER'\"))))
-        print(f'Countries: {countries.scalar()}')
-        print(f'Cities: {cities.scalar()}')
-        print(f'Reviews: {reviews.scalar()}')
-        print(f'Masters: {masters.scalar()}')
-
-asyncio.run(verify())
-" 2>&1 || echo "VERIFY FAILED"
+            python3.12 create_minimal_reviews.py
+            echo "=== MINIMAL REVIEWS DONE ==="
 
             # Frontend
             cd ../frontend
@@ -86,11 +65,14 @@ asyncio.run(verify())
             npm run build
             sudo cp -r dist/* /var/www/beauty-specialist/frontend/dist/
 
-            # Restart services
+            # Restart
             sudo systemctl restart beauty-backend
             sudo systemctl restart nginx
-
-            # Check if backend is running
             sleep 2
-            curl -s http://127.0.0.1:8000/health 2>&1 || echo "HEALTH CHECK FAILED"
-            curl -s http://127.0.0.1:8000/api/v1/countries/ 2>&1 | head -c 200 || echo "COUNTRIES API FAILED"
+
+            echo "=== HEALTH ==="
+            curl -s http://127.0.0.1:8000/health
+            echo ""
+            echo "=== COUNTRIES ==="
+            curl -s http://127.0.0.1:8000/api/v1/countries/ | head -c 200
+            echo ""
