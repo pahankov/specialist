@@ -35,6 +35,10 @@ config = context.config
 # This allows migrations to target the correct database
 db_url = os.environ.get("DATABASE_URL")
 if db_url:
+    # Alembic runs synchronously — convert asyncpg to psycopg2
+    # DATABASE_URL on server is postgresql+asyncpg://
+    # Alembic needs postgresql+psycopg2://
+    db_url = db_url.replace("+asyncpg", "+psycopg2")
     config.set_main_option("sqlalchemy.url", db_url)
 
 # Interpret the config file for Python logging.
