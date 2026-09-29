@@ -68,6 +68,10 @@ jobs:
             npm run build
             sudo cp -r dist/* /var/www/beauty-specialist/frontend/dist/
 
+            # Fix log directory permissions (service runs as www-data)
+            sudo chown -R www-data:www-data /var/www/beauty-specialist/online-booking/backend/logs/
+            sudo chmod -R 755 /var/www/beauty-specialist/online-booking/backend/logs/
+
             # Restart
             sudo systemctl restart beauty-backend
             sudo systemctl restart nginx

@@ -401,6 +401,17 @@ ALTER TABLE users ALTER COLUMN role SET DEFAULT 'CLIENT';
 Проблема: bash интерпретирует `!` в двойных кавычках.
 Решение: использовать одинарные кавычки или `set +H`
 
+### 6. 502 Bad Gateway — бэкенд не запускается
+Проблема: сервис `beauty-backend` неактивен, nginx возвращает 502.
+Причина: сервис запускается от `www-data`, но директория `logs/` принадлежит `deploy`.
+Решение:
+```bash
+sudo chown -R www-data:www-data /var/www/beauty-specialist/online-booking/backend/logs/
+sudo chmod -R 755 /var/www/beauty-specialist/online-booking/backend/logs/
+sudo systemctl restart beauty-backend
+```
+Проверка: `sudo systemctl status beauty-backend --no-pager`
+
 ## Структура на сервере
 ```
 /var/www/beauty-specialist/
