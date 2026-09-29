@@ -412,6 +412,49 @@ sudo systemctl restart beauty-backend
 ```
 Проверка: `sudo systemctl status beauty-backend --no-pager`
 
+### 7. 500 Internal Server Error — пустые таблицы countries/cities
+Проблема: API `/api/v1/countries/` и `/api/v1/auth/login-unified` возвращают 500.
+Причина: модель ожидает колонки `name_en`, `phone_prefix`, `is_active` в `countries` и `name_en`, `slug`, `is_active`, `name_ru` в `cities`, но старая БД имеет другую схему.
+Решение (автоматическое): деплой-скрипт автоматически исправляет схему перед миграциями.
+Ручное исправление:
+```bash
+cat > /tmp/fix_schema.sql << 'EOF'
+ALTER TABLE countries ADD COLUMN IF NOT EXISTS name_en VARCHAR(100);
+ALTER TABLE countries ADD COLUMN IF NOT EXISTS phone_prefix VARCHAR(10);
+ALTER TABLE countries ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+ALTER TABLE countries DROP COLUMN IF EXISTS name;
+ALTER TABLE countries DROP COLUMN IF EXISTS created_at;
+
+ALTER TABLE cities ADD COLUMN IF NOT EXISTS name_en VARCHAR(100);
+ALTER TABLE cities ADD COLUMN IF NOT EXISTS slug VARCHAR(100);
+ALTER TABLE cities ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+ALTER TABLE cities RENAME COLUMN name TO name_ru;
+EOF
+sudo -u postgres psql -d online_booking -f /tmp/fix_schema.sql
+```
+Затем заполнить данные:
+```bash
+cat > /tmp/fix_data.sql << 'EOF'
+INSERT INTO countries (code, name_ru, name_en, phone_prefix, is_active)
+SELECT 'RU', 'Россия', 'Russia', '+7', TRUE WHERE NOT EXISTS (SELECT 1 FROM countries WHERE code = 'RU');
+INSERT INTO countries (code, name_ru, name_en, phone_prefix, is_active)
+SELECT 'KZ', 'Казахстан', 'Kazakhstan', '+7', TRUE WHERE NOT EXISTS (SELECT 1 FROM countries WHERE code = 'KZ');
+INSERT INTO countries (code, name_ru, name_en, phone_prefix, is_active)
+SELECT 'BY', 'Беларусь', 'Belarus', '+375', TRUE WHERE NOT EXISTS (SELECT 1 FROM countries WHERE code = 'BY');
+
+INSERT INTO cities (country_id, name_ru, name_en, slug, is_active)
+SELECT c.id, city_name, city_name, LOWER(REPLACE(city_name, ' ', '-')), TRUE
+FROM countries c,
+     unnest(ARRAY['Москва', 'Санкт-Петербург', 'Новосибирск', 'Екатеринбург',
+       'Казань', 'Нижний Новгород', 'Челябинск', 'Самара',
+       'Омск', 'Ростов-на-Дону', 'Уфа', 'Красноярск',
+       'Воронеж', 'Пермь', 'Волгоград']) AS city_name
+WHERE c.code = 'RU'
+AND NOT EXISTS (SELECT 1 FROM cities ci WHERE ci.name_ru = city_name AND ci.country_id = c.id);
+EOF
+sudo -u postgres psql -d online_booking -f /tmp/fix_data.sql
+```
+
 ## Структура на сервере
 ```
 /var/www/beauty-specialist/
