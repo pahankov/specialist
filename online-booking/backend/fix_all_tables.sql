@@ -51,6 +51,19 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE;
 -- Но в БД enum type может быть создан с uppercase значениями
 -- Нужно привести enum к lowercase значениям модели
 
+-- Восстанавливаем колонку status если удалена (был баг с CASCADE)
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'master_profiles' AND column_name = 'status'
+    ) THEN
+        -- Восстанавливаем колонку с новым типом
+        ALTER TABLE master_profiles ADD COLUMN status masterstatus DEFAULT 'active';
+        RAISE NOTICE 'master_profiles.status column restored';
+    END IF;
+END $$;
+
 -- Сначала исправляем данные (преобразуем uppercase в lowercase)
 UPDATE master_profiles SET status = 'active' WHERE status = 'ACTIVE';
 UPDATE master_profiles SET status = 'inactive' WHERE status = 'INACTIVE';
