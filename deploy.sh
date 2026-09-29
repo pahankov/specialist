@@ -91,68 +91,22 @@ check_and_fix_schema() {
     # PostgreSQL — проверяем и исправляем
     info "Проверка схемы PostgreSQL..."
 
-    # Создаём SQL-скрипт для исправления схемы
-    cat > /tmp/fix_schema.sql << 'SQLEOF'
--- =====================================================
--- FIX SCHEMA: Автоматическое исправление схемы БД
--- =====================================================
--- Эта миграция добавляет колонки, которые могли быть
--- добавлены в модель, но отсутствуют в старой БД.
---
--- ВАЖНО: Эту процедуру нужно запускать ПЕРЕД alembic upgrade head
--- при деплое на сервер с существующей БД.
--- =====================================================
-
--- ─── countries ──────────────────────────────────────────
--- Старая схема: id, name, code, created_at
--- Новая схема:  id, code, name_ru, name_en, phone_prefix, is_active
-
-ALTER TABLE countries ADD COLUMN IF NOT EXISTS name_en VARCHAR(100);
-ALTER TABLE countries ADD COLUMN IF NOT EXISTS phone_prefix VARCHAR(10);
-ALTER TABLE countries ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
-ALTER TABLE countries DROP COLUMN IF EXISTS name;
-ALTER TABLE countries DROP COLUMN IF EXISTS created_at;
-
--- ─── cities ─────────────────────────────────────────────
--- Старая схема: id, country_id, name, created_at
--- Новая схема:  id, country_id, name_ru, name_en, slug, is_active
-
-ALTER TABLE cities ADD COLUMN IF NOT EXISTS name_en VARCHAR(100);
-ALTER TABLE cities ADD COLUMN IF NOT EXISTS slug VARCHAR(100);
-ALTER TABLE cities ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
-ALTER TABLE cities RENAME COLUMN name TO name_ru;
-
--- ─── master_profiles ────────────────────────────────────
--- Добавляем unique constraint на user_id (если нет)
--- Примечание: в модели user_id unique=True, но constraint мог не создаться
-
-DO $$
-BEGIN
-    -- Проверяем, есть ли unique constraint
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.table_constraints
-        WHERE constraint_name = 'uq_master_profiles_user_id'
-        AND table_name = 'master_profiles'
-    ) THEN
-        -- Если нет unique, создаём индекс (не constraint, но работает)
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_master_profiles_user_id_unique
-        ON master_profiles(user_id)
-        WHERE user_id IS NOT NULL;
-    END IF;
-END $$;
-SQLEOF
-
-    if [ -f /tmp/fix_schema.sql ]; then
-        info "Применяю исправления схемы..."
-        sudo -u postgres psql -d online_booking -f /tmp/fix_schema.sql 2>&1 | while read line; do
-            if [[ "$line" == *"ERROR"* ]]; then
-                warn "$line"
-            else
-                echo "  $line"
-            fi
-        done
-        success "Схема БД проверена и исправлена"
+    # Используем comprehensive SQL скрипт
+    FIX_SCHEMA_FILE="$BACKEND_DIR/fix_all_tables.sql"
+    if [ ! -f "$FIX_SCHEMA_FILE" ]; then
+        error "Файл fix_all_tables.sql не найден: $FIX_SCHEMA_FILE"
+        exit 1
     fi
+
+    info "Применяю исправления схемы ($FIX_SCHEMA_FILE)..."
+    sudo -u postgres psql -d online_booking -f "$FIX_SCHEMA_FILE" 2>&1 | while read line; do
+        if [[ "$line" == *"ERROR"* ]]; then
+            warn "$line"
+        else
+            echo "  $line"
+        fi
+    done
+    success "Схема БД проверена и исправлена"
 }
 
 check_and_fix_schema
