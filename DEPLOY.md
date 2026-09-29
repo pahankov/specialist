@@ -455,6 +455,38 @@ EOF
 sudo -u postgres psql -d online_booking -f /tmp/fix_data.sql
 ```
 
+### 8. СХЕМА БД — КАК НЕ ЛОМАТЬ
+
+**ПРОБЛЕМА:** Модель SQLAlchemy может ожидать колонки, которых нет в production БД.
+Это вызывает `ProgrammingError: column X does not exist` → 500 Internal Server Error на ВСЕХ endpoint'ах.
+
+**ПРИМЕР:** Модель `Country` ожидает `name_en`, `phone_prefix`, `is_active`, но в БД только `name`, `code`.
+
+**РЕШЕНИЕ:**
+1. **Всегда** проверяйте схему БД перед деплоем:
+   ```bash
+   ./deploy.sh --dry-run
+   ```
+
+2. **Автоматическое исправление** в `deploy.sh`:
+   - Скрипт автоматически добавляет недостающие колонки
+   - Работает и локально, и на сервере
+   - Idempotent (безопасно запускать多次)
+
+3. **При изменении модели** всегда:
+   - [ ] Генерируйте миграцию: `alembic revision --autogenerate -m "add_column_x"`
+   - [ ] Тестируйте на чистой БД: `alembic upgrade head`
+   - [ ] Проверяйте, что миграция idempotent
+   - [ ] Обновляйте `fix_schema.sql` в `deploy.sh` для старых БД
+
+**ВАЖНО:** Если вы добавляете колонку в модель, она ДОЛЖНА быть в:
+1. `app/models/` — модель SQLAlchemy
+2. `app/schemas/` — Pydantic schema
+3. `alembic/versions/` — миграция (автоматически через --autogenerate)
+4. `deploy.sh` → `fix_schema.sql` — для старых production БД
+
+---
+
 ## Структура на сервере
 ```
 /var/www/beauty-specialist/
@@ -486,6 +518,33 @@ sudo -u postgres psql -d online_booking -f /tmp/fix_data.sql
 - `443` — HTTPS (Nginx + SSL)
 - `8000` — Backend (localhost, только Nginx прокси)
 - `5432` — PostgreSQL (localhost)
+
+## Быстрый деплой
+
+### Автоматический скрипт `deploy.sh`
+
+```bash
+# Продакшен (требует DATABASE_URL)
+export DATABASE_URL='postgresql+asyncpg://user:pass@host:5432/dbname'
+./deploy.sh
+
+# Локально (SQLite)
+./deploy.sh --local
+
+# Только проверка без изменений
+./deploy.sh --dry-run
+```
+
+Скрипт автоматически:
+1. Проверяет и исправляет схему БД (добавляет недостающие колонки)
+2. Запускает миграции Alembic
+3. Создаёт/обновляет суперпользователя
+4. Заполняет seed-данными
+5. Собирает фронтенд
+6. Перезапускает сервисы
+7. Проверяет что всё работает
+
+---
 
 ## Чеклист при добавлении нового функционала
 
