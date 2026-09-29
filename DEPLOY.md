@@ -305,12 +305,16 @@ python -m alembic downgrade -1   # откат на одну версию
 2. Подключение к серверу по SSH (секреты `SERVER_HOST`, `SERVER_SSH_KEY`)
 3. `git pull origin main`
 4. `export DATABASE_URL="${DATABASE_URL}"` — передаёт URL БД из GitHub Secrets
-5. `alembic upgrade head` — применяет все 7 миграций
-6. `create_superuser_sync.py` — создаёт/обновляет админа (pahankov@mail.ru)
-7. `seed_production.py` — заполняет БД тестовыми данными если пуста
-8. Сборка фронтенда (`npm ci` + `npm run build`)
-9. Копирование статики в `/var/www/beauty-specialist/frontend/dist/`
-10. Перезапуск beauty-backend + nginx
+5. **`fix_all_tables.sql`** — исправляет схему БД (добавляет недостающие колонки, конвертирует enum в VARCHAR)
+6. `alembic upgrade head` — применяет все миграции
+7. `create_superuser.py` — создаёт/обновляет админа (pahankov@mail.ru)
+8. `fix_production_db.py` — дополнительные исправления БД
+9. `seed_production.py` — заполняет БД тестовыми данными если пуста
+10. `create_minimal_reviews.py` — создаёт отзывы для карусели
+11. Сборка фронтенда (`npm ci` + `npm run build`)
+12. Копирование статики в `/var/www/beauty-specialist/frontend/dist/`
+13. Перезапуск beauty-backend + nginx
+14. **Тесты API** — проверка health, countries, login, reviews
 
 ### GitHub Secrets
 
@@ -455,7 +459,73 @@ EOF
 sudo -u postgres psql -d online_booking -f /tmp/fix_data.sql
 ```
 
-### 8. СХЕМА БД — КАК НЕ ЛОМАТЬ
+### 8. ENUM-ТИПЫ В МОДЕЛЯХ — ГЛАВНАЯ ПРИЧИНА 500 ОШИБОК
+
+**🔥 КРИТИЧНО: НЕ ИСПОЛЬЗУЙТЕ `SAEnum` в моделях SQLAlchemy!**
+
+**ПРОБЛЕМА:** `SAEnum(MasterStatus)` в модели создаёт PostgreSQL ENUM-тип. asyncpg (асинхронный драйвер PostgreSQL) **кэширует определения ENUM-типов на уровне TCP-соединения**. Когда вы меняете модель (добавляете/удаляете значение enum), asyncpg продолжает использовать старое определение из кэша. Это вызывает:
+
+```
+LookupError: 'active' is not among the defined enum values.
+Enum name: masterstatus. Possible values: ACTIVE, INACTIVE, SUSPENDED
+```
+
+**ЭТА ОШИБКА:**
+- Вызывает 500 Internal Server Error на ВСЕХ endpoint'ах, которые обращаются к таблице с enum
+- НЕ лечится через `DROP TYPE CASCADE` (колонка удаляется)
+- НЕ лечится через перезапуск сервиса (кэш внутри asyncpg connection pool)
+- НЕ лечится через `alembic upgrade head` (миграция не меняет данные)
+- Лечится ТОЛЬКО заменой enum на VARCHAR
+
+**ПРАВИЛО:**
+```python
+# ❌ НИКОГДА так не делайте:
+from sqlalchemy import Enum as SAEnum
+status = Column(SAEnum(MasterStatus), default=MasterStatus.ACTIVE, nullable=False)
+
+# ✅ ВСЕГДА так делайте:
+status = Column(String(20), default="active", nullable=False)  # 'active', 'inactive', 'suspended'
+```
+
+**Если нужно добавить новое значение enum:**
+1. Измените `String(20)` на новое значение (например, "archived")
+2. НЕ нужно создавать миграцию для изменения типа колонки
+3. Обновите `fix_all_tables.sql` для старых БД
+
+**Как исправить существующую таблицу с enum:**
+```bash
+# На сервере:
+cat > /tmp/fix_enum.sql << 'EOF'
+-- Конвертируем enum в VARCHAR
+ALTER TABLE master_profiles ALTER COLUMN status TYPE VARCHAR(20);
+-- Исправляем значения
+UPDATE master_profiles SET status = 'active' WHERE status = 'ACTIVE';
+-- Ставим default
+ALTER TABLE master_profiles ALTER COLUMN status SET DEFAULT 'active';
+EOF
+sudo -u postgres psql -d online_booking -f /tmp/fix_enum.sql
+```
+
+**Как проверить, есть ли enum в модели:**
+```bash
+grep -r "SAEnum\|Enum(" online-booking/backend/app/models/
+```
+Если есть — ЗАМЕНИТЬ на `String(20)`.
+
+**Как проверить, есть ли enum в БД:**
+```bash
+sudo -u postgres psql -d online_booking -c "SELECT typname, enumlabel FROM pg_type t JOIN pg_enum e ON t.oid = e.enumtypid ORDER BY typname, enumsortorder;"
+```
+
+### 9. ENUM-ТИПЫ В МОДЕЛЯХ — КАК НЕ ЛОМАТЬ
+
+При изменении модели **ВСЕГДА** проверяйте:
+- [ ] Нет ли `SAEnum` или `Enum()` в моделях
+- [ ] Если есть — заменить на `String(20)` с комментариями допустимых значений
+- [ ] В коде НЕ использовать `.value` у enum (например, `mp.status.value` → `mp.status`)
+- [ ] Обновить `fix_all_tables.sql` для конвертации старых enum в VARCHAR
+
+### 10. СХЕМА БД — КАК НЕ ЛОМАТЬ
 
 **ПРОБЛЕМА:** Модель SQLAlchemy может ожидать колонки, которых нет в production БД.
 Это вызывает `ProgrammingError: column X does not exist` → 500 Internal Server Error на ВСЕХ endpoint'ах.
@@ -553,7 +623,8 @@ export DATABASE_URL='postgresql+asyncpg://user:pass@host:5432/dbname'
 ### 1. Модель и схема
 - [ ] Модель создана в `app/models/`
 - [ ] Pydantic-схемы (create/update/response) в `app/schemas/`
-- [ ] Enum-типы для статусов/ролей определены
+- [ ] **НЕТ `SAEnum` или `Enum()` в моделях** — использовать `String(20)` вместо enum
+- [ ] В коде НЕ использовать `.value` у status (например, `mp.status` а не `mp.status.value`)
 
 ### 2. Миграция БД
 - [ ] Миграция сгенерирована: `python -m alembic revision --autogenerate -m "описание"`
@@ -620,10 +691,13 @@ export DATABASE_URL='postgresql+asyncpg://user:pass@host:5432/dbname'
 
 **Частые ошибки при забывании пунктов:**
 
-| Забыли | Результат | Как обнаружить |
-|--------|-----------|----------------|
-| Сид-данные для новой таблицы | 500 ошибка на API | `curl https://beauty-specialist.ru/api/v1/new-endpoint/` |
-| Связанную запись (MasterProfile) | 500 ошибка при логине | `journalctl -u beauty-backend -n 50` |
-| Сид-данные для отзывов | Пустая карусель | Открыть главную страницу |
-| Обновить `deploy.yml` | На сервере старые данные | Проверить логи деплоя |
-| Empty state компонента | Белый экран | Открыть страницу на чистом сервере |
+| Забыли | Результат | Как обнаружить | Как исправить |
+|--------|-----------|----------------|---------------|
+| SAEnum в модели | 500 ошибка на ВСЕХ endpoint'ах | `journalctl -u beauty-backend -n 50` | Заменить на `String(20)` |
+| Сид-данные для новой таблицы | 500 ошибка на API | `curl https://beauty-specialist.ru/api/v1/new-endpoint/` | Запустить `seed_production.py` |
+| Связанную запись (MasterProfile) | 500 ошибка при логине | `journalctl -u beauty-backend -n 50` | Создать запись через SQL |
+| Сид-данные для отзывов | Пустая карусель | Открыть главную страницу | Запустить `create_minimal_reviews.py` |
+| Обновить `deploy.yml` | На сервере старые данные | Проверить логи деплоя | Добавить шаги в workflow |
+| Empty state компонента | Белый экран | Открыть страницу на чистом сервере | Добавить empty state |
+| Фикс схемы БД | 500 ошибка (column X does not exist) | `journalctl -u beauty-backend -n 50` | Запустить `fix_all_tables.sql` |
+| Права на логи | 502 Bad Gateway | `systemctl status beauty-backend` | `chown -R www-data:www-data logs/` |
