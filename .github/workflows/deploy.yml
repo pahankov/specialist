@@ -41,22 +41,8 @@ jobs:
             source venv/bin/activate
             pip install -r requirements.txt
 
-            # Fix schema mismatches (old DB may lack columns added in migrations)
-            cat > /tmp/fix_schema.sql << 'SQLEOF'
--- Fix countries table (may lack name_en, phone_prefix, is_active)
-ALTER TABLE countries ADD COLUMN IF NOT EXISTS name_en VARCHAR(100);
-ALTER TABLE countries ADD COLUMN IF NOT EXISTS phone_prefix VARCHAR(10);
-ALTER TABLE countries ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
-ALTER TABLE countries DROP COLUMN IF EXISTS name;
-ALTER TABLE countries DROP COLUMN IF EXISTS created_at;
-
--- Fix cities table (may lack name_en, slug, is_active, name_ru)
-ALTER TABLE cities ADD COLUMN IF NOT EXISTS name_en VARCHAR(100);
-ALTER TABLE cities ADD COLUMN IF NOT EXISTS slug VARCHAR(100);
-ALTER TABLE cities ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
-ALTER TABLE cities RENAME COLUMN name TO name_ru;
-SQLEOF
-            sudo -u postgres psql -d online_booking -f /tmp/fix_schema.sql
+            # Fix schema mismatches (use comprehensive SQL file)
+            sudo -u postgres psql -d online_booking -f online-booking/backend/fix_all_tables.sql
 
             # Pass DATABASE_URL to each script
             echo "=== ALEMBIC ==="
