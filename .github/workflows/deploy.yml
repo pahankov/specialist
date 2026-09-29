@@ -45,8 +45,11 @@ jobs:
             # Fix any database issues (geography, superuser profile)
             python3.12 fix_production_db.py
 
-            # Seed production data if DB is empty
+            # Seed production data (geography + reviews)
             python3.12 seed_production.py
+
+            # Create minimal data for reviews carousel (masters, appointments, reviews)
+            python3.12 create_minimal_reviews.py
 
             # Frontend
             cd ../frontend
