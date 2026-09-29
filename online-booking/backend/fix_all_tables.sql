@@ -51,10 +51,11 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE;
 -- Должна быть в порядке
 
 -- =============================================================
--- 6. client_profiles (проверка)
+-- 6. client_profiles
 -- =============================================================
--- Модель: id, user_id, created_at, updated_at
--- Должна быть в порядке
+-- Модель: id, user_id, no_show_count, preferred_service_ids, created_at, updated_at
+ALTER TABLE client_profiles ADD COLUMN IF NOT EXISTS no_show_count INTEGER DEFAULT 0;
+ALTER TABLE client_profiles ADD COLUMN IF NOT EXISTS preferred_service_ids JSON;
 
 -- =============================================================
 -- 7. services
@@ -66,7 +67,8 @@ ALTER TABLE services ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
 -- 8. appointments
 -- =============================================================
 -- Модель: id, master_id, service_id, client_id, appointment_date, status, notes, created_at, updated_at
--- Должна быть в порядке
+-- client_id в старой БД мог быть user_id вместо client_id
+-- Проверим и исправим если нужно
 
 -- =============================================================
 -- 9. reviews
