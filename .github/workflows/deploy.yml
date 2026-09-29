@@ -19,13 +19,20 @@ jobs:
           envs: |
             DATABASE_URL
           script: |
-            set -e
+            set -ex
+
+            echo "=========================================="
+            echo " DEPLOY STARTED"
+            echo "=========================================="
+
             cd /var/www/beauty-specialist
 
-            # Fix git permissions (deploy user may not own .git after previous deploys)
+            # Fix git permissions
+            echo ">>> Fixing git permissions..."
             sudo chown -R deploy:deploy /var/www/beauty-specialist/.git 2>/dev/null || true
             sudo chmod -R u+rw /var/www/beauty-specialist/.git 2>/dev/null || true
 
+            echo ">>> Pulling latest code..."
             git config --global --add safe.directory /var/www/beauty-specialist
             git pull origin main
             git reset --hard HEAD
@@ -33,51 +40,48 @@ jobs:
             # Export DATABASE_URL for migrations and scripts
             export DATABASE_URL="${DATABASE_URL}"
 
-            # Write systemd service
+            echo ">>> Writing systemd service..."
             bash deploy_setup.sh
 
-            # Backend
+            # Backend setup
+            echo ">>> Setting up backend venv..."
             cd online-booking/backend
             python3.12 -m venv venv
             source venv/bin/activate
             pip install -r requirements.txt
 
             # Run database migrations
-            echo "=== ALEMBIC MIGRATIONS ==="
-            alembic upgrade head 2>&1 | tee /tmp/deploy.log
-            echo "" >> /tmp/deploy.log
+            echo ">>> Running alembic migrations..."
+            alembic upgrade head
 
             # Create/update superuser
-            echo "=== CREATE SUPERUSER ==="
-            python3.12 create_superuser.py 2>&1 | tee -a /tmp/deploy.log
-            echo "" >> /tmp/deploy.log
+            echo ">>> Creating/updating superuser..."
+            python3.12 create_superuser.py
 
-            # Fix any database issues (geography, superuser profile)
-            echo "=== FIX PRODUCTION DB ==="
-            python3.12 fix_production_db.py 2>&1 | tee -a /tmp/deploy.log
-            echo "" >> /tmp/deploy.log
+            # Fix any database issues
+            echo ">>> Fixing production DB..."
+            python3.12 fix_production_db.py
 
-            # Seed production data (geography + reviews)
-            echo "=== SEED PRODUCTION ==="
-            python3.12 seed_production.py 2>&1 | tee -a /tmp/deploy.log
-            echo "" >> /tmp/deploy.log
+            # Seed production data
+            echo ">>> Seeding production data..."
+            python3.12 seed_production.py
 
-            # Create minimal data for reviews carousel (masters, appointments, reviews)
-            echo "=== CREATE MINIMAL REVIEWS ==="
-            python3.12 create_minimal_reviews.py 2>&1 | tee -a /tmp/deploy.log
-            echo "" >> /tmp/deploy.log
+            # Create minimal data for reviews carousel
+            echo ">>> Creating minimal data for reviews..."
+            python3.12 create_minimal_reviews.py
 
             # Frontend
+            echo ">>> Building frontend..."
             cd ../frontend
             npm ci
             npm run build
             sudo cp -r dist/* /var/www/beauty-specialist/frontend/dist/
 
-            # Restart
+            # Restart services
+            echo ">>> Restarting services..."
             sudo systemctl restart beauty-backend
             sudo systemctl restart nginx
 
-            # Show deploy log
-            echo "=== DEPLOY LOG ==="
-            cat /tmp/deploy.log
-            echo "=== END LOG ==="
+            echo "=========================================="
+            echo " DEPLOY SUCCESSFUL"
+            echo "=========================================="
