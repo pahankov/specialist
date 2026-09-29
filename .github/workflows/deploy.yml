@@ -42,6 +42,9 @@ jobs:
             # Create/update superuser
             python3.12 create_superuser_sync.py
 
+            # Fix any database issues (geography, superuser profile)
+            python3.12 fix_production_db.py
+
             # Seed production data if DB is empty
             python3.12 seed_production.py
 

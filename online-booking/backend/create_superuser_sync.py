@@ -51,6 +51,7 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     phone = Column(String, nullable=True)
     role = Column(SAEnum(UserRole), default=UserRole.CLIENT, nullable=False)
+    city_id = Column(Integer, nullable=True)
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
@@ -104,6 +105,7 @@ def main():
             user.hashed_password = hash_password(SUPERUSER_PASSWORD)
             user.role = UserRole.ADMIN
             user.is_active = True
+            user.is_verified = True
             print("Superuser updated:")
         else:
             user = User(
@@ -112,6 +114,7 @@ def main():
                 hashed_password=hash_password(SUPERUSER_PASSWORD),
                 phone="+79615202311",
                 role=UserRole.ADMIN,
+                city_id=None,  # Superuser doesn't need city_id
                 is_active=True,
                 is_verified=True,
             )
@@ -122,6 +125,8 @@ def main():
                 user_id=user.id,
                 telegram_username=TELEGRAM_USERNAME,
                 description="Суперпользователь",
+                experience_years=10,
+                is_available=True,
             )
             session.add(master_profile)
             print("Superuser created:")
