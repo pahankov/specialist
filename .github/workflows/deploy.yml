@@ -41,8 +41,8 @@ jobs:
             source venv/bin/activate
             pip install -r requirements.txt
 
-            # Fix schema mismatches (use comprehensive SQL file)
-            sudo -u postgres psql -d online_booking -f online-booking/backend/fix_all_tables.sql
+            # Fix schema mismatches BEFORE migrations (uses file in current directory)
+            sudo -u postgres psql -d online_booking -f fix_all_tables.sql || echo "[WARN] Schema fix failed, continuing..."
 
             # Pass DATABASE_URL to each script
             echo "=== ALEMBIC ==="
