@@ -155,40 +155,13 @@ ENVEOF
 ```
 
 **Файл `alembic.ini`:**
-```bash
-# Важно: изменить URL на PostgreSQL
-sed -i 's|sqlite:///./online_booking.db|postgresql+psycopg2://specialist:<POSTGRES_PASSWORD>@localhost:5432/online_booking|' alembic.ini
-```
+Больше не нужно менять вручную — URL берётся из переменной окружения `DATABASE_URL` через `alembic/env.py`.
 
 **Создание таблиц:**
-Первая миграция (`9a9c2edb119f`) пустая — не создаёт таблицы. Нужно создать вручную:
-```bash
-cd /var/www/beauty-specialist/online-booking/backend
-python -c "
-from sqlalchemy import create_engine
-from app.database import Base
-from app.models.user import User
-from app.models.master_profile import MasterProfile
-from app.models.client_profile import ClientProfile
-from app.models.service import Service
-from app.models.appointment import Appointment
-from app.models.working_hour import WorkingHour
-from app.models.audit_log import AuditLog
-from app.models.blocked_slot import BlockedSlot
-from app.models.country import Country
-from app.models.city import City
-from app.models.refresh_token import RefreshToken
-from app.models.otp_code import OtpCode
-engine = create_engine('postgresql+psycopg2://specialist:<POSTGRES_PASSWORD>@localhost:5432/online_booking')
-Base.metadata.create_all(engine)
-print('Tables created!')
-"
-```
+Больше не нужно создавать вручную — baseline-миграция `4fdb5e791ead` создаёт все 14 таблиц автоматически при `alembic upgrade head`.
 
 **Пометить миграции как применённые:**
-```bash
-sudo -u postgres psql -d online_booking -c "CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL); INSERT INTO alembic_version (version_num) VALUES ('08fbbef38349');"
-```
+Больше не нужно — `alembic upgrade head` сам применяет все миграции.
 
 **Systemd сервис:**
 ```bash
@@ -291,19 +264,79 @@ certbot --nginx -d beauty-specialist.ru -d www.beauty-specialist.ru --non-intera
 ### 14. GitHub Actions (CI/CD)
 **Секреты репозитория:**
 - `SERVER_HOST` = `REDACTED_SERVER_IP`
-- `SERVER_USER` = `deploy`
 - `SERVER_SSH_KEY` = содержимое приватного SSH-ключа (файл без `.pub`)
-
-**SSH-ключ на сервере:**
-```bash
-mkdir -p /home/deploy/.ssh
-chmod 700 /home/deploy/.ssh
-echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILc2F+wSnap84R5iUAm/m46qMx7K+XIroYfXKmHWreMk github-actions' > /home/deploy/.ssh/authorized_keys
-chmod 600 /home/deploy/.ssh/authorized_keys
-chown -R deploy:deploy /home/deploy/.ssh
-```
+- `DATABASE_URL` = `postgresql+asyncpg://specialist:<POSTGRES_PASSWORD>@localhost:5432/online_booking`
 
 **Workflow** — файл `.github/workflows/deploy.yml`
+
+## Миграции БД
+
+### Как работают миграции
+
+Миграции Alembic — это скрипты, которые изменяют структуру БД. При каждом push в `main` GitHub Actions автоматически применяет все миграции на сервере через `alembic upgrade head`.
+
+**Полная цепочка миграций (линейная, без ветвлений):**
+→ `9a9c2edb119f` (initial_schema — пустая) → `08fbbef38349` (master_status enum + working_hour.is_active) → `f43f84fe3057` (timezone fix: все DateTime → TIMESTAMP WITH TIME ZONE) → `sync_missing_columns` (no_show_count, preferred_service_ids, name_ru/name_en в countries) → `aaa7fcc30d47` (name_ru в countries) → `b2e8f1a3c9d0` (name_en в cities) → `4fdb5e791ead` (baseline: создаёт все 14 таблиц)
+
+### Как сгенерировать новую миграцию
+
+```bash
+cd online-booking/backend
+# Локально (SQLite)
+$env:DATABASE_URL = "sqlite+aiosqlite:///./dev.db"
+python -m alembic revision --autogenerate -m "описание изменений"
+python -m alembic upgrade head
+```
+
+Alembic читает `DATABASE_URL` из переменной окружения через `alembic/env.py`. Если переменная не set — используется SQLite по умолчанию из `alembic.ini`.
+
+### Проверка миграций
+
+```bash
+python -m alembic history        # показать цепочку
+python -m alembic current        # текущая версия в БД
+python -m alembic upgrade head   # применить все
+python -m alembic downgrade -1   # откат на одну версию
+```
+
+### Как работает деплой
+
+1. Push в main → запускается `.github/workflows/deploy.yml`
+2. Подключение к серверу по SSH (секреты `SERVER_HOST`, `SERVER_SSH_KEY`)
+3. `git pull origin main`
+4. `export DATABASE_URL="${DATABASE_URL}"` — передаёт URL БД из GitHub Secrets
+5. `alembic upgrade head` — применяет все 7 миграций
+6. `create_superuser_sync.py` — создаёт/обновляет админа (pahankov@mail.ru)
+7. `seed_production.py` — заполняет БД тестовыми данными если пуста
+8. Сборка фронтенда (`npm ci` + `npm run build`)
+9. Копирование статики в `/var/www/beauty-specialist/frontend/dist/`
+10. Перезапуск beauty-backend + nginx
+
+### GitHub Secrets
+
+Обязательно настроить в Settings → Secrets and variables → Actions → New repository secret:
+
+| Secret | Описание | Пример |
+|--------|----------|--------|
+| `SERVER_HOST` | IP сервера | `REDACTED_SERVER_IP` |
+| `SERVER_SSH_KEY` | Приватный SSH-ключ | `-----BEGIN OPENSSH PRIVATE KEY-----...` |
+| `DATABASE_URL` | URL PostgreSQL для миграций | `postgresql+asyncpg://specialist:<POSTGRES_PASSWORD>@localhost:5432/online_booking` |
+
+> **Без `DATABASE_URL` миграции не подключатся к БД!**
+
+### Структура миграций
+
+Файлы находятся в `online-booking/backend/alembic/versions/`:
+
+| Файл | Что делает |
+|------|------------|
+| `9a9c2edb119f_initial_schema.py` | Пустая — таблицы создаются через baseline |
+| `08fbbef38349_add_master_status_enum...py` | Enum `MasterStatus` + `WorkingHour.is_active` |
+| `f43f84fe3057_fix_timezone_in_datetime...py` | Все `DateTime` → `TIMESTAMP WITH TIME ZONE`, удаление старых таблиц |
+| `sync_missing_columns.py` | Добавляет `no_show_count`, `preferred_service_ids`, `name_ru`/`name_en` в countries |
+| `aaa7fcc30d47_add_name_ru_to_countries.py` | `name_ru` в countries (idempotent) |
+| `b2e8f1a3c9d0_add_cities_name_en.py` | `name_en` в cities |
+| `4fdb5e791ead_baseline_capture_current_schema.py` | Baseline — создаёт все 14 таблиц, 31+ колонок, индексы |
 
 ## Полезные команды
 
