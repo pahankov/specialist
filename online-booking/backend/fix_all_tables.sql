@@ -45,10 +45,34 @@ ALTER TABLE cities RENAME COLUMN name TO name_ru;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE;
 
 -- =============================================================
--- 5. master_profiles (проверка)
+-- 5. master_profiles — fix enum values
 -- =============================================================
--- Модель: id, user_id, description, avatar_url, telegram_username, experience_years, status, is_active, created_at, updated_at
--- Должна быть в порядке
+-- Модель: status uses MasterStatus.ACTIVE = "active"
+-- Но в БД enum type может быть создан с uppercase значениями
+-- Нужно привести enum к lowercase значениям модели
+
+-- Удаляем старый enum type и создаём новый с правильными значениями
+DO $$
+BEGIN
+    -- Проверяем, есть ли старый enum
+    IF EXISTS (
+        SELECT 1 FROM pg_type t
+        JOIN pg_namespace n ON n.oid = t.typnamespace
+        WHERE t.typname = 'masterstatus'
+        AND n.nspname = 'public'
+    ) THEN
+        -- Удаляем старый enum
+        DROP TYPE masterstatus;
+        
+        -- Создаём новый с lowercase значениями как в модели
+        CREATE TYPE masterstatus AS ENUM ('active', 'inactive', 'suspended');
+        
+        -- Обновляем колонку
+        ALTER TABLE master_profiles ALTER COLUMN status TYPE masterstatus USING status::text;
+        
+        RAISE NOTICE 'masterstatus enum recreated with lowercase values';
+    END IF;
+END $$;
 
 -- =============================================================
 -- 6. client_profiles
