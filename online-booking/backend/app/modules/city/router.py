@@ -51,7 +51,7 @@ async def get_cities(
     country_id: Optional[int] = Query(None, description="Filter by country ID"),
     search: Optional[str] = Query(None, description="Search cities by name (Russian)"),
     page: int = Query(1, ge=1, description="Page number"),
-    page_size: int = Query(50, ge=1, le=200, description="Items per page"),
+    page_size: int = Query(50, ge=1, le=1000, description="Items per page"),
     active_only: bool = Query(True, description="Return only active cities"),
 ):
     """Get cities with pagination, optional country filter and search."""
