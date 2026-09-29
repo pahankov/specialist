@@ -29,7 +29,9 @@ jobs:
             git pull origin main
             git reset --hard HEAD
 
+            # Export DATABASE_URL for all subsequent commands
             export DATABASE_URL="${DATABASE_URL}"
+            echo "DB: ${DATABASE_URL:0:30}..."
 
             bash deploy_setup.sh
 
@@ -39,24 +41,25 @@ jobs:
             source venv/bin/activate
             pip install -r requirements.txt
 
+            # Pass DATABASE_URL to each script
             echo "=== ALEMBIC ==="
-            alembic upgrade head
+            DATABASE_URL="${DATABASE_URL}" alembic upgrade head
             echo "=== ALEMBIC DONE ==="
 
             echo "=== SUPERUSER ==="
-            python3.12 create_superuser.py
+            DATABASE_URL="${DATABASE_URL}" python3.12 create_superuser.py
             echo "=== SUPERUSER DONE ==="
 
             echo "=== FIX DB ==="
-            python3.12 fix_production_db.py
+            DATABASE_URL="${DATABASE_URL}" python3.12 fix_production_db.py
             echo "=== FIX DB DONE ==="
 
             echo "=== SEED ==="
-            python3.12 seed_production.py
+            DATABASE_URL="${DATABASE_URL}" python3.12 seed_production.py
             echo "=== SEED DONE ==="
 
             echo "=== MINIMAL REVIEWS ==="
-            python3.12 create_minimal_reviews.py
+            DATABASE_URL="${DATABASE_URL}" python3.12 create_minimal_reviews.py
             echo "=== MINIMAL REVIEWS DONE ==="
 
             # Frontend
@@ -75,7 +78,6 @@ jobs:
             # Check backend
             echo "=== BACKEND CHECK ==="
             systemctl status beauty-backend --no-pager 2>&1 | head -10
-            journalctl -u beauty-backend --no-pager -n 30 2>&1
             ss -tlnp | grep 8000 || echo "Port 8000 NOT listening"
 
             # Test API
