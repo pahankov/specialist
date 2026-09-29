@@ -22,7 +22,7 @@ class MasterProfile(Base):
     avatar_url = Column(String(500))
     telegram_username = Column(String(100))
     experience_years = Column(Integer, nullable=True)
-    status = Column(SAEnum(MasterStatus), default=MasterStatus.ACTIVE, nullable=False)
+    status = Column(String(20), default="active", nullable=False)  # 'active', 'inactive', 'suspended'
     is_active = Column(Boolean, default=True)  # soft-delete flag
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),

@@ -227,7 +227,7 @@ def _master_profile_to_dict(mp):
         "telegram_username": mp.telegram_username,
         "description": mp.description,
         "avatar_url": mp.avatar_url,
-        "status": mp.status.value if mp.status else "active",
+        "status": mp.status if mp.status else "active",
         "is_active": mp.is_active,
         "is_admin": mp.user.is_admin,
         "created_at": mp.created_at.isoformat() if mp.created_at else None,

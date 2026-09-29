@@ -45,40 +45,28 @@ ALTER TABLE cities RENAME COLUMN name TO name_ru;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE;
 
 -- =============================================================
--- 5. master_profiles — fix enum values
+-- 5. master_profiles — fix status column (use VARCHAR not enum)
 -- =============================================================
--- Модель: status uses MasterStatus.ACTIVE = "active"
--- Но в БД enum type может быть создан с uppercase значениями
--- Нужно привести enum к lowercase значениям модели
+-- Модель: status uses VARCHAR 'active', 'inactive', 'suspended'
+-- Если колонка удалена — восстанавливаем
+-- Если есть enum type — игнорируем, используем VARCHAR
 
--- Восстанавливаем колонку status если удалена (был баг с CASCADE)
+-- Восстанавливаем колонку status если удалена
 DO $$
 BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM information_schema.columns
         WHERE table_name = 'master_profiles' AND column_name = 'status'
     ) THEN
-        -- Восстанавливаем колонку с новым типом
-        ALTER TABLE master_profiles ADD COLUMN status masterstatus DEFAULT 'active';
-        RAISE NOTICE 'master_profiles.status column restored';
+        ALTER TABLE master_profiles ADD COLUMN status VARCHAR(20) DEFAULT 'active';
+        RAISE NOTICE 'master_profiles.status column restored as VARCHAR';
     END IF;
 END $$;
 
--- Сначала исправляем данные (преобразуем uppercase в lowercase)
+-- Приводим данные к lowercase
 UPDATE master_profiles SET status = 'active' WHERE status = 'ACTIVE';
 UPDATE master_profiles SET status = 'inactive' WHERE status = 'INACTIVE';
 UPDATE master_profiles SET status = 'suspended' WHERE status = 'SUSPENDED';
-
--- Удаляем старый enum type БЕЗ CASCADE (чтобы не удалить колонку!)
-DROP TYPE IF EXISTS masterstatus;
-
--- Создаём новый с lowercase значениями как в модели
-CREATE TYPE masterstatus AS ENUM ('active', 'inactive', 'suspended');
-
--- Alter the column to use the new type (drop default first)
-ALTER TABLE master_profiles ALTER COLUMN status DROP DEFAULT;
-ALTER TABLE master_profiles ALTER COLUMN status TYPE masterstatus USING status::text::masterstatus;
-ALTER TABLE master_profiles ALTER COLUMN status SET DEFAULT 'active'::masterstatus;
 
 -- =============================================================
 -- 6. client_profiles
