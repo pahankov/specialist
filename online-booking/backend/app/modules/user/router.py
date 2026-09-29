@@ -39,7 +39,7 @@ async def get_masters(
         .options(joinedload(MasterProfile.user))
         .where(
             User.role == UserRole.MASTER,
-            cast(MasterProfile.status, String) == 'ACTIVE'
+            cast(MasterProfile.status, String) == 'active'
         )
         .order_by(User.name)
         .offset(offset).limit(limit)
