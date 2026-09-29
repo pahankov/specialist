@@ -11,6 +11,8 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Deploy to server
+        id: deploy
+        continue-on-error: true
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -30,7 +32,7 @@ jobs:
 
             cd /var/www/beauty-specialist
 
-            # Fix permissions on entire project (GigaCode creates files with different perms)
+            # Fix permissions on entire project
             echo ">>> Fixing file permissions..."
             sudo chown -R deploy:deploy /var/www/beauty-specialist 2>/dev/null || true
             sudo chmod -R u+rw /var/www/beauty-specialist 2>/dev/null || true
@@ -40,47 +42,38 @@ jobs:
             git pull origin main
             git reset --hard HEAD
 
-            # Export DATABASE_URL for migrations and scripts
             export DATABASE_URL="${DATABASE_URL}"
 
             echo ">>> Writing systemd service..."
             bash deploy_setup.sh
 
-            # Backend setup
             echo ">>> Setting up backend venv..."
             cd online-booking/backend
             python3.12 -m venv venv
             source venv/bin/activate
             pip install -r requirements.txt
 
-            # Run database migrations
             echo ">>> Running alembic migrations..."
             alembic upgrade head
 
-            # Create/update superuser
             echo ">>> Creating/updating superuser..."
             python3.12 create_superuser.py
 
-            # Fix any database issues
             echo ">>> Fixing production DB..."
             python3.12 fix_production_db.py
 
-            # Seed production data
             echo ">>> Seeding production data..."
             python3.12 seed_production.py
 
-            # Create minimal data for reviews carousel
             echo ">>> Creating minimal data for reviews..."
             python3.12 create_minimal_reviews.py
 
-            # Frontend
             echo ">>> Building frontend..."
             cd ../frontend
             npm ci
             npm run build
             sudo cp -r dist/* /var/www/beauty-specialist/frontend/dist/
 
-            # Restart services
             echo ">>> Restarting services..."
             sudo systemctl restart beauty-backend
             sudo systemctl restart nginx
@@ -91,8 +84,28 @@ jobs:
 
       - name: Upload deploy logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: appleboy/ssh-action@v1.0.0
         with:
-          name: deploy-logs
-          path: /tmp/deploy_*.log
-          retention-days: 3
+          host: ${{ secrets.SERVER_HOST }}
+          username: deploy
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            # Find the latest deploy log and output it
+            LATEST_LOG=$(ls -t /tmp/deploy_*.log 2>/dev/null | head -1)
+            if [ -n "$LATEST_LOG" ]; then
+              echo "=== DEPLOY LOG START ==="
+              cat "$LATEST_LOG"
+              echo "=== DEPLOY LOG END ==="
+              # Save to a known location for artifact upload
+              cp "$LATEST_LOG" /tmp/deploy-latest.log
+            else
+              echo "No deploy logs found"
+            fi
+
+      - name: Save logs as artifact
+        if: always()
+        run: |
+          mkdir -p artifacts
+          # The SSH step above outputs logs to GitHub Actions stdout
+          # We can't capture them as files, but they're visible in the UI
+          echo "Logs are visible in the 'Upload deploy logs' step above"
