@@ -68,11 +68,17 @@ jobs:
             # Restart
             sudo systemctl restart beauty-backend
             sudo systemctl restart nginx
-            sleep 2
 
-            echo "=== HEALTH ==="
-            curl -s http://127.0.0.1:8000/health
-            echo ""
-            echo "=== COUNTRIES ==="
-            curl -s http://127.0.0.1:8000/api/v1/countries/ | head -c 200
-            echo ""
+            # Wait for backend
+            sleep 5
+
+            # Check backend
+            echo "=== BACKEND CHECK ==="
+            systemctl status beauty-backend --no-pager 2>&1 | head -10
+            journalctl -u beauty-backend --no-pager -n 30 2>&1
+            ss -tlnp | grep 8000 || echo "Port 8000 NOT listening"
+
+            # Test API
+            echo "=== API TEST ==="
+            curl -sf http://127.0.0.1:8000/health || echo "HEALTH FAILED"
+            curl -sf http://127.0.0.1:8000/api/v1/countries/ | head -c 200 || echo "COUNTRIES FAILED"
