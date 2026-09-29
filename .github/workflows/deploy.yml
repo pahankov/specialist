@@ -11,8 +11,6 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Deploy to server
-        id: deploy
-        continue-on-error: true
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -21,91 +19,78 @@ jobs:
           envs: |
             DATABASE_URL
           script: |
-            set -ex
-
-            LOGFILE="/tmp/deploy_$(date +%s).log"
-            exec > >(tee -a "$LOGFILE") 2>&1
-
-            echo "=========================================="
-            echo " DEPLOY STARTED"
-            echo "=========================================="
-
             cd /var/www/beauty-specialist
 
             # Fix permissions on entire project
-            echo ">>> Fixing file permissions..."
             sudo chown -R deploy:deploy /var/www/beauty-specialist 2>/dev/null || true
             sudo chmod -R u+rw /var/www/beauty-specialist 2>/dev/null || true
 
-            echo ">>> Pulling latest code..."
             git config --global --add safe.directory /var/www/beauty-specialist
             git pull origin main
             git reset --hard HEAD
 
             export DATABASE_URL="${DATABASE_URL}"
 
-            echo ">>> Writing systemd service..."
             bash deploy_setup.sh
 
-            echo ">>> Setting up backend venv..."
+            # Backend setup
             cd online-booking/backend
             python3.12 -m venv venv
             source venv/bin/activate
             pip install -r requirements.txt
 
-            echo ">>> Running alembic migrations..."
-            alembic upgrade head
+            # Run database migrations
+            echo "=== ALEMBIC ==="
+            alembic upgrade head 2>&1 || { echo "ALEMBIC FAILED"; exit 1; }
 
-            echo ">>> Creating/updating superuser..."
-            python3.12 create_superuser.py
+            # Create/update superuser
+            echo "=== SUPERUSER ==="
+            python3.12 create_superuser.py 2>&1 || { echo "SUPERUSER FAILED"; exit 1; }
 
-            echo ">>> Fixing production DB..."
-            python3.12 fix_production_db.py
+            # Fix any database issues
+            echo "=== FIX DB ==="
+            python3.12 fix_production_db.py 2>&1 || { echo "FIX DB FAILED"; exit 1; }
 
-            echo ">>> Seeding production data..."
-            python3.12 seed_production.py
+            # Seed production data
+            echo "=== SEED ==="
+            python3.12 seed_production.py 2>&1 || { echo "SEED FAILED"; exit 1; }
 
-            echo ">>> Creating minimal data for reviews..."
-            python3.12 create_minimal_reviews.py
+            # Create minimal data for reviews carousel
+            echo "=== MINIMAL REVIEWS ==="
+            python3.12 create_minimal_reviews.py 2>&1 || { echo "MINIMAL REVIEWS FAILED"; exit 1; }
 
-            echo ">>> Building frontend..."
+            # Verify data was created
+            echo "=== VERIFY ==="
+            python3.12 -c "
+import asyncio
+from app.database import AsyncSessionLocal
+from sqlalchemy import select, text
+
+async def verify():
+    async with AsyncSessionLocal() as db:
+        countries = await db.execute(select(text('count(*)').select_from(text('countries'))))
+        cities = await db.execute(select(text('count(*)').select_from(text('cities'))))
+        reviews = await db.execute(select(text('count(*)').select_from(text('reviews'))))
+        masters = await db.execute(select(text('count(*)').select_from(text('users')).where(text(\"role='MASTER'\"))))
+        print(f'Countries: {countries.scalar()}')
+        print(f'Cities: {cities.scalar()}')
+        print(f'Reviews: {reviews.scalar()}')
+        print(f'Masters: {masters.scalar()}')
+
+asyncio.run(verify())
+" 2>&1 || echo "VERIFY FAILED"
+
+            # Frontend
             cd ../frontend
             npm ci
             npm run build
             sudo cp -r dist/* /var/www/beauty-specialist/frontend/dist/
 
-            echo ">>> Restarting services..."
+            # Restart services
             sudo systemctl restart beauty-backend
             sudo systemctl restart nginx
 
-            echo "=========================================="
-            echo " DEPLOY SUCCESSFUL"
-            echo "=========================================="
-
-      - name: Upload deploy logs
-        if: always()
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: deploy
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          script: |
-            # Find the latest deploy log and output it
-            LATEST_LOG=$(ls -t /tmp/deploy_*.log 2>/dev/null | head -1)
-            if [ -n "$LATEST_LOG" ]; then
-              echo "=== DEPLOY LOG START ==="
-              cat "$LATEST_LOG"
-              echo "=== DEPLOY LOG END ==="
-              # Save to a known location for artifact upload
-              cp "$LATEST_LOG" /tmp/deploy-latest.log
-            else
-              echo "No deploy logs found"
-            fi
-
-      - name: Save logs as artifact
-        if: always()
-        run: |
-          mkdir -p artifacts
-          # The SSH step above outputs logs to GitHub Actions stdout
-          # We can't capture them as files, but they're visible in the UI
-          echo "Logs are visible in the 'Upload deploy logs' step above"
+            # Check if backend is running
+            sleep 2
+            curl -s http://127.0.0.1:8000/health 2>&1 || echo "HEALTH CHECK FAILED"
+            curl -s http://127.0.0.1:8000/api/v1/countries/ 2>&1 | head -c 200 || echo "COUNTRIES API FAILED"
