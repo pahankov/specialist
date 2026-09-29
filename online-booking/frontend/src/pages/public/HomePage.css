@@ -320,11 +320,24 @@
 }
 
 /* Reviews in carousel - remove extra padding */
+.reviews-carousel-slide {
+  min-height: 500px;
+  display: flex;
+  flex-direction: column;
+}
+
 .reviews-carousel-slide .reviews-section {
   padding: 3rem 0;
   background: transparent;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .reviews-carousel-slide .reviews-section h2 {
   margin-bottom: 2rem;
+}
+
+.reviews-carousel-slide .reviews-grid {
+  flex: 1;
 }
