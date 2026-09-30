@@ -5,6 +5,7 @@ Updated to use the unified User model with role-based access.
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from typing import Optional
 import bcrypt
 from app.models.user import User, UserRole
 from app.models.master_profile import MasterProfile
@@ -294,3 +295,70 @@ async def login_unified(identifier: str, password: str, db: AsyncSession) -> tup
 
     logger.info("User successfully logged in: %s", identifier)
     return access_token, user
+
+
+# ─── Unified Registration ────────────────────────────────────────────
+
+async def register_unified(
+    name: str,
+    email: str,
+    phone: str,
+    password: str,
+    city_id: Optional[int],
+    telegram_username: Optional[str],
+    is_master: bool,
+    db: AsyncSession
+) -> User:
+    """Full registration with role selection (client or master).
+    
+    Returns User instance with appropriate profile.
+    """
+    logger.info("Unified registration: %s (is_master=%s)", email, is_master)
+
+    role = UserRole.MASTER if is_master else UserRole.CLIENT
+
+    # Check email uniqueness
+    result = await db.execute(select(User).where(User.email == email))
+    if result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Пользователь с таким email уже существует"
+        )
+
+    # Check phone uniqueness
+    result = await db.execute(select(User).where(User.phone == phone))
+    if result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Пользователь с таким телефоном уже существует"
+        )
+
+    # Create user
+    new_user = User(
+        name=name,
+        email=email,
+        phone=phone,
+        hashed_password=hash_password(password),
+        role=role,
+        city_id=city_id,
+        is_verified=True,
+    )
+    db.add(new_user)
+    await db.flush()
+
+    # Create profile based on role
+    if is_master:
+        master_profile = MasterProfile(
+            user_id=new_user.id,
+            telegram_username=telegram_username,
+        )
+        db.add(master_profile)
+    else:
+        client_profile = ClientProfile(user_id=new_user.id)
+        db.add(client_profile)
+
+    await db.commit()
+    await db.refresh(new_user)
+
+    logger.info("User successfully registered: %s (role=%s)", email, role.value)
+    return new_user
