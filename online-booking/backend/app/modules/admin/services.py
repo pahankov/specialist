@@ -1,12 +1,14 @@
 """Admin service CRUD endpoints with pagination."""
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, Query, Response, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from sqlalchemy.future import select
 from typing import List, Optional
 
 from app.database import get_db
 from app.models.service import Service
-from app.models.user import User
+from app.models.user import User, UserRole
+from app.models.master_profile import MasterProfile
 from app.schemas.service import ServiceCreate, ServiceResponse, ServiceUpdate
 from app.schemas.pagination import PaginatedResponse
 from app.dependencies.auth import require_master
@@ -14,6 +16,17 @@ from app.dependencies.crud import get_owned_or_404
 from app.services.audit import log_action
 
 router = APIRouter()
+
+
+async def _get_master_profile_id(master: User, db: AsyncSession) -> Optional[int]:
+    """Get master_profile.id safely — returns None for admins (they have no services)."""
+    if master.role == UserRole.ADMIN:
+        return None
+    result = await db.execute(select(MasterProfile).where(MasterProfile.user_id == master.id))
+    mp = result.scalar_one_or_none()
+    if not mp:
+        raise HTTPException(status_code=403, detail="Not a master")
+    return mp.id
 
 
 @router.post("/services", response_model=ServiceResponse, status_code=201)
@@ -139,7 +152,7 @@ async def delete_admin_service(
     db: AsyncSession = Depends(get_db)
 ):
     """Soft-delete a service."""
-    mp_id = master.master_profile.id
+    mp_id = await _get_master_profile_id(master, db)
     service = await get_owned_or_404(db, Service, service_id, mp_id)
     await log_action(db, mp_id, "delete", "service", service_id, service.name, level="warning")
     service.is_active = False
