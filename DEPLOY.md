@@ -595,6 +595,46 @@ export DATABASE_URL='postgresql+asyncpg://user:pass@host:5432/dbname'
 
 ---
 
+## ПРАВИЛА БЕЗОПАСНОСТИ И КАЧЕСТВА КОДА
+
+### 1. Никогда не коммить чувствительные данные
+- **Никогда** не добавляй реальные пароли, API-ключи, токены в код или документацию
+- В DEPLOY.md используй placeholders: `<POSTGRES_PASSWORD>`, `<SECRET_KEY>`, `<TELEGRAM_BOT_TOKEN>`
+- Реальные секреты хранятся в:
+  - `.env` на сервере (не в git!)
+  - GitHub Secrets (`DATABASE_URL`, `SERVER_SSH_KEY`)
+  - `.env.production` на сервере (не в git!)
+- **Проверка:** перед коммитом выполни `git diff --cached` и убедись что нет `password`, `secret`, `token`, `key` со значениями
+
+### 2. После любого редактирования файла — проверяй синтаксис
+- Python: `python -c "import ast; ast.parse(open('file.py').read())"` или `python -c "import module_name"`
+- TypeScript: `npm run type-check`
+- **Никогда** не доверяй редактированию без валидации
+- Если файл редактируется через скрипт — проверяй что нет null bytes (`\x00`)
+
+### 3. При изменении моделей SQLAlchemy — проверяй все relationship
+- Если меняешь FK в модели — проверь все `back_populates` в других моделях
+- Если удаляешь relationship — проверь что нигде не используется
+- **Проверка:** `python -c "from app.main import app"` — если импорт падает с NoForeignKeysError — проблема в relationship
+
+### 4. При изменении log_action — проверяй все вызовы
+- log_action принимает `master_id` — убедись что это User.id (не MasterProfile.id)
+- Супер-админ (role=ADMIN) не имеет MasterProfile → `master.master_profile.id` = None → AttributeError
+- **Проверка:** `grep -r "log_action" app/modules/admin/` — все вызовы должны использовать `master.id`
+
+### 5. Деплой при пуше — изменения должны быть минимальными и проверенными
+- Перед коммитом: локальная проверка импорта `python -c "from app.main import app"`
+- Изменения должны быть обратимыми (git commit с понятным сообщением)
+- После коммита: подождать деплой, проверить логи `sudo journalctl -u beauty-backend -n 100`
+
+### 6. Модульная структура
+- Файлы > 300 строк — делить на модули
+- Один файл — одна ответственность (SRP)
+- Роутеры агрегируются в `__init__.py` модуля
+- Не меняй API пути — только внутреннюю структуру
+
+---
+
 **Частые ошибки при забывании пунктов:**
 
 | Забыли | Результат | Как обнаружить | Как исправить |
