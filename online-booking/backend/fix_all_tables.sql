@@ -137,7 +137,68 @@ INSERT INTO countries (code, name_ru, name_en, phone_prefix, is_active)
 SELECT 'BY', 'Беларусь', 'Belarus', '+375', TRUE
 WHERE NOT EXISTS (SELECT 1 FROM countries WHERE code = 'BY');
 
--- Cities for Russia
+-- =============================================================
+-- 14. Fix FK constraints (models reference master_profiles/client_profiles, not users)
+-- =============================================================
+-- These FKs were created pointing to 'users' but models expect master_profiles/client_profiles
+
+-- appointments
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'appointments_master_id_fkey') THEN
+        ALTER TABLE appointments DROP CONSTRAINT IF EXISTS appointments_master_id_fkey;
+        ALTER TABLE appointments ADD CONSTRAINT appointments_master_id_fkey
+            FOREIGN KEY (master_id) REFERENCES master_profiles(id) ON DELETE CASCADE;
+    END IF;
+END $$;
+
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'appointments_client_id_fkey') THEN
+        ALTER TABLE appointments DROP CONSTRAINT IF EXISTS appointments_client_id_fkey;
+        ALTER TABLE appointments ADD CONSTRAINT appointments_client_id_fkey
+            FOREIGN KEY (client_id) REFERENCES client_profiles(id) ON DELETE CASCADE;
+    END IF;
+END $$;
+
+-- blocked_slots
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'blocked_slots_master_id_fkey') THEN
+        ALTER TABLE blocked_slots DROP CONSTRAINT IF EXISTS blocked_slots_master_id_fkey;
+        ALTER TABLE blocked_slots ADD CONSTRAINT blocked_slots_master_id_fkey
+            FOREIGN KEY (master_id) REFERENCES master_profiles(id) ON DELETE CASCADE;
+    END IF;
+END $$;
+
+-- reviews
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'reviews_master_id_fkey') THEN
+        ALTER TABLE reviews DROP CONSTRAINT IF EXISTS reviews_master_id_fkey;
+        ALTER TABLE reviews ADD CONSTRAINT reviews_master_id_fkey
+            FOREIGN KEY (master_id) REFERENCES master_profiles(id) ON DELETE CASCADE;
+    END IF;
+END $$;
+
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'reviews_client_id_fkey') THEN
+        ALTER TABLE reviews DROP CONSTRAINT IF EXISTS reviews_client_id_fkey;
+        ALTER TABLE reviews ADD CONSTRAINT reviews_client_id_fkey
+            FOREIGN KEY (client_id) REFERENCES client_profiles(id) ON DELETE CASCADE;
+    END IF;
+END $$;
+
+-- working_hours
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'working_hours_master_id_fkey') THEN
+        ALTER TABLE working_hours DROP CONSTRAINT IF EXISTS working_hours_master_id_fkey;
+        ALTER TABLE working_hours ADD CONSTRAINT working_hours_master_id_fkey
+            FOREIGN KEY (master_id) REFERENCES master_profiles(id) ON DELETE CASCADE;
+    END IF;
+END $$;
+
+-- =============================================================
+-- 15. fill missing data (countries, cities)
+-- =============================================================
+
+-- Countries
 INSERT INTO cities (country_id, name_ru, name_en, slug, is_active)
 SELECT c.id, city_name, city_name, LOWER(REPLACE(city_name, ' ', '-')), TRUE
 FROM countries c,
