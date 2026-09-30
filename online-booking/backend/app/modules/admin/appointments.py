@@ -33,7 +33,7 @@ async def _find_or_create_client(db: AsyncSession, phone: str, name: str) -> Use
     result = await db.execute(select(User).where(User.phone == normalized))
     user = result.scalar_one_or_none()
     if not user:
-        user = User(name=name, phone=normalized, role="CLIENT")
+        user = User(name=name, phone=normalized, role=UserRole.CLIENT)
         db.add(user)
         client_profile = ClientProfile(user_id=user.id)
         db.add(client_profile)
