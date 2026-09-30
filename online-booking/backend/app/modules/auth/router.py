@@ -6,7 +6,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import update
 from datetime import datetime, timezone as dt_timezone
-from pydantic import BaseModel
 
 from app.database import get_db
 from app.models.user import User, UserRole
@@ -25,15 +24,6 @@ logger = get_logger(__name__)
 router = APIRouter()
 
 security = HTTPBearer(auto_error=False)
-
-
-class LoginRequest(BaseModel):
-    email: str
-    password: str
-
-
-class ClientLoginRequest(BaseModel):
-    phone: str
 
 
 def _set_auth_cookies(
@@ -255,56 +245,16 @@ async def register_unified(
     db: AsyncSession = Depends(get_db)
 ):
     """Full registration with role selection (client or master)."""
-    from app.modules.auth import service as auth_service
-    from app.models.user import UserRole
-
-    # Determine role
-    role = UserRole.MASTER if req.is_master else UserRole.CLIENT
-
-    # Check if email already exists
-    result = await db.execute(select(User).where(User.email == req.email))
-    if result.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Пользователь с таким email уже существует"
-        )
-
-    # Check if phone already exists
-    result = await db.execute(select(User).where(User.phone == req.phone))
-    if result.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Пользователь с таким телефоном уже существует"
-        )
-
-    # Create user
-    new_user = User(
+    new_user = await service.register_unified(
         name=req.name,
         email=req.email,
         phone=req.phone,
-        hashed_password=service.hash_password(req.password),
-        role=role,
+        password=req.password,
         city_id=req.city_id,
-        is_verified=True,  # auto-verify on registration
+        telegram_username=req.telegram_username,
+        is_master=req.is_master,
+        db=db,
     )
-    db.add(new_user)
-    await db.flush()
-
-    # Create profile based on role
-    if role == UserRole.MASTER:
-        from app.models.master_profile import MasterProfile
-        master_profile = MasterProfile(
-            user_id=new_user.id,
-            telegram_username=req.telegram_username,
-        )
-        db.add(master_profile)
-    else:
-        from app.models.client_profile import ClientProfile
-        client_profile = ClientProfile(user_id=new_user.id)
-        db.add(client_profile)
-
-    await db.commit()
-    await db.refresh(new_user)
 
     return {
         "id": new_user.id,
