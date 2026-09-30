@@ -50,7 +50,7 @@ async def create_working_hour(
     db.add(hour)
     await db.flush()
     await db.refresh(hour)
-    await log_action(db, master.master_profile.id, "create", "working_hour", hour.id, f"{data.schedule_date}: {data.start_time}-{data.end_time}", level="info")
+    await log_action(db, master.id, "create", "working_hour", hour.id, f"{data.schedule_date}: {data.start_time}-{data.end_time}", level="info")
     await db.commit()
     
     # Auto-update master status based on working hours
@@ -82,7 +82,7 @@ async def update_working_hour(
     if data.is_active is not None:
         hour.is_active = data.is_active
         changes.append(f"активность: {data.is_active}")
-    await log_action(db, master.master_profile.id, "update", "working_hour", hour_id, ", ".join(changes) if changes else "Обновление", level="info")
+    await log_action(db, master.id, "update", "working_hour", hour_id, ", ".join(changes) if changes else "Обновление", level="info")
     await db.commit()
     await db.refresh(hour)
     
@@ -101,7 +101,7 @@ async def delete_working_hour(
 ):
     """Delete working hours."""
     hour = await get_owned_or_404(db, WorkingHour, hour_id, master.master_profile.id)
-    await log_action(db, master.master_profile.id, "delete", "working_hour", hour_id, f"{hour.schedule_date}: {hour.start_time}-{hour.end_time}", level="warning")
+    await log_action(db, master.id, "delete", "working_hour", hour_id, f"{hour.schedule_date}: {hour.start_time}-{hour.end_time}", level="warning")
     await db.delete(hour)
     await db.commit()
     
