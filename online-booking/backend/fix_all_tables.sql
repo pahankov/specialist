@@ -105,8 +105,16 @@ ALTER TABLE working_hours ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRU
 -- =============================================================
 -- Модель: id, master_id, level, action, entity_type, entity_id, details, ip_address, created_at
 -- Старая схема могла не иметь master_id и level
-ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS master_id INTEGER REFERENCES master_profiles(id);
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS master_id INTEGER;
 ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS level VARCHAR(10) DEFAULT 'info';
+-- Fix FK: audit_logs should reference users (not master_profiles) so admins can log actions too
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'audit_logs_master_id_fkey') THEN
+        ALTER TABLE audit_logs DROP CONSTRAINT audit_logs_master_id_fkey;
+        ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_master_id_fkey
+            FOREIGN KEY (master_id) REFERENCES users(id) ON DELETE SET NULL;
+    END IF;
+END $$;
 
 -- =============================================================
 -- 12. blocked_slots
