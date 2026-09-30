@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import AsyncSessionLocal, engine, Base
 from app.models.user import User, UserRole
-from app.models.master_profile import MasterProfile, MasterStatus
+from app.models.master_profile import MasterProfile
 from app.models.client_profile import ClientProfile
 from app.models.service import Service
 from app.models.appointment import Appointment
@@ -225,7 +225,7 @@ async def create_seed_data():
                 avatar_url=f"https://i.pravatar.cc/150?img={i+10}",
                 telegram_username=MASTER_TELEGRAM[i],
                 experience_years=random.randint(1, 15),
-                status=MasterStatus.ACTIVE if random.random() > 0.1 else MasterStatus.INACTIVE,
+                status="active" if random.random() > 0.1 else "inactive",
                 is_active=True,
                 created_at=user.created_at,
             )
