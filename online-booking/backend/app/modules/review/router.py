@@ -79,8 +79,8 @@ async def create_review(
     """Create a review for a completed appointment."""
     result = await db.execute(
         select(Appointment)
-        .where(Appointment.id == review_data.appointment_id)
         .options(selectinload(Appointment.client_profile).joinedload(ClientProfile.user))
+        .where(Appointment.id == review_data.appointment_id)
     )
     appointment = result.scalar_one_or_none()
     if not appointment:

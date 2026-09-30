@@ -1,5 +1,5 @@
 """Master profile — stores master-specific data separate from User."""
-from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, DateTime, Index, Enum as SAEnum
+from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, DateTime, Index
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from enum import Enum

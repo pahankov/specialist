@@ -44,6 +44,7 @@ class User(Base):
     master_profile = relationship("MasterProfile", back_populates="user", uselist=False)
     client_profile = relationship("ClientProfile", back_populates="user", uselist=False)
     refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
+    audit_logs = relationship("AuditLog", back_populates="user")
 
     def __repr__(self):
         return f"<User(id={self.id}, email={self.email}, role={self.role.value})>"

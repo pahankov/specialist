@@ -19,7 +19,7 @@ class CacheService:
         """Try to connect to Redis, disable cache if unavailable."""
         try:
             import redis
-            redis_url = settings.get("REDIS_URL", "redis://localhost:6379/0")
+            redis_url = settings.REDIS_URL
             self._redis = redis.from_url(redis_url, decode_responses=True, socket_connect_timeout=2)
             self._redis.ping()
             self._enabled = True

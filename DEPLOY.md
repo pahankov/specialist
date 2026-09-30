@@ -168,7 +168,7 @@ ENVEOF
 **Пометить миграции как применённые:**
 Больше не нужно — `alembic upgrade head` сам применяет все миграции.
 
-**Systemd сервис:**
+**Systemd сервис (КРИТИЧНО!):**
 ```bash
 cat > /etc/systemd/system/beauty-backend.service << 'SVCEOF'
 [Unit]
@@ -179,8 +179,9 @@ After=network.target postgresql.service
 Type=simple
 User=www-data
 WorkingDirectory=/var/www/beauty-specialist/online-booking/backend
-Environment="PATH=/var/www/beauty-specialist/online-booking/backend/venv/bin"
-ExecStart=/var/www/beauty-specialist/online-booking/backend/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 2
+EnvironmentFile=/var/www/beauty-specialist/online-booking/backend/.env
+Environment=APP_ENV=production
+ExecStart=/var/www/beauty-specialist/online-booking/backend/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
 Restart=always
 RestartSec=5
 
@@ -192,6 +193,10 @@ systemctl daemon-reload
 systemctl enable beauty-backend
 systemctl start beauty-backend
 ```
+**ВАЖНО:**
+- `EnvironmentFile=.env` — читает `DATABASE_URL` из `.env` (НЕ `Environment="DATABASE_URL=..."!`)
+- `Environment=APP_ENV=production` — форсирует PostgreSQL вместо SQLite
+- Без этих двух строк бэкенд падает на SQLite → 502 Bad Gateway
 
 **Папка логов:**
 ```bash
@@ -281,7 +286,7 @@ certbot --nginx -d beauty-specialist.ru -d www.beauty-specialist.ru --non-intera
 Миграции Alembic — это скрипты, которые изменяют структуру БД. При каждом push в `main` GitHub Actions автоматически применяет все миграции на сервере через `alembic upgrade head`.
 
 **Полная цепочка миграций (линейная, без ветвлений):**
-→ `9a9c2edb119f` (initial_schema — пустая) → `08fbbef38349` (master_status enum + working_hour.is_active) → `f43f84fe3057` (timezone fix: все DateTime → TIMESTAMP WITH TIME ZONE) → `sync_missing_columns` (no_show_count, preferred_service_ids, name_ru/name_en в countries) → `aaa7fcc30d47` (name_ru в countries) → `b2e8f1a3c9d0` (name_en в cities) → `4fdb5e791ead` (baseline: создаёт все 14 таблиц)
+→ `9a9c2edb119f` (initial_schema — пустая) → `08fbbef38349` (master_status string + working_hour.is_active) → `f43f84fe3057` (timezone fix) → `sync_missing_columns` (no_show_count, preferred_service_ids) → `aaa7fcc30d47` (name_ru в countries) → `b2e8f1a3c9d0` (name_en в cities) → `4fdb5e791ead` (baseline: IF NOT EXISTS) → `5c72771` (audit_logs FK → users вместо master_profiles, чтобы админ мог логировать действия)
 
 ### Как сгенерировать новую миграцию
 
@@ -555,6 +560,38 @@ export DATABASE_URL='postgresql+asyncpg://user:pass@host:5432/dbname'
 - [ ] Админ-панель открывается
 - [ ] Карусель на главной показывает отзывы
 - [ ] Регистрация/авторизация мастеров работает
+
+---
+
+## КРИТИЧЕСКИЕ ОШИБКИ И ИХ ПРИЧИНЫ
+
+### 1. 502 Bad Gateway — бэкенд на SQLite
+**Причина:** systemd юнит не читает `.env` (нет `EnvironmentFile=`) или `APP_ENV=development`.
+**Проверка:** `cat /etc/systemd/system/beauty-backend.service` — должен содержать `EnvironmentFile=` и `APP_ENV=production`.
+**Решение:** Обновить юнит (см. раздел выше) + `sudo systemctl restart beauty-backend`.
+
+### 2. 502 — юнит не обновился после деплоя
+**Причина:** `deploy_setup.sh` не имеет `sudo` для записи в `/etc/systemd/system/`.
+**Решение:** `deploy_setup.sh` пишет в `/tmp`, потом `sudo bash -c 'cat > /etc/systemd/system/...' << 'UNIT'`.
+
+### 3. Alembic: `ValueError: invalid interpolation syntax in '***'`
+**Причина:** `config.set_main_option()` ломается на `!` в пароле.
+**Решение:** В `alembic/env.py` НЕ использовать `config.set_main_option()`, передавать URL напрямую в `engine_from_config()`.
+
+### 4. Alembic: `MissingGreenlet`
+**Причина:** `config.get_main_option()` возвращает SQLite URL из `alembic.ini` (не пустая строка → fallback не срабатывает).
+**Решение:** В `env.py` всегда проверять `DATABASE_URL` из env ПЕРВЫМ.
+
+### 5. 500 — `ForeignKeyViolationError` (FK ссылается на users вместо master_profiles)
+**Причина:** старая БД имеет FK `appointments.master_id → users`, модель ожидает `→ master_profiles`.
+**Решение:** `fix_all_tables.sql` содержит блок "Fix FK constraints" — DROP и CREATE FK заново.
+
+### 6. 500 — `ForeignKeyViolationError: audit_logs.master_id → master_profiles`
+**Причина:** `audit_logs.master_id` ссылается на `master_profiles`, но админ не мастер. `log_action()` вставляет `master_id=1` (id админа).
+**Решение:** `audit_logs.master_id` должен ссылаться на `users(id)`. Фикс в `fix_all_tables.sql` (строки 110-117).
+
+### 7. seed_test_data.py падает на `MasterStatus`
+**Решение:** Использовать `status="active"` вместо `status=MasterStatus.ACTIVE`.
 
 ---
 

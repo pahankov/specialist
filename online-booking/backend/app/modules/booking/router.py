@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from typing import List, Optional
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pydantic import BaseModel
 
 from app.database import get_db

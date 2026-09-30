@@ -12,7 +12,7 @@ class AuditLog(Base):
     )
 
     id = Column(Integer, primary_key=True)
-    master_id = Column(Integer, ForeignKey("master_profiles.id"), nullable=True, index=True)
+    master_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     level = Column(String(10), nullable=False, default="info")
     action = Column(String(50), nullable=False)
     entity_type = Column(String(50), nullable=False)
@@ -21,7 +21,7 @@ class AuditLog(Base):
     ip_address = Column(String(45), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
-    master_profile = relationship("MasterProfile", back_populates="audit_logs")
+    user = relationship("User", back_populates="audit_logs")
 
     def __repr__(self):
         return f"<AuditLog {self.action} {self.entity_type}:{self.entity_id}>"
