@@ -82,4 +82,5 @@ async def get_all_audit_logs(
     logs = result.scalars().all()
     return AuditLogListResponse(
         total=total,
-        logs=[_build_log_response(log) for log i
+        logs=[_build_log_response(log) for log in logs]
+    )
