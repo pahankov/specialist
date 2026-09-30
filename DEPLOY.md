@@ -1,5 +1,9 @@
 # Деплой beauty-specialist.ru
 
+> **ПОСЛЕДНЕЕ ОБНОВЛЕНИЕ:** 30 сентября 2026
+> **СТАТУС:** ✅ Сайт работает, деплой автоматизирован
+> **ГЛАВНОЕ ПРАВИЛО:** НЕ использовать `SAEnum` в моделях SQLAlchemy (см. раздел 1)
+
 ## Сервер
 
 | Параметр | Значение |
@@ -88,8 +92,9 @@ sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE online_booking TO spe
 **Важно:** При создании таблиц вручную через `psql` нужно также создавать ENUM-типы:
 ```sql
 CREATE TYPE userrole AS ENUM ('MASTER', 'CLIENT', 'ADMIN');
-CREATE TYPE masterstatus AS ENUM ('ACTIVE', 'INACTIVE', 'SUSPENDED');
 ```
+
+> ⚠️ **НЕ создавайте `masterstatus` enum!** В моделях используется `String(20)` вместо `SAEnum`.
 
 ### 7. Python 3.12
 ```bash
@@ -382,30 +387,19 @@ top -bn1 | head -10
 Проблема: таблицы создаются от `postgres`, а бэкенд подключается как `specialist`.
 Решение: `ALTER SCHEMA public OWNER TO specialist;`
 
-### 2. ENUM-типы не созданы
-Проблема: `role` column type mismatch.
-Решение:
-```sql
-CREATE TYPE userrole AS ENUM ('MASTER', 'CLIENT', 'ADMIN');
-CREATE TYPE masterstatus AS ENUM ('ACTIVE', 'INACTIVE', 'SUSPENDED');
-ALTER TABLE users ALTER COLUMN role DROP DEFAULT;
-ALTER TABLE users ALTER COLUMN role TYPE userrole USING CASE role WHEN 'MASTER' THEN 'MASTER'::userrole WHEN 'ADMIN' THEN 'ADMIN'::userrole ELSE 'CLIENT'::userrole END;
-ALTER TABLE users ALTER COLUMN role SET DEFAULT 'CLIENT';
-```
-
-### 3. Дублирование `/api/v1/api/v1/`
+### 2. Дублирование `/api/v1/api/v1/`
 Проблема: `VITE_API_URL` содержит `/api/v1`, а код фронтенда добавляет его снова.
 Решение: `VITE_API_URL=https://beauty-specialist.ru` (без `/api/v1`)
 
-### 4. Cloudflare 530
+### 3. Cloudflare 530
 Проблема: Cloudflare проксирует трафик, но origin не доступен.
 Решение: Отключить прокси в Cloudflare (серая тучка в DNS записях)
 
-### 5. PostgreSQL password с `!`
+### 4. PostgreSQL password с `!`
 Проблема: bash интерпретирует `!` в двойных кавычках.
 Решение: использовать одинарные кавычки или `set +H`
 
-### 6. 502 Bad Gateway — бэкенд не запускается
+### 5. 502 Bad Gateway — бэкенд не запускается
 Проблема: сервис `beauty-backend` неактивен, nginx возвращает 502.
 Причина: сервис запускается от `www-data`, но директория `logs/` принадлежит `deploy`.
 Решение:
@@ -416,144 +410,19 @@ sudo systemctl restart beauty-backend
 ```
 Проверка: `sudo systemctl status beauty-backend --no-pager`
 
-### 7. 500 Internal Server Error — пустые таблицы countries/cities
-Проблема: API `/api/v1/countries/` и `/api/v1/auth/login-unified` возвращают 500.
-Причина: модель ожидает колонки `name_en`, `phone_prefix`, `is_active` в `countries` и `name_en`, `slug`, `is_active`, `name_ru` в `cities`, но старая БД имеет другую схему.
-Решение (автоматическое): деплой-скрипт автоматически исправляет схему перед миграциями.
-Ручное исправление:
+### 6. 500 Internal Server Error — column X does not exist
+Проблема: модель ожидает колонку, которой нет в production БД.
+Причина: схема БД не соответствует модели SQLAlchemy.
+Решение: запустить `fix_all_tables.sql`:
 ```bash
-cat > /tmp/fix_schema.sql << 'EOF'
-ALTER TABLE countries ADD COLUMN IF NOT EXISTS name_en VARCHAR(100);
-ALTER TABLE countries ADD COLUMN IF NOT EXISTS phone_prefix VARCHAR(10);
-ALTER TABLE countries ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
-ALTER TABLE countries DROP COLUMN IF EXISTS name;
-ALTER TABLE countries DROP COLUMN IF EXISTS created_at;
-
-ALTER TABLE cities ADD COLUMN IF NOT EXISTS name_en VARCHAR(100);
-ALTER TABLE cities ADD COLUMN IF NOT EXISTS slug VARCHAR(100);
-ALTER TABLE cities ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
-ALTER TABLE cities RENAME COLUMN name TO name_ru;
-EOF
-sudo -u postgres psql -d online_booking -f /tmp/fix_schema.sql
-```
-Затем заполнить данные:
-```bash
-cat > /tmp/fix_data.sql << 'EOF'
-INSERT INTO countries (code, name_ru, name_en, phone_prefix, is_active)
-SELECT 'RU', 'Россия', 'Russia', '+7', TRUE WHERE NOT EXISTS (SELECT 1 FROM countries WHERE code = 'RU');
-INSERT INTO countries (code, name_ru, name_en, phone_prefix, is_active)
-SELECT 'KZ', 'Казахстан', 'Kazakhstan', '+7', TRUE WHERE NOT EXISTS (SELECT 1 FROM countries WHERE code = 'KZ');
-INSERT INTO countries (code, name_ru, name_en, phone_prefix, is_active)
-SELECT 'BY', 'Беларусь', 'Belarus', '+375', TRUE WHERE NOT EXISTS (SELECT 1 FROM countries WHERE code = 'BY');
-
-INSERT INTO cities (country_id, name_ru, name_en, slug, is_active)
-SELECT c.id, city_name, city_name, LOWER(REPLACE(city_name, ' ', '-')), TRUE
-FROM countries c,
-     unnest(ARRAY['Москва', 'Санкт-Петербург', 'Новосибирск', 'Екатеринбург',
-       'Казань', 'Нижний Новгород', 'Челябинск', 'Самара',
-       'Омск', 'Ростов-на-Дону', 'Уфа', 'Красноярск',
-       'Воронеж', 'Пермь', 'Волгоград']) AS city_name
-WHERE c.code = 'RU'
-AND NOT EXISTS (SELECT 1 FROM cities ci WHERE ci.name_ru = city_name AND ci.country_id = c.id);
-EOF
-sudo -u postgres psql -d online_booking -f /tmp/fix_data.sql
+cd /var/www/beauty-specialist/online-booking/backend
+sudo -u postgres psql -d online_booking -f fix_all_tables.sql
 ```
 
-### 8. ENUM-ТИПЫ В МОДЕЛЯХ — ГЛАВНАЯ ПРИЧИНА 500 ОШИБОК
-
-**🔥 КРИТИЧНО: НЕ ИСПОЛЬЗУЙТЕ `SAEnum` в моделях SQLAlchemy!**
-
-**ПРОБЛЕМА:** `SAEnum(MasterStatus)` в модели создаёт PostgreSQL ENUM-тип. asyncpg (асинхронный драйвер PostgreSQL) **кэширует определения ENUM-типов на уровне TCP-соединения**. Когда вы меняете модель (добавляете/удаляете значение enum), asyncpg продолжает использовать старое определение из кэша. Это вызывает:
-
-```
-LookupError: 'active' is not among the defined enum values.
-Enum name: masterstatus. Possible values: ACTIVE, INACTIVE, SUSPENDED
-```
-
-**ЭТА ОШИБКА:**
-- Вызывает 500 Internal Server Error на ВСЕХ endpoint'ах, которые обращаются к таблице с enum
-- НЕ лечится через `DROP TYPE CASCADE` (колонка удаляется)
-- НЕ лечится через перезапуск сервиса (кэш внутри asyncpg connection pool)
-- НЕ лечится через `alembic upgrade head` (миграция не меняет данные)
-- Лечится ТОЛЬКО заменой enum на VARCHAR
-
-**ПРАВИЛО:**
-```python
-# ❌ НИКОГДА так не делайте:
-from sqlalchemy import Enum as SAEnum
-status = Column(SAEnum(MasterStatus), default=MasterStatus.ACTIVE, nullable=False)
-
-# ✅ ВСЕГДА так делайте:
-status = Column(String(20), default="active", nullable=False)  # 'active', 'inactive', 'suspended'
-```
-
-**Если нужно добавить новое значение enum:**
-1. Измените `String(20)` на новое значение (например, "archived")
-2. НЕ нужно создавать миграцию для изменения типа колонки
-3. Обновите `fix_all_tables.sql` для старых БД
-
-**Как исправить существующую таблицу с enum:**
-```bash
-# На сервере:
-cat > /tmp/fix_enum.sql << 'EOF'
--- Конвертируем enum в VARCHAR
-ALTER TABLE master_profiles ALTER COLUMN status TYPE VARCHAR(20);
--- Исправляем значения
-UPDATE master_profiles SET status = 'active' WHERE status = 'ACTIVE';
--- Ставим default
-ALTER TABLE master_profiles ALTER COLUMN status SET DEFAULT 'active';
-EOF
-sudo -u postgres psql -d online_booking -f /tmp/fix_enum.sql
-```
-
-**Как проверить, есть ли enum в модели:**
-```bash
-grep -r "SAEnum\|Enum(" online-booking/backend/app/models/
-```
-Если есть — ЗАМЕНИТЬ на `String(20)`.
-
-**Как проверить, есть ли enum в БД:**
-```bash
-sudo -u postgres psql -d online_booking -c "SELECT typname, enumlabel FROM pg_type t JOIN pg_enum e ON t.oid = e.enumtypid ORDER BY typname, enumsortorder;"
-```
-
-### 9. ENUM-ТИПЫ В МОДЕЛЯХ — КАК НЕ ЛОМАТЬ
-
-При изменении модели **ВСЕГДА** проверяйте:
-- [ ] Нет ли `SAEnum` или `Enum()` в моделях
-- [ ] Если есть — заменить на `String(20)` с комментариями допустимых значений
-- [ ] В коде НЕ использовать `.value` у enum (например, `mp.status.value` → `mp.status`)
-- [ ] Обновить `fix_all_tables.sql` для конвертации старых enum в VARCHAR
-
-### 10. СХЕМА БД — КАК НЕ ЛОМАТЬ
-
-**ПРОБЛЕМА:** Модель SQLAlchemy может ожидать колонки, которых нет в production БД.
-Это вызывает `ProgrammingError: column X does not exist` → 500 Internal Server Error на ВСЕХ endpoint'ах.
-
-**ПРИМЕР:** Модель `Country` ожидает `name_en`, `phone_prefix`, `is_active`, но в БД только `name`, `code`.
-
-**РЕШЕНИЕ:**
-1. **Всегда** проверяйте схему БД перед деплоем:
-   ```bash
-   ./deploy.sh --dry-run
-   ```
-
-2. **Автоматическое исправление** в `deploy.sh`:
-   - Скрипт автоматически добавляет недостающие колонки
-   - Работает и локально, и на сервере
-   - Idempotent (безопасно запускать多次)
-
-3. **При изменении модели** всегда:
-   - [ ] Генерируйте миграцию: `alembic revision --autogenerate -m "add_column_x"`
-   - [ ] Тестируйте на чистой БД: `alembic upgrade head`
-   - [ ] Проверяйте, что миграция idempotent
-   - [ ] Обновляйте `fix_schema.sql` в `deploy.sh` для старых БД
-
-**ВАЖНО:** Если вы добавляете колонку в модель, она ДОЛЖНА быть в:
-1. `app/models/` — модель SQLAlchemy
-2. `app/schemas/` — Pydantic schema
-3. `alembic/versions/` — миграция (автоматически через --autogenerate)
-4. `deploy.sh` → `fix_schema.sql` — для старых production БД
+### 7. 500 Internal Server Error — LookupError enum
+Проблема: `LookupError: 'active' is not among the defined enum values`
+Причина: в модели используется `SAEnum`, asyncpg кэширует старый enum-тип.
+Решение: заменить `SAEnum` на `String(20)` в модели и `.value` на прямое значение в коде.
 
 ---
 
@@ -680,11 +549,11 @@ export DATABASE_URL='postgresql+asyncpg://user:pass@host:5432/dbname'
 
 ### 10. Финальная проверка на чистом сервере
 - [ ] `GET /api/v1/health` — 200 OK
-- [ ] `GET /api/v1/countries/` — 200 OK с данными
+- [ ] `GET /api/v1/masters/` — 200 OK с данными
+- [ ] `GET /api/v1/reviews/` — 200 OK с отзывами
 - [ ] `POST /api/v1/auth/login-unified` — вход суперпользователя работает
 - [ ] Админ-панель открывается
-- [ ] Карусель на главной показывает все 3 слайда
-- [ ] Отзывы отображаются в карусели
+- [ ] Карусель на главной показывает отзывы
 - [ ] Регистрация/авторизация мастеров работает
 
 ---
@@ -694,6 +563,7 @@ export DATABASE_URL='postgresql+asyncpg://user:pass@host:5432/dbname'
 | Забыли | Результат | Как обнаружить | Как исправить |
 |--------|-----------|----------------|---------------|
 | SAEnum в модели | 500 ошибка на ВСЕХ endpoint'ах | `journalctl -u beauty-backend -n 50` | Заменить на `String(20)` |
+| `.value` у status | 500 AttributeError | `journalctl -u beauty-backend -n 50` | Убрать `.value` |
 | Сид-данные для новой таблицы | 500 ошибка на API | `curl https://beauty-specialist.ru/api/v1/new-endpoint/` | Запустить `seed_production.py` |
 | Связанную запись (MasterProfile) | 500 ошибка при логине | `journalctl -u beauty-backend -n 50` | Создать запись через SQL |
 | Сид-данные для отзывов | Пустая карусель | Открыть главную страницу | Запустить `create_minimal_reviews.py` |
