@@ -730,7 +730,62 @@ git diff --cached | grep -i "password\|secret\|token\|key"
 | Обновить `deploy.yml` | На сервере старые данные | Проверить логи деплоя | Добавить шаги в workflow |
 | Empty state компонента | Белый экран | Открыть страницу на чистом сервере | Добавить empty state |
 | Фикс схемы БД | 500 ошибка (column X does not exist) | `journalctl -u beauty-backend -n 50` | Запустить `fix_all_tables.sql` |
-| Права на логи | 502 Bad Gateway | `systemctl status beauty-backend` | `chown -R www-data:www-data logs/` |в:**в:**
+| Права на логи | 502 Bad Gateway | `systemctl status beauty-backend` | `chown -R www-data:www-data logs/` |
+
+---
+
+## ИТОГОВЫЕ ПРАВИЛА РАБОТЫ С КОДОМ
+
+> **Эти правила были выведены в процессе рефакторинга и должны соблюдаться всегда.**
+
+### 1. Перед коммитом — ОБЯЗАТЕЛЬНАЯ проверка (5 команд)
+```bash
+# 1. Синтаксис всех изменённых файлов
+python -c "import ast; ast.parse(open('file.py').read())"
+
+# 2. Импорт всего приложения (ловит 90% ошибок)
+python -c "from app.main import app"
+
+# 3. Проверка использований при изменении модели
+grep -r "old_name" app/
+
+# 4. Проверка импортов
+grep -r "def function_name" app/
+
+# 5. Проверка чувствительных данных
+git diff --cached | grep -i "password\|secret\|token\|key"
+```
+
+### 2. При разделении файлов — ВСЕГДА проверять каждый endpoint
+- Копировать ВСЕ импорты (не только основные)
+- Проверить каждый параметр в каждом эндпоинте
+- Проверить что все async/sync функции правильные
+
+### 3. При изменении моделей SQLAlchemy — проверять ВСЕ relationship
+- `FK` → все `back_populates` в других моделях
+- Удаление relationship → `grep -r` по всему проекту
+- `NoForeignKeysError` = рассинхрон relationship
+
+### 4. Никогда не доверять редактированию без валидации
+- После редактирования — `ast.parse()` или `python -c "import module"`
+- Если файл редактировался через скрипт — проверить на null bytes
+
+### 5. При изменении log_action — проверять ВСЕ вызовы
+- `master.id` (User.id), НЕ `master.master_profile.id`
+- Супер-админ не имеет MasterProfile → None.id → AttributeError
+
+### 6. При удалении классов — проверять что нигде не используются
+- `grep -r "ClassName" app/` перед удалением
+- Если удалил класс из router.py — проверить эндпоинты
+
+### 7. При создании новых модулей — проверять пути импортов
+- `hash_password` в `app.modules.auth.service`, НЕ `app.services.auth`
+- Искать точный путь через `grep`, НЕ гадать
+
+### 8. Деплой при пуше — изменения должны быть минимальными
+- Один коммит = одно изменение
+- Понятное сообщение коммита
+- После коммита — проверить логи деплоя и `journalctl`в:**в:**
 
 | Забыли | Результат | Как обнаружить | Как исправить |
 |--------|-----------|----------------|---------------|
