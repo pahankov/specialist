@@ -9,6 +9,22 @@ from app.models.appointment import Appointment
 from app.dependencies.crud import get_owned_or_404, get_or_404
 
 
+async def get_master_profile_id(db: AsyncSession, master: User) -> int:
+    """Get master_profile.id safely — handles both admin and regular master.
+    
+    - Admin (role=ADMIN): returns master.id (User.id) — admin has no MasterProfile
+    - Regular master: returns master_profile.id
+    - Non-master: raises 403
+    """
+    if master.role == UserRole.ADMIN:
+        return master.id
+    result = await db.execute(select(MasterProfile).where(MasterProfile.user_id == master.id))
+    mp = result.scalar_one_or_none()
+    if not mp:
+        raise HTTPException(status_code=403, detail="Not a master")
+    return mp.id
+
+
 async def get_appointment_for_master(
     db: AsyncSession,
     appointment_id: int,

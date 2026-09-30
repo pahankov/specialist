@@ -17,7 +17,7 @@ from app.schemas.pagination import PaginatedResponse
 from app.dependencies.auth import require_master
 from app.dependencies.crud import get_owned_or_404, get_or_404
 from app.services.audit import log_action
-from app.modules.admin.helpers import get_appointment_for_master
+from app.modules.admin.helpers import get_appointment_for_master, get_master_profile_id
 
 router = APIRouter()
 
@@ -361,11 +361,12 @@ async def get_appointments_by_date(
             .order_by(Appointment.appointment_date)
         )
     else:
+        mp_id = await get_master_profile_id(db, master)
         query = (
             select(Appointment)
             .options(selectinload(Appointment.client_profile).joinedload(ClientProfile.user))
             .options(selectinload(Appointment.service))
-            .where(Appointment.master_id == master.master_profile.id,
+            .where(Appointment.master_id == mp_id,
                    Appointment.appointment_date >= start_dt, Appointment.appointment_date <= end_dt)
             .order_by(Appointment.appointment_date)
         )
