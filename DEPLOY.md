@@ -611,11 +611,13 @@ export DATABASE_URL='postgresql+asyncpg://user:pass@host:5432/dbname'
 - TypeScript: `npm run type-check`
 - **Никогда** не доверяй редактированию без валидации
 - Если файл редактируется через скрипт — проверяй что нет null bytes (`\x00`)
+- **Пример ошибки:** `audit.py` обрезался на строке 85 → `SyntaxError: '[' was never closed`
 
 ### 3. При изменении моделей SQLAlchemy — проверяй все relationship
 - Если меняешь FK в модели — проверь все `back_populates` в других моделях
 - Если удаляешь relationship — проверь что нигде не используется
 - **Проверка:** `python -c "from app.main import app"` — если импорт падает с NoForeignKeysError — проблема в relationship
+- **Пример ошибки:** `AuditLog.master_profile` удалён, но `admin/audit.py` всё ещё использовал `selectinload(AuditLog.master_profile)`
 
 ### 4. При изменении log_action — проверяй все вызовы
 - log_action принимает `master_id` — убедись что это User.id (не MasterProfile.id)
@@ -626,16 +628,24 @@ export DATABASE_URL='postgresql+asyncpg://user:pass@host:5432/dbname'
 - Перед коммитом: локальная проверка импорта `python -c "from app.main import app"`
 - Изменения должны быть обратимыми (git commit с понятным сообщением)
 - После коммита: подождать деплой, проверить логи `sudo journalctl -u beauty-backend -n 100`
+- **Логи с сервера:** `ssh root@REDACTED_SERVER_IP` → `sudo journalctl -u beauty-backend --no-pager -n 100`
 
 ### 6. Модульная структура
 - Файлы > 300 строк — делить на модули
 - Один файл — одна ответственность (SRP)
 - Роутеры агрегируются в `__init__.py` модуля
 - Не меняй API пути — только внутреннюю структуру
+- **При разделении файла — копируй ВСЕ импорты!**
+- **Пример ошибки:** `crud.py` — забыл `Query` из `fastapi` → `NameError: name 'Query' is not defined`
+
+### 7. При создании новых модулей — проверяй все зависимости
+- Каждый новый файл должен пройти `python -c "import ast; ast.parse(open('file.py').read())"`
+- Проверь что все импорты существуют: `from app.modules.auth.service import hash_password` (не `app.services.auth`)
+- **Пример ошибки:** `hash_password` в `app.modules.auth.service`, а не в `app.services.auth`
 
 ---
 
-**Частые ошибки при забывании пунктов:**
+**Частые ошибки при забывании пунктов:**в:**
 
 | Забыли | Результат | Как обнаружить | Как исправить |
 |--------|-----------|----------------|---------------|
