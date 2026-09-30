@@ -1,10 +1,9 @@
 #!/bin/bash
 # Write systemd service unit — uses EnvironmentFile to read .env properly
-# First ensure deploy has NOPASSWD for cp (idempotent)
-sudo bash -c 'echo "deploy ALL=(ALL) NOPASSWD: /usr/bin/cp" > /etc/sudoers.d/99-deploy-cp && chmod 440 /etc/sudoers.d/99-deploy-cp'
-
-# Write unit to /tmp then copy with sudo
-cat > /tmp/beauty-backend.service << 'SVCEOF'
+# Write to temp script, then run with sudo bash to avoid permission issues
+cat > /tmp/_deploy_unit.sh << 'SCRIPT'
+#!/bin/bash
+sudo bash -c 'cat > /etc/systemd/system/beauty-backend.service' << 'UNIT'
 [Unit]
 Description=Beauty Specialist Backend API
 After=network.target postgresql.service
@@ -21,6 +20,8 @@ RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
-SVCEOF
-sudo cp /tmp/beauty-backend.service /etc/systemd/system/beauty-backend.service
+UNIT
 sudo systemctl daemon-reload
+sudo systemctl restart beauty-backend
+SCRIPT
+sudo bash /tmp/_deploy_unit.sh
