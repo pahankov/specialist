@@ -785,7 +785,73 @@ git diff --cached | grep -i "password\|secret\|token\|key"
 ### 8. Деплой при пуше — изменения должны быть минимальными
 - Один коммит = одно изменение
 - Понятное сообщение коммита
-- После коммита — проверить логи деплоя и `journalctl`в:**в:**
+- После коммита — проверить логи деплоя и `journalctl`
+
+---
+
+## ИТОГИ ИСПРАВЛЁННЫХ ОШИБОК (REFRAIN FROM)
+
+> Все ошибки, возникшие при рефакторинге. **Никогда не делать так:**
+
+### 1. Никогда не использовать `master.master_profile.id` для супер-админа
+**Ошибка:** `AttributeError: 'NoneType' object has no attribute 'id'` на `/masters`, `/services`, `/appointments`
+**Причина:** Супер-админ (role=ADMIN) не имеет MasterProfile → `master.master_profile` = `None`
+**Правило:** Всегда проверять `if master.role == UserRole.ADMIN` перед доступом к `master.master_profile`
+**Проверка:** `grep -r "master.master_profile.id" app/modules/admin/` — все места должны иметь проверку роли
+
+### 2. Никогда не удалять relationship без проверки всех использований
+**Ошибка:** `NoForeignKeysError` при импорте приложения
+**Причина:** Изменил FK в `AuditLog` на `users.id`, но `MasterProfile.audit_logs` всё ещё ссылался на `master_profile`
+**Правило:** При изменении модели — `grep -r "old_relationship_name" app/` по ВСЕМ файлам
+**Проверка:** `python -c "from app.main import app"` — падает с NoForeignKeysError = проблема в relationship
+
+### 3. Никогда не использовать `async def` для конвертеров внутри list comprehension
+**Ошибка:** `ResponseValidationError: coroutine object` на `/masters`
+**Причина:** `_to_response` объявлен как `async def`, но вызывается в `[... for u in users]` без `await`
+**Правило:** Конвертеры данных (`_to_response`, `_to_dict`) — всегда `def`, НЕ `async def`
+**Проверка:** `grep -r "async def.*_to_" app/` — не должно быть
+
+### 4. Никогда не удалять классы из router.py без проверки эндпоинтов
+**Ошибка:** `NameError: name 'LoginRequest' is not defined`
+**Причина:** Удалил `LoginRequest` и `ClientLoginRequest` из `router.py`, но они использовались в эндпоинтах
+**Правило:** Перед удалением класса — `grep -r "ClassName" app/` по всему проекту
+**Проверка:** `python -c "import ast; ast.parse(open('file.py').read())"`
+
+### 5. Никогда не забывать импорты при разделении файлов
+**Ошибка:** `NameError: name 'Query' is not defined`
+**Причина:** Разделил `masters.py` на 6 модулей, но забыл `Query` в `crud.py`
+**Правило:** При разделении файла — копировать ВСЕ импорты, проверять КАЖДЫЙ endpoint
+**Проверка:** `python -c "from app.main import app"`
+
+### 6. Никогда не использовать неверный путь импорта
+**Ошибка:** `ImportError: No module named 'app.services.auth'`
+**Причина:** `hash_password` в `app.modules.auth.service`, а не `app.services.auth`
+**Правило:** Искать точный путь через `grep -r "def function_name" app/`, НЕ гадать
+**Проверка:** `python -c "from app.modules.auth.service import hash_password"`
+
+### 7. Никогда не доверять редактированию без валидации синтаксиса
+**Ошибка:** `SyntaxError: '[' was never closed` в `audit.py`
+**Причина:** Null bytes при редактировании через Python-скрипт обрезали строку
+**Правило:** После любого редактирования — `python -c "import ast; ast.parse(open('file.py').read())"`
+**Проверка:** Если файл редактировался через скрипт — проверить на null bytes
+
+### 8. Никогда не использовать `settings.get()` у Pydantic BaseSettings
+**Ошибка:** `AttributeError: 'BaseSettings' object has no attribute 'get'`
+**Причина:** `settings` — Pydantic модель, у неё нет метода `.get()`
+**Правило:** Использовать `settings.REDIS_URL` напрямую, НЕ `settings.get("REDIS_URL", ...)`
+**Проверка:** `grep -r "settings.get(" app/` — не должно быть
+
+### 9. Никогда не использовать `MasterStatus.ACTIVE` в коде (кроме service)
+**Ошибка:** Инконсистентность — некоторые места используют `MasterStatus.ACTIVE`, другие `"active"`
+**Причина:** Колонка `String(20)`, enum `MasterStatus` только в `master_status.py`
+**Правило:** Использовать строки `"active"`, `"inactive"`, `"suspended"` везде, кроме `services/master_status.py`
+**Проверка:** `grep -r "MasterStatus\." app/` — должен быть только в `master_status.py`
+
+### 10. Никогда не использовать `role="CLIENT"` вместо enum
+**Ошибка:** Инконсистентность — некоторые места используют `"CLIENT"`, другие `UserRole.CLIENT`
+**Правило:** Всегда `UserRole.CLIENT`, `UserRole.ADMIN`, `UserRole.MASTER`
+**Проверка:** `grep -r 'role=".*"' app/modules/admin/` — не должно быть
+
 
 | Забыли | Результат | Как обнаружить | Как исправить |
 |--------|-----------|----------------|---------------|
