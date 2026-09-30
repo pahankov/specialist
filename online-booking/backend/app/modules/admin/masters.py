@@ -84,7 +84,7 @@ async def get_all_masters(
             "phone": u.phone,
             "telegram_username": u.master_profile.telegram_username,
             "description": u.master_profile.description,
-            "status": u.master_profile.status.value if u.master_profile.status else "active",
+            "status": u.master_profile.status if u.master_profile.status else "active",
             "is_active": u.master_profile.is_active,
             "is_admin": u.is_admin,
             "created_at": u.master_profile.created_at,
@@ -302,7 +302,7 @@ async def toggle_master_active(
         "phone": user.phone,
         "telegram_username": master_profile.telegram_username,
         "description": master_profile.description,
-        "status": master_profile.status.value,
+        "status": master_profile.status,
         "is_active": master_profile.is_active,
         "is_admin": user.is_admin,
         "created_at": master_profile.created_at,
@@ -343,7 +343,7 @@ async def suspend_master(
         "phone": user.phone,
         "telegram_username": master_profile.telegram_username,
         "description": master_profile.description,
-        "status": master_profile.status.value,
+        "status": master_profile.status,
         "is_active": master_profile.is_active,
         "is_admin": user.is_admin,
         "created_at": master_profile.created_at,
@@ -381,7 +381,7 @@ async def unsuspend_master(
         "phone": user.phone,
         "telegram_username": master_profile.telegram_username,
         "description": master_profile.description,
-        "status": master_profile.status.value,
+        "status": master_profile.status,
         "is_active": master_profile.is_active,
         "is_admin": user.is_admin,
         "created_at": master_profile.created_at,
@@ -465,7 +465,7 @@ async def refresh_master_status(
         "phone": user.phone,
         "telegram_username": master_profile.telegram_username,
         "description": master_profile.description,
-        "status": master_profile.status.value,
+        "status": master_profile.status,
         "is_active": master_profile.is_active,
         "is_admin": user.is_admin,
         "created_at": master_profile.created_at,
@@ -675,7 +675,7 @@ async def get_master_full(
         "description": master_profile.description,
         "avatar_url": master_profile.avatar_url,
         "experience_years": master_profile.experience_years,
-        "status": master_profile.status.value if master_profile.status else "active",
+        "status": master_profile.status if master_profile.status else "active",
         "is_active": master_profile.is_active,
         "is_admin": user.is_admin,
         "created_at": master_profile.created_at.isoformat() if master_profile.created_at else None,
@@ -718,11 +718,11 @@ async def bulk_toggle_active(
                 results["errors"].append({"master_id": mid, "error": "Cannot toggle self"})
                 continue
             
-            mp.status = MasterStatus.INACTIVE if mp.status == MasterStatus.ACTIVE else MasterStatus.ACTIVE
+            mp.status = "inactive" if mp.status == "active" else "active"
             results["toggled"].append({
                 "master_id": mid,
                 "name": mp.user.name,
-                "new_status": mp.status.value
+                "new_status": mp.status
             })
         except Exception as e:
             results["errors"].append({"master_id": mid, "error": str(e)})
