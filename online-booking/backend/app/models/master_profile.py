@@ -33,7 +33,6 @@ class MasterProfile(Base):
     services = relationship("Service", back_populates="master_profile")
     appointments = relationship("Appointment", back_populates="master_profile")
     working_hours = relationship("WorkingHour", back_populates="master_profile")
-    audit_logs = relationship("AuditLog", back_populates="master_profile")
     blocked_slots = relationship("BlockedSlot", back_populates="master_profile")
     reviews = relationship("Review", back_populates="master_profile")
 
