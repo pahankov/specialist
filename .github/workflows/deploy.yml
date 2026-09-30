@@ -44,6 +44,39 @@ jobs:
             # Fix schema mismatches BEFORE migrations (uses file in current directory)
             sudo -u postgres psql -d online_booking -f fix_all_tables.sql || echo "[WARN] Schema fix failed, continuing..."
 
+            # CRITICAL FIX: Replace SAEnum with VARCHAR in master_profile.py
+            # asyncpg caches enum types causing persistent 500 errors
+            # This fix is applied AFTER git pull (which may restore old SAEnum code)
+            echo "=== FIXING ENUM TO VARCHAR ==="
+            python3.12 -c "
+import re
+with open('app/models/master_profile.py', 'r') as f:
+    content = f.read()
+# Replace SAEnum with VARCHAR
+content = re.sub(
+    r'status = Column\(SAEnum\(MasterStatus\), default=MasterStatus\.ACTIVE, nullable=False\)',
+    'status = Column(String(20), default=\"active\", nullable=False)  # active, inactive, suspended',
+    content
+)
+with open('app/models/master_profile.py', 'w') as f:
+    f.write(content)
+print('master_profile.py: SAEnum -> VARCHAR')
+"
+
+            # Fix router.py to not use .value on status (now a string)
+            python3.12 -c "
+import re
+with open('app/modules/user/router.py', 'r') as f:
+    content = f.read()
+content = content.replace(
+    '\"status\": mp.status.value if mp.status else \"active\",',
+    '\"status\": mp.status if mp.status else \"active\",'
+)
+with open('app/modules/user/router.py', 'w') as f:
+    f.write(content)
+print('router.py: .value removed from status')
+"
+
             # Pass DATABASE_URL to each script
             echo "=== ALEMBIC ==="
             DATABASE_URL="${DATABASE_URL}" alembic upgrade head
