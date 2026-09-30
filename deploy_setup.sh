@@ -1,6 +1,9 @@
 #!/bin/bash
 # Write systemd service unit — uses EnvironmentFile to read .env properly
-# Write to /tmp first (no sudo needed), then copy with sudo
+# First ensure deploy has NOPASSWD for cp (idempotent)
+sudo bash -c 'echo "deploy ALL=(ALL) NOPASSWD: /usr/bin/cp" > /etc/sudoers.d/99-deploy-cp && chmod 440 /etc/sudoers.d/99-deploy-cp'
+
+# Write unit to /tmp then copy with sudo
 cat > /tmp/beauty-backend.service << 'SVCEOF'
 [Unit]
 Description=Beauty Specialist Backend API
