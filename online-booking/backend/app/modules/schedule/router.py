@@ -7,7 +7,10 @@ from datetime import time
 
 from app.database import get_db
 from app.models.working_hour import WorkingHour
+from app.models.user import User
 from app.schemas.working_hour import WorkingHourCreate
+from app.dependencies.auth import require_master
+from app.dependencies.crud import get_owned_or_404
 from app.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -26,14 +29,35 @@ def _working_hour_to_dict(wh):
 
 
 @router.get("/", response_model=List[dict])
-async def get_working_hours(master_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(WorkingHour).where(WorkingHour.master_id == master_id))
+async def get_working_hours(
+    master: User = Depends(require_master),
+    master_id: int = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get working hours for the authenticated master (or specified master for superadmin)."""
+    is_admin = master.role == "ADMIN"
+    
+    if is_admin and master_id is not None:
+        query = select(WorkingHour).where(WorkingHour.master_id == master_id)
+    else:
+        query = select(WorkingHour).where(WorkingHour.master_id == master.master_profile.id)
+    
+    result = await db.execute(query)
     working_hours = result.scalars().all()
     return [_working_hour_to_dict(wh) for wh in working_hours]
 
 
 @router.post("/", response_model=dict, status_code=201)
-async def create_working_hour(wh: WorkingHourCreate, db: AsyncSession = Depends(get_db)):
+async def create_working_hour(
+    wh: WorkingHourCreate,
+    master: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db)
+):
+    """Create working hours for the authenticated master."""
+    # Verify the master_id matches the authenticated user
+    if wh.master_id != master.master_profile.id:
+        raise HTTPException(status_code=403, detail="Cannot create working hours for another master")
+    
     start_time_obj = time.fromisoformat(wh.start_time)
     end_time_obj = time.fromisoformat(wh.end_time)
 
@@ -51,11 +75,13 @@ async def create_working_hour(wh: WorkingHourCreate, db: AsyncSession = Depends(
 
 
 @router.delete("/{wh_id}", status_code=204)
-async def delete_working_hour(wh_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(WorkingHour).where(WorkingHour.id == wh_id))
-    wh = result.scalar_one_or_none()
-    if not wh:
-        raise HTTPException(status_code=404, detail="Working hour not found")
-    await db.delete(wh)
+async def delete_working_hour(
+    wh_id: int,
+    master: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete working hour (only if owned by the authenticated master)."""
+    hour = await get_owned_or_404(db, WorkingHour, wh_id, master.master_profile.id)
+    await db.delete(hour)
     await db.commit()
     return None
