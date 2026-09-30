@@ -18,7 +18,7 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/masters", tags=["masters"])
 
 
-async def _to_response(user: User, master_profile: MasterProfile) -> dict:
+def _to_response(user: User, master_profile: MasterProfile) -> dict:
     """Convert User + MasterProfile to response dict."""
     return {
         "id": master_profile.id,
