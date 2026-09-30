@@ -1,5 +1,5 @@
 """Client profile — stores client-specific data separate from User."""
-from sqlalchemy import Column, Integer, String, Integer, JSON, DateTime, ForeignKey, Index
+from sqlalchemy import Column, Integer, String, JSON, DateTime, ForeignKey, Index
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from app.database import Base

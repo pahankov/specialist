@@ -684,7 +684,7 @@ async def get_master_full(
             "total_appointments": total_appointments,
             "status_counts": status_counts,
             "total_clients": total_clients,
-            "total_services": total_appt.scalar() or 0,  # placeholder
+            "total_services": total_services,
             "total_revenue": total_revenue,
             "avg_rating": avg_rating,
             "review_count": review_count,

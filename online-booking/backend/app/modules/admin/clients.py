@@ -7,7 +7,7 @@ from typing import List, Optional
 
 from app.database import get_db
 from app.models.client_profile import ClientProfile
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.appointment import Appointment
 from app.schemas.client import ClientCreate, ClientUpdate, ClientResponse
 from app.schemas.pagination import PaginatedResponse
@@ -107,7 +107,7 @@ async def create_admin_client(
         if result.scalar_one_or_none():
             raise HTTPException(status_code=400, detail="Клиент с таким email уже существует")
     
-    user = User(name=data.name, phone=data.phone, email=data.email, role="CLIENT")
+    user = User(name=data.name, phone=data.phone, email=data.email, role=UserRole.CLIENT)
     db.add(user)
     await db.flush()
     
@@ -116,7 +116,7 @@ async def create_admin_client(
     await db.flush()
     await db.refresh(user)
     
-    await log_action(db, master.id, "create", "client", user.id, data.name, level="info")
+    await log_action(db, master.master_profile.id, "create", "client", user.id, data.name, level="info")
     await db.commit()
     
     return {
@@ -155,7 +155,7 @@ async def update_admin_client(
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(user, field, value)
     
-    await log_action(db, master.id, "update", "client", client_id, f"Обновлены поля: {', '.join(data.model_dump(exclude_unset=True).keys())}", level="info")
+    await log_action(db, master.master_profile.id, "update", "client", client_id, f"Обновлены поля: {', '.join(data.model_dump(exclude_unset=True).keys())}", level="info")
     await db.commit()
     await db.refresh(user)
     
@@ -182,7 +182,7 @@ async def delete_admin_client(
     if not user:
         raise HTTPException(status_code=404, detail="Client not found")
     
-    await log_action(db, master.id, "delete", "client", client_id, user.name, level="warning")
+    await log_action(db, master.master_profile.id, "delete", "client", client_id, user.name, level="warning")
     await db.delete(user)
     await db.commit()
     return None

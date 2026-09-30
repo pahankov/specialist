@@ -65,7 +65,7 @@ async def confirm_appointment(
     else:
         appointment = await get_or_404(db, Appointment, appointment_id)
     appointment.status = "confirmed"
-    await log_action(db, master.id, "confirm", "appointment", appointment.id, "Статус изменён на confirmed", level="info")
+    await log_action(db, master.master_profile.id, "confirm", "appointment", appointment.id, "Статус изменён на confirmed", level="info")
     await db.commit()
     await db.refresh(appointment)
     return appointment
@@ -96,7 +96,7 @@ async def cancel_appointment(
     appointment.status = "cancelled"
     if reason:
         appointment.notes = f"{appointment.notes}\nОтмена: {reason}" if appointment.notes else f"Отмена: {reason}"
-    await log_action(db, master.id, "cancel", "appointment", appointment.id, f"Причина: {reason}", level="warning")
+    await log_action(db, master.master_profile.id, "cancel", "appointment", appointment.id, f"Причина: {reason}", level="warning")
     await db.commit()
     await db.refresh(appointment)
     return appointment
@@ -124,7 +124,7 @@ async def complete_appointment(
     else:
         appointment = await get_or_404(db, Appointment, appointment_id)
     appointment.status = "completed"
-    await log_action(db, master.id, "complete", "appointment", appointment.id, level="info")
+    await log_action(db, master.master_profile.id, "complete", "appointment", appointment.id, level="info")
     await db.commit()
     await db.refresh(appointment)
     return appointment
@@ -151,7 +151,7 @@ async def delete_appointment(
         appointment = await get_owned_or_404(db, Appointment, appointment_id, mp.id)
     else:
         appointment = await get_or_404(db, Appointment, appointment_id)
-    await log_action(db, master.id, "delete", "appointment", appointment_id, level="warning")
+    await log_action(db, master.master_profile.id, "delete", "appointment", appointment_id, level="warning")
     await db.delete(appointment)
     await db.commit()
     return None
@@ -180,7 +180,7 @@ async def mark_no_show(
         appointment = await get_or_404(db, Appointment, appointment_id)
     appointment.status = "cancelled"
     appointment.notes = f"{appointment.notes}\n\nНеявка" if appointment.notes else "Неявка"
-    await log_action(db, master.id, "no-show", "appointment", appointment_id, level="warning")
+    await log_action(db, master.master_profile.id, "no-show", "appointment", appointment_id, level="warning")
 
     if appointment.client_id:
         client_result = await db.execute(
@@ -342,7 +342,7 @@ async def create_appointment(
     db.add(new_appointment)
     await db.flush()
     await db.refresh(new_appointment)
-    await log_action(db, master.id, "create", "appointment", new_appointment.id, f"Клиент: {client.name}", level="info")
+    await log_action(db, master.master_profile.id, "create", "appointment", new_appointment.id, f"Клиент: {client.name}", level="info")
     await db.commit()
     return new_appointment
 
@@ -368,7 +368,9 @@ async def book_appointment(
     if not service:
         raise HTTPException(status_code=404, detail="Услуга не найдена")
 
-    client_result = await db.execute(select(User).where(User.id == data.client_id))
+    client_result = await db.execute(
+        select(User).options(joinedload(User.client_profile)).where(User.id == data.client_id)
+    )
     user = client_result.scalar_one_or_none()
     if not user or user.role.value != "CLIENT":
         raise HTTPException(status_code=404, detail="Клиент не найден")
@@ -438,6 +440,6 @@ async def get_appointments_by_date(
         {"id": a.id, "client_name": a.client_profile.user.name if a.client_profile else "Unknown",
          "client_phone": a.client_profile.user.phone if a.client_profile else "",
           "service_name": a.service.name if a.service else "",
-          "appointment_date": a.appointment_date.isoformat(), "status": a.status}
+                     "appointment_date": a.appointment_date.isoformat(), "status": a.status}
          for a in appointments
     ]
