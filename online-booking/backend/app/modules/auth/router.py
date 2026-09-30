@@ -81,7 +81,7 @@ async def register_master(
 # ─── Login ────────────────────────────────────────────────────────────
 
 @router.post("/login", response_model=TokenResponse)
-async def login(response: Response, req: LoginRequest, db: AsyncSession = Depends(get_db)):
+async def login(response: Response, req: UserLoginByEmail, db: AsyncSession = Depends(get_db)):
     """Login master by email+password — returns access token in response body, refresh token in httpOnly cookie."""
     access_token, user = await service.login_master(req.email, req.password, db)
 
@@ -103,7 +103,7 @@ async def login(response: Response, req: LoginRequest, db: AsyncSession = Depend
 
 
 @router.post("/client/login", response_model=TokenResponse)
-async def client_login(req: ClientLoginRequest, db: AsyncSession = Depends(get_db)):
+async def client_login(req: UserLoginByPhone, db: AsyncSession = Depends(get_db)):
     """Legacy client login by phone (no password)."""
     access_token, user = await service.login_client_legacy(req.phone, db)
     return {"access_token": access_token, "token_type": "bearer"}
