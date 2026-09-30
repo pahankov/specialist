@@ -645,7 +645,92 @@ export DATABASE_URL='postgresql+asyncpg://user:pass@host:5432/dbname'
 
 ---
 
-**Частые ошибки при забывании пунктов:**в:**
+## ЧЕК-ЛИСТ ПЕРЕД КОММИТОМ
+
+> **Всегда выполняй перед `git commit`!** Это сэкономит часы на отладку.
+
+### 1. Проверь синтаксис всех изменённых файлов
+```bash
+python -c "import ast; ast.parse(open('file.py').read())"
+```
+- **Не доверяй** редактированию без валидации
+- Если файл редактировался через скрипт — проверь на null bytes
+
+### 2. Проверь импорт всего приложения
+```bash
+python -c "from app.main import app"
+```
+- Ловит 90% ошибок до деплоя
+- Если падает с `NoForeignKeysError` → проблема в relationship
+- Если падает с `NameError` → проблема в импорте
+
+### 3. Проверь ВСЕ использования при изменении модели
+```bash
+grep -r "old_relationship_name" app/
+grep -r "log_action" app/modules/admin/
+```
+- Не только в новом модуле, а во всём проекте
+- При смене FK — проверь все `back_populates`
+- При удалении relationship — проверь что нигде не используется
+
+### 4. Проверь все импорты в новых файлах
+```bash
+grep -r "def hash_password" app/  # найти точный путь
+grep -r "Query" app/modules/admin/masters/  # проверить все параметры
+```
+- Не гадать, а искать
+- При разделении файла — проверить КАЖДЫЙ endpoint, КАЖДЫЙ параметр
+
+### 5. Проверь что не удалил используемые классы
+```bash
+grep -r "LoginRequest" app/modules/auth/
+```
+- Если удалил класс — проверь что нигде не используется
+
+### 6. Проверь async/sync функции
+- `def` — синхронная, вызывается как `result = func()`
+- `async def` — асинхронная, вызывается как `result = await func()`
+- **Не делай** `async def` для простых конвертеров (они не await'ятся в list comprehension)
+
+### 7. Проверь чувствительные данные
+```bash
+git diff --cached | grep -i "password\|secret\|token\|key"
+```
+- Никаких реальных паролей в коде или документации
+- В DEPLOY.md — только placeholders
+
+---
+
+## ТАБЛИЦА ИНЦИДЕНТОВ
+
+> Все ошибки, которые произошли при рефакторинге. Используй для предотвращения повторений.
+
+| Инцидент | Причина | Как обнаружил | Как исправил |
+|----------|---------|---------------|---------------|
+| `NoForeignKeysError` | FK в AuditLog изменён на users.id, но MasterProfile.audit_logs всё ещё ссылается на master_profile.id | `journalctl` → NoForeignKeysError | Удалить `audit_logs` из MasterProfile |
+| `AttributeError: 'NoneType' object has no attribute 'id'` | `master.master_profile.id` для супер-админа (нет MasterProfile) | 502 Bad Gateway | Использовать `master.id` (User.id) |
+| `audit.py` обрезался на строке 85 | Null bytes при редактировании через Python-скрипт | `SyntaxError: '[' was never closed` | Пересоздать файл полностью |
+| `NameError: name 'Query' is not defined` | Забыл `Query` при разделении `masters.py` на модули | `journalctl` → NameError | Добавить `Query` в импорты |
+| `NameError: name 'LoginRequest' is not defined` | Удалил класс, но он использовался в эндпоинтах | `journalctl` → NameError | Заменить на `UserLoginByEmail` из schemas |
+| `ResponseValidationError: coroutine object` | `_to_response` объявлен как `async def`, но не await'ится | 500 Internal Server Error | Убрать `async` |
+| `No module named 'redis'` | Redis не установлен на сервере | `journalctl` → warning | Игнорировать (fallback на отсутствие кэша) |
+| `hash_password` не найден | Путь `app.services.auth` не существует | `journalctl` → ImportError | Использовать `app.modules.auth.service` |
+
+---
+
+## ЧАСТЫЕ ОШИБКИ ПРИ ЗАБЫВАНИИ ПУНКТОВ
+
+| Забыли | Результат | Как обнаружить | Как исправить |
+|--------|-----------|----------------|---------------|
+| SAEnum в модели | 500 ошибка на ВСЕХ endpoint'ах | `journalctl -u beauty-backend -n 50` | Заменить на `String(20)` |
+| `.value` у status | 500 AttributeError | `journalctl -u beauty-backend -n 50` | Убрать `.value` |
+| Сид-данные для новой таблицы | 500 ошибка на API | `curl https://beauty-specialist.ru/api/v1/new-endpoint/` | Запустить `seed_production.py` |
+| Связанную запись (MasterProfile) | 500 ошибка при логине | `journalctl -u beauty-backend -n 50` | Создать запись через SQL |
+| Сид-данные для отзывов | Пустая карусель | Открыть главную страницу | Запустить `create_minimal_reviews.py` |
+| Обновить `deploy.yml` | На сервере старые данные | Проверить логи деплоя | Добавить шаги в workflow |
+| Empty state компонента | Белый экран | Открыть страницу на чистом сервере | Добавить empty state |
+| Фикс схемы БД | 500 ошибка (column X does not exist) | `journalctl -u beauty-backend -n 50` | Запустить `fix_all_tables.sql` |
+| Права на логи | 502 Bad Gateway | `systemctl status beauty-backend` | `chown -R www-data:www-data logs/` |в:**в:**
 
 | Забыли | Результат | Как обнаружить | Как исправить |
 |--------|-----------|----------------|---------------|
