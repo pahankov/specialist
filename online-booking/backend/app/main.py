@@ -8,6 +8,16 @@ from app.logging_config import setup_logging, get_logger
 from app.middleware.rate_limit import RateLimitMiddleware
 import asyncio
 
+# Import module routers
+from app.modules.auth import router as auth_router
+from app.modules.user import router as user_router
+from app.modules.booking import router as booking_router
+from app.modules.service import router as service_router
+from app.modules.schedule import router as schedule_router
+from app.modules.review import router as review_router
+from app.modules.admin import router as admin_router
+from app.modules.city import router as city_router
+
 # Инициализация логирования
 setup_logging("INFO")
 logger = get_logger(__name__)
@@ -98,15 +108,6 @@ async def health_check():
     return {"status": "ok", "app": settings.APP_NAME}
 
 # ─── Import and include module routers ─────────────────────────
-
-from app.modules.auth import router as auth_router
-from app.modules.user import router as user_router
-from app.modules.booking import router as booking_router
-from app.modules.service import router as service_router
-from app.modules.schedule import router as schedule_router
-from app.modules.review import router as review_router
-from app.modules.admin import router as admin_router
-from app.modules.city import router as city_router
 
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(city_router, prefix="/api/v1", tags=["cities"])
