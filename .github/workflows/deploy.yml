@@ -44,45 +44,6 @@ jobs:
             # Fix schema mismatches BEFORE migrations (uses file in current directory)
             sudo -u postgres psql -d online_booking -f fix_all_tables.sql || echo "[WARN] Schema fix failed, continuing..."
 
-            # CRITICAL FIX: Replace SAEnum with VARCHAR in ALL files
-            # asyncpg caches enum types causing persistent 500 errors
-            # This fix is applied AFTER git pull (which may restore old SAEnum code)
-            echo "=== FIXING ENUM TO VARCHAR ==="
-            cat > /tmp/fix_enum.py << 'PYEOF'
-import re, os
-files_to_fix = [
-    'app/models/master_profile.py',
-    'app/modules/user/router.py',
-    'app/modules/admin/masters.py',
-]
-for filepath in files_to_fix:
-    if not os.path.exists(filepath):
-        continue
-    with open(filepath, 'r') as f:
-        content = f.read()
-    original = content
-    # Replace SAEnum with VARCHAR in model
-    content = re.sub(
-        r'status = Column\(SAEnum\(MasterStatus\), default=MasterStatus\.ACTIVE, nullable=False\)',
-        'status = Column(String(20), default="active", nullable=False)  # active, inactive, suspended',
-        content
-    )
-    # Remove .value from status references
-    content = content.replace('.status.value', '.status')
-    # Replace MasterStatus enum assignments with strings
-    content = content.replace('MasterStatus.INACTIVE', '"inactive"')
-    content = content.replace('MasterStatus.ACTIVE', '"active"')
-    content = content.replace('MasterStatus.SUSPENDED', '"suspended"')
-    if content != original:
-        with open(filepath, 'w') as f:
-            f.write(content)
-        print(f'Fixed: {filepath}')
-    else:
-        print(f'Skipped (no changes): {filepath}')
-print('ENUM->VARCHAR fix complete')
-PYEOF
-            python3.12 /tmp/fix_enum.py
-
             # Pass DATABASE_URL to each script
             echo "=== ALEMBIC ==="
             DATABASE_URL="${DATABASE_URL}" alembic upgrade head
