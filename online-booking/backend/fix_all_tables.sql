@@ -104,8 +104,9 @@ ALTER TABLE working_hours ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRU
 -- 11. audit_logs
 -- =============================================================
 -- Модель: id, master_id, level, action, entity_type, entity_id, details, ip_address, created_at
--- Старая схема могла не иметь master_id
+-- Старая схема могла не иметь master_id и level
 ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS master_id INTEGER REFERENCES master_profiles(id);
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS level VARCHAR(10) DEFAULT 'info';
 
 -- =============================================================
 -- 12. blocked_slots
