@@ -14,14 +14,22 @@ class TestToggleMasterActive:
     """Tests for toggle-active endpoint."""
 
     async def test_toggle_active_on(self, client, super_admin_headers, created_master_id):
-        """Master can be toggled to active."""
+        """Master can be toggled (active→inactive→active)."""
+        # First toggle: active → inactive
         resp = await client.post(
             f"/api/v1/admin/{created_master_id}/toggle-active",
             headers=super_admin_headers
         )
         assert resp.status_code == 200
-        data = resp.json()
-        assert data["status"] == "active"
+        assert resp.json()["status"] == "inactive"
+        
+        # Second toggle: inactive → active
+        resp = await client.post(
+            f"/api/v1/admin/{created_master_id}/toggle-active",
+            headers=super_admin_headers
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "active"
 
     async def test_toggle_active_off(self, client, super_admin_headers, created_master_id):
         """Master can be toggled to inactive."""
@@ -37,13 +45,13 @@ class TestToggleMasterActive:
         data = resp.json()
         assert data["status"] in ("active", "inactive")
 
-    async def test_toggle_admin_self(self, client, super_admin_headers, super_admin_user_with_profile):
+    async def test_toggle_admin_self(self, client, super_admin_headers_2, super_admin_user_with_profile):
         """Super admin cannot toggle themselves."""
         mp = super_admin_user_with_profile["master_profile"]
 
         resp = await client.post(
             f"/api/v1/admin/{mp.id}/toggle-active",
-            headers=super_admin_headers
+            headers=super_admin_headers_2
         )
         assert resp.status_code == 400
         assert "себя" in resp.json()["detail"]
@@ -62,13 +70,13 @@ class TestSuspendMaster:
         data = resp.json()
         assert data["status"] == "suspended"
 
-    async def test_suspend_admin_self(self, client, super_admin_headers, super_admin_user_with_profile):
+    async def test_suspend_admin_self(self, client, super_admin_headers_2, super_admin_user_with_profile):
         """Super admin cannot suspend themselves."""
         mp = super_admin_user_with_profile["master_profile"]
 
         resp = await client.post(
             f"/api/v1/admin/{mp.id}/suspend",
-            headers=super_admin_headers
+            headers=super_admin_headers_2
         )
         assert resp.status_code == 400
         assert "себя" in resp.json()["detail"]
@@ -135,13 +143,13 @@ class TestToggleAdmin:
         data = resp.json()
         assert data["is_admin"] is False
 
-    async def test_toggle_admin_self(self, client, super_admin_headers, super_admin_user_with_profile):
+    async def test_toggle_admin_self(self, client, super_admin_headers_2, super_admin_user_with_profile):
         """Super admin cannot change own admin rights."""
         mp = super_admin_user_with_profile["master_profile"]
 
         resp = await client.post(
             f"/api/v1/admin/{mp.id}/toggle-admin",
-            headers=super_admin_headers
+            headers=super_admin_headers_2
         )
         assert resp.status_code == 400
         assert "права" in resp.json()["detail"]

@@ -9,7 +9,9 @@ class TestAdminGetClients:
         """Returns empty list when no clients."""
         resp = await client.get("/api/v1/admin/clients", headers=auth_headers)
         assert resp.status_code == 200
-        assert resp.json() == []
+        data = resp.json()
+        assert data["items"] == []
+        assert data["total"] == 0
 
     async def test_get_admin_clients_with_data(self, client, auth_headers, test_client_data):
         """Returns list of clients."""
@@ -17,7 +19,7 @@ class TestAdminGetClients:
 
         resp = await client.get("/api/v1/admin/clients", headers=auth_headers)
         assert resp.status_code == 200
-        clients = resp.json()
+        clients = resp.json()["items"]
         assert len(clients) >= 1
         # Phone is normalized
         assert any("+7" in c["phone"] and "999" in c["phone"] for c in clients)
@@ -107,9 +109,9 @@ class TestAdminUpdateClient:
 class TestAdminDeleteClient:
     """Tests for DELETE /api/v1/admin/clients/{id}"""
 
-    async def test_delete_admin_client(self, client, auth_context, test_client_data):
+    async def test_delete_admin_client(self, client, auth_headers, test_client_data):
         """Admin can delete a client."""
-        headers = auth_context["headers"]
+        headers = auth_headers
 
         client_resp = await client.post(
             "/api/v1/admin/clients", json=test_client_data, headers=headers
@@ -121,7 +123,7 @@ class TestAdminDeleteClient:
 
         # Verify deleted
         get_resp = await client.get("/api/v1/admin/clients", headers=headers)
-        assert not any(c["id"] == client_id for c in get_resp.json())
+        assert not any(c["id"] == client_id for c in get_resp.json()["items"])
 
     async def test_delete_admin_client_not_found(self, client, auth_headers):
         """Returns 404 for non-existent client."""

@@ -10,7 +10,9 @@ class TestAdminGetAppointments:
         """Returns empty list when no appointments."""
         resp = await client.get("/api/v1/admin/appointments", headers=auth_headers)
         assert resp.status_code == 200
-        assert resp.json() == []
+        data = resp.json()
+        assert data["items"] == []
+        assert data["total"] == 0
 
     async def test_get_admin_appointments_with_data(self, client, auth_headers, test_master_data, test_service_data):
         """Returns appointments with client and service details."""
@@ -32,8 +34,9 @@ class TestAdminGetAppointments:
 
         resp = await client.get("/api/v1/admin/appointments", headers=auth_headers)
         assert resp.status_code == 200
-        assert len(resp.json()) >= 1
-        appt = resp.json()[0]
+        data = resp.json()
+        assert len(data["items"]) >= 1
+        appt = data["items"][0]
         assert "client_name" in appt
         assert "service_name" in appt
 
@@ -211,7 +214,7 @@ class TestAdminDeleteAppointment:
 
         # Verify deleted
         get_resp = await client.get("/api/v1/admin/appointments", headers=auth_headers)
-        assert len(get_resp.json()) == 0
+        assert len(get_resp.json()["items"]) == 0
 
 
 class TestAdminBookAppointment:
@@ -326,8 +329,9 @@ class TestMarkNoShow:
 
         # Verify client has no_show_count = 0
         client_resp = await client.get("/api/v1/admin/clients", headers=auth_headers)
+        clients = client_resp.json()["items"]
         client_before = next(
-            c for c in client_resp.json()
+            c for c in clients
             if c["name"] == "No Show Client"
         )
         assert client_before["no_show_count"] == 0
@@ -342,11 +346,12 @@ class TestMarkNoShow:
         assert "Неявка" in resp.json()["notes"]
 
         # Verify client's no_show_count incremented to 1
-        client_resp = await client.get("/api/v1/admin/clients", headers=auth_headers)
-        client_after = next(
-            c for c in client_resp.json()
-            if c["name"] == "No Show Client"
-        )
+        # Use search to find the specific client
+        client_resp = await client.get("/api/v1/admin/clients", params={"search": "No Show Client"}, headers=auth_headers)
+        clients = client_resp.json()["items"]
+        assert len(clients) > 0, f"Clients found: {[c['name'] for c in clients]}"
+        client_after = clients[0]
+        assert client_after["name"] == "No Show Client"
         assert client_after["no_show_count"] == 1
 
     async def test_mark_no_show_multiple_times(self, client, auth_headers, test_master_data, test_service_data):
@@ -390,8 +395,9 @@ class TestMarkNoShow:
 
         # Verify no_show_count = 2
         client_resp = await client.get("/api/v1/admin/clients", headers=auth_headers)
+        clients = client_resp.json()["items"]
         client_data = next(
-            c for c in client_resp.json()
+            c for c in clients
             if c["name"] == "Repeat No-Show"
         )
         assert client_data["no_show_count"] == 2

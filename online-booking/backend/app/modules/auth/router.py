@@ -9,6 +9,7 @@ from datetime import datetime, timezone as dt_timezone
 
 from app.database import get_db
 from app.models.user import User, UserRole
+from app.models.master_profile import MasterProfile
 from app.models.refresh_token import RefreshToken
 from app.models.country import Country
 from app.schemas.user import UserCreate, UserLoginByEmail, UserLoginByPhone
@@ -67,8 +68,13 @@ async def register_master(
     new_user = await service.register_master(user_data, db)
     logger.info("Master registered successfully: id=%s, email=%s", new_user.id, new_user.email)
 
+    # Load master_profile to get its ID
+    from sqlalchemy import select as sa_select
+    result = await db.execute(sa_select(MasterProfile).where(MasterProfile.user_id == new_user.id))
+    master_profile = result.scalar_one_or_none()
+
     return {
-        "id": new_user.id,
+        "id": master_profile.id if master_profile else new_user.id,
         "name": new_user.name,
         "email": new_user.email,
         "phone": new_user.phone,
