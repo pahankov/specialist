@@ -99,10 +99,9 @@ async def get_current_master(
     )
     user = result.scalar_one_or_none()
 
-    if user is None or user.master_profile is None:
+    if user is None:
         logger.error(
-            "Master user found but master_profile is None: user_id=%s, role=%s",
-            user.id if user else "N/A",
+            "Master user not found: role=%s",
             user.role if user else "N/A"
         )
         raise HTTPException(
@@ -110,7 +109,21 @@ async def get_current_master(
             detail="Master profile not found"
         )
 
-    logger.info("Master authenticated: id=%s, profile_id=%s", user.id, user.master_profile.id)
+    # Admin users (role=ADMIN) don't have MasterProfile — that's expected
+    if user.role == UserRole.MASTER and user.master_profile is None:
+        logger.error(
+            "Master user found but master_profile is None: user_id=%s",
+            user.id
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Master profile not found"
+        )
+
+    if user.master_profile is not None:
+        logger.info("Master authenticated: id=%s, profile_id=%s", user.id, user.master_profile.id)
+    else:
+        logger.info("Admin authenticated (no master_profile): id=%s", user.id)
     return user
 
 
@@ -164,7 +177,7 @@ def require_master(user: User = Depends(get_current_master)) -> User:
     return user
 
 
-def require_admin(user: User = Depends(get_current_master)) -> User:
+def require_admin(user: User = Depends(get_current_user)) -> User:
     """Dependency that requires an admin user."""
     if user.role != UserRole.ADMIN:
         logger.warning(
