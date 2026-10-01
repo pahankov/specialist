@@ -5,7 +5,32 @@ on:
     branches: [main]
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          cd online-booking/backend
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-cov httpx aiosqlite
+
+      - name: Run tests
+        run: |
+          cd online-booking/backend
+          PYTHONPATH=. pytest tests/ -v --tb=short --tb=no 2>&1 | tee test-results.txt
+          echo ""
+          echo "=== TEST SUMMARY ==="
+          grep -E "passed|failed|error|skipped" test-results.txt | tail -1
+
   deploy:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -40,6 +65,18 @@ jobs:
             python3.12 -m venv venv
             source venv/bin/activate
             pip install -r requirements.txt
+
+            # Run tests BEFORE deployment
+            echo "=== RUNNING TESTS ==="
+            pip install pytest pytest-asyncio pytest-cov httpx aiosqlite
+            PYTHONPATH=. pytest tests/ -v --tb=short --tb=no 2>&1 | tee /tmp/test-results.txt
+            TEST_SUMMARY=$(grep -E "passed|failed|error|skipped" /tmp/test-results.txt | tail -1)
+            echo "Test summary: $TEST_SUMMARY"
+            if echo "$TEST_SUMMARY" | grep -q "failed\|error"; then
+                echo "ERROR: Tests failed on server! Aborting deployment."
+                exit 1
+            fi
+            echo "=== ALL TESTS PASSED ==="
 
             # Fix schema mismatches BEFORE migrations (uses file in current directory)
             sudo -u postgres psql -d online_booking -f fix_all_tables.sql || echo "[WARN] Schema fix failed, continuing..."
