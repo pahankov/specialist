@@ -41,7 +41,7 @@ class UnifiedRegisterRequest(BaseModel):
             raise ValueError('Введите номер телефона')
         if len(digits) > 11:
             digits = digits[-11:]
-        if digits.startswith('8') and len(digits) == 11:
+        if digits.startswith('8') and digits == 11:
             digits = '7' + digits[1:]
         if not digits.startswith('7'):
             digits = '7' + digits
@@ -49,11 +49,32 @@ class UnifiedRegisterRequest(BaseModel):
             raise ValueError('Номер телефона должен содержать 10 цифр')
         return f'+7 ({digits[1:4]}) {digits[4:7]}-{digits[7:9]}-{digits[9:11]}'
 
+    @field_validator('password')
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError('Пароль должен содержать минимум 8 символов')
+        if not any(c.isupper() for c in v):
+            raise ValueError('Пароль должен содержать хотя бы одну заглавную букву')
+        if not any(c.islower() for c in v):
+            raise ValueError('Пароль должен содержать хотя бы одну строчную букву')
+        if not any(c.isdigit() for c in v):
+            raise ValueError('Пароль должен содержать хотя бы одну цифру')
+        if not any(c in '!@#$%^&*()_+-=[]{}|;:,.<>?' for c in v):
+            raise ValueError('Пароль должен содержать хотя бы один спецсимвол')
+        if len(set(v)) < 4:
+            raise ValueError('Пароль должен содержать минимум 4 уникальных символа')
+        return v
+
     @field_validator('telegram_username')
     @classmethod
     def validate_telegram(cls, v: Optional[str]) -> Optional[str]:
         if v is None:
             return v
+        v = v.strip()
+        if v and not v.startswith('@'):
+            v = '@' + v
+        return v
         v = v.strip()
         if v and not v.startswith('@'):
             v = '@' + v
