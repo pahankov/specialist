@@ -27,7 +27,9 @@ jobs:
           PYTHONPATH=. pytest tests/ -v --tb=short --cov=app --cov-report=term-missing --tb=no 2>&1 | tee test-results.txt
           echo ""
           echo "=== TEST SUMMARY ==="
-          grep -E "passed|failed|error|skipped|coverage" test-results.txt | tail -5
+          # Only match the final summary line: "X passed, Y failed, ..."
+          grep -E "^[=]+.*passed.*failed" test-results.txt | tail -1 || \
+          grep "passed.*in" test-results.txt | tail -1
 
   deploy:
     needs: test
@@ -75,12 +77,17 @@ jobs:
             echo "=== RUNNING TESTS ==="
             pip install pytest pytest-asyncio pytest-cov httpx aiosqlite
             PYTHONPATH=. pytest tests/ -v --tb=short --cov=app --cov-report=term-missing --tb=no 2>&1 | tee /tmp/test-results.txt
-            TEST_SUMMARY=$(grep -E "passed|failed|error|skipped|coverage" /tmp/test-results.txt | tail -5)
-            echo "Test summary: $TEST_SUMMARY"
-            if echo "$TEST_SUMMARY" | grep -q "failed\|error"; then
+            
+            # Check for actual test failures (not coverage report lines)
+            if grep -qE "^[=]+.*failed" /tmp/test-results.txt || grep -qE "^[=]+.*error" /tmp/test-results.txt; then
                 echo "ERROR: Tests failed on server! Aborting deployment."
+                grep -E "failed|error" /tmp/test-results.txt | tail -5
                 exit 1
             fi
+            
+            # Show summary
+            TEST_SUMMARY=$(grep "passed.*in" /tmp/test-results.txt | tail -1)
+            echo "Test summary: $TEST_SUMMARY"
             echo "=== ALL TESTS PASSED ==="
 
             # Fix schema mismatches BEFORE migrations (uses file in current directory)
