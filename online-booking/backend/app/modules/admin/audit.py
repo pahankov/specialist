@@ -10,6 +10,7 @@ from app.models.audit_log import AuditLog
 from app.models.user import User
 from app.schemas.audit_log import AuditLogListResponse, AuditLogResponse
 from app.dependencies.auth import require_master, require_super_admin
+from app.modules.admin.helpers import get_master_profile_id
 
 router = APIRouter()
 
@@ -39,8 +40,9 @@ async def get_audit_logs(
     db: AsyncSession = Depends(get_db)
 ):
     """Get audit logs for the authenticated master."""
-    query = select(AuditLog).where(AuditLog.master_id == master.master_profile.id)
-    count_query = select(func.count(AuditLog.id)).where(AuditLog.master_id == master.master_profile.id)
+    mp_id = await get_master_profile_id(db, master)
+    query = select(AuditLog).where(AuditLog.master_id == mp_id)
+    count_query = select(func.count(AuditLog.id)).where(AuditLog.master_id == mp_id)
     if entity_type:
         query = query.where(AuditLog.entity_type == entity_type)
         count_query = count_query.where(AuditLog.entity_type == entity_type)

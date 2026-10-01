@@ -8,11 +8,13 @@ from datetime import time
 from app.database import get_db
 from app.models.working_hour import WorkingHour
 from app.models.user import User
+from app.models.master_profile import MasterProfile
 from app.schemas.working_hour import WorkingHourCreate, WorkingHourUpdate, WorkingHourResponse
 from app.dependencies.auth import require_master
 from app.dependencies.crud import get_owned_or_404
 from app.services.audit import log_action
 from app.services.master_status import update_master_status_from_working_hours
+from app.modules.admin.helpers import get_master_profile_id
 
 router = APIRouter()
 
@@ -29,7 +31,8 @@ async def get_working_hours(
     if is_admin and master_id is not None:
         query = select(WorkingHour).where(WorkingHour.master_id == master_id).order_by(WorkingHour.schedule_date)
     else:
-        query = select(WorkingHour).where(WorkingHour.master_id == master.master_profile.id).order_by(WorkingHour.schedule_date)
+        mp_id = await get_master_profile_id(db, master)
+        query = select(WorkingHour).where(WorkingHour.master_id == mp_id).order_by(WorkingHour.schedule_date)
     
     result = await db.execute(query)
     return result.scalars().all()
@@ -42,8 +45,9 @@ async def create_working_hour(
     db: AsyncSession = Depends(get_db)
 ):
     """Create working hours."""
+    mp_id = await get_master_profile_id(db, master)
     hour = WorkingHour(
-        master_id=master.master_profile.id, schedule_date=data.schedule_date,
+        master_id=mp_id, schedule_date=data.schedule_date,
         start_time=data.start_time,
         end_time=data.end_time
     )
@@ -54,7 +58,10 @@ async def create_working_hour(
     await db.commit()
     
     # Auto-update master status based on working hours
-    await update_master_status_from_working_hours(db, master.master_profile)
+    mp = await db.execute(select(MasterProfile).where(MasterProfile.id == hour.master_id))
+    mp_profile = mp.scalar_one_or_none()
+    if mp_profile:
+        await update_master_status_from_working_hours(db, mp_profile)
     await db.commit()
     
     return hour
@@ -68,7 +75,8 @@ async def update_working_hour(
     db: AsyncSession = Depends(get_db)
 ):
     """Update working hours."""
-    hour = await get_owned_or_404(db, WorkingHour, hour_id, master.master_profile.id)
+    mp_id = await get_master_profile_id(db, master)
+    hour = await get_owned_or_404(db, WorkingHour, hour_id, mp_id)
     changes = []
     if data.schedule_date is not None:
         hour.schedule_date = data.schedule_date
@@ -87,7 +95,10 @@ async def update_working_hour(
     await db.refresh(hour)
     
     # Auto-update master status based on working hours
-    await update_master_status_from_working_hours(db, master.master_profile)
+    mp = await db.execute(select(MasterProfile).where(MasterProfile.id == hour.master_id))
+    mp_profile = mp.scalar_one_or_none()
+    if mp_profile:
+        await update_master_status_from_working_hours(db, mp_profile)
     await db.commit()
     
     return hour
@@ -100,13 +111,17 @@ async def delete_working_hour(
     db: AsyncSession = Depends(get_db)
 ):
     """Delete working hours."""
-    hour = await get_owned_or_404(db, WorkingHour, hour_id, master.master_profile.id)
+    mp_id = await get_master_profile_id(db, master)
+    hour = await get_owned_or_404(db, WorkingHour, hour_id, mp_id)
     await log_action(db, master.id, "delete", "working_hour", hour_id, f"{hour.schedule_date}: {hour.start_time}-{hour.end_time}", level="warning")
     await db.delete(hour)
     await db.commit()
     
     # Auto-update master status based on working hours
-    await update_master_status_from_working_hours(db, master.master_profile)
+    mp = await db.execute(select(MasterProfile).where(MasterProfile.id == hour.master_id))
+    mp_profile = mp.scalar_one_or_none()
+    if mp_profile:
+        await update_master_status_from_working_hours(db, mp_profile)
     await db.commit()
     
     return None
@@ -119,13 +134,17 @@ async def toggle_working_hour_active(
     db: AsyncSession = Depends(get_db)
 ):
     """Toggle working hour active/inactive status."""
-    hour = await get_owned_or_404(db, WorkingHour, hour_id, master.master_profile.id)
+    mp_id = await get_master_profile_id(db, master)
+    hour = await get_owned_or_404(db, WorkingHour, hour_id, mp_id)
     hour.is_active = not hour.is_active
     await db.commit()
     await db.refresh(hour)
     
     # Auto-update master status based on working hours
-    await update_master_status_from_working_hours(db, master.master_profile)
+    mp = await db.execute(select(MasterProfile).where(MasterProfile.id == hour.master_id))
+    mp_profile = mp.scalar_one_or_none()
+    if mp_profile:
+        await update_master_status_from_working_hours(db, mp_profile)
     await db.commit()
     
     return hour

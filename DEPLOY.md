@@ -787,6 +787,17 @@ git diff --cached | grep -i "password\|secret\|token\|key"
 - Понятное сообщение коммита
 - После коммита — проверить логи деплоя и `journalctl`
 
+### 9. Для доступа к master_profile.id — использовать helper `get_master_profile_id()`
+**Ошибка:** `AttributeError: 'NoneType' object has no attribute 'id'` на `/working-hours`, `/monthly-stats`, `/appointments/by-date`, `/services`
+**Причина:** Супер-админ (role=ADMIN) не имеет MasterProfile → `master.master_profile` = `None`
+**Правило:** Никогда не использовать `master.master_profile.id` напрямую. Использовать helper:
+```python
+from app.modules.admin.helpers import get_master_profile_id
+mp_id = await get_master_profile_id(db, master)
+```
+**Проверка:** `grep -r "master\.master_profile\.id" app/modules/admin/` — должен вернуть только helper
+**Проверка:** `python -c "from app.main import app"` — если падает с AttributeError → проблема в master_profile
+
 ---
 
 ## ИТОГИ ИСПРАВЛЁННЫХ ОШИБОК (REFRAIN FROM)

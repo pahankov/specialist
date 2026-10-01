@@ -13,6 +13,7 @@ from app.models.master_profile import MasterProfile
 from app.dependencies.auth import require_master
 from app.services.background_tasks import bg_task_service
 from app.services.export_tasks import export_appointments_csv_task, export_clients_csv_task
+from app.modules.admin.helpers import get_master_profile_id
 
 router = APIRouter()
 
@@ -41,13 +42,14 @@ async def export_appointments_csv(
         }
 
     # Synchronous export
+    mp_id = await get_master_profile_id(db, master)
     query = (
         select(Appointment, User.name.label('client_name'), User.phone.label('client_phone'),
                Service.name.label('service_name'), Service.price.label('service_price'))
         .join(ClientProfile, Appointment.client_id == ClientProfile.id, isouter=True)
         .join(User, ClientProfile.user_id == User.id, isouter=True)
         .join(Service, Appointment.service_id == Service.id, isouter=True)
-        .where(Appointment.master_id == master.master_profile.id)
+        .where(Appointment.master_id == mp_id)
     )
     if status:
         query = query.where(Appointment.status == status)
