@@ -10,6 +10,7 @@ from app.schemas.blocked_slot import BlockedSlotCreate, BlockedSlotResponse
 from app.dependencies.auth import require_master
 from app.dependencies.crud import get_owned_or_404
 from app.services.audit import log_action
+from app.modules.admin.helpers import get_master_profile_id
 
 router = APIRouter()
 
@@ -20,8 +21,9 @@ async def get_blocked_slots(
     db: AsyncSession = Depends(get_db)
 ):
     """Get blocked slots for the authenticated master."""
+    mp_id = await get_master_profile_id(db, master)
     result = await db.execute(
-        select(BlockedSlot).where(BlockedSlot.master_id == master.master_profile.id)
+        select(BlockedSlot).where(BlockedSlot.master_id == mp_id)
         .order_by(BlockedSlot.start_dt.desc())
     )
     slots = result.scalars().all()
@@ -42,8 +44,9 @@ async def create_blocked_slot(
     """Block a time slot."""
     if data.start_dt >= data.end_dt:
         raise HTTPException(status_code=422, detail="start_dt must be before end_dt")
+    mp_id = await get_master_profile_id(db, master)
     slot = BlockedSlot(
-        master_id=master.master_profile.id, start_dt=data.start_dt, end_dt=data.end_dt, reason=data.reason
+        master_id=mp_id, start_dt=data.start_dt, end_dt=data.end_dt, reason=data.reason
     )
     db.add(slot)
     await db.flush()
@@ -61,7 +64,8 @@ async def delete_blocked_slot(
     db: AsyncSession = Depends(get_db)
 ):
     """Delete a blocked slot."""
-    slot = await get_owned_or_404(db, BlockedSlot, slot_id, master.master_profile.id)
+    mp_id = await get_master_profile_id(db, master)
+    slot = await get_owned_or_404(db, BlockedSlot, slot_id, mp_id)
     await log_action(db, master.id, "delete", "blocked_slot", slot_id, level="warning")
     await db.delete(slot)
     await db.commit()

@@ -14,19 +14,9 @@ from app.schemas.pagination import PaginatedResponse
 from app.dependencies.auth import require_master
 from app.dependencies.crud import get_owned_or_404
 from app.services.audit import log_action
+from app.modules.admin.helpers import get_master_profile_id
 
 router = APIRouter()
-
-
-async def _get_master_profile_id(master: User, db: AsyncSession) -> Optional[int]:
-    """Get master_profile.id safely — returns None for admins (they have no services)."""
-    if master.role == UserRole.ADMIN:
-        return None
-    result = await db.execute(select(MasterProfile).where(MasterProfile.user_id == master.id))
-    mp = result.scalar_one_or_none()
-    if not mp:
-        raise HTTPException(status_code=403, detail="Not a master")
-    return mp.id
 
 
 @router.post("/services", response_model=ServiceResponse, status_code=201)
@@ -36,7 +26,7 @@ async def create_admin_service(
     db: AsyncSession = Depends(get_db)
 ):
     """Create a service for the authenticated master."""
-    mp_id = master.master_profile.id
+    mp_id = await get_master_profile_id(db, master)
     new_service = Service(
         master_id=mp_id, name=data.name, description=data.description,
         duration_minutes=data.duration_minutes, price=data.price, is_active=True
@@ -62,9 +52,14 @@ async def get_admin_services(
     offset = (page - 1) * page_size
 
     # Extract master_profile.id BEFORE building query to avoid lazy-load
-    mp_id = master.master_profile.id
+    mp_id = await get_master_profile_id(db, master)
 
     # Base query — use scalar mp_id, not master.master_profile.id
+    if mp_id is None:
+        # Admin has no services — return empty
+        return PaginatedResponse(
+            items=[], total=0, page=page, page_size=page_size, total_pages=0
+        )
     base_query = select(Service).where(Service.master_id == mp_id)
     count_query = select(func.count(Service.id)).where(Service.master_id == mp_id)
 
@@ -101,20 +96,25 @@ async def get_all_admin_services(
     offset = (page - 1) * page_size
 
     # Extract master_profile.id BEFORE building query
-    mp_id = master.master_profile.id
+    mp_id = await get_master_profile_id(db, master)
 
-    # Get total
-    total_result = await db.execute(
-        select(func.count(Service.id)).where(Service.master_id == mp_id)
-    )
-    total = total_result.scalar() or 0
+    if mp_id is None:
+        # Admin has no services — return empty
+        total = 0
+        services = []
+    else:
+        # Get total
+        total_result = await db.execute(
+            select(func.count(Service.id)).where(Service.master_id == mp_id)
+        )
+        total = total_result.scalar() or 0
 
-    # Get data
-    result = await db.execute(
-        select(Service).where(Service.master_id == mp_id)
-        .order_by(Service.name).offset(offset).limit(page_size)
-    )
-    services = result.scalars().all()
+        # Get data
+        result = await db.execute(
+            select(Service).where(Service.master_id == mp_id)
+            .order_by(Service.name).offset(offset).limit(page_size)
+        )
+        services = result.scalars().all()
 
     return PaginatedResponse(
         items=services,
@@ -133,7 +133,7 @@ async def update_admin_service(
     db: AsyncSession = Depends(get_db)
 ):
     """Update a service."""
-    mp_id = master.master_profile.id
+    mp_id = await get_master_profile_id(db, master)
     service = await get_owned_or_404(db, Service, service_id, mp_id)
     changes = []
     for field, value in data.model_dump(exclude_unset=True).items():
@@ -152,7 +152,7 @@ async def delete_admin_service(
     db: AsyncSession = Depends(get_db)
 ):
     """Soft-delete a service."""
-    mp_id = await _get_master_profile_id(master, db)
+    mp_id = await get_master_profile_id(db, master)
     service = await get_owned_or_404(db, Service, service_id, mp_id)
     await log_action(db, mp_id, "delete", "service", service_id, service.name, level="warning")
     service.is_active = False
