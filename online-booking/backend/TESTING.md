@@ -102,6 +102,432 @@ async def session(engine) -> AsyncSession:
 
 ## Критические правила
 
+> ⚠️ **Этот раздел — источник истины.** Перед написанием любого теста прочитайте его полностью. 90% проблем при тестировании можно предотвратить, следуя этим правилам.
+
+### 0. 🔴 КРИТИЧНО: Предотвращение ошибок (Checklist before every test)
+
+**ПЕРЕД написанием теста задайте себе 5 вопросов:**
+
+| # | Вопрос | Где проверить |
+|---|--------|---------------|
+| 1 | Нужен ли `role` в тестовых данных? | `schemas/user.py` → `UserCreate` |
+| 2 | Нужен ли `flush()` перед созданием связанных объектов? | Модель имеет FK? → да, нужен `flush()` |
+| 3 | Какой формат ответа: пагинация или список? | `PaginatedResponse[T]` → `data["items"]` |
+| 4 | Какая роль нужна: MASTER или ADMIN? | `require_master` vs `require_super_admin` |
+| 5 | Правильный ли путь к API? | `router.py` — проверь порядок роутов |
+
+**Если ответ на любой вопрос "не уверен" — открой соответствующий файл и проверь.**
+
+---
+
+### 1. 🔴 КРИТИЧНО: `flush()` перед созданием связанных объектов
+
+**Плохо:**
+```python
+new_user = User(...)
+db.add(new_user)
+
+# ❌ new_user.id == None!
+master_profile = MasterProfile(user_id=new_user.id)  # user_id=None → IntegrityError
+db.add(master_profile)
+```
+
+**Хорошо:**
+```python
+new_user = User(...)
+db.add(new_user)
+await db.flush()  # ✅ Получаем ID
+
+# Теперь new_user.id доступен
+master_profile = MasterProfile(user_id=new_user.id)
+db.add(master_profile)
+```
+
+**Почему:** SQLAlchemy не назначает ID до flush/commit. Если создать связанную запись до flush, FK будет `None`.
+
+**Когда нужно:** При создании ANY связанной сущности (MasterProfile, ClientProfile, Appointment, Review и т.д.)
+
+---
+
+### 2. 🔴 КРИТИЧНО: Всегда указывайте `role` в тестовых данных
+
+**Плохо:**
+```python
+test_master_data = {
+    "name": "Test Master",
+    "email": "test@example.com",
+    "password": "SecurePass123!",
+    # ❌ role не указан → 422 Unprocessable Entity
+}
+```
+
+**Хорошо:**
+```python
+test_master_data = {
+    "name": "Test Master",
+    "email": "test@example.com",
+    "password": "SecurePass123!",
+    "role": "MASTER",  # ✅ Обязательно
+}
+```
+
+**Почему:** `UserCreate` schema требует поле `role: UserRole`. Без него API возвращает 422.
+
+**Когда нужно:** При регистрации через API (`/register`, `/auth/register`)
+
+---
+
+### 3. 🔴 КРИТИЧНО: Создавайте пользователей напрямую в БД для fixtures
+
+**Плохо (через API):**
+```python
+@pytest.fixture
+async def created_master_id(client, test_master_data):
+    resp = await client.post("/api/v1/auth/register", json=test_master_data)
+    return resp.json()["id"]  # ❌ Данные теряются из-за commit() в session fixture
+```
+
+**Хорошо (прямое создание):**
+```python
+@pytest.fixture
+async def created_master_id(session, test_master_data):
+    user = User(
+        name=test_master_data["name"],
+        email=test_master_data["email"],
+        hashed_password=hash_password(test_master_data["password"]),
+        phone=test_master_data["phone"],
+        role=UserRole.MASTER,
+        is_verified=True,
+    )
+    session.add(user)
+    await session.flush()  # ✅ Получаем ID
+    await session.refresh(user)
+    return user.id
+```
+
+**Почему:** `session` fixture делает `commit()` после yield, а не `rollback()`. Данные создаются в той же сессии и видны в тесте.
+
+---
+
+### 4. ✅ Используйте class-based структуру для тестов
+
+```python
+class TestGetMasters:
+    """Tests for GET /api/v1/admin/masters"""
+
+    async def test_list_masters_empty(self, client, super_admin_headers):
+        """Returns empty list when no masters exist."""
+        resp = await client.get("/api/v1/admin/masters", headers=super_admin_headers)
+        assert resp.status_code == 200
+        assert resp.json() == []
+```
+
+**Почему:** Лучше группировка, понятнее структура, легче находить падающие тесты.
+
+---
+
+### 5. ✅ Используйте правильные пути к API
+
+**Правильные пути:**
+- `/api/v1/admin/masters` — список всех мастеров (superadmin)
+- `/api/v1/admin/masters/{id}` — мастер по ID
+- `/api/v1/admin/{id}/toggle-active` — toggle статуса (без `/masters/`)
+- `/api/v1/admin/masters/bulk/toggle-active` — bulk операции
+
+**Неправильные пути:**
+- ❌ `/api/v1/admin/masters/{id}/toggle-active` (нет `/masters/` в пути)
+- ❌ `/api/v1/admin/masters/bulk` (нужно `/bulk/toggle-active`)
+
+**Правило:** Если endpoint не найден (404), откройте `router.py` и проверьте порядок регистрации роутов.
+
+---
+
+### 6. ✅ Телефон форматируется автоматически
+
+API автоматически форматирует телефоны в `+7 (XXX) XXX-XX-XX`.
+
+**Плохо:**
+```python
+# ❌ Поиск по неформатированному номеру
+{"phone": "+79990001122"}  # В БД хранится как "+7 (999) 000-11-22"
+```
+
+**Хорошо:**
+```python
+# ✅ API сам форматировал при регистрации
+# Или используйте отформатированный номер
+{"phone": "+7 (999) 000-11-22"}
+```
+
+---
+
+### 7. ✅ Проверяй формат ответа API: пагинация vs список
+
+Некоторые endpoints возвращают **пагинированный ответ**, а не просто список.
+
+**Пагинированный формат:**
+```json
+{
+  "items": [...],
+  "total": 5,
+  "page": 1,
+  "page_size": 20,
+  "total_pages": 1
+}
+```
+
+**Плохо:**
+```python
+resp = await client.get("/api/v1/admin/appointments", headers=headers)
+assert resp.json() == []  # ❌ Ошибка! Возвращается {'items': [], ...}
+```
+
+**Хорошо:**
+```python
+resp = await client.get("/api/v1/admin/appointments", headers=headers)
+data = resp.json()
+assert data["items"] == []
+assert data["total"] == 0
+```
+
+**Endpoints с пагинацией:**
+- `GET /api/v1/admin/appointments`
+- `GET /api/v1/admin/clients`
+- `GET /api/v1/admin/services`
+- `GET /api/v1/admin/masters`
+- `GET /api/v1/admin/audit-logs`
+
+**Endpoints БЕЗ пагинации (возвращают один объект или список):**
+- `GET /api/v1/admin/services/all`
+- `POST /api/v1/services/` (возвращает один объект)
+- `POST /api/v1/auth/register` (возвращает один объект)
+
+**Как проверить:** Всегда смотри router.py — если response_model=`PaginatedResponse[T]`, значит нужна обёртка `["items"]`.
+
+---
+
+### 8. ✅ При удалении связанных объектов — удаляй их правильно
+
+**Плохо:**
+```python
+# ❌ Удаляем User, но ClientProfile остаётся с user_id=NULL
+await db.delete(user)
+await db.commit()
+# → IntegrityError: NOT NULL constraint failed: client_profiles.user_id
+```
+
+**Хорошо:**
+```python
+# Сначала удаляем зависимые записи
+profile = await db.execute(select(ClientProfile).where(ClientProfile.user_id == user_id))
+if profile:
+    await db.delete(profile.scalar())
+
+# Потом удаляем пользователя
+await db.delete(user)
+await db.commit()
+```
+
+**Почему:** ForeignKey имеет `nullable=False`. Нужно удалить Child перед Parent.
+
+---
+
+### 9. ✅ При запросе ClientProfile по appointment.client_id — ищи по user_id
+
+**Плохо:**
+```python
+# ❌ appointment.client_id — это user.id, а не client_profile.id
+client = await db.execute(
+    select(ClientProfile).where(ClientProfile.id == appointment.client_id)
+)
+# → Ничего не найдено!
+```
+
+**Хорошо:**
+```python
+# ✅ appointment.client_id — это user.id
+client = await db.execute(
+    select(ClientProfile).where(ClientProfile.user_id == appointment.client_id)
+)
+```
+
+**Почему:** В Appointment.client_id хранится ID пользователя (user.id), а не ID профиля.
+
+---
+
+### 10. ✅ Импортируй все необходимые ORM-функции
+
+**Плохо:**
+```python
+from sqlalchemy.orm import aliased, selectinload
+# ...
+select(User).options(joinedload(User.client_profile))  # ❌ NameError: joinedload not defined
+```
+
+**Хорошо:**
+```python
+from sqlalchemy.orm import aliased, selectinload, joinedload
+# ...
+select(User).options(joinedload(User.client_profile))  # ✅
+```
+
+**Почему:** `joinedload`, `selectinload`, `subqueryload` — это отдельные импорты, а не части одного модуля.
+
+---
+
+### 11. ✅ Bulk endpoints: Pydantic модель для Body
+
+**Плохо:**
+```python
+@router.post("/bulk/toggle-active")
+async def bulk_toggle_active(
+    master_ids: List[int],  # ❌ FastAPI считает это query параметром
+    ...
+):
+```
+
+**Хорошо:**
+```python
+class MasterIdsRequest(BaseModel):
+    master_ids: List[int]
+
+@router.post("/bulk/toggle-active")
+async def bulk_toggle_active(
+    data: MasterIdsRequest,  # ✅ Pydantic модель
+    ...
+):
+    master_ids = data.master_ids
+```
+
+**Почему:** Без `Body()` FastAPI интерпретирует `List[int]` как query параметр → 422. С `Body(..., embed=True)` нужен Pydantic wrapper.
+
+**В тесте:**
+```python
+resp = await client.post("/api/v1/admin/bulk/toggle-active", 
+    json={"master_ids": [1, 2, 3]},  # ✅ Объект, не массив
+    headers=headers
+)
+```
+
+---
+
+### 12. ✅ Порядок регистрации роутов в FastAPI важен!
+
+**Проблема:** Если `masters_router` (с prefix `/masters`) зарегистрирован ДО `bulk_router`, то путь `/api/v1/admin/bulk/...` будет перехвачен маршрутом `/api/v1/admin/masters/{master_id}/...` и `bulk` станет значением `{master_id}` → 404.
+
+**Плохо:**
+```python
+router.include_router(masters_router)   # ❌ Сначала masters
+router.include_router(bulk_router)      # ❌ bulk никогда не достучится
+```
+
+**Хорошо:**
+```python
+router.include_router(bulk_router)      # ✅ Сначала bulk (без {id})
+router.include_router(masters_router)   # ✅ Потом masters (с {id})
+```
+
+**Правило:** Всегда регистрируй роуты БЕЗ `{param}` ДО роутов С `{param}`.
+
+---
+
+### 13. ✅ Проверяй роль для admin endpoints
+
+Некоторые admin endpoints требуют **ADMIN**, а не просто MASTER.
+
+**Плохо:**
+```python
+async def test_audit_logs(self, client, auth_headers):  # ❌ auth_headers = MASTER
+    resp = await client.get("/api/v1/admin/audit-logs", headers=auth_headers)
+    assert resp.status_code == 200  # ❌ 403 Forbidden
+```
+
+**Хорошо:**
+```python
+async def test_audit_logs(self, client, super_admin_headers):  # ✅ ADMIN
+    resp = await client.get("/api/v1/admin/audit-logs", headers=super_admin_headers)
+    assert resp.status_code == 200  # ✅
+```
+
+**Как проверить:** Открой router.py и посмотри, какой dependency используется:
+- `require_master` — подходит и MASTER, и ADMIN
+- `require_super_admin` — только ADMIN
+
+---
+
+### 14. ✅ Bulk toggle/suspend/unsuspend требуют MasterProfile IDs
+
+Bulk endpoints (`/bulk/toggle-active`, `/bulk/suspend`, `/bulk/unsuspend`) ожидают `master_profile.id`, а не `user.id`.
+
+**Плохо:**
+```python
+# ❌ user.id != master_profile.id
+resp = await client.post("/api/v1/admin/bulk/toggle-active", 
+    json={"master_ids": [user_id]},  # ❌ user.id
+    headers=headers
+)
+```
+
+**Хорошо:**
+```python
+# ✅ master_profile.id
+# Регистрация возвращает master_profile.id в ответе
+resp = await client.post("/api/v1/auth/register", json=reg_data)
+master_profile_id = resp.json()["master_profile_id"]
+
+resp = await client.post("/api/v1/admin/bulk/toggle-active", 
+    json={"master_ids": [master_profile_id]},  # ✅ master_profile.id
+    headers=headers
+)
+```
+
+---
+
+### 15. ✅ Session fixture использует commit(), а не rollback()
+
+**Почему:** `session` fixture делает `commit()` после yield. Это означает:
+- Данные, созданные в тесте, видны в том же тесте (через тот же session)
+- После yield данные коммичатся в БД (для SQLite это не проблема)
+
+**Что это значит для тестов:**
+- Создаёшь запись через `session.add()` → она видна в `httpx.AsyncClient` запросах внутри того же теста
+- Не нужно делать `rollback()` — данные сохраняются
+
+**Пример:**
+```python
+async def test_something(self, client, session):
+    # Создаём данные в той же сессии
+    user = User(...)
+    session.add(user)
+    await session.flush()
+    
+    # Эти данные видны через HTTP клиент в том же тесте!
+    resp = await client.get("/api/v1/admin/masters", headers=headers)
+    assert resp.status_code == 200
+```
+
+---
+
+### 16. ⚠️ Redis тесты требуют работающего Redis
+
+Тесты `test_cache_service.py` и `test_reviews.py` используют Redis. Если Redis не запущен:
+- `test_cache_service.py` — падает с connection error
+- `test_reviews.py` — падает с 8 errors
+
+**Решение:** Запустить Redis локально или использовать `pytest.mark.skipif` для пропуска этих тестов.
+
+---
+
+### 17. ⚠️ Refresh токены и password security требуют понимания бизнес-логики
+
+Некоторые тесты (`test_refresh_tokens.py`, `test_password_security.py`) падают не из-за ошибок в тестах, а из-за несоответствия между ожидаемым поведением и реальной реализацией.
+
+**Подход:**
+1. Откройте файл с тестом
+2. Откройте соответствующий production-файл
+3. Сравните ожидаемое поведение с реальным
+4. Либо исправьте production-код (если это баг), либо исправьте тест (если реализация намеренная)
+
 ### 1. ✅ Всегда используйте `await db.flush()` перед созданием связанных объектов
 
 **Плохо:**
@@ -525,7 +951,67 @@ assert resp2.status_code == 200  # ❌ 404
 
 ---
 
-## Актуальная статистика (v4 — 2026-10-01 18:45)
+### Проблема 5: 403 Forbidden на admin endpoints
+
+**Симптом:**
+```
+assert resp.status_code == 200  # ❌ 403 Forbidden
+```
+
+**Причина:** Endpoint требует `require_super_admin`, а тест использует `auth_headers` (MASTER role).
+
+**Решение:** Использовать `super_admin_headers` для endpoints, требующих ADMIN.
+
+**Где встречается:** `test_admin_dashboard.py`, `test_admin_audit.py`
+
+---
+
+### Проблема 6: Bulk endpoints ожидают master_profile.id, а не user.id
+
+**Симптом:**
+```
+assert resp.status_code == 200  # ❌ 404 или пустой список
+```
+
+**Причина:** Bulk endpoints (`/bulk/toggle-active`, `/bulk/suspend`, `/bulk/unsuspend`) ищут по `master_profile.id`.
+
+**Решение:** Использовать `master_profile.id` из ответа регистрации, а не `user.id`.
+
+**Где исправлено:** `test_masters_bulk.py`
+
+---
+
+### Проблема 7: Route conflict — bulk routes не достижимы
+
+**Симптом:**
+```
+assert resp.status_code == 200  # ❌ 404 для /api/v1/admin/bulk/toggle-active
+```
+
+**Причина:** `bulk_router` был зарегистрирован ПОСЛЕ `masters_router`, поэтому путь `/api/v1/admin/bulk/...` перехватывался маршрутом `/api/v1/admin/masters/{master_id}/...`.
+
+**Решение:** Зарегистрировать `bulk_router` ДО `masters_router` в admin router.
+
+**Где исправлено:** `app/modules/admin/router.py`
+
+---
+
+### Проблема 8: Pydantic модель для bulk endpoints
+
+**Симптом:**
+```
+assert resp.status_code == 200  # ❌ 422 Unprocessable Entity
+```
+
+**Причина:** Bulk endpoints ожидают объект `{"master_ids": [...]}`, а не массив `[1, 2, 3]`.
+
+**Решение:** Использовать `json={"master_ids": [1, 2, 3]}` в тесте.
+
+**Где исправлено:** `app/modules/admin/masters/bulk.py` — добавлена Pydantic модель `MasterIdsRequest`
+
+---
+
+## Актуальная статистика (v5 — 2026-10-01 19:15)
 
 | Метрика | Значение |
 |--------|---------|
@@ -557,6 +1043,31 @@ assert resp2.status_code == 200  # ❌ 404
 4. `book_appointment` — добавлен импорт `joinedload`
 5. `bulk_toggle_active/suspend/unsuspend` — добавлен `Body(..., embed=True)` через Pydantic модель
 6. `bulk_router` — перемещён в admin router перед masters_router для исправления конфликта путей
+
+---
+
+## Чек-лист перед написанием теста
+
+**ПЕРЕД написанием любого теста проверьте:**
+
+- [ ] `role` указан в тестовых данных для регистрации?
+- [ ] `flush()` вызван перед созданием связанных объектов?
+- [ ] Формат ответа API: пагинация (`data["items"]`) или список?
+- [ ] Роль для авторизации: `super_admin_headers` или `auth_headers`?
+- [ ] Путь к API правильный? (проверьте `router.py`)
+- [ ] Для bulk endpoints: `json={"master_ids": [...]}` а не `json=[...]`?
+- [ ] Для bulk endpoints: `master_profile.id` а не `user.id`?
+
+**ПЕРЕД коммитом:**
+
+- [ ] Все тесты проходят (`pytest tests/ -v --tb=no`)
+- [ ] Нет `ERROR` в результатах (только `PASSED` или `FAILED`)
+- [ ] Фикстуры используют `flush()` перед созданием связанных объектов
+- [ ] Тестовые данные включают `role` поле
+- [ ] Используется class-based структура для группировки
+- [ ] Путь к API правильный (проверьте `router.py`)
+- [ ] Телефон отформатирован правильно (если нужно)
+- [ ] Нет хардкода ID (используйте фикстуры)
 
 ---
 
@@ -622,14 +1133,18 @@ pytest tests/test_masters_crud.py::TestGetMasters::test_list_masters_empty -v
 
 ---
 
+---
+
 ## Чек-лист перед коммитом тестов
+
+> ⚠️ **Этот чек-лист дублирует чек-лист из раздела "Критические правила".** Используйте его для финальной проверки перед коммитом.
 
 - [ ] Все тесты проходят (`pytest tests/ -v --tb=no`)
 - [ ] Нет `ERROR` в результатах (только `PASSED` или `FAILED`)
 - [ ] Фикстуры используют `flush()` перед созданием связанных объектов
 - [ ] Тестовые данные включают `role` поле
 - [ ] Используется class-based структура для группировки
-- [ ] Путь к API правильный (проверьте router.py)
+- [ ] Путь к API правильный (проверьте `router.py`)
 - [ ] Телефон отформатирован правильно (если нужно)
 - [ ] Нет хардкода ID (используйте фикстуры)
 
