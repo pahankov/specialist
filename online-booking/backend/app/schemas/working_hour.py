@@ -3,6 +3,7 @@ from pydantic import BaseModel, ConfigDict, field_serializer, field_validator
 from typing import Optional
 
 class WorkingHourCreate(BaseModel):
+    master_id: Optional[int] = None
     schedule_date: date
     start_time: time
     end_time: time

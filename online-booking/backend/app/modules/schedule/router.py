@@ -3,7 +3,6 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from typing import List
-from datetime import time
 
 from app.database import get_db
 from app.models.working_hour import WorkingHour
@@ -54,18 +53,18 @@ async def create_working_hour(
     db: AsyncSession = Depends(get_db)
 ):
     """Create working hours for the authenticated master."""
-    # Verify the master_id matches the authenticated user
-    if wh.master_id != master.master_profile.id:
-        raise HTTPException(status_code=403, detail="Cannot create working hours for another master")
+    # Use provided master_id or default to authenticated user's profile
+    target_master_id = wh.master_id if wh.master_id is not None else master.master_profile.id
     
-    start_time_obj = time.fromisoformat(wh.start_time)
-    end_time_obj = time.fromisoformat(wh.end_time)
+    # Verify the master_id matches the authenticated user (if explicitly provided)
+    if wh.master_id is not None and wh.master_id != master.master_profile.id:
+        raise HTTPException(status_code=403, detail="Cannot create working hours for another master")
 
     new_wh = WorkingHour(
-        master_id=wh.master_id,
+        master_id=target_master_id,
         schedule_date=wh.schedule_date,
-        start_time=start_time_obj,
-        end_time=end_time_obj
+        start_time=wh.start_time,
+        end_time=wh.end_time
     )
 
     db.add(new_wh)
