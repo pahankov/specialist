@@ -1072,19 +1072,19 @@ IntegrityError: UNIQUE constraint failed: users.email
 
 ---
 
-## Актуальная статистика (v8 — 2026-10-01 21:00)
+## Актуальная статистика (v9 — 2026-10-01 22:00)
 
 | Метрика | Значение |
 |--------|---------|
-| ✅ PASSED | **238** |
+| ✅ PASSED | **245** |
 | ❌ FAILED | **0** |
 | ⏭️ SKIPPED | **0** |
 | ⚠️ ERROR | 0 |
-| **Всего** | **238** |
+| **Всего** | **245** |
 
-**Покрытие:** 238 тестов, ~20000+ строк тестового кода, 22 test files.
+**Покрытие:** 245 тестов, ~21000+ строк тестового кода, 23 test files.
 
-### Пройденные файлы (100% PASS) — 22 файла:
+### Пройденные файлы (100% PASS) — 23 файла:
 - `test_admin_appointments.py` — 16/16 ✅
 - `test_admin_audit.py` — 4/4 ✅
 - `test_admin_clients.py` — 11/11 ✅
@@ -1096,6 +1096,7 @@ IntegrityError: UNIQUE constraint failed: users.email
 - `test_auth_dependencies.py` — 10/10 ✅
 - `test_auth_service.py` — 12/12 ✅
 - `test_auth_tokens.py` — 12/12 ✅
+- `test_booking_flow.py` — 7/7 ✅ (NEW — full integration flow)
 - `test_cache_service.py` — 18/18 ✅
 - `test_clients.py` — 9/9 ✅
 - `test_health.py` — 3/3 ✅
@@ -1174,6 +1175,9 @@ PYTHONPATH=. pytest tests/ -v --cov=app --cov-report=term-missing
 12. `schedule/router.py` — убраны redundant `fromisoformat` вызовы (schema уже парсит time)
 13. `UserCreate` — добавлена валидация пароля (min 8 chars, upper/lower/digit/special, 4 unique)
 14. `UnifiedRegisterRequest` — добавлена валидация пароля (те же правила, что и UserCreate)
+15. `public_booking` — добавлен `db.commit()` (был только flush, данные не сохранялись)
+16. `public_booking` conflict check — исправлена арифметика timedelta в SQLAlchemy WHERE
+   (timedelta конвертировался в '1970-01-01' строку; использовано вычитание вместо сложения)
 
 ---
 
