@@ -14,7 +14,8 @@ class TestRegisterMaster:
         assert data["name"] == test_master_data["name"]
         assert data["email"] == test_master_data["email"]
         assert data["phone"] == "+7 (999) 000-11-22"
-        assert data["telegram_username"] == test_master_data["telegram_username"]
+        # telegram_username is None at registration (set later via profile update)
+        assert data["telegram_username"] is None
         assert "id" in data
         assert "hashed_password" not in data  # password should not be returned
 
@@ -51,7 +52,8 @@ class TestRegisterMaster:
             "name": "Strong Password User",
             "email": "strong@example.com",
             "password": "SecurePass123!",
-            "phone": "+79990000001"
+            "phone": "+79990000001",
+            "role": "MASTER"
         }
         resp = await client.post("/api/v1/auth/register", json=data)
         assert resp.status_code == 201

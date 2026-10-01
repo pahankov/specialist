@@ -82,6 +82,7 @@ async def register_master(
         "city_id": new_user.city_id,
         "is_active": new_user.is_active,
         "is_verified": new_user.is_verified,
+        "telegram_username": master_profile.telegram_username if master_profile else None,
         "created_at": new_user.created_at.isoformat() if new_user.created_at else None,
         "updated_at": new_user.updated_at.isoformat() if new_user.updated_at else None,
     }

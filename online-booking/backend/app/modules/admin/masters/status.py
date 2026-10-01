@@ -167,7 +167,7 @@ async def toggle_master_admin(
         super_admin.email, role_str, master_id, mp.user.name, old_role, mp.user.role.value
     )
 
-    # Return response without status field for toggle-admin
+    # Return response with all required fields for toggle-admin
     return {
         "id": mp.id,
         "user_id": mp.user.id,
@@ -176,6 +176,7 @@ async def toggle_master_admin(
         "phone": mp.user.phone,
         "telegram_username": mp.telegram_username,
         "description": mp.description,
+        "status": mp.status,
         "is_active": mp.is_active,
         "is_admin": mp.user.is_admin,
         "created_at": mp.created_at,
