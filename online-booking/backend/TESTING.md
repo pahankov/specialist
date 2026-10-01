@@ -4,6 +4,7 @@
 
 - [Структура тестов](#структура-тестов)
 - [Запуск тестов](#запуск-тестов)
+- [CI/CD и деплой](#cicd-и-деплой)
 - [Архитектура тестов](#архитектура-тестов)
 - [Критические правила](#критические-правила)
 - [Известные проблемы и решения](#известные-проблемы-и-решения)
@@ -1106,6 +1107,51 @@ IntegrityError: UNIQUE constraint failed: users.email
 - `test_refresh_tokens.py` — 5/5 ✅
 - `test_schedule.py` — 7/7 ✅ (NEW)
 - `test_services.py` — 7/7 ✅
+
+---
+
+## CI/CD и деплой
+
+### GitHub Actions Workflow (`.github/workflows/deploy.yml`)
+
+**Порядок выполнения при push в main:**
+
+1. **Test job** — запускает тесты в CI
+   - Устанавливает Python 3.11 и зависимости
+   - Запускает `pytest` с coverage
+   - Показывает summary: passed/failed/skipped/coverage
+   - **Если тесты падают — деплой отменяется**
+
+2. **Deploy job** — запускается ТОЛЬКО если тесты прошли
+   - SSH на сервер
+   - **Database backup** — создаёт timestamped SQL dump
+   - **Test job on server** — запускает тесты перед деплоем
+   - **Alembic migrations** — применяет миграции БД
+   - **Superuser creation** — создаёт админа если нет
+   - **Seed data** — заполняет начальные данные
+   - **Frontend build** — собирает фронтенд
+   - **Service restart** — перезапускает backend и nginx
+   - **Health check** — 3 попытки проверки здоровья API
+   - **API verification** — проверяет ключевые endpoints
+
+### Safety Gates
+
+| Gate | Что делает | Что происходит при fail |
+|------|-----------|------------------------|
+| CI tests | Тесты в GitHub Actions | Деплой отменяется |
+| Server tests | Тесты на сервере перед restart | Деплой abort, сервис не перезапускается |
+| DB backup | SQL dump перед миграциями | Продолжает (warn), но есть бэкап |
+| Health check | 3 попытки проверки /health | Warning, но деплой завершается |
+
+### Coverage
+
+```bash
+# Локально с coverage
+pytest tests/ -v --cov=app --cov-report=term-missing
+
+# На сервере автоматически при деплое
+PYTHONPATH=. pytest tests/ -v --cov=app --cov-report=term-missing
+```
 
 ### Пропущенные тесты (SKIPPED):
 - `test_password_security.py` — 6 skipped (password validation not implemented in API yet)
