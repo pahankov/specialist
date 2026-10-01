@@ -271,12 +271,36 @@ assert data["total"] == 0
 - `GET /api/v1/admin/clients`
 - `GET /api/v1/admin/services`
 - `GET /api/v1/admin/masters`
+- `GET /api/v1/admin/audit-logs`
 
-**Endpoints БЕЗ пагинации (возвращают список):**
+**Endpoints БЕЗ пагинации (возвращают один объект или список):**
 - `GET /api/v1/admin/services/all`
 - `POST /api/v1/services/` (возвращает один объект)
+- `POST /api/v1/auth/register` (возвращает один объект)
 
 **Как проверить:** Всегда смотри router.py — если response_model=`PaginatedResponse[T]`, значит нужна обёртка `["items"]`.
+
+---
+
+### 14. ✅ Bulk endpoints: json={master_ids: [...]} а не json=[...]
+
+**Плохо:**
+```python
+resp = await client.post("/api/v1/admin/bulk/toggle-active", 
+    json=[1, 2, 3],  # ❌ Ожидается объект {"master_ids": [...]}
+    headers=headers
+)
+```
+
+**Хорошо:**
+```python
+resp = await client.post("/api/v1/admin/bulk/toggle-active", 
+    json={"master_ids": [1, 2, 3]},  # ✅ Pydantic модель
+    headers=headers
+)
+```
+
+**Почему:** Bulk endpoints используют Pydantic модель `MasterIdsRequest` с полем `master_ids`.
 
 ---
 
@@ -346,6 +370,86 @@ select(User).options(joinedload(User.client_profile))  # ✅
 ```
 
 **Почему:** `joinedload`, `selectinload`, `subqueryload` — это отдельные импорты, а не части одного модуля.
+
+---
+
+### 11. ✅ Bulk endpoints требуют Pydantic модель для Body
+
+**Плохо:**
+```python
+@router.post("/bulk/toggle-active")
+async def bulk_toggle_active(
+    master_ids: List[int],  # ❌ FastAPI считает это query параметром
+    ...
+):
+```
+
+**Хорошо:**
+```python
+class MasterIdsRequest(BaseModel):
+    master_ids: List[int]
+
+@router.post("/bulk/toggle-active")
+async def bulk_toggle_active(
+    data: MasterIdsRequest,  # ✅ Pydantic модель
+    ...
+):
+    master_ids = data.master_ids
+```
+
+**Почему:** Без `Body()` FastAPI интерпретирует `List[int]` как query параметр → 422. С `Body(..., embed=True)` нужен Pydantic wrapper.
+
+**В тесте:**
+```python
+resp = await client.post("/api/v1/admin/bulk/toggle-active", 
+    json={"master_ids": [1, 2, 3]},  # ✅ Объект, не массив
+    headers=headers
+)
+```
+
+---
+
+### 12. ✅ Порядок регистрации роутов в FastAPI важен!
+
+**Проблема:** Если `masters_router` (с prefix `/masters`) зарегистрирован ДО `bulk_router`, то путь `/api/v1/admin/bulk/...` будет перехвачен маршрутом `/api/v1/admin/masters/{master_id}/...` и `bulk` станет значением `{master_id}` → 404.
+
+**Плохо:**
+```python
+router.include_router(masters_router)   # ❌ Сначала masters
+router.include_router(bulk_router)      # ❌ bulk никогда не достучится
+```
+
+**Хорошо:**
+```python
+router.include_router(bulk_router)      # ✅ Сначала bulk (без {id})
+router.include_router(masters_router)   # ✅ Потом masters (с {id})
+```
+
+**Правило:** Всегда регистрируй роуты БЕЗ `{param}` ДО роутов С `{param}`.
+
+---
+
+### 13. ✅ Проверяй роль для admin endpoints
+
+Некоторые admin endpoints требуют **ADMIN**, а не просто MASTER.
+
+**Плохо:**
+```python
+async def test_audit_logs(self, client, auth_headers):  # ❌ auth_headers = MASTER
+    resp = await client.get("/api/v1/admin/audit-logs", headers=auth_headers)
+    assert resp.status_code == 200  # ❌ 403 Forbidden
+```
+
+**Хорошо:**
+```python
+async def test_audit_logs(self, client, super_admin_headers):  # ✅ ADMIN
+    resp = await client.get("/api/v1/admin/audit-logs", headers=super_admin_headers)
+    assert resp.status_code == 200  # ✅
+```
+
+**Как проверить:** Открой router.py и посмотри, какой dependency используется:
+- `require_master` — подходит и MASTER, и ADMIN
+- `require_super_admin` — только ADMIN
 
 ---
 
@@ -421,7 +525,7 @@ assert resp2.status_code == 200  # ❌ 404
 
 ---
 
-## Актуальная статистика (v3 — 2026-10-01 18:30)
+## Актуальная статистика (v4 — 2026-10-01 18:45)
 
 | Метрика | Значение |
 |--------|---------|
@@ -432,7 +536,7 @@ assert resp2.status_code == 200  # ❌ 404
 
 **Покрытие:** ~225 тестов, ~18000+ строк тестового кода, ~20 test files.
 
-### Пройденные файлы (100% PASS):
+### Пройденные файлы (100% PASS) — 12 файлов:
 - `test_admin_appointments.py` — 16/16 ✅
 - `test_admin_audit.py` — 4/4 ✅
 - `test_admin_clients.py` — 11/11 ✅
