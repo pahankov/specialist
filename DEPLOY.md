@@ -756,6 +756,9 @@ git diff --cached | grep -i "password\|secret\|token\|key"
 | `hash_password` не найден | Путь `app.services.auth` не существует | `journalctl` → ImportError | Использовать `app.modules.auth.service` |
 | **Отсутствие логов в auth** | JWT-валидация без логов — неясно почему токен не проходит | 401 без контекста | Добавить логирование в `dependencies/auth.py` |
 | **Отсутствие global exception handler** | Unhandled exceptions возвращали стандартный 500 без контекста | 500 без traceback | Добавить `@app.exception_handler(Exception)` |
+| **KeyError: 'request_id'** | CorrelationFilter на root logger не применяется к propagated записям | 500 + Logging error | Добавить фильтр на каждый handler, писать в `__dict__` |
+| **TypeError: offset-naive vs offset-aware** | Сравнение `expires_at` (timezone-aware) с naive datetime | 500 на `/auth/refresh` | Убрать `.replace(tzinfo=None)` |
+| **401 на `/admin/dashboard`** | `get_current_master` требовал `master_profile is not None` для ADMIN | 401 для супер-админа | Разрешить ADMIN без master_profile, `require_admin` → `get_current_user` |
 
 ---
 
@@ -885,6 +888,21 @@ async def do_action(...):
 **Проверка:** `grep -r "get_logger" app/` — должен быть в каждом модуле
 **Проверка:** `grep -r "logger\." app/` — каждый endpoint должен иметь хотя бы 1 лог
 
+### 11. При изменении моделей SQLAlchemy — проверять ВСЕ relationship
+**Ошибка:** `NoForeignKeysError` при импорте приложения
+**Причина:** Изменил FK в `AuditLog` на `users.id`, но `MasterProfile.audit_logs` всё ещё ссылался на `master_profile`
+**Правило:** При изменении модели — `grep -r "old_relationship_name" app/` по ВСЕМ файлам
+**Проверка:** `python -c "from app.main import app"` — падает с NoForeignKeysError = проблема в relationship
+
+### 12. `get_current_master` — не требует `master_profile` для ADMIN
+**Ошибка:** `TypeError: Master user found but master_profile is None` на `/admin/dashboard`
+**Причина:** Супер-админ (role=ADMIN) не имеет MasterProfile. `get_current_master` требовал `master_profile is not None` для ВСЕХ пользователей, включая ADMIN. `require_admin` использовал `get_current_master` вместо `get_current_user`.
+**Правило:** 
+- `get_current_master` — разрешает ADMIN без `master_profile`, требует `master_profile` только для MASTER
+- `require_admin` — использует `get_current_user`, НЕ `get_current_master`
+- `require_master` — использует `get_current_master` (только для MASTER)
+**Проверка:** `python -c "from app.main import app"` — если падает с AttributeError → проблема в master_profile
+
 ---
 
 ## ИТОГИ ИСПРАВЛЁННЫХ ОШИБОК (REFRAIN FROM)
@@ -949,6 +967,20 @@ async def do_action(...):
 **Ошибка:** Инконсистентность — некоторые места используют `"CLIENT"`, другие `UserRole.CLIENT`
 **Правило:** Всегда `UserRole.CLIENT`, `UserRole.ADMIN`, `UserRole.MASTER`
 **Проверка:** `grep -r 'role=".*"' app/modules/admin/` — не должно быть
+
+### 11. Никогда не добавлять CorrelationFilter на root logger
+**Ошибка:** `KeyError: 'request_id'` в RotatingFileHandler
+**Причина:** Фильтры на root logger не применяются к записям от дочерних логгеров (propagation). `logging.Formatter` использует `self._fmt % record.__dict__`, а `CorrelationFilter` ставил только `record.request_id`.
+**Правило:** 
+- Добавлять `CorrelationFilter` на КАЖДЫЙ handler (console + file), а не на logger
+- Писать `record.request_id` И в `record.__dict__['request_id']`, formatter использует `__dict__`
+**Проверка:** `grep -r "addFilter" app/logging_config.py` — должен быть на каждом handler
+
+### 12. Никогда не сравнивать timezone-aware и naive datetime
+**Ошибка:** `TypeError: can't compare offset-naive and offset-aware datetimes` на `/auth/refresh`
+**Причина:** `RefreshToken.expires_at` — `DateTime(timezone=True)` в PostgreSQL, SQLAlchemy возвращает timezone-aware datetime. Сравнение с naive datetime (`.replace(tzinfo=None)`) вызывало TypeError.
+**Правило:** Всегда использовать timezone-aware datetime для сравнения. Не вызывать `.replace(tzinfo=None)` на aware datetime.
+**Проверка:** `grep -r "\.replace(tzinfo=None)" app/` — не должно быть при сравнении с БД
 
 
 | Забыли | Результат | Как обнаружить | Как исправить |
