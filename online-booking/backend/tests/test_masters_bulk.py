@@ -1,6 +1,6 @@
 """Tests for admin master bulk operation endpoints.
 
-Routes (bulk_router has no prefix, included under admin_router):
+Routes (bulk_router is included directly under admin router):
 - POST /api/v1/admin/bulk/toggle-active
 - POST /api/v1/admin/bulk/suspend
 - POST /api/v1/admin/bulk/unsuspend
@@ -31,7 +31,7 @@ class TestBulkToggleActive:
 
         resp = await client.post(
             "/api/v1/admin/bulk/toggle-active",
-            json=ids,
+            json={"master_ids": ids},
             headers=super_admin_headers
         )
         assert resp.status_code == 200
@@ -45,7 +45,7 @@ class TestBulkToggleActive:
 
         resp = await client.post(
             "/api/v1/admin/bulk/toggle-active",
-            json=[mp.id],
+            json={"master_ids": [mp.id]},
             headers=super_admin_headers_2
         )
         assert resp.status_code == 200
@@ -57,7 +57,7 @@ class TestBulkToggleActive:
         """Bulk toggle handles non-existent masters gracefully."""
         resp = await client.post(
             "/api/v1/admin/bulk/toggle-active",
-            json=[99999, 99998],
+            json={"master_ids": [99999, 99998]},
             headers=super_admin_headers
         )
         assert resp.status_code == 200
@@ -89,7 +89,7 @@ class TestBulkSuspend:
 
         resp = await client.post(
             "/api/v1/admin/bulk/suspend",
-            json=ids,
+            json={"master_ids": ids},
             headers=super_admin_headers
         )
         assert resp.status_code == 200
@@ -103,7 +103,7 @@ class TestBulkSuspend:
 
         resp = await client.post(
             "/api/v1/admin/bulk/suspend",
-            json=[mp.id],
+            json={"master_ids": [mp.id]},
             headers=super_admin_headers_2
         )
         assert resp.status_code == 200
@@ -135,13 +135,13 @@ class TestBulkUnsuspend:
 
         await client.post(
             "/api/v1/admin/bulk/suspend",
-            json=ids,
+            json={"master_ids": ids},
             headers=super_admin_headers
         )
 
         resp = await client.post(
             "/api/v1/admin/bulk/unsuspend",
-            json=ids,
+            json={"master_ids": ids},
             headers=super_admin_headers
         )
         assert resp.status_code == 200

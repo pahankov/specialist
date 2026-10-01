@@ -1,9 +1,10 @@
 """Bulk master operations — toggle, suspend, unsuspend for multiple masters."""
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 from typing import List
+from pydantic import BaseModel
 
 from app.database import get_db
 from app.models.user import User
@@ -14,6 +15,11 @@ from app.logging_config import get_logger
 logger = get_logger(__name__)
 
 router = APIRouter()
+
+
+class MasterIdsRequest(BaseModel):
+    """Request body for bulk operations."""
+    master_ids: List[int]
 
 
 async def _get_master_or_404(db, master_id: int):
@@ -31,10 +37,11 @@ async def _get_master_or_404(db, master_id: int):
 
 @router.post("/bulk/toggle-active", response_model=dict)
 async def bulk_toggle_active(
-    master_ids: List[int],
+    data: MasterIdsRequest,
     super_admin: User = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db)
 ):
+    master_ids = data.master_ids
     """Toggle active status for multiple masters at once."""
     logger.info(
         "Bulk toggle-active: admin=%s, masters=%s",
@@ -79,10 +86,11 @@ async def bulk_toggle_active(
 
 @router.post("/bulk/suspend", response_model=dict)
 async def bulk_suspend(
-    master_ids: List[int],
+    data: MasterIdsRequest,
     super_admin: User = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db)
 ):
+    master_ids = data.master_ids
     """Suspend multiple masters at once."""
     logger.info(
         "Bulk suspend: admin=%s, masters=%s",
@@ -121,10 +129,11 @@ async def bulk_suspend(
 
 @router.post("/bulk/unsuspend", response_model=dict)
 async def bulk_unsuspend(
-    master_ids: List[int],
+    data: MasterIdsRequest,
     super_admin: User = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db)
 ):
+    master_ids = data.master_ids
     """Unsuspend multiple masters at once."""
     logger.info(
         "Bulk unsuspend: admin=%s, masters=%s",

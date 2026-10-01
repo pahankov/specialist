@@ -14,6 +14,7 @@ from app.modules.admin.working_hours import router as working_hours_router
 from app.modules.admin.audit import router as audit_router
 from app.modules.admin.export import router as export_router
 from app.modules.admin.blocked_slots import router as blocked_slots_router
+from app.modules.admin.masters.bulk import router as bulk_router  # Must be before masters_router
 from app.modules.admin.masters import router as masters_router
 from app.modules.admin.admin_reviews import router as admin_reviews_router
 from app.modules.admin.health import router as health_router
@@ -25,6 +26,7 @@ router.include_router(services_router)
 router.include_router(clients_router)
 router.include_router(working_hours_router)
 router.include_router(blocked_slots_router)
+router.include_router(bulk_router)  # Register before masters_router to avoid path conflicts
 router.include_router(masters_router)
 router.include_router(admin_reviews_router)
 router.include_router(audit_router)
