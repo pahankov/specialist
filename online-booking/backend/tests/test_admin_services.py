@@ -9,7 +9,9 @@ class TestAdminGetServices:
         """Returns empty list when no services."""
         resp = await client.get("/api/v1/admin/services", headers=auth_headers)
         assert resp.status_code == 200
-        assert resp.json() == []
+        data = resp.json()
+        assert data["items"] == []
+        assert data["total"] == 0
 
     async def test_get_admin_services_active_only(self, client, auth_headers, test_master_data, test_service_data):
         """Returns only active services."""
@@ -19,7 +21,7 @@ class TestAdminGetServices:
 
         resp = await client.get("/api/v1/admin/services", headers=auth_headers)
         assert resp.status_code == 200
-        services = resp.json()
+        services = resp.json()["items"]
         assert len(services) >= 2
         # All returned should be active
         assert all(s.get("is_active", True) for s in services)
@@ -98,13 +100,13 @@ class TestAdminDeleteService:
 
         # Verify soft-deleted
         all_resp = await client.get("/api/v1/admin/services/all", headers=auth_headers)
-        deleted = [s for s in all_resp.json() if s["id"] == service_id]
+        deleted = [s for s in all_resp.json()["items"] if s["id"] == service_id]
         assert len(deleted) == 1
         assert deleted[0]["is_active"] is False
 
         # Verify not in active list
         active_resp = await client.get("/api/v1/admin/services", headers=auth_headers)
-        assert not any(s["id"] == service_id for s in active_resp.json())
+        assert not any(s["id"] == service_id for s in active_resp.json()["items"])
 
     async def test_admin_delete_service_not_found(self, client, auth_headers):
         """Returns 404 for non-existent service."""

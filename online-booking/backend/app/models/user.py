@@ -28,8 +28,8 @@ class User(Base):
     )
 
     id = Column(Integer, primary_key=True)
-    email = Column(String(255), unique=True, nullable=True, index=True)
-    phone = Column(String(20), unique=True, nullable=True, index=True)
+    email = Column(String(255), unique=True, nullable=True)
+    phone = Column(String(20), unique=True, nullable=True)
     hashed_password = Column(String(255), nullable=True)  # null for OTP-only clients
     name = Column(String(100), nullable=False)
     role = Column(Enum(UserRole), nullable=False, default=UserRole.CLIENT)

@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, Query, Response, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
-from sqlalchemy.orm import aliased, selectinload
+from sqlalchemy.orm import aliased, selectinload, joinedload
 from typing import List, Optional
 from datetime import datetime, timedelta
 
@@ -38,6 +38,7 @@ async def _find_or_create_client(db: AsyncSession, phone: str, name: str) -> Use
     if not user:
         user = User(name=name, phone=normalized, role=UserRole.CLIENT)
         db.add(user)
+        await db.flush()
         client_profile = ClientProfile(user_id=user.id)
         db.add(client_profile)
         await db.commit()
@@ -128,7 +129,7 @@ async def mark_no_show(
 
     if appointment.client_id:
         client_result = await db.execute(
-            select(ClientProfile).where(ClientProfile.id == appointment.client_id)
+            select(ClientProfile).where(ClientProfile.user_id == appointment.client_id)
         )
         client = client_result.scalar_one_or_none()
         if client:

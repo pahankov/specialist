@@ -118,7 +118,7 @@ async def auth_context(client, test_master_data):
 
 @pytest.fixture
 async def created_master_id(session, test_master_data):
-    """Create a master directly in DB and return their ID."""
+    """Create a master directly in DB and return their master_profile ID."""
     from app.models.user import User, UserRole
     from app.models.master_profile import MasterProfile
     from app.modules.auth.service import hash_password
@@ -138,8 +138,9 @@ async def created_master_id(session, test_master_data):
     mp = MasterProfile(user_id=user.id)
     session.add(mp)
     await session.flush()
+    await session.refresh(mp)
 
-    return user.id
+    return mp.id  # API expects master_profile.id, not user.id
 
 
 @pytest.fixture

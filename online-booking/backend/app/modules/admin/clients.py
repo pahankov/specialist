@@ -187,6 +187,14 @@ async def delete_admin_client(
     if not user:
         raise HTTPException(status_code=404, detail="Client not found")
     
+    # Also delete the client_profile
+    profile_result = await db.execute(
+        select(ClientProfile).where(ClientProfile.user_id == client_id)
+    )
+    profile = profile_result.scalar_one_or_none()
+    if profile:
+        await db.delete(profile)
+    
     await log_action(db, master.id, "delete", "client", client_id, user.name, level="warning")
     await db.delete(user)
     await db.commit()

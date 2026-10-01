@@ -1,9 +1,9 @@
 """Tests for admin master bulk operation endpoints.
 
-Routes (bulk_router has no prefix, included under masters_router):
-- POST /api/v1/admin/masters/bulk/toggle-active
-- POST /api/v1/admin/masters/bulk/suspend
-- POST /api/v1/admin/masters/bulk/unsuspend
+Routes (bulk_router has no prefix, included under admin_router):
+- POST /api/v1/admin/bulk/toggle-active
+- POST /api/v1/admin/bulk/suspend
+- POST /api/v1/admin/bulk/unsuspend
 """
 import pytest
 
@@ -21,15 +21,16 @@ class TestBulkToggleActive:
                     "name": f"Bulk Master {i}",
                     "email": f"bulk_master_{i}@example.com",
                     "password": "TestPass123!",
-                    "phone": f"+7999000{i:03d}",
-                    "telegram_username": f"bulk_master_{i}"
+                    "phone": f"+7999000{i}001",
+                    "telegram_username": f"bulk_master_{i}",
+                    "role": "MASTER"
                 }
             )
             assert resp.status_code == 201
             ids.append(resp.json()["id"])
 
         resp = await client.post(
-            "/api/v1/admin/masters/bulk/toggle-active",
+            "/api/v1/admin/bulk/toggle-active",
             json=ids,
             headers=super_admin_headers
         )
@@ -38,14 +39,14 @@ class TestBulkToggleActive:
         assert len(data["toggled"]) == 3
         assert len(data["errors"]) == 0
 
-    async def test_bulk_toggle_self_blocked(self, client, super_admin_headers, super_admin_user_with_profile):
+    async def test_bulk_toggle_self_blocked(self, client, super_admin_headers_2, super_admin_user_with_profile):
         """Bulk toggle skips super admin themselves."""
         mp = super_admin_user_with_profile["master_profile"]
 
         resp = await client.post(
-            "/api/v1/admin/masters/bulk/toggle-active",
+            "/api/v1/admin/bulk/toggle-active",
             json=[mp.id],
-            headers=super_admin_headers
+            headers=super_admin_headers_2
         )
         assert resp.status_code == 200
         data = resp.json()
@@ -55,7 +56,7 @@ class TestBulkToggleActive:
     async def test_bulk_toggle_not_found(self, client, super_admin_headers):
         """Bulk toggle handles non-existent masters gracefully."""
         resp = await client.post(
-            "/api/v1/admin/masters/bulk/toggle-active",
+            "/api/v1/admin/bulk/toggle-active",
             json=[99999, 99998],
             headers=super_admin_headers
         )
@@ -78,15 +79,16 @@ class TestBulkSuspend:
                     "name": f"Suspend Master {i}",
                     "email": f"suspend_master_{i}@example.com",
                     "password": "TestPass123!",
-                    "phone": f"+7999001{i:03d}",
-                    "telegram_username": f"suspend_master_{i}"
+                    "phone": f"+7999001{i}001",
+                    "telegram_username": f"suspend_master_{i}",
+                    "role": "MASTER"
                 }
             )
             assert resp.status_code == 201
             ids.append(resp.json()["id"])
 
         resp = await client.post(
-            "/api/v1/admin/masters/bulk/suspend",
+            "/api/v1/admin/bulk/suspend",
             json=ids,
             headers=super_admin_headers
         )
@@ -95,14 +97,14 @@ class TestBulkSuspend:
         assert len(data["suspended"]) == 3
         assert len(data["errors"]) == 0
 
-    async def test_bulk_suspend_self_blocked(self, client, super_admin_headers, super_admin_user_with_profile):
+    async def test_bulk_suspend_self_blocked(self, client, super_admin_headers_2, super_admin_user_with_profile):
         """Bulk suspend skips super admin themselves."""
         mp = super_admin_user_with_profile["master_profile"]
 
         resp = await client.post(
-            "/api/v1/admin/masters/bulk/suspend",
+            "/api/v1/admin/bulk/suspend",
             json=[mp.id],
-            headers=super_admin_headers
+            headers=super_admin_headers_2
         )
         assert resp.status_code == 200
         data = resp.json()
@@ -123,21 +125,22 @@ class TestBulkUnsuspend:
                     "name": f"Unsuspend Master {i}",
                     "email": f"unsuspend_master_{i}@example.com",
                     "password": "TestPass123!",
-                    "phone": f"+7999002{i:03d}",
-                    "telegram_username": f"unsuspend_master_{i}"
+                    "phone": f"+7999002{i}001",
+                    "telegram_username": f"unsuspend_master_{i}",
+                    "role": "MASTER"
                 }
             )
             assert resp.status_code == 201
             ids.append(resp.json()["id"])
 
         await client.post(
-            "/api/v1/admin/masters/bulk/suspend",
+            "/api/v1/admin/bulk/suspend",
             json=ids,
             headers=super_admin_headers
         )
 
         resp = await client.post(
-            "/api/v1/admin/masters/bulk/unsuspend",
+            "/api/v1/admin/bulk/unsuspend",
             json=ids,
             headers=super_admin_headers
         )

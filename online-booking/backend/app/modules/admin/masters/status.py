@@ -100,6 +100,7 @@ async def suspend_master(
         logger.warning("Admin %s tried to suspend self (id=%s)", super_admin.email, master_id)
         raise HTTPException(status_code=400, detail="Нельзя заблокировать себя")
 
+    mp.status = "suspended"
     await db.commit()
     await db.refresh(mp)
     logger.info(
@@ -123,6 +124,7 @@ async def unsuspend_master(
         master_id, mp.user.name, super_admin.email
     )
 
+    mp.status = "active"
     await db.commit()
     await db.refresh(mp)
     logger.info(
