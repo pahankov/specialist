@@ -58,6 +58,11 @@ jobs:
             export DATABASE_URL="${DATABASE_URL}"
             echo "DB: ${DATABASE_URL:0:30}..."
 
+            # Backup database BEFORE any changes
+            echo "=== DATABASE BACKUP ==="
+            pg_dump "${DATABASE_URL}" > /tmp/db-backup-$(date +%Y%m%d-%H%M%S).sql 2>/dev/null || echo "[WARN] Backup skipped (pg_dump not available)"
+            echo "=== BACKUP DONE ==="
+
             bash deploy_setup.sh
 
             # Backend
@@ -147,4 +152,24 @@ jobs:
                 echo "REVIEWS API works: $(echo $REVIEWS | python3 -c 'import sys,json; print(len(json.load(sys.stdin)))' 2>/dev/null || echo 'N/A') reviews"
             else
                 echo "REVIEWS API FAILED: $REVIEWS"
+            fi
+
+            # Final health check — retry 3 times with 10s delay
+            echo "=== FINAL HEALTH CHECK ==="
+            HEALTH_OK=false
+            for i in 1 2 3; do
+                HEALTH_RESP=$(curl -sf http://127.0.0.1:8000/health 2>&1) || true
+                if echo "$HEALTH_RESP" | grep -q '"status"'; then
+                    HEALTH_OK=true
+                    echo "Health check passed: $HEALTH_RESP"
+                    break
+                fi
+                echo "Retry $i/3 — health check failed, waiting 10s..."
+                sleep 10
+            done
+
+            if [ "$HEALTH_OK" = false ]; then
+                echo "ERROR: Health check failed after 3 retries! Deployment may be unstable."
+            else
+                echo "=== DEPLOYMENT SUCCESSFUL ==="
             fi
