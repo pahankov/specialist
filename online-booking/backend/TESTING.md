@@ -1296,3 +1296,49 @@ pytest tests/ -v --log-cli-level=DEBUG
 # Посчитать статистику
 pytest tests/ -v --tb=no 2>&1 | Select-String "passed|failed|error"
 ```
+
+---
+
+## Устранение неполадок
+
+### CI/CD проблемы
+
+#### CI падает с "module not found" или "cd: no such file"
+
+**Причина:** Неверный путь к backend в `ci.yml` или `deploy.yml`.
+
+**Решение:**
+```yaml
+# ❌ Неправильно:
+cd backend
+
+# ✅ Правильно:
+cd online-booking/backend
+```
+
+**Проверка:**
+```bash
+# Убедитесь, что путь существует:
+ls online-booking/backend/tests/
+ls online-booking/backend/requirements.txt
+```
+
+#### CI падает с "No tests collected"
+
+**Причина:** pytest не находит тесты из-за неправильного рабочего каталога.
+
+**Решение:** Убедитесь, что `cd online-booking/backend` выполнен ПЕРЕД запуском pytest.
+
+#### Серверные тесты падают на деплое
+
+**Причина:** Различия между окружением CI и сервера.
+
+**Решение:**
+1. Запустите тесты локально с теми же зависимостями:
+   ```bash
+   cd online-booking/backend
+   pip install -r requirements.txt
+   pytest tests/ -v --tb=short
+   ```
+2. Проверьте, что `PYTHONPATH=.` установлен
+3. Убедитесь, что `requirements.txt` включает все зависимости
