@@ -198,7 +198,15 @@ async def refresh_token(request: Request, db: AsyncSession = Depends(get_db)):
     )
     stored_token = result.scalar_one_or_none()
 
-    if not stored_token or stored_token.expires_at < datetime.now(dt_timezone.utc):
+    if not stored_token:
+        logger.warning("Token refresh: token not found for user_id=%s", user_id)
+        raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
+
+    # Handle timezone-aware vs naive datetime comparison (SQLite stores naive datetimes)
+    expires_at = stored_token.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=dt_timezone.utc)
+    if expires_at < datetime.now(dt_timezone.utc):
         logger.warning("Token refresh: token not found or expired for user_id=%s", user_id)
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 

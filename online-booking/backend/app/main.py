@@ -1,7 +1,8 @@
 """Online Booking API — main application entry point."""
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 from app.config import settings
 from app.database import engine, Base
 from app.logging_config import setup_logging, get_logger
@@ -68,6 +69,12 @@ app = FastAPI(
 @app.exception_handler(422)
 async def validation_exception_handler(request: Request, exc):
     """Return user-friendly validation errors."""
+    # Only handle Pydantic ValidationErrors, not HTTPException(422)
+    if not isinstance(exc, ValidationError):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.detail},
+        )
     details = []
     for error in exc.errors():
         loc = " -> ".join(str(l) for l in error.get("loc", []))

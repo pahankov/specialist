@@ -41,6 +41,7 @@ class TestRefreshToken:
             "email": "invalid_type@example.com",
             "password": "SecurePass123!",
             "phone": "+79990000099",
+            "role": "MASTER",
         })
         login_resp = await client.post("/api/v1/auth/login", json={
             "email": "invalid_type@example.com",
