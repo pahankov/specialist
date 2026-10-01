@@ -1,6 +1,9 @@
 """SMS provider abstraction."""
+import logging
 from abc import ABC, abstractmethod
 from typing import Protocol
+
+logger = logging.getLogger(__name__)
 
 
 class SmsProvider(Protocol):
@@ -26,8 +29,6 @@ class FakeSmsProvider(BaseSmsProvider):
     """
 
     async def send(self, phone: str, code: str) -> bool:
-        import logging
-        logger = logging.getLogger(__name__)
         logger.info("FAKE SMS - OTP for %s: %s", phone, code)
         return True
 
@@ -49,11 +50,10 @@ class TwilioSmsProvider(BaseSmsProvider):
                 to=phone,
                 from_=self.from_number,
             )
+            logger.info("SMS sent via Twilio to %s", phone)
             return True
         except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error("Failed to send SMS via Twilio: %s", e)
+            logger.error("Failed to send SMS via Twilio to %s: %s", phone, e, exc_info=True)
             return False
 
 
@@ -78,11 +78,14 @@ class SmscRuSmsProvider(BaseSmsProvider):
             async with aiohttp.ClientSession() as session:
                 async with session.post(url, data=params, timeout=aiohttp.ClientTimeout(total=10)) as resp:
                     result = await resp.text()
-                    return result.startswith("100|")
+                    success = result.startswith("100|")
+                    if success:
+                        logger.info("SMS sent via sms.ru to %s", phone)
+                    else:
+                        logger.warning("sms.ru returned non-success for %s: %s", phone, result)
+                    return success
         except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error("Failed to send SMS via sms.ru: %s", e)
+            logger.error("Failed to send SMS via sms.ru to %s: %s", phone, e, exc_info=True)
             return False
 
 
@@ -92,15 +95,18 @@ def get_sms_provider() -> BaseSmsProvider:
     provider_name = getattr(settings, 'SMS_PROVIDER', 'fake').lower()
 
     if provider_name == 'twilio':
+        logger.info("Using Twilio SMS provider")
         return TwilioSmsProvider(
             account_sid=settings.TWILIO_ACCOUNT_SID,
             auth_token=settings.TWILIO_AUTH_TOKEN,
             from_number=settings.TWILIO_FROM_NUMBER,
         )
     elif provider_name == 'smsc':
+        logger.info("Using sms.ru provider")
         return SmscRuSmsProvider(
             login=settings.SMSC_LOGIN,
             password=settings.SMSC_PASSWORD,
         )
     else:
+        logger.info("Using FAKE SMS provider (development mode)")
         return FakeSmsProvider()

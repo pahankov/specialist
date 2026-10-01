@@ -9,21 +9,27 @@
   CRITICAL - критические ошибки, угрожающие работе приложения
 
 Особенности:
+  - Correlation ID (request_id) подставляется через logging.context —
+    RequestLoggingMiddleware кладёт его в request.state.request_id,
+    а корневой logger добавляет его в каждый log record.
   - SQLAlchemy логи выведены на уровень WARNING (SQL-запросы только при ошибках)
   - Uvicorn логи выведены на уровень WARNING (HTTP-запросы в dev, ошибки в prod)
   - Цветной вывод для консоли (ANSI-коды)
+  - Rotating file handler (10 МБ, 5 файлов)
 """
 
 import logging
 import sys
 from pathlib import Path
+from logging import LogRecord
+from contextvars import ContextVar
 
 # Директория для файлов логов
 LOG_DIR = Path(__file__).parent.parent / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 
-# Форматирование логов
-LOG_FORMAT = "[%(asctime)s] %(levelname)s %(name)s: %(message)s"
+# Форматирование логов с поддержкой %(request_id)s
+LOG_FORMAT = "[%(asctime)s] %(levelname)s [%(request_id)s] %(name)s: %(message)s"
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 # Цвета для консоли (ANSI)
@@ -35,6 +41,17 @@ COLORS = {
     "CRITICAL": "\033[35m", # Magenta
     "RESET": "\033[0m",     # Reset
 }
+
+# Context-var для correlation ID (set в RequestLoggingMiddleware)
+_request_id_var: ContextVar[str] = ContextVar("request_id", default="-")
+
+
+class CorrelationFilter(logging.Filter):
+    """Вставляет request_id из contextvars в каждый log record."""
+
+    def filter(self, record: LogRecord) -> bool:
+        record.request_id = _request_id_var.get()
+        return True
 
 
 class ColorFormatter(logging.Formatter):
@@ -84,6 +101,7 @@ def setup_logging(level: str = "INFO") -> None:
     root_logger = logging.getLogger()
     root_logger.setLevel(log_level)
     root_logger.handlers.clear()
+    root_logger.addFilter(CorrelationFilter())
     root_logger.addHandler(console_handler)
     root_logger.addHandler(file_handler)
 
@@ -96,6 +114,11 @@ def setup_logging(level: str = "INFO") -> None:
 
     # Логируем факт запуска
     root_logger.info("Логирование инициализировано (уровень: %s)", level.upper())
+
+
+def set_request_id(request_id: str) -> None:
+    """Установить correlation ID для текущего async context."""
+    _request_id_var.set(request_id)
 
 
 def get_logger(name: str) -> logging.Logger:

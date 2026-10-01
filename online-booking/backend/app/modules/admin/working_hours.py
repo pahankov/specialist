@@ -15,6 +15,9 @@ from app.dependencies.crud import get_owned_or_404
 from app.services.audit import log_action
 from app.services.master_status import update_master_status_from_working_hours
 from app.modules.admin.helpers import get_master_profile_id
+from app.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -26,6 +29,7 @@ async def get_working_hours(
     db: AsyncSession = Depends(get_db)
 ):
     """Get working hours for the authenticated master (or specified master for superadmin)."""
+    logger.info("Get working hours: master=%s, master_id=%s", master.id, master_id)
     is_admin = master.role == "ADMIN"
     
     if is_admin and master_id is not None:

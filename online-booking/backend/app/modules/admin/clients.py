@@ -14,6 +14,9 @@ from app.schemas.pagination import PaginatedResponse
 from app.dependencies.auth import require_master
 from app.dependencies.crud import get_or_404
 from app.services.audit import log_action
+from app.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -28,6 +31,8 @@ async def get_admin_clients(
     db: AsyncSession = Depends(get_db)
 ):
     """Get all clients (paginated with total count)."""
+    logger.info("Get clients: master=%s, page=%d, page_size=%d, search=%s, master_id=%s",
+                master.id, page, page_size, search, master_id)
     offset = (page - 1) * page_size
 
     # Base query

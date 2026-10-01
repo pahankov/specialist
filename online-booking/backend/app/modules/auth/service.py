@@ -127,6 +127,7 @@ async def login_master(email: str, password: str, db: AsyncSession) -> tuple[str
     refresh_token_value, expires_at = create_refresh_token_payload(user.id, user.email or "")
     db.add(RefreshToken(user_id=user.id, token=refresh_token_value, expires_at=expires_at))
     await db.commit()
+    logger.debug("Refresh token stored for user_id=%s, expires=%s", user.id, expires_at)
 
     logger.info("Мастер успешно вошёл в систему: %s", email)
     return access_token, user
@@ -194,6 +195,7 @@ async def verify_otp(phone: str, code: str, db: AsyncSession) -> tuple[str, User
 
     if not user:
         # Create new client user
+        logger.info("Creating new client via OTP: phone=%s", phone)
         user = User(
             name="",  # will be set later
             phone=phone,
@@ -208,6 +210,7 @@ async def verify_otp(phone: str, code: str, db: AsyncSession) -> tuple[str, User
         db.add(client_profile)
         await db.commit()
         await db.refresh(user)
+        logger.info("New client created via OTP: user_id=%s, phone=%s", user.id, phone)
 
     from app.modules.auth.token import create_access_token
     from app.modules.auth.token import create_refresh_token_payload

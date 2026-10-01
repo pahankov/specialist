@@ -18,6 +18,9 @@ from app.dependencies.auth import require_master
 from app.dependencies.crud import get_owned_or_404, get_or_404
 from app.services.audit import log_action
 from app.modules.admin.helpers import get_appointment_for_master, get_master_profile_id
+from app.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -51,6 +54,7 @@ async def confirm_appointment(
     db: AsyncSession = Depends(get_db)
 ):
     """Confirm an appointment."""
+    logger.info("Confirm appointment %s by master %s", appointment_id, master.id)
     appointment = await get_appointment_for_master(db, appointment_id, master)
     appointment.status = "confirmed"
     await log_action(db, master.id, "confirm", "appointment", appointment.id, "Статус изменён на confirmed", level="info")
@@ -67,6 +71,7 @@ async def cancel_appointment(
     db: AsyncSession = Depends(get_db)
 ):
     """Cancel an appointment."""
+    logger.info("Cancel appointment %s by master %s, reason=%s", appointment_id, master.id, reason)
     appointment = await get_appointment_for_master(db, appointment_id, master)
     appointment.status = "cancelled"
     if reason:
@@ -84,6 +89,7 @@ async def complete_appointment(
     db: AsyncSession = Depends(get_db)
 ):
     """Mark an appointment as completed."""
+    logger.info("Complete appointment %s by master %s", appointment_id, master.id)
     appointment = await get_appointment_for_master(db, appointment_id, master)
     appointment.status = "completed"
     await log_action(db, master.id, "complete", "appointment", appointment.id, level="info")
@@ -99,6 +105,7 @@ async def delete_appointment(
     db: AsyncSession = Depends(get_db)
 ):
     """Delete an appointment."""
+    logger.info("Delete appointment %s by master %s", appointment_id, master.id)
     appointment = await get_appointment_for_master(db, appointment_id, master)
     await log_action(db, master.id, "delete", "appointment", appointment_id, level="warning")
     await db.delete(appointment)
@@ -113,6 +120,7 @@ async def mark_no_show(
     db: AsyncSession = Depends(get_db)
 ):
     """Mark an appointment as no-show. Increments client's no_show_count."""
+    logger.info("No-show appointment %s by master %s", appointment_id, master.id)
     appointment = await get_appointment_for_master(db, appointment_id, master)
     appointment.status = "cancelled"
     appointment.notes = f"{appointment.notes}\n\nНеявка" if appointment.notes else "Неявка"
@@ -147,6 +155,8 @@ async def get_admin_appointments(
     db: AsyncSession = Depends(get_db)
 ):
     """Get appointments with client and service details (paginated with total count)."""
+    logger.info("Get appointments: master=%s, status=%s, master_id=%s, client_id=%s, service_id=%s, date_from=%s, date_to=%s, page=%d",
+                master.id, status, master_id, client_id, service_id, date_from, date_to, page)
     offset = (page - 1) * page_size
     is_admin = master.role == UserRole.ADMIN
     
@@ -290,6 +300,8 @@ async def book_appointment(
     db: AsyncSession = Depends(get_db)
 ):
     """Book an appointment from admin panel (select client from DB)."""
+    logger.info("Admin booking appointment: master=%s, client=%s, service=%s, date=%s",
+                master.id, data.client_id, data.service_id, data.appointment_date)
     result = await db.execute(
         select(MasterProfile).where(MasterProfile.user_id == master.id)
     )

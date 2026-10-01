@@ -6,7 +6,9 @@ from app.config import settings
 from app.database import engine, Base
 from app.logging_config import setup_logging, get_logger
 from app.middleware.rate_limit import RateLimitMiddleware
+from app.middleware.request_logging import RequestLoggingMiddleware
 import asyncio
+import traceback
 
 # Import module routers
 from app.modules.auth import router as auth_router
@@ -18,8 +20,8 @@ from app.modules.review import router as review_router
 from app.modules.admin import router as admin_router
 from app.modules.city import router as city_router
 
-# Инициализация логирования
-setup_logging("INFO")
+# Инициализация логирования (DEBUG для разработки, INFO для продакшена)
+setup_logging("DEBUG")
 logger = get_logger(__name__)
 logger.info("Инициализация приложения %s", settings.APP_NAME)
 
@@ -76,6 +78,31 @@ async def validation_exception_handler(request: Request, exc):
         content={"detail": details},
     )
 
+
+# ─── Global 500 handler — log full traceback ───────────────────
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Catch-all for unhandled exceptions — log full traceback, return generic error."""
+    request_id = getattr(request.state, "request_id", "-")
+    logger.critical(
+        "UNHANDLED EXCEPTION: %s %s | %s | %s: %s\n%s",
+        request.method,
+        request.url.path,
+        request_id,
+        type(exc).__name__,
+        exc,
+        "".join(traceback.format_exception(exc)),
+        exc_info=False,  # traceback already formatted above
+    )
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "Внутренняя ошибка сервера",
+            "request_id": request_id,
+        },
+    )
+
 # ─── Middleware ────────────────────────────────────────────────
 
 app.add_middleware(
@@ -87,6 +114,9 @@ app.add_middleware(
 )
 
 app.add_middleware(RateLimitMiddleware)
+
+# Request logging — LAST middleware so it wraps everything
+app.add_middleware(RequestLoggingMiddleware)
 
 # ─── Health check ──────────────────────────────────────────────
 

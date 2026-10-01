@@ -1,6 +1,6 @@
 # Деплой beauty-specialist.ru
 
-> **ПОСЛЕДНЕЕ ОБНОВЛЕНИЕ:** 30 сентября 2026
+> **ПОСЛЕДНЕЕ ОБНОВЛЕНИЕ:** 1 октября 2026
 > **СТАТУС:** ✅ Сайт работает, деплой автоматизирован
 > **ГЛАВНОЕ ПРАВИЛО:** НЕ использовать `SAEnum` в моделях SQLAlchemy (см. раздел 1)
 
@@ -367,6 +367,39 @@ journalctl -u beauty-backend --no-pager -n 30
 journalctl -u nginx --no-pager -n 30
 ```
 
+### Файлы логов приложения
+```bash
+# Приложение пишет логи в /var/www/.../backend/logs/app.log
+# Rotating: 10 МБ, 5 файлов
+sudo tail -100 /var/www/beauty-specialist/online-booking/backend/logs/app.log
+
+# Фильтр по request_id (correlation ID)
+grep "abc12345" /var/www/beauty-specialist/online-booking/backend/logs/app.log
+
+# Критические ошибки (CRITICAL)
+grep "CRITICAL" /var/www/beauty-specialist/online-booking/backend/logs/app.log
+
+# Ошибки авторизации
+grep "JWT\|Login\|Logout\|OTP" /var/www/beauty-specialist/online-booking/backend/logs/app.log
+```
+
+### Структура лог-сообщений
+```
+[2026-10-01 09:00:00] INFO [abc12345] app.modules.auth.dependencies: JWT decoded: user_id=5, role=MASTER
+```
+- `[abc12345]` — correlation ID (уникальный для каждого HTTP-запроса)
+- `app.modules.auth.dependencies` — модуль, где записан лог
+- `INFO` — уровень логирования (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+
+### Уровни логирования
+| Уровень | Когда используется | Пример |
+|---------|-------------------|--------|
+| DEBUG | Детали JWT, сессии БД, прогресс CSV | `JWT decoded: user_id=5` |
+| INFO | Штатные действия: login, register, commit | `Master registered: id=5` |
+| WARNING | Предупреждения: неверный токен, 404 | `JWT validation failed` |
+| ERROR | Ошибки: не удалось отправить SMS, Redis | `Failed to send SMS: timeout` |
+| CRITICAL | Unhandled exceptions, full traceback | `UNHANDLED EXCEPTION: POST /api/...` |
+
 ### Перезапуск
 ```bash
 systemctl restart beauty-backend
@@ -699,6 +732,12 @@ git diff --cached | grep -i "password\|secret\|token\|key"
 - Никаких реальных паролей в коде или документации
 - В DEPLOY.md — только placeholders
 
+### 8. Проверь логирование новых эндпоинтов
+- [ ] `logger = get_logger(__name__)` в каждом новом файле
+- [ ] Intent-лог перед действием, result-лог после
+- [ ] `ERROR + exc_info=True` для unhandled exceptions
+- [ ] `WARNING` для нештатных ситуаций (неверный токен, 404)
+
 ---
 
 ## ТАБЛИЦА ИНЦИДЕНТОВ
@@ -715,6 +754,8 @@ git diff --cached | grep -i "password\|secret\|token\|key"
 | `ResponseValidationError: coroutine object` | `_to_response` объявлен как `async def`, но не await'ится | 500 Internal Server Error | Убрать `async` |
 | `No module named 'redis'` | Redis не установлен на сервере | `journalctl` → warning | Игнорировать (fallback на отсутствие кэша) |
 | `hash_password` не найден | Путь `app.services.auth` не существует | `journalctl` → ImportError | Использовать `app.modules.auth.service` |
+| **Отсутствие логов в auth** | JWT-валидация без логов — неясно почему токен не проходит | 401 без контекста | Добавить логирование в `dependencies/auth.py` |
+| **Отсутствие global exception handler** | Unhandled exceptions возвращали стандартный 500 без контекста | 500 без traceback | Добавить `@app.exception_handler(Exception)` |
 
 ---
 
@@ -787,6 +828,23 @@ git diff --cached | grep -i "password\|secret\|token\|key"
 - Понятное сообщение коммита
 - После коммита — проверить логи деплоя и `journalctl`
 
+### 9. Логирование — ОБЯЗАТЕЛЬНО для всех новых эндпоинтов
+- Каждый endpoint должен иметь `logger = get_logger(__name__)`
+- **Intent** перед действием: `logger.info("Intent: action X by user Y")`
+- **Result** после действия: `logger.info("Result: action X completed")`
+- **Ошибки** — `ERROR` + `exc_info=True` для traceback
+- **Предупреждения** — `WARNING` для нештатных ситуаций
+- Correlation ID (request_id) подставляется автоматически через `logging_config.py`
+- **Пример:**
+  ```python
+  from app.logging_config import get_logger
+  logger = get_logger(__name__)
+  
+  logger.info("Intent: toggle master id=%s by admin %s", master_id, admin.email)
+  # ... действие ...
+  logger.info("Result: master id=%s toggled to %s", master_id, new_status)
+  ```
+
 ### 9. Для доступа к master_profile.id — использовать helper `get_master_profile_id()`
 **Ошибка:** `AttributeError: 'NoneType' object has no attribute 'id'` на `/working-hours`, `/monthly-stats`, `/appointments/by-date`, `/services`
 **Причина:** Супер-админ (role=ADMIN) не имеет MasterProfile → `master.master_profile` = `None`
@@ -797,6 +855,35 @@ mp_id = await get_master_profile_id(db, master)
 ```
 **Проверка:** `grep -r "master\.master_profile\.id" app/modules/admin/` — должен вернуть только helper
 **Проверка:** `python -c "from app.main import app"` — если падает с AttributeError → проблема в master_profile
+
+### 10. Логирование — ОБЯЗАТЕЛЬНО для всех эндпоинтов
+**Правило:** Каждый модуль и endpoint должен логировать:
+- `logger = get_logger(__name__)` — в начале файла
+- **Intent** перед действием: `logger.info("Intent: action X by user Y")`
+- **Result** после действия: `logger.info("Result: action X completed")`
+- **Ошибки** — `ERROR + exc_info=True` для traceback
+- **Предупреждения** — `WARNING` для нештатных ситуаций
+
+**Correlation ID:** автоматически подставляется через `logging_config.py` + `RequestLoggingMiddleware`. Каждый лог содержит `[request_id]` для связывания с HTTP-запросом.
+
+**Пример:**
+```python
+from app.logging_config import get_logger
+logger = get_logger(__name__)
+
+@router.post("/action")
+async def do_action(...):
+    logger.info("Intent: action X by user_id=%s", user.id)
+    try:
+        # ... действие ...
+        logger.info("Result: action X completed for user_id=%s", user.id)
+    except Exception as e:
+        logger.error("Action X failed: %s", e, exc_info=True)
+        raise
+```
+
+**Проверка:** `grep -r "get_logger" app/` — должен быть в каждом модуле
+**Проверка:** `grep -r "logger\." app/` — каждый endpoint должен иметь хотя бы 1 лог
 
 ---
 

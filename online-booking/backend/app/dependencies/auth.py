@@ -19,6 +19,9 @@ from app.database import get_db
 from app.models.user import User, UserRole
 from app.models.master_profile import MasterProfile
 from app.config import settings
+from app.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 security = HTTPBearer()
 
@@ -38,11 +41,15 @@ async def get_current_user(
         )
         user_id: int = int(payload.get("sub"))
         if user_id is None:
+            logger.warning("JWT valid payload but missing 'sub' field")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid token payload"
             )
-    except JWTError:
+        token_role = payload.get("role")
+        logger.debug("JWT decoded: user_id=%s, role=%s", user_id, token_role)
+    except JWTError as e:
+        logger.warning("JWT validation failed: %s", e)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token"
@@ -52,11 +59,13 @@ async def get_current_user(
     user = result.scalar_one_or_none()
 
     if user is None:
+        logger.warning("User not found in DB: user_id=%s (from JWT)", user_id)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found"
         )
 
+    logger.debug("Authenticated user: id=%s, role=%s, name=%s", user.id, user.role, user.name)
     return user
 
 
@@ -73,6 +82,10 @@ async def get_current_master(
     user = await get_current_user(credentials, db)
 
     if user.role not in (UserRole.MASTER, UserRole.ADMIN):
+        logger.warning(
+            "Access denied: user_id=%s has role=%s, expected MASTER or ADMIN",
+            user.id, user.role
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token — not a master"
@@ -84,7 +97,21 @@ async def get_current_master(
         .options(joinedload(User.master_profile))
         .where(User.id == user.id)
     )
-    return result.scalar_one_or_none()
+    user = result.scalar_one_or_none()
+
+    if user is None or user.master_profile is None:
+        logger.error(
+            "Master user found but master_profile is None: user_id=%s, role=%s",
+            user.id if user else "N/A",
+            user.role if user else "N/A"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Master profile not found"
+        )
+
+    logger.info("Master authenticated: id=%s, profile_id=%s", user.id, user.master_profile.id)
+    return user
 
 
 async def get_current_client(
@@ -104,11 +131,16 @@ async def get_current_client(
         token_role = payload.get("role")
 
         if user_id is None or token_role != "CLIENT":
+            logger.warning(
+                "Client auth failed: user_id=%s, token_role=%s (expected CLIENT)",
+                user_id, token_role
+            )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid token payload"
             )
-    except JWTError:
+    except JWTError as e:
+        logger.warning("JWT validation failed for client: %s", e)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token"
@@ -118,6 +150,7 @@ async def get_current_client(
     user = result.scalar_one_or_none()
 
     if user is None:
+        logger.warning("Client user not found: user_id=%s", user_id)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found"
@@ -134,10 +167,15 @@ def require_master(user: User = Depends(get_current_master)) -> User:
 def require_admin(user: User = Depends(get_current_master)) -> User:
     """Dependency that requires an admin user."""
     if user.role != UserRole.ADMIN:
+        logger.warning(
+            "Admin access denied: user_id=%s, role=%s",
+            user.id, user.role
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Доступ разрешён только администраторам"
         )
+    logger.info("Admin authenticated: user_id=%s, name=%s", user.id, user.name)
     return user
 
 

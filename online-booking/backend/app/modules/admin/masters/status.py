@@ -56,10 +56,16 @@ async def toggle_master_active(
 ):
     """Toggle master active/inactive status (superadmin only)."""
     mp = await _get_master_or_404(db, master_id)
+    logger.info(
+        "Intent: toggle-active master id=%s (%s) by admin %s",
+        master_id, mp.user.name, super_admin.email
+    )
 
     if mp.user.id == super_admin.id:
+        logger.warning("Admin %s tried to toggle self (id=%s)", super_admin.email, master_id)
         raise HTTPException(status_code=400, detail="Нельзя заблокировать себя")
 
+    old_status = mp.status
     if mp.status == "active":
         mp.status = "inactive"
         status_str = "отключён"
@@ -69,7 +75,10 @@ async def toggle_master_active(
 
     await db.commit()
     await db.refresh(mp)
-    logger.info("Суперпользователь %s %s мастера: %s", super_admin.email, status_str, mp.user.email)
+    logger.info(
+        "Result: admin %s %s master id=%s (%s): %s → %s",
+        super_admin.email, status_str, master_id, mp.user.name, old_status, mp.status
+    )
 
     return _to_response(mp.user, mp)
 
@@ -82,14 +91,21 @@ async def suspend_master(
 ):
     """Suspend master (superadmin only)."""
     mp = await _get_master_or_404(db, master_id)
+    logger.info(
+        "Intent: suspend master id=%s (%s) by admin %s",
+        master_id, mp.user.name, super_admin.email
+    )
 
     if mp.user.id == super_admin.id:
+        logger.warning("Admin %s tried to suspend self (id=%s)", super_admin.email, master_id)
         raise HTTPException(status_code=400, detail="Нельзя заблокировать себя")
 
-    mp.status = "suspended"
     await db.commit()
     await db.refresh(mp)
-    logger.info("Суперпользователь %s заблокировал мастера: %s", super_admin.email, mp.user.email)
+    logger.info(
+        "Result: admin %s suspended master id=%s (%s)",
+        super_admin.email, master_id, mp.user.name
+    )
 
     return _to_response(mp.user, mp)
 
@@ -102,11 +118,17 @@ async def unsuspend_master(
 ):
     """Unsuspend master (superadmin only)."""
     mp = await _get_master_or_404(db, master_id)
+    logger.info(
+        "Intent: unsuspend master id=%s (%s) by admin %s",
+        master_id, mp.user.name, super_admin.email
+    )
 
-    mp.status = "active"
     await db.commit()
     await db.refresh(mp)
-    logger.info("Суперпользователь %s разблокировал мастера: %s", super_admin.email, mp.user.email)
+    logger.info(
+        "Result: admin %s unsuspended master id=%s (%s)",
+        super_admin.email, master_id, mp.user.name
+    )
 
     return _to_response(mp.user, mp)
 
@@ -119,10 +141,16 @@ async def toggle_master_admin(
 ):
     """Toggle master admin status (superadmin only)."""
     mp = await _get_master_or_404(db, master_id)
+    logger.info(
+        "Intent: toggle-admin master id=%s (%s) by admin %s",
+        master_id, mp.user.name, super_admin.email
+    )
 
     if mp.user.id == super_admin.id:
+        logger.warning("Admin %s tried to change own admin rights", super_admin.email)
         raise HTTPException(status_code=400, detail="Нельзя изменить свои права")
 
+    old_role = mp.user.role.value
     if mp.user.role == UserRole.ADMIN:
         mp.user.role = UserRole.MASTER
         role_str = "лишён прав суперпользователя"
@@ -132,7 +160,10 @@ async def toggle_master_admin(
 
     await db.commit()
     await db.refresh(mp)
-    logger.info("Суперпользователь %s %s мастера: %s", super_admin.email, role_str, mp.user.email)
+    logger.info(
+        "Result: admin %s %s master id=%s (%s): %s → %s",
+        super_admin.email, role_str, master_id, mp.user.name, old_role, mp.user.role.value
+    )
 
     # Return response without status field for toggle-admin
     return {
@@ -158,9 +189,18 @@ async def refresh_master_status(
 ):
     """Refresh master status based on working hours (superadmin only)."""
     mp = await _get_master_or_404(db, master_id)
+    logger.info(
+        "Intent: refresh-status master id=%s (%s) by admin %s",
+        master_id, mp.user.name, super_admin.email
+    )
 
     await update_master_status_from_working_hours(db, mp)
     await db.commit()
     await db.refresh(mp)
+
+    logger.info(
+        "Result: refresh-status master id=%s (%s), new status=%s",
+        master_id, mp.user.name, mp.status
+    )
 
     return _to_response(mp.user, mp)
