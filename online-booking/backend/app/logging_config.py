@@ -79,6 +79,7 @@ def setup_logging(level: str = "INFO") -> None:
     console_handler = logging.StreamHandler(sys.stderr)
     console_handler.setLevel(log_level)
     console_handler.setFormatter(ColorFormatter(LOG_FORMAT, datefmt=DATE_FORMAT))
+    console_handler.addFilter(CorrelationFilter())
 
     # --- Rotating file handler (макс. 10 МБ, 5 файлов) ---
     try:
@@ -92,6 +93,7 @@ def setup_logging(level: str = "INFO") -> None:
         )
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(logging.Formatter(LOG_FORMAT, datefmt=DATE_FORMAT))
+        file_handler.addFilter(CorrelationFilter())
     except ImportError:
         # Fallback для старых версий Python
         file_handler = logging.FileHandler(
@@ -99,12 +101,12 @@ def setup_logging(level: str = "INFO") -> None:
         )
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(logging.Formatter(LOG_FORMAT, datefmt=DATE_FORMAT))
+        file_handler.addFilter(CorrelationFilter())
 
     # Корневой логгер
     root_logger = logging.getLogger()
     root_logger.setLevel(log_level)
     root_logger.handlers.clear()
-    root_logger.addFilter(CorrelationFilter())
     root_logger.addHandler(console_handler)
     root_logger.addHandler(file_handler)
 
