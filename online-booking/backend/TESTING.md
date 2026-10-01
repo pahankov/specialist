@@ -421,12 +421,12 @@ assert resp2.status_code == 200  # ❌ 404
 
 ---
 
-## Актуальная статистика (v2 — 2026-10-01 18:00)
+## Актуальная статистика (v3 — 2026-10-01 18:30)
 
 | Метрика | Значение |
 |--------|---------|
-| ✅ PASSED | **195** |
-| ❌ FAILED | 22 |
+| ✅ PASSED | **201** |
+| ❌ FAILED | 16 |
 | ⚠️ ERROR | 9 |
 | **Всего** | **225** |
 
@@ -441,6 +441,7 @@ assert resp2.status_code == 200  # ❌ 404
 - `test_auth_tokens.py` — 12/12 ✅
 - `test_auth_service.py` — 12/12 ✅
 - `test_cache_service.py` — 18/18 ✅
+- `test_masters_bulk.py` — 6/6 ✅
 - `test_masters_crud.py` — 17/17 ✅
 - `test_masters.py` — 10/10 ✅
 - `test_rate_limiting.py` — 9/9 ✅
@@ -450,6 +451,8 @@ assert resp2.status_code == 200  # ❌ 404
 2. `mark_no_show` — исправлен запрос: `ClientProfile.user_id` вместо `ClientProfile.id`
 3. `delete_admin_client` — добавлено удаление ClientProfile перед User
 4. `book_appointment` — добавлен импорт `joinedload`
+5. `bulk_toggle_active/suspend/unsuspend` — добавлен `Body(..., embed=True)` через Pydantic модель
+6. `bulk_router` — перемещён в admin router перед masters_router для исправления конфликта путей
 
 ---
 
