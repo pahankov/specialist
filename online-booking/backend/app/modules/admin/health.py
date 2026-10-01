@@ -7,6 +7,9 @@ from app.database import get_db
 from app.models.appointment import Appointment
 from app.services.cache import cache_service
 from app.services.background_tasks import bg_task_service
+from app.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -42,7 +45,9 @@ async def health_check(
     try:
         await db.execute(text("SELECT 1"))
         result["database"] = "connected"
+        logger.debug("Health check: DB OK")
     except Exception as e:
+        logger.error("Health check: DB error: %s", e, exc_info=True)
         result["database"] = f"error: {str(e)}"
         result["status"] = "degraded"
 
@@ -51,6 +56,7 @@ async def health_check(
     result["cache"] = cache_status
 
     if cache_status.get("cache") == "error":
+        logger.warning("Health check: cache error: %s", cache_status.get("detail"))
         result["status"] = "degraded"
 
     # Check background tasks
@@ -58,8 +64,12 @@ async def health_check(
     result["tasks"] = tasks_status
 
     if tasks_status.get("tasks") == "error":
+        logger.warning("Health check: tasks error: %s", tasks_status.get("detail"))
         result["status"] = "degraded"
 
+    logger.info("Health check result: status=%s db=%s cache=%s tasks=%s",
+                result["status"], result["database"],
+                cache_status.get("cache"), tasks_status.get("tasks"))
     return result
 
 
@@ -85,7 +95,9 @@ async def health_check_verbose(
             "status": "connected",
             "total_appointments": db_result.scalar() or 0,
         }
+        logger.debug("Health verbose: total_appointments=%d", db_result.scalar() or 0)
     except Exception as e:
+        logger.error("Health verbose: DB metrics error: %s", e, exc_info=True)
         result["database"] = f"error: {str(e)}"
         result["status"] = "degraded"
 

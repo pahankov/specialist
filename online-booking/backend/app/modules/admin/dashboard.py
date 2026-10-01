@@ -17,6 +17,9 @@ from app.dependencies.auth import require_master
 from app.utils import utcnow
 from app.services.cache import cache_service
 from app.modules.admin.helpers import get_master_profile_id
+from app.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -35,6 +38,7 @@ async def get_dashboard(
     
     Uses Redis cache with 5-minute TTL for superadmin stats.
     """
+    logger.info("Get dashboard for master %s (is_admin=%s)", master.id, master.is_admin)
     if master.is_admin:
         cache_key = f"admin:dashboard:global"
         
@@ -246,6 +250,7 @@ async def get_monthly_stats(
     db: AsyncSession = Depends(get_db)
 ):
     """Get statistics for a specific month."""
+    logger.info("Get monthly stats: master=%s, year=%d, month=%d", master.id, year, month)
     mp_id = await get_master_profile_id(db, master)
     start_dt = datetime(year, month, 1)
     end_dt = datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1)

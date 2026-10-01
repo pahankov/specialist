@@ -4,6 +4,8 @@ from app.config import settings
 import logging
 import os
 
+logger = logging.getLogger(__name__)
+
 db_url = settings.DATABASE_URL
 
 # Handle SQLite path resolution
@@ -27,6 +29,9 @@ if "sqlite" in db_url:
         os.makedirs(db_dir, exist_ok=True)
 
     db_url = f"sqlite+aiosqlite:///{db_path}"
+    logger.info("SQLite database path: %s", db_path)
+
+logger.info("Database URL: %s", db_url.replace("://", "://***@***" if "://" in db_url and "@" not in db_url.split("://")[1] else "://"))
 
 engine = create_async_engine(
     db_url,
@@ -45,9 +50,13 @@ Base = declarative_base()
 
 
 async def get_db():
+    logger.debug("DB session created")
     async with AsyncSessionLocal() as session:
         try:
             yield session
         except Exception:
+            logger.warning("DB session rollback due to exception")
             await session.rollback()
             raise
+        else:
+            logger.debug("DB session committed successfully")

@@ -11,6 +11,9 @@ from app.dependencies.auth import require_master
 from app.dependencies.crud import get_owned_or_404
 from app.services.audit import log_action
 from app.modules.admin.helpers import get_master_profile_id
+from app.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -21,6 +24,7 @@ async def get_blocked_slots(
     db: AsyncSession = Depends(get_db)
 ):
     """Get blocked slots for the authenticated master."""
+    logger.info("Get blocked slots: master=%s", master.id)
     mp_id = await get_master_profile_id(db, master)
     result = await db.execute(
         select(BlockedSlot).where(BlockedSlot.master_id == mp_id)

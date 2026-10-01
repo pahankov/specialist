@@ -15,6 +15,9 @@ from app.dependencies.auth import require_master
 from app.dependencies.crud import get_owned_or_404
 from app.services.audit import log_action
 from app.modules.admin.helpers import get_master_profile_id
+from app.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -26,6 +29,7 @@ async def create_admin_service(
     db: AsyncSession = Depends(get_db)
 ):
     """Create a service for the authenticated master."""
+    logger.info("Create service: master=%s, name=%s", master.id, data.name)
     mp_id = await get_master_profile_id(db, master)
     new_service = Service(
         master_id=mp_id, name=data.name, description=data.description,
