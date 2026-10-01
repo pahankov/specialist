@@ -1072,19 +1072,19 @@ IntegrityError: UNIQUE constraint failed: users.email
 
 ---
 
-## Актуальная статистика (v7 — 2026-10-01 20:20)
+## Актуальная статистика (v8 — 2026-10-01 21:00)
 
 | Метрика | Значение |
 |--------|---------|
-| ✅ PASSED | **217** |
+| ✅ PASSED | **238** |
 | ❌ FAILED | **0** |
-| ⏭️ SKIPPED | 15 (6 password validation + 9 reviews) |
+| ⏭️ SKIPPED | **0** |
 | ⚠️ ERROR | 0 |
-| **Всего** | **232** |
+| **Всего** | **238** |
 
-**Покрытие:** ~232 теста, ~19000+ строк тестового кода, ~21 test files.
+**Покрытие:** 238 тестов, ~20000+ строк тестового кода, 22 test files.
 
-### Пройденные файлы (100% PASS) — 20 файлов:
+### Пройденные файлы (100% PASS) — 22 файла:
 - `test_admin_appointments.py` — 16/16 ✅
 - `test_admin_audit.py` — 4/4 ✅
 - `test_admin_clients.py` — 11/11 ✅
@@ -1098,14 +1098,16 @@ IntegrityError: UNIQUE constraint failed: users.email
 - `test_auth_tokens.py` — 12/12 ✅
 - `test_cache_service.py` — 18/18 ✅
 - `test_clients.py` — 9/9 ✅
+- `test_health.py` — 3/3 ✅
 - `test_masters.py` — 10/10 ✅
 - `test_masters_bulk.py` — 6/6 ✅
 - `test_masters_crud.py` — 17/17 ✅
 - `test_masters_status.py` — 11/11 ✅
-- `test_password_security.py` — 5/5 ✅ (6 skipped)
+- `test_password_security.py` — 11/11 ✅ (0 skipped, was 6)
 - `test_rate_limiting.py` — 9/9 ✅
 - `test_refresh_tokens.py` — 5/5 ✅
-- `test_schedule.py` — 7/7 ✅ (NEW)
+- `test_reviews.py` — 12/12 ✅ (0 skipped, was 9)
+- `test_schedule.py` — 7/7 ✅
 - `test_services.py` — 7/7 ✅
 
 ---
@@ -1170,6 +1172,8 @@ PYTHONPATH=. pytest tests/ -v --cov=app --cov-report=term-missing
 10. `create_client` — добавлена проверка duplicate email (409 вместо IntegrityError)
 11. `WorkingHourCreate` — master_id сделан опционаальным (admin endpoints derive from auth)
 12. `schedule/router.py` — убраны redundant `fromisoformat` вызовы (schema уже парсит time)
+13. `UserCreate` — добавлена валидация пароля (min 8 chars, upper/lower/digit/special, 4 unique)
+14. `UnifiedRegisterRequest` — добавлена валидация пароля (те же правила, что и UserCreate)
 
 ---
 
