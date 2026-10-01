@@ -50,7 +50,10 @@ class CorrelationFilter(logging.Filter):
     """Вставляет request_id из contextvars в каждый log record."""
 
     def filter(self, record: LogRecord) -> bool:
-        record.request_id = _request_id_var.get()
+        # Записываем и в атрибут, и в __dict__ — formatter использует __dict__
+        rid = _request_id_var.get()
+        record.request_id = rid
+        record.__dict__['request_id'] = rid
         return True
 
 
