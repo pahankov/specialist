@@ -29,7 +29,7 @@ class FakeSmsProvider(BaseSmsProvider):
     """
 
     async def send(self, phone: str, code: str) -> bool:
-        logger.info("FAKE SMS - OTP for %s: %s", phone, code)
+        logger.info("FAKE SMS - OTP generated for %s (code NOT logged)", phone)
         return True
 
 
