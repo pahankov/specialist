@@ -1071,19 +1071,19 @@ IntegrityError: UNIQUE constraint failed: users.email
 
 ---
 
-## Актуальная статистика (v6 — 2026-10-01 19:45)
+## Актуальная статистика (v7 — 2026-10-01 20:20)
 
 | Метрика | Значение |
 |--------|---------|
-| ✅ PASSED | **210** |
+| ✅ PASSED | **217** |
 | ❌ FAILED | **0** |
 | ⏭️ SKIPPED | 15 (6 password validation + 9 reviews) |
 | ⚠️ ERROR | 0 |
-| **Всего** | **225** |
+| **Всего** | **232** |
 
-**Покрытие:** ~225 тестов, ~18000+ строк тестового кода, ~20 test files.
+**Покрытие:** ~232 теста, ~19000+ строк тестового кода, ~21 test files.
 
-### Пройденные файлы (100% PASS) — 19 файлов:
+### Пройденные файлы (100% PASS) — 20 файлов:
 - `test_admin_appointments.py` — 16/16 ✅
 - `test_admin_audit.py` — 4/4 ✅
 - `test_admin_clients.py` — 11/11 ✅
@@ -1104,6 +1104,7 @@ IntegrityError: UNIQUE constraint failed: users.email
 - `test_password_security.py` — 5/5 ✅ (6 skipped)
 - `test_rate_limiting.py` — 9/9 ✅
 - `test_refresh_tokens.py` — 5/5 ✅
+- `test_schedule.py` — 7/7 ✅ (NEW)
 - `test_services.py` — 7/7 ✅
 
 ### Пропущенные тесты (SKIPPED):
@@ -1121,6 +1122,8 @@ IntegrityError: UNIQUE constraint failed: users.email
 8. `create_appointment` — удалён дублирующий локальный импорт `User` (UnboundLocalError)
 9. `refresh_token` — исправлено сравнение timezone-aware/naive datetime
 10. `create_client` — добавлена проверка duplicate email (409 вместо IntegrityError)
+11. `WorkingHourCreate` — master_id сделан опционаальным (admin endpoints derive from auth)
+12. `schedule/router.py` — убраны redundant `fromisoformat` вызовы (schema уже парсит time)
 
 ---
 
