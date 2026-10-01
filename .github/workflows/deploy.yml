@@ -24,10 +24,10 @@ jobs:
       - name: Run tests
         run: |
           cd online-booking/backend
-          PYTHONPATH=. pytest tests/ -v --tb=short --tb=no 2>&1 | tee test-results.txt
+          PYTHONPATH=. pytest tests/ -v --tb=short --cov=app --cov-report=term-missing --tb=no 2>&1 | tee test-results.txt
           echo ""
           echo "=== TEST SUMMARY ==="
-          grep -E "passed|failed|error|skipped" test-results.txt | tail -1
+          grep -E "passed|failed|error|skipped|coverage" test-results.txt | tail -5
 
   deploy:
     needs: test
@@ -74,8 +74,8 @@ jobs:
             # Run tests BEFORE deployment
             echo "=== RUNNING TESTS ==="
             pip install pytest pytest-asyncio pytest-cov httpx aiosqlite
-            PYTHONPATH=. pytest tests/ -v --tb=short --tb=no 2>&1 | tee /tmp/test-results.txt
-            TEST_SUMMARY=$(grep -E "passed|failed|error|skipped" /tmp/test-results.txt | tail -1)
+            PYTHONPATH=. pytest tests/ -v --tb=short --cov=app --cov-report=term-missing --tb=no 2>&1 | tee /tmp/test-results.txt
+            TEST_SUMMARY=$(grep -E "passed|failed|error|skipped|coverage" /tmp/test-results.txt | tail -5)
             echo "Test summary: $TEST_SUMMARY"
             if echo "$TEST_SUMMARY" | grep -q "failed\|error"; then
                 echo "ERROR: Tests failed on server! Aborting deployment."
