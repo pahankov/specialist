@@ -191,7 +191,7 @@ async def refresh_token(request: Request, db: AsyncSession = Depends(get_db)):
     )
     stored_token = result.scalar_one_or_none()
 
-    if not stored_token or stored_token.expires_at < datetime.now(dt_timezone.utc).replace(tzinfo=None):
+    if not stored_token or stored_token.expires_at < datetime.now(dt_timezone.utc):
         logger.warning("Token refresh: token not found or expired for user_id=%s", user_id)
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 
