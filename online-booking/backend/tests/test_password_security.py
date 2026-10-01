@@ -105,10 +105,9 @@ class TestPasswordHashing:
 class TestPasswordValidation:
     """Tests for password strength validation rules."""
 
-    @pytest.mark.skip(reason="Password validation not implemented in API yet")
     async def test_password_min_length(self, client):
         """Password must be at least 8 characters."""
-        resp = await client.post("/api/v1/auth/register", json={
+        resp = await client.post("/api/v1/auth/register-unified", json={
             "name": "Test",
             "email": "minlen@example.com",
             "password": "Ab1!",  # 4 chars
@@ -117,10 +116,9 @@ class TestPasswordValidation:
         })
         assert resp.status_code == 422
 
-    @pytest.mark.skip(reason="Password validation not implemented in API yet")
     async def test_password_needs_uppercase(self, client):
         """Password must contain at least one uppercase letter."""
-        resp = await client.post("/api/v1/auth/register", json={
+        resp = await client.post("/api/v1/auth/register-unified", json={
             "name": "Test",
             "email": "upper@example.com",
             "password": "lowercase1!",
@@ -129,10 +127,9 @@ class TestPasswordValidation:
         })
         assert resp.status_code == 422
 
-    @pytest.mark.skip(reason="Password validation not implemented in API yet")
     async def test_password_needs_lowercase(self, client):
         """Password must contain at least one lowercase letter."""
-        resp = await client.post("/api/v1/auth/register", json={
+        resp = await client.post("/api/v1/auth/register-unified", json={
             "name": "Test",
             "email": "lower@example.com",
             "password": "UPPERCASE1!",
@@ -141,49 +138,46 @@ class TestPasswordValidation:
         })
         assert resp.status_code == 422
 
-    @pytest.mark.skip(reason="Password validation not implemented in API yet")
     async def test_password_needs_digit(self, client):
         """Password must contain at least one digit."""
-        resp = await client.post("/api/v1/auth/register", json={
+        resp = await client.post("/api/v1/auth/register-unified", json={
             "name": "Test",
             "email": "digit@example.com",
-            "password": "NoDigits!!",
+            "password": "Abcdefgh!",
             "phone": "+79990000001",
             "role": "MASTER",
         })
         assert resp.status_code == 422
 
-    @pytest.mark.skip(reason="Password validation not implemented in API yet")
     async def test_password_needs_special_char(self, client):
         """Password must contain at least one special character."""
-        resp = await client.post("/api/v1/auth/register", json={
+        resp = await client.post("/api/v1/auth/register-unified", json={
             "name": "Test",
             "email": "special@example.com",
-            "password": "NoSpecial1",
+            "password": "Abcdefgh1",
             "phone": "+79990000001",
             "role": "MASTER",
         })
         assert resp.status_code == 422
 
-    @pytest.mark.skip(reason="Password validation not implemented in API yet")
     async def test_password_needs_unique_chars(self, client):
-        """Password must have at least 4 unique characters."""
-        resp = await client.post("/api/v1/auth/register", json={
+        """Password must contain at least 4 unique characters."""
+        resp = await client.post("/api/v1/auth/register-unified", json={
             "name": "Test",
             "email": "unique@example.com",
-            "password": "AAAA1!",  # Only 2 unique chars: A, 1, !
+            "password": "AAAA1111!",  # only 3 unique chars
             "phone": "+79990000001",
             "role": "MASTER",
         })
         assert resp.status_code == 422
 
     async def test_password_accepts_all_requirements(self, client):
-        """Password meeting all requirements is accepted."""
-        resp = await client.post("/api/v1/auth/register", json={
+        """Strong password is accepted."""
+        resp = await client.post("/api/v1/auth/register-unified", json={
             "name": "Test",
-            "email": "valid@example.com",
-            "password": "Abcd1234!",  # 8+ chars, upper, lower, digit, special, 4+ unique
-            "phone": "+79990000001",
+            "email": "strong@example.com",
+            "password": "SecurePass123!",
+            "phone": "+79990000002",
             "role": "MASTER",
         })
         assert resp.status_code == 201

@@ -1,262 +1,274 @@
-"""Tests for reviews API."""
-import pytest
-
-# NOTE: These tests reference 'app.models.client' which doesn't exist.
-# The correct model is 'ClientProfile' from 'app.models.client_profile'.
-# The tests need to be rewritten to use User + ClientProfile instead of Client.
-# Skipping until properly rewritten.
-pytestmark = pytest.mark.skip(reason="Tests reference non-existent 'app.models.client' model — needs rewrite using ClientProfile")
+"""Tests for admin reviews API."""
+from datetime import datetime, timezone
 
 
-@pytest.fixture
-async def completed_appointment(session, auth_context):
-    """Create a completed appointment for review."""
-    from app.models.appointment import Appointment
-    from app.models.service import Service
-    from app.models.client import Client
-    from datetime import datetime
-    
-    # Create a service first
-    service = Service(
-        master_id=auth_context["master_id"],
-        name="Test Service",
-        duration_minutes=60,
-        price=2500,
-        is_active=True,
-    )
-    session.add(service)
-    await session.flush()
-    
-    # Create a client
-    client = Client(name="Test Client", phone="+79001234567")
-    session.add(client)
-    await session.flush()
-    
-    appointment = Appointment(
-        master_id=auth_context["master_id"],
-        service_id=service.id,
-        client_id=client.id,
-        appointment_date=datetime(2026, 1, 1, 10, 0),
-        status="completed",
-    )
-    session.add(appointment)
-    await session.commit()
-    await session.refresh(appointment)
-    return appointment
+class TestGetAdminReviews:
+    """Tests for GET /api/v1/admin/reviews"""
+
+    async def test_get_reviews_empty(self, client, super_admin_headers):
+        """Returns empty paginated response when no reviews."""
+        resp = await client.get("/api/v1/admin/reviews", headers=super_admin_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "items" in data
+        assert "total" in data
+        assert data["total"] == 0
+
+    async def test_get_reviews_with_data(self, client, super_admin_headers, session, created_master_id):
+        """Returns reviews for master."""
+        from app.models.review import Review
+        from app.models.service import Service
+        from app.models.client_profile import ClientProfile
+        from app.models.user import User
+
+        # Create service
+        service = Service(
+            master_id=created_master_id,
+            name="Test Service",
+            duration_minutes=60,
+            price=2500,
+            is_active=True,
+        )
+        session.add(service)
+        await session.flush()
+
+        # Create client user + profile
+        client_user = User(
+            name="Test Client",
+            email="client_review@example.com",
+            phone="+79001234567",
+            role="CLIENT",
+        )
+        session.add(client_user)
+        await session.flush()
+
+        client_profile = ClientProfile(user_id=client_user.id)
+        session.add(client_profile)
+        await session.flush()
+
+        # Create review
+        review = Review(
+            appointment_id=1,  # dummy
+            master_id=created_master_id,
+            client_name="Test Client",
+            client_phone="+79001234567",
+            rating=5.0,
+            comment="Отличный мастер!",
+            is_published=True,
+        )
+        session.add(review)
+        await session.commit()
+        await session.refresh(review)
+
+        resp = await client.get("/api/v1/admin/reviews", headers=super_admin_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] >= 1
+        assert len(data["items"]) >= 1
+        assert data["items"][0]["rating"] == 5.0
+
+    async def test_filter_reviews_by_master_id(self, client, super_admin_headers, session, created_master_id):
+        """Filter reviews by master_id."""
+        from app.models.review import Review
+
+        review = Review(
+            appointment_id=1,
+            master_id=created_master_id,
+            client_name="Test",
+            client_phone="+79001234567",
+            rating=4.0,
+            comment="Test",
+            is_published=True,
+        )
+        session.add(review)
+        await session.commit()
+
+        resp = await client.get(
+            "/api/v1/admin/reviews",
+            params={"master_id": created_master_id},
+            headers=super_admin_headers
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] >= 1
+
+    async def test_filter_reviews_by_published_status(self, client, super_admin_headers, session, created_master_id):
+        """Filter reviews by published status."""
+        from app.models.review import Review
+
+        review = Review(
+            appointment_id=1,
+            master_id=created_master_id,
+            client_name="Test",
+            client_phone="+79001234567",
+            rating=3.0,
+            comment="Test",
+            is_published=False,
+        )
+        session.add(review)
+        await session.commit()
+
+        resp = await client.get(
+            "/api/v1/admin/reviews",
+            params={"is_published": False},
+            headers=super_admin_headers
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        for item in data["items"]:
+            assert item["is_published"] is False
 
 
-@pytest.fixture
-async def test_review(session, completed_appointment, auth_context):
-    """Create a review for the completed appointment."""
-    from app.models.review import Review
-    
-    review = Review(
-        appointment_id=completed_appointment.id,
-        master_id=auth_context["master_id"],
-        client_name="Test Client",
-        client_phone="+79001234567",
-        rating=5.0,
-        comment="Отличный мастер!",
-        is_published=True,
-    )
-    session.add(review)
-    await session.commit()
-    await session.refresh(review)
-    return review
+class TestGetAverageRating:
+    """Tests for GET /api/v1/admin/reviews/average/{master_id}"""
+
+    async def test_average_rating_with_reviews(self, client, super_admin_headers, session, created_master_id):
+        """Returns correct average rating."""
+        from app.models.review import Review
+
+        review = Review(
+            appointment_id=1,
+            master_id=created_master_id,
+            client_name="Test",
+            client_phone="+79001234567",
+            rating=5.0,
+            comment="Great!",
+            is_published=True,
+        )
+        session.add(review)
+        await session.commit()
+
+        resp = await client.get(
+            f"/api/v1/admin/reviews/average/{created_master_id}",
+            headers=super_admin_headers
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "average_rating" in data
+        assert "review_count" in data
+        assert data["review_count"] >= 1
+
+    async def test_average_rating_no_reviews(self, client, super_admin_headers):
+        """Returns zero when no reviews."""
+        resp = await client.get(
+            "/api/v1/admin/reviews/average/99999",
+            headers=super_admin_headers
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["review_count"] == 0
+        assert data["average_rating"] is None
 
 
-@pytest.fixture
-async def unpublished_review(session, auth_context):
-    """Create an unpublished review."""
-    from app.models.appointment import Appointment
-    from app.models.service import Service
-    from app.models.client import Client
-    from app.models.review import Review
-    from datetime import datetime
-    
-    service = Service(
-        master_id=auth_context["master_id"],
-        name="Test Service 2",
-        duration_minutes=60,
-        price=2500,
-        is_active=True,
-    )
-    session.add(service)
-    await session.flush()
-    
-    client = Client(name="Another Client", phone="+79009876543")
-    session.add(client)
-    await session.flush()
-    
-    appointment = Appointment(
-        master_id=auth_context["master_id"],
-        service_id=service.id,
-        client_id=client.id,
-        appointment_date=datetime(2026, 1, 2, 10, 0),
-        status="completed",
-    )
-    session.add(appointment)
-    await session.flush()
-    
-    review = Review(
-        appointment_id=appointment.id,
-        master_id=auth_context["master_id"],
-        client_name="Another Client",
-        client_phone="+79009876543",
-        rating=4.0,
-        comment="Хорошо, но could быть лучше",
-        is_published=False,
-    )
-    session.add(review)
-    await session.commit()
-    await session.refresh(review)
-    return review
+class TestPublishReview:
+    """Tests for PATCH /api/v1/admin/reviews/{id}/publish"""
+
+    async def test_publish_review(self, client, super_admin_headers, session, created_master_id):
+        """Superadmin can publish a review."""
+        from app.models.review import Review
+
+        review = Review(
+            appointment_id=1,
+            master_id=created_master_id,
+            client_name="Test",
+            client_phone="+79001234567",
+            rating=4.0,
+            comment="Test",
+            is_published=False,
+        )
+        session.add(review)
+        await session.commit()
+        await session.refresh(review)
+
+        resp = await client.patch(
+            f"/api/v1/admin/reviews/{review.id}/publish",
+            headers=super_admin_headers
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["is_published"] is True
+
+    async def test_publish_review_not_found(self, client, super_admin_headers):
+        """Returns 404 for non-existent review."""
+        resp = await client.patch(
+            "/api/v1/admin/reviews/99999/publish",
+            headers=super_admin_headers
+        )
+        assert resp.status_code == 404
 
 
-# ─── Public endpoints (no auth required) ──────────────────────────
+class TestUnpublishReview:
+    """Tests for PATCH /api/v1/admin/reviews/{id}/unpublish"""
 
-@pytest.mark.asyncio
-async def test_get_reviews_public(client, auth_context, test_review):
-    """Test getting published reviews without auth."""
-    response = await client.get("/api/v1/reviews/", params={"master_id": auth_context["master_id"]})
-    assert response.status_code == 200
-    data = response.json()
-    assert isinstance(data, list)
-    assert len(data) >= 1
-    assert data[0]["id"] == test_review.id
-    assert data[0]["rating"] == 5.0
-    assert data[0]["is_published"] is True
+    async def test_unpublish_review(self, client, super_admin_headers, session, created_master_id):
+        """Superadmin can unpublish a review."""
+        from app.models.review import Review
 
+        review = Review(
+            appointment_id=1,
+            master_id=created_master_id,
+            client_name="Test",
+            client_phone="+79001234567",
+            rating=5.0,
+            comment="Test",
+            is_published=True,
+        )
+        session.add(review)
+        await session.commit()
+        await session.refresh(review)
 
-@pytest.mark.asyncio
-async def test_get_reviews_only_published(client, auth_context, test_review, unpublished_review):
-    """Test that only published reviews are returned by default."""
-    response = await client.get("/api/v1/reviews/", params={"master_id": auth_context["master_id"]})
-    assert response.status_code == 200
-    data = response.json()
-    assert all(r["is_published"] is True for r in data)
+        resp = await client.patch(
+            f"/api/v1/admin/reviews/{review.id}/unpublish",
+            headers=super_admin_headers
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["is_published"] is False
 
-
-@pytest.mark.asyncio
-async def test_get_average_rating(client, auth_context, test_review, unpublished_review):
-    """Test average rating endpoint."""
-    response = await client.get("/api/v1/reviews/average", params={"master_id": auth_context["master_id"]})
-    assert response.status_code == 200
-    data = response.json()
-    assert "average_rating" in data
-    assert "review_count" in data
-    assert data["review_count"] >= 1
-
-
-# ─── Authenticated endpoints ──────────────────────────────────────
-
-@pytest.mark.asyncio
-async def test_create_review(client, auth_context, session, completed_appointment):
-    """Test creating a review for a completed appointment."""
-    response = await client.post(
-        "/api/v1/reviews/",
-        json={
-            "appointment_id": completed_appointment.id,
-            "rating": 4.5,
-            "comment": "Было отлично!",
-        },
-        headers={"Authorization": f"Bearer {auth_context['token']}"},
-    )
-    assert response.status_code == 201
-    data = response.json()
-    assert data["rating"] == 4.5
-    assert data["comment"] == "Было отлично!"
-    assert data["is_published"] is True
+    async def test_unpublish_review_not_found(self, client, super_admin_headers):
+        """Returns 404 for non-existent review."""
+        resp = await client.patch(
+            "/api/v1/admin/reviews/99999/unpublish",
+            headers=super_admin_headers
+        )
+        assert resp.status_code == 404
 
 
-@pytest.mark.asyncio
-async def test_create_review_invalid_rating(client, auth_context, completed_appointment):
-    """Test that ratings outside 1-5 range are rejected."""
-    response = await client.post(
-        "/api/v1/reviews/",
-        json={"appointment_id": completed_appointment.id, "rating": 6.0},
-        headers={"Authorization": f"Bearer {auth_context['token']}"},
-    )
-    assert response.status_code == 422
+class TestDeleteReview:
+    """Tests for DELETE /api/v1/admin/reviews/{id}"""
 
+    async def test_delete_review(self, client, super_admin_headers, session, created_master_id):
+        """Superadmin can delete a review."""
+        from app.models.review import Review
 
-@pytest.mark.asyncio
-async def test_create_review_on_non_completed(client, auth_context, session):
-    """Test that reviews can only be created for completed appointments."""
-    from app.models.appointment import Appointment
-    from app.models.service import Service
-    from app.models.client import Client
-    from datetime import datetime
-    
-    service = Service(
-        master_id=auth_context["master_id"],
-        name="Test Service Pending",
-        duration_minutes=60,
-        price=2500,
-        is_active=True,
-    )
-    session.add(service)
-    await session.flush()
-    
-    client_model = Client(name="Pending Client", phone="+79001111111")
-    session.add(client_model)
-    await session.flush()
-    
-    appointment = Appointment(
-        master_id=auth_context["master_id"],
-        service_id=service.id,
-        client_id=client_model.id,
-        appointment_date=datetime(2026, 1, 1, 10, 0),
-        status="pending",
-    )
-    session.add(appointment)
-    await session.commit()
-    await session.refresh(appointment)
+        review = Review(
+            appointment_id=1,
+            master_id=created_master_id,
+            client_name="Test",
+            client_phone="+79001234567",
+            rating=3.0,
+            comment="Test",
+            is_published=True,
+        )
+        session.add(review)
+        await session.commit()
+        await session.refresh(review)
 
-    response = await client.post(
-        "/api/v1/reviews/",
-        json={"appointment_id": appointment.id, "rating": 5.0},
-        headers={"Authorization": f"Bearer {auth_context['token']}"},
-    )
-    assert response.status_code == 400
+        resp = await client.delete(
+            f"/api/v1/admin/reviews/{review.id}",
+            headers=super_admin_headers
+        )
+        assert resp.status_code == 204
 
+        # Verify deleted
+        resp = await client.get("/api/v1/admin/reviews", headers=super_admin_headers)
+        data = resp.json()
+        assert not any(r["id"] == review.id for r in data["items"])
 
-@pytest.mark.asyncio
-async def test_create_duplicate_review(client, auth_context, test_review):
-    """Test that duplicate reviews are rejected."""
-    response = await client.post(
-        "/api/v1/reviews/",
-        json={"appointment_id": test_review.appointment_id, "rating": 3.0},
-        headers={"Authorization": f"Bearer {auth_context['token']}"},
-    )
-    assert response.status_code == 409
-
-
-@pytest.mark.asyncio
-async def test_update_review(client, auth_context, test_review):
-    """Test updating a review."""
-    response = await client.patch(
-        f"/api/v1/reviews/{test_review.id}",
-        json={"comment": "Обновленный комментарий", "is_published": False},
-        headers={"Authorization": f"Bearer {auth_context['token']}"},
-    )
-    assert response.status_code == 200
-    data = response.json()
-    assert data["comment"] == "Обновленный комментарий"
-    assert data["is_published"] is False
-
-
-@pytest.mark.asyncio
-async def test_delete_review(client, auth_context, test_review):
-    """Test deleting a review."""
-    response = await client.delete(
-        f"/api/v1/reviews/{test_review.id}",
-        headers={"Authorization": f"Bearer {auth_context['token']}"},
-    )
-    assert response.status_code == 204
-
-    # Verify review list no longer includes it
-    response = await client.get("/api/v1/reviews/")
-    assert response.status_code == 200
-    data = response.json()
-    assert all(r["id"] != test_review.id for r in data)
+    async def test_delete_review_not_found(self, client, super_admin_headers):
+        """Returns 404 for non-existent review."""
+        resp = await client.delete(
+            "/api/v1/admin/reviews/99999",
+            headers=super_admin_headers
+        )
+        assert resp.status_code == 404
