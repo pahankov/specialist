@@ -533,7 +533,7 @@ OtpCode (id, phone, code_hash, expires_at, is_used, created_at)
 # Backend
 cd backend
 $env:PYTHONPATH='.'
-pytest tests/ -v                          # Все тесты (135)
+pytest tests/ -v                          # Все тесты (~200)
 pytest tests/test_reviews.py -v           # Только reviews
 pytest tests/ -v --cov=app                # С покрытием
 
@@ -543,6 +543,9 @@ npx vitest run                            # Все тесты (44)
 npx vitest run src/tests/helpers.test.ts  # Только helpers
 npx vitest                              # Watch mode
 ```
+
+**Важно:** Подробная документация по тестированию — [TESTING.md](online-booking/backend/TESTING.md).
+Включает критические правила, известные проблемы и чек-лист перед коммитом.
 
 ## 🌱 Seed-скрипт
 

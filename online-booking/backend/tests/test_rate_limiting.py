@@ -1,5 +1,5 @@
 """Tests for rate limiting middleware."""
-from app.middleware import rate_limiter
+from app.middleware.rate_limit import rate_limiter
 
 
 class TestRateLimiter:

@@ -82,6 +82,7 @@ async def register_master(user_data: UserCreate, db: AsyncSession) -> User:
         is_verified=bool(user_data.email),  # auto-verify if email provided
     )
     db.add(new_user)
+    await db.flush()  # Get user ID before creating profile
 
     # Create master profile
     master_profile = MasterProfile(
