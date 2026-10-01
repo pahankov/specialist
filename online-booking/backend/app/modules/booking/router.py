@@ -66,7 +66,6 @@ async def create_appointment(
 
     if not client:
         logger.info("Создание нового клиента для записи: %s", appointment.client_phone)
-        from app.models.user import User
         new_user = User(
             name=appointment.client_name,
             phone=appointment.client_phone,

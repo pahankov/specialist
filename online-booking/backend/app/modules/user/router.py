@@ -180,6 +180,12 @@ async def create_client(
     if result.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Client with this phone already exists")
 
+    # Check for duplicate email
+    if client.email:
+        email_result = await db.execute(select(User).where(User.email == client.email, User.role == UserRole.CLIENT))
+        if email_result.scalar_one_or_none():
+            raise HTTPException(status_code=409, detail="Client with this email already exists")
+
     new_user = User(
         name=client.name,
         phone=client.phone,

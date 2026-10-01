@@ -70,7 +70,7 @@ class TestCreateClient:
 
         await client.post("/api/v1/clients/", json=data1, headers=auth_headers)
         resp = await client.post("/api/v1/clients/", json=data2, headers=auth_headers)
-        assert resp.status_code == 201  # Email is not unique in regular clients endpoint
+        assert resp.status_code == 409  # Conflict: email already exists
 
 
 class TestDeleteClient:
