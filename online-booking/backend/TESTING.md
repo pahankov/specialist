@@ -1331,14 +1331,20 @@ ls online-booking/backend/requirements.txt
 
 #### Серверные тесты падают на деплое
 
-**Причина:** Различия между окружением CI и сервера.
+**Причина:** grep-паттерн в `deploy.yml` ловит `error` из coverage-отчёта (например, `test_cache_get_handles_decode_error`), а не из итогов тестов.
 
-**Решение:**
-1. Запустите тесты локально с теми же зависимостями:
-   ```bash
-   cd online-booking/backend
-   pip install -r requirements.txt
-   pytest tests/ -v --tb=short
-   ```
-2. Проверьте, что `PYTHONPATH=.` установлен
-3. Убедитесь, что `requirements.txt` включает все зависимости
+**Решение:** Использовать точный паттерн для итоговой строки pytest:
+```bash
+# ❌ Неправильно — ловит "error" из coverage:
+grep -E "passed|failed|error|skipped|coverage" test-results.txt | tail -5
+
+# ✅ Правильно — только итоговая строка:
+grep "passed.*in" test-results.txt | tail -1
+```
+
+**Проверка:**
+```bash
+# Убедитесь, что итоговая строка содержит только summary:
+grep "passed.*in" /tmp/test-results.txt
+# Должно быть: "238 passed, 0 failed in 466s"
+```
