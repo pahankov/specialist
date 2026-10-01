@@ -676,6 +676,16 @@ export DATABASE_URL='postgresql+asyncpg://user:pass@host:5432/dbname'
 - Проверь что все импорты существуют: `from app.modules.auth.service import hash_password` (не `app.services.auth`)
 - **Пример ошибки:** `hash_password` в `app.modules.auth.service`, а не в `app.services.auth`
 
+### 8. Никогда не пушить чувствительные данные в git
+- **Никогда** не коммить `.env`, пароли, API-ключи, токены, секретные ключи
+- `.env` файлы в `.gitignore` — но это не гарантия, `.gitignore` можно отключить
+- **Правило:** перед `git commit` — `git diff --cached | grep -iE "password|secret|token|key|api_key|DADATA|TELEGRAM_BOT"`
+- **В DEPLOY.md** — только плейсхолдеры: `<POSTGRES_PASSWORD>`, `<SECRET_KEY>`, `<TELEGRAM_BOT_TOKEN>`
+- **На сервере** — `.env` не трогает деплой, он только `git pull`
+- **Если уже запушил секреты** — `git filter-branch --tree-filter` для очистки истории + `--force` push
+- **Проверка:** `git log --all -p | grep -iE "Postgres2024|beauty-specialist-2024|07c167324787848e"` — должен вернуть пустоту
+- **Пример ошибки:** DEPLOY.md содержал реальные PostgreSQL пароль, DADATA ключи, Telegram Bot Token — все 193 коммита были переписаны
+
 ---
 
 ## ЧЕК-ЛИСТ ПЕРЕД КОММИТОМ
@@ -738,6 +748,12 @@ git diff --cached | grep -i "password\|secret\|token\|key"
 - [ ] `ERROR + exc_info=True` для unhandled exceptions
 - [ ] `WARNING` для нештатных ситуаций (неверный токен, 404)
 
+### 8. Проверь логирование новых эндпоинтов
+- [ ] `logger = get_logger(__name__)` в каждом новом файле
+- [ ] Intent-лог перед действием, result-лог после
+- [ ] `ERROR + exc_info=True` для unhandled exceptions
+- [ ] `WARNING` для нештатных ситуаций (неверный токен, 404)
+
 ---
 
 ## ТАБЛИЦА ИНЦИДЕНТОВ
@@ -759,6 +775,7 @@ git diff --cached | grep -i "password\|secret\|token\|key"
 | **KeyError: 'request_id'** | CorrelationFilter на root logger не применяется к propagated записям | 500 + Logging error | Добавить фильтр на каждый handler, писать в `__dict__` |
 | **TypeError: offset-naive vs offset-aware** | Сравнение `expires_at` (timezone-aware) с naive datetime | 500 на `/auth/refresh` | Убрать `.replace(tzinfo=None)` |
 | **401 на `/admin/dashboard`** | `get_current_master` требовал `master_profile is not None` для ADMIN | 401 для супер-админа | Разрешить ADMIN без master_profile, `require_admin` → `get_current_user` |
+| **Утечка секретов в DEPLOY.md** | PostgreSQL пароль, DADATA ключи, Telegram Bot Token в истории git | Ручная проверка | `git filter-branch --tree-filter` + `--force` push, 193 коммита переписаны |
 
 ---
 
@@ -981,6 +998,16 @@ async def do_action(...):
 **Причина:** `RefreshToken.expires_at` — `DateTime(timezone=True)` в PostgreSQL, SQLAlchemy возвращает timezone-aware datetime. Сравнение с naive datetime (`.replace(tzinfo=None)`) вызывало TypeError.
 **Правило:** Всегда использовать timezone-aware datetime для сравнения. Не вызывать `.replace(tzinfo=None)` на aware datetime.
 **Проверка:** `grep -r "\.replace(tzinfo=None)" app/` — не должно быть при сравнении с БД
+
+### 13. Никогда не пушить чувствительные данные в git
+**Ошибка:** DEPLOY.md содержал PostgreSQL пароль, DADATA ключи, Telegram Bot Token, VK_APP_ID — все 193 коммита были переписаны
+**Причина:** `.gitignore` работает, но DEPLOY.md — обычный файл, и в нём были реальные секреты
+**Правило:**
+- **Никогда** не коммить `.env`, пароли, API-ключи, токены, секретные ключи
+- В DEPLOY.md — только плейсхолдеры: `<POSTGRES_PASSWORD>`, `<SECRET_KEY>`, `<TELEGRAM_BOT_TOKEN>`
+- Перед коммитом: `git diff --cached | grep -iE "password|secret|token|key|api_key|DADATA|TELEGRAM_BOT"`
+- Если уже запушил — `git filter-branch --tree-filter` для очистки истории + `--force` push
+**Проверка:** `git log --all -p | grep -iE "Postgres2024|beauty-specialist-2024|07c167324787848e"` — должен вернуть пустоту
 
 
 | Забыли | Результат | Как обнаружить | Как исправить |
