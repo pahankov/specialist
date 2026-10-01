@@ -221,7 +221,7 @@ async def public_booking(booking: PublicBookingCreate, db: AsyncSession = Depend
             Appointment.master_id == booking.master_id,
             Appointment.status != "cancelled",
             Appointment.appointment_date < service_end,
-            Appointment.appointment_date + timedelta(minutes=service.duration_minutes) > booking.appointment_date
+            Appointment.appointment_date > booking.appointment_date - timedelta(minutes=service.duration_minutes)
         ).limit(1)
     )
     if conflict_result.scalar_one_or_none():
@@ -260,7 +260,7 @@ async def public_booking(booking: PublicBookingCreate, db: AsyncSession = Depend
     )
 
     db.add(appointment)
-    await db.flush()
+    await db.commit()
     await db.refresh(appointment)
 
     logger.info("Публичная запись создана: id=%s, мастер=%s", appointment.id, booking.master_id)
