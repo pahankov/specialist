@@ -421,12 +421,12 @@ assert resp2.status_code == 200  # ❌ 404
 
 ---
 
-## Актуальная статистика
+## Актуальная статистика (v2 — 2026-10-01 18:00)
 
-| Статус | Количество |
-|--------|-----------|
-| ✅ PASSED | 189 |
-| ❌ FAILED | 28 |
+| Метрика | Значение |
+|--------|---------|
+| ✅ PASSED | **195** |
+| ❌ FAILED | 22 |
 | ⚠️ ERROR | 9 |
 | **Всего** | **225** |
 
@@ -434,7 +434,9 @@ assert resp2.status_code == 200  # ❌ 404
 
 ### Пройденные файлы (100% PASS):
 - `test_admin_appointments.py` — 16/16 ✅
+- `test_admin_audit.py` — 4/4 ✅
 - `test_admin_clients.py` — 11/11 ✅
+- `test_admin_dashboard.py` — 4/4 ✅
 - `test_admin_services.py` — 9/9 ✅
 - `test_auth_tokens.py` — 12/12 ✅
 - `test_auth_service.py` — 12/12 ✅
