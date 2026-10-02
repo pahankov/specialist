@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field
 from typing import Optional
 import os
 import sys
@@ -20,7 +21,7 @@ def _get_default_db_url() -> str:
 
 
 class Settings(BaseSettings):
-    DATABASE_URL: str = ""  # set via _get_default_db_url after init
+    DATABASE_URL: str = Field(default_factory=_get_default_db_url)
     SECRET_KEY: str = ""
     REFRESH_SECRET_KEY: str = ""
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30  # shortened from 1440
@@ -54,11 +55,6 @@ class Settings(BaseSettings):
         case_sensitive=False,
         extra="ignore",
     )
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        if not self.DATABASE_URL:
-            self.DATABASE_URL = _get_default_db_url()
 
     @property
     def allowed_origins_list(self) -> list[str]:
