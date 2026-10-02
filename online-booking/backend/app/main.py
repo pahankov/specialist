@@ -6,7 +6,7 @@ from pydantic import ValidationError
 from app.config import settings
 from app.database import engine, Base
 from app.logging_config import setup_logging, get_logger
-from app.middleware.rate_limit import RateLimitMiddleware
+from app.middleware.rate_limit import limiter
 from app.middleware.request_logging import RequestLoggingMiddleware
 import asyncio
 import traceback
@@ -119,8 +119,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-app.add_middleware(RateLimitMiddleware)
 
 # Request logging — LAST middleware so it wraps everything
 app.add_middleware(RequestLoggingMiddleware)
