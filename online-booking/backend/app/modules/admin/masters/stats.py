@@ -13,7 +13,7 @@ from app.models.service import Service
 from app.models.review import Review
 from app.dependencies.auth import require_super_admin
 
-router = APIRouter()
+router = APIRouter(prefix="/masters")
 
 
 @router.get("/{master_id}/stats")
@@ -25,6 +25,7 @@ async def get_master_stats(
     """Get statistics for a specific master (superadmin only)."""
     result = await db.execute(
         select(MasterProfile)
+        .options(selectinload(MasterProfile.user))
         .where(MasterProfile.id == master_id)
     )
     master_profile = result.scalar_one_or_none()
@@ -107,6 +108,7 @@ async def get_master_full(
     """Get complete master profile with stats, rating, reviews, and audit logs."""
     result = await db.execute(
         select(MasterProfile)
+        .options(selectinload(MasterProfile.user))
         .where(MasterProfile.id == master_id)
     )
     master_profile = result.scalar_one_or_none()
@@ -137,6 +139,12 @@ async def get_master_full(
         )
     )
     total_clients = client_result.scalar() or 0
+
+    # --- Services ---
+    services_result = await db.execute(
+        select(func.count(Service.id)).where(Service.master_id == master_id)
+    )
+    total_services = services_result.scalar() or 0
 
     # --- Revenue ---
     revenue_result = await db.execute(
