@@ -194,6 +194,29 @@ utils/
 | Production cache | Redis 7 |
 | Rate limiting | Встроенный middleware (60 req/min default) |
 
+## 🤖 MCP-серверы
+
+Проект настроен с 7 MCP-серверами для расширения возможностей GigaCode AI-ассистента. Конфигурация в `.gigacode_vsc/gigacode.jsonc`.
+
+| Сервер | Назначение | Статус |
+|--------|-----------|--------|
+| **GitHub** | Работа с PR, issues, репозиториями | ✅ |
+| **PostgreSQL** | Прямые SQL-запросы к БД | ✅ |
+| **Filesystem** | Чтение/запись файлов проекта | ✅ |
+| **Playwright** | E2E-тестирование браузера | ✅ |
+| **Puppeteer** | Скриншоты и автоматизация браузера | ✅ |
+| **SQLite** | Запросы к локальной БД (dev) | ✅ |
+| **Docker** | Управление контейнерами и compose | ✅ |
+
+### Настройка
+
+1. **GitHub:** замените `ghp_ВАШ_ТОКЕН` в `.gigacode_vsc/gigacode.jsonc` на реальный Personal Access Token (права: `repo`, `read:user`)
+2. **PostgreSQL:** connection string берётся из `docker-compose.yml` (`postgres:postgres@localhost:5432/online_booking`)
+3. **Filesystem:** разрешены директории проекта и `C:\Project`
+4. **SQLite:** указывает на `online-booking/backend/online_booking.db`
+
+Перезапустите GigaCode после изменений конфигурации.
+
 ## 📋 Что реализовано
 
 ### ✅ Backend
@@ -503,12 +526,6 @@ OtpCode (id, phone, code_hash, expires_at, is_used, created_at)
 - `active` — работает, принимает записи, появляется в публичном каталоге
 - `inactive` — не работает (нет активных рабочих дней или сам отключился), не появляется в каталоге
 - `suspended` — заблокирован админом (нарушение правил), не может работать
-
-### Статусы записей
-- `pending` — ожидает подтверждения
-- `confirmed` — подтверждена
-- `cancelled` — отменена
-- `completed` — завершена
 
 ### Статусы записей
 - `pending` — ожидает подтверждения

@@ -1145,7 +1145,7 @@ master_profile = result.scalar_one_or_none()
 
 ---
 
-## Актуальная статистика (v10 — 2026-10-02 09:30)
+## Актуальная статистика (v11 — 2026-10-02 19:50)
 
 | Метрика | Значение |
 |--------|---------|
@@ -1156,6 +1156,13 @@ master_profile = result.scalar_one_or_none()
 | **Всего** | **261** |
 
 **Покрытие:** 261 тестов, ~22000+ строк тестового кода, 26 test files.
+
+### Фронтенд-тесты (Vitest)
+- **Test Files:** 6 passed (все `.tsx`/`.ts`, без `.js` дубликатов)
+- **Tests:** 44 passed
+- **Duration:** ~1.5s
+
+> ⚠️ **Важно:** `tsc --noEmit` в `package.json` — НЕ использовать `tsc` без `--noEmit`, иначе генерируются `.js` файлы-дубликаты.
 
 ### Пройденные файлы (100% PASS) — 26 файлов:
 - `test_admin_appointments.py` — 16/16 ✅
@@ -1379,6 +1386,18 @@ pytest tests/test_masters_crud.py::TestGetMasters::test_list_masters_empty -v
 - [ ] Все необходимые ORM-функции импортированы (`joinedload`, `selectinload`, `aliased`)?
 - [ ] Нет локальных импортов, которые могут вызвать `UnboundLocalError`?
 - [ ] Переменные объявлены ДО использования (нет `NameError`)?
+
+---
+
+## Чек-лист перед коммитом frontend-кода
+
+> ⚠️ **Обязательно перед коммитом изменений во фронтенде.**
+
+- [ ] Нет `.js` файлов в `frontend/src/` (должно быть 0)
+- [ ] `tsc --noEmit` проходит без ошибок
+- [ ] `npm run build` собирается успешно
+- [ ] Все новые компоненты — `.tsx`, НЕ `.js`
+- [ ] Frontend-тесты проходят: `npx vitest run`
 
 ---
 
