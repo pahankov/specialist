@@ -32,13 +32,13 @@ function SchedulePage() {
   const [longPressTriggered] = useState(false)
   const [monthlyStats, setMonthlyStats] = useState<MonthlyStats | null>(null)
   const [selectedMasterId, setSelectedMasterId] = useState<number | ''>('')
-  const [allMasters, setAllMasters] = useState<Array<{ id: number; name: string }>>([])
+  const [allMasters, setAllMasters] = useState<{ id: number; name: string }[]>([])
 
   // Fetch masters for filter
   useEffect(() => {
     adminApi.get('/api/v1/admin/masters')
       .then(r => setAllMasters(r.data.map((m: any) => ({ id: m.id, name: m.name }))))
-      .catch(() => {})
+      .catch(() => { /* ignore */ })
   }, [])
 
   useEffect(() => {

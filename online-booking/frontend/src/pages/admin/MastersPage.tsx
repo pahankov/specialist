@@ -103,7 +103,7 @@ function MastersPage() {
 
     const isCurrentlyActive = master.is_active
     const undoAction = () => {
-      superAdminApi.toggleMasterActive(id).catch(() => {})
+      superAdminApi.toggleMasterActive(id).catch(() => { /* ignore */ })
     }
 
     try {

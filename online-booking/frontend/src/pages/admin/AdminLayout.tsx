@@ -54,7 +54,7 @@ function AdminLayout({ navItems, isAdmin }: AdminLayoutProps) {
         setMaster({ id: masterId, name, is_admin: isAdminUser })
       }
     } catch {
-      adminApi.getDashboard().catch(() => {})
+      adminApi.getDashboard().catch(() => { /* ignore */ })
     }
   }, [])
 

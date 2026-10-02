@@ -93,8 +93,8 @@ function HomePage() {
             el: '.carousel-indicators',
             clickable: true,
           }}
-          onSlideChange={() => {}}
-          onSwiper={() => {}}
+          onSlideChange={() => { /* ignore */ }}
+          onSwiper={() => { /* ignore */ }}
         >
           {/* Slide 1: Services */}
           <SwiperSlide>
