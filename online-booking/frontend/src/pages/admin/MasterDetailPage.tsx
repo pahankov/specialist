@@ -34,7 +34,7 @@ interface MasterFull {
   created_at?: string
   updated_at?: string
   stats: MasterStats
-  recent_reviews: Array<{
+  recent_reviews: {
     id: number
     client_name: string
     client_phone: string
@@ -42,15 +42,15 @@ interface MasterFull {
     comment?: string
     is_published: boolean
     created_at?: string
-  }>
-  recent_appointments: Array<{
+  }[]
+  recent_appointments: {
     id: number
     client_name?: string
     appointment_date?: string
     status: string
     service_name?: string
     service_price: number
-  }>
+  }[]
 }
 
 const statusLabels: Record<string, string> = {
@@ -69,6 +69,8 @@ function MasterDetailPage() {
   const [loading, setLoading] = useState(true)
   const [auditLoading, setAuditLoading] = useState(false)
   const [activeTab, setActiveTab] = useState<TabType>('overview')
+  // Placeholder for bulk selection (used in MastersPage, kept for future use)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_selectedMasters, _setSelectedMasters] = useState<Set<number>>(new Set())
 
   const loadMaster = async () => {

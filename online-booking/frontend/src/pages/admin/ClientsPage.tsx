@@ -21,7 +21,7 @@ function ClientsPage() {
   const [email, setEmail] = useState('')
   const [search, setSearch] = useState('')
   const [masterIdFilter, setMasterIdFilter] = useState<number | ''>('')
-  const [allMasters, setAllMasters] = useState<Array<{ id: number; name: string }>>([])
+  const [allMasters, setAllMasters] = useState<{ id: number; name: string }[]>([])
   const [totalClients, setTotalClients] = useState(0)
 
   const fetchOptions = async () => {
@@ -96,7 +96,7 @@ function ClientsPage() {
         'Отменить'
       )
       fetchData()
-    } catch (err: any) {
+    } catch {
       addToast('Ошибка удаления', 'error')
     } finally { setDeletingId(null) }
   }

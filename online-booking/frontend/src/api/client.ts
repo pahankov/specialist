@@ -54,10 +54,10 @@ apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 
 // Handle 401 — try refresh, then redirect to login
 let isRefreshing = false
-let failedQueue: Array<{
+let failedQueue: {
   resolve: (token: string) => void
   reject: (error: any) => void
-}> = []
+}[] = []
 
 function processQueue(error: any, token: string | null = null) {
   failedQueue.forEach(prom => {

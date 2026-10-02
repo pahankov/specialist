@@ -148,7 +148,7 @@ export interface DashboardStats {
   total_clients: number
   total_services: number
   total_revenue: number
-  recent_appointments: Array<{
+  recent_appointments: {
     id: number
     client_id: number
     client_name: string | null
@@ -158,12 +158,12 @@ export interface DashboardStats {
     service_id: number
     service_name: string | null
     service_price: number
-  }>
-  upcoming_appointments: Array<{
+  }[]
+  upcoming_appointments: {
     id: number
     appointment_date: string
     status: string
-  }>
+  }[]
 }
 
 export interface AppointmentWithClient extends Appointment {
@@ -187,7 +187,7 @@ export interface AdminStats {
   total_clients: number
   total_services: number
   total_revenue: number
-  recent_appointments?: Array<{
+  recent_appointments?: {
     id: number
     master_id: number
     master_name?: string | null
@@ -196,13 +196,13 @@ export interface AdminStats {
     status: string
     service_name?: string | null
     service_price?: number
-  }>
-  upcoming_appointments?: Array<{
+  }[]
+  upcoming_appointments?: {
     id: number
     master_name?: string | null
     appointment_date: string
     status: string
-  }>
+  }[]
 }
 
 export interface MonthlyStats {
@@ -323,11 +323,11 @@ export interface ChangelogEntry {
   date: string
   type: string
   title: string
-  changes: Array<{
+  changes: {
     type: string
     description: string
     impact: string
-  }>
+  }[]
 }
 
 export interface Changelog {
@@ -364,7 +364,7 @@ export interface MasterDetail {
   created_at?: string
   updated_at?: string
   stats: MasterStats
-  recent_reviews: Array<{
+  recent_reviews: {
     id: number
     client_name: string
     client_phone: string
@@ -372,22 +372,22 @@ export interface MasterDetail {
     comment?: string
     is_published: boolean
     created_at?: string
-  }>
-  recent_appointments: Array<{
+  }[]
+  recent_appointments: {
     id: number
     client_name?: string
     appointment_date?: string
     status: string
     service_name?: string
     service_price: number
-  }>
+  }[]
 }
 
 export interface BulkResult {
-  toggled?: Array<{ master_id: number; name: string; new_status: string }>
-  suspended?: Array<{ master_id: number; name: string }>
-  unsuspended?: Array<{ master_id: number; name: string }>
-  errors: Array<{ master_id: number; error: string }>
+  toggled?: { master_id: number; name: string; new_status: string }[]
+  suspended?: { master_id: number; name: string }[]
+  unsuspended?: { master_id: number; name: string }[]
+  errors: { master_id: number; error: string }[]
 }
 
 export interface AuditLogEntry {
@@ -405,6 +405,6 @@ export interface AuditLogEntry {
 
 export interface ImportResult {
   imported: number
-  errors: Array<{ row: number; error: string }>
+  errors: { row: number; error: string }[]
   total_rows: number
 }

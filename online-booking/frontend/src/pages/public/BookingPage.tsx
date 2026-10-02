@@ -20,7 +20,6 @@ function BookingPage() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [success, setSuccess] = useState(false)
-  const [_error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchServices = async () => {
@@ -31,7 +30,6 @@ function BookingPage() {
           setSelectedService(res.data[0])
         }
       } catch (err) {
-        setError('Не удалось загрузить услуги')
         console.error(err)
       } finally {
         setLoading(false)

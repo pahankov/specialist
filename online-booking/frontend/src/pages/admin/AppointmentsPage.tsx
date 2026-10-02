@@ -28,9 +28,9 @@ function AppointmentsPage() {
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
   const [showCompleted, setShowCompleted] = useState(false)
   const [totalPages, setTotalPages] = useState(1)
-  const [allMasters, setAllMasters] = useState<Array<{ id: number; name: string }>>([])
-  const [allClients, setAllClients] = useState<Array<{ id: number; name: string }>>([])
-  const [allServices, setAllServices] = useState<Array<{ id: number; name: string }>>([])
+  const [allMasters, setAllMasters] = useState<{ id: number; name: string }[]>([])
+  const [allClients, setAllClients] = useState<{ id: number; name: string }[]>([])
+  const [allServices, setAllServices] = useState<{ id: number; name: string }[]>([])
   const [showFilters, setShowFilters] = useState(false)
   const pageSize = 20
 

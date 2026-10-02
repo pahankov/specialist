@@ -5,7 +5,7 @@ import { Skeleton, EmptyState } from '../../components/common'
 import './RevenuePage.css'
 
 interface RevenueBreakdown {
-  breakdown: Array<{ name: string; revenue: number; count: number }>
+  breakdown: { name: string; revenue: number; count: number }[]
   total_revenue: number
 }
 
@@ -19,7 +19,7 @@ function RevenuePage() {
   const [masterIdFilter, setMasterIdFilter] = useState<number | ''>('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
-  const [allMasters, setAllMasters] = useState<Array<{ id: number; name: string }>>([])
+  const [allMasters, setAllMasters] = useState<{ id: number; name: string }[]>([])
 
   useEffect(() => {
     setLoading(true)
@@ -35,7 +35,7 @@ function RevenuePage() {
   useEffect(() => {
     adminApi.get('/api/v1/admin/masters')
       .then(r => setAllMasters(r.data.map((m: any) => ({ id: m.id, name: m.name }))))
-      .catch(() => {})
+      .catch(() => { /* ignore */ })
   }, [])
 
   useEffect(() => {

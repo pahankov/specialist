@@ -87,9 +87,9 @@ export function getMonthName(date: Date): string {
 }
 
 export function getFilteredClients(
-  clients: Array<{ id: number; name: string; phone: string }>,
+  clients: { id: number; name: string; phone: string }[],
   search: string
-): Array<{ id: number; name: string; phone: string }> {
+): { id: number; name: string; phone: string }[] {
   if (!search) return clients
   const lower = search.toLowerCase()
   return clients.filter(c =>
@@ -98,9 +98,9 @@ export function getFilteredClients(
 }
 
 export function getFilteredServices(
-  services: Array<{ id: number; name: string; duration_minutes: number; price: number | string }>,
+  services: { id: number; name: string; duration_minutes: number; price: number | string }[],
   search: string
-): Array<{ id: number; name: string; duration_minutes: number; price: number | string }> {
+): { id: number; name: string; duration_minutes: number; price: number | string }[] {
   if (!search) return services
   const lower = search.toLowerCase()
   return services.filter(s => s.name.toLowerCase().includes(lower))
@@ -111,7 +111,7 @@ export function formatPrice(price: number | string): string {
   return num.toLocaleString('ru-RU')
 }
 
-export function buildMonthlyStats(stats: { confirmed_appointments: number; total_minutes: number; total_hours: number; revenue: number } | null): Array<{ value: string | number; label: string }> {
+export function buildMonthlyStats(stats: { confirmed_appointments: number; total_minutes: number; total_hours: number; revenue: number } | null): { value: string | number; label: string }[] {
   if (!stats) return []
   return [
     { value: stats.confirmed_appointments, label: 'Подтверждено записей' },
