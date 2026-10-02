@@ -1009,15 +1009,130 @@ async def do_action(...):
 - Если уже запушил — `git filter-branch --tree-filter` для очистки истории + `--force` push
 **Проверка:** `git log --all -p | grep -iE "Postgres2024|beauty-specialist-2024|07c167324787848e"` — должен вернуть пустоту
 
+### 14. Никогда не допускать дублирования файлов `.js` и `.tsx`/`.ts` во фронтенде
+**Ошибка:** 49 `.js` файлов дублировали `.tsx` версии, `tsc` по умолчанию генерировал `.js` рядом с `.ts`
+**Причина:** `tsc` без флага `--noEmit` компилирует `.ts` → `.js` в той же директории. Vite при `import './App'` выбирает `.tsx` (приоритет: `.tsx` > `.ts` > `.jsx` > `.js`), но на CI/CD мог собраться `.js` если порядок файлов изменился.
+**Правило:**
+- **Никогда** не использовать `.js` файлы в `frontend/src/`
+- `tsc` всегда запускать с `--noEmit` — только проверка типов, без генерации `.js`
+- В `frontend/.gitignore` есть `src/**/*.js` — любые `.js` в `src/` должны удаляться
+- `.tsx` версии всегда полнее и актуальнее
+- При добавлении нового компонента — только `.tsx`, НЕ `.js`
+**Решение:** `tsc --noEmit` в `package.json` (строка build)
+**Проверка:** `find frontend/src -name "*.js" | wc -l` — должен вернуть 0
+**На сервере:** деплой делает `npm run build` → `tsc --noEmit && vite build` → Vite автоматически выберет `.tsx`
 
-| Забыли | Результат | Как обнаружить | Как исправить |
-|--------|-----------|----------------|---------------|
-| SAEnum в модели | 500 ошибка на ВСЕХ endpoint'ах | `journalctl -u beauty-backend -n 50` | Заменить на `String(20)` |
-| `.value` у status | 500 AttributeError | `journalctl -u beauty-backend -n 50` | Убрать `.value` |
-| Сид-данные для новой таблицы | 500 ошибка на API | `curl https://beauty-specialist.ru/api/v1/new-endpoint/` | Запустить `seed_production.py` |
-| Связанную запись (MasterProfile) | 500 ошибка при логине | `journalctl -u beauty-backend -n 50` | Создать запись через SQL |
-| Сид-данные для отзывов | Пустая карусель | Открыть главную страницу | Запустить `create_minimal_reviews.py` |
-| Обновить `deploy.yml` | На сервере старые данные | Проверить логи деплоя | Добавить шаги в workflow |
-| Empty state компонента | Белый экран | Открыть страницу на чистом сервере | Добавить empty state |
-| Фикс схемы БД | 500 ошибка (column X does not exist) | `journalctl -u beauty-backend -n 50` | Запустить `fix_all_tables.sql` |
-| Права на логи | 502 Bad Gateway | `systemctl status beauty-backend` | `chown -R www-data:www-data logs/` |
+### 15. Никогда не использовать `git reset --hard HEAD` в CI/CD
+**Ошибка:** `git reset --hard HEAD` в `deploy.yml` мог сбросить изменения при частичном деплое
+**Причина:** Если `git pull` не сработал полностью, `reset --hard` удалил бы все изменения
+**Правило:** Использовать только `git pull origin main` без дополнительных команд
+**Исправлено:** Удалена строка `git reset --hard HEAD` из `.github/workflows/deploy.yml`
+
+### 16. Никогда не использовать `SAEnum` в моделях SQLAlchemy
+**Ошибка:** `LookupError: 'active' is not among the defined enum types` — ВСЕ endpoint'ы падали с 500
+**Причина:** asyncpg кэширует enum-типы из БД. При изменении enum (добавление/удаление значений) asyncpg не обновляет кэш.
+**Правило:** Использовать `String(20)` вместо `SAEnum` во ВСЕХ моделях. Enum-типы только в коде (Python enum классы).
+**Проверка:** `grep -r "SAEnum" app/models/` — должен вернуть пустоту
+
+---
+
+## ЧЕК-ЛИСТ ПЕРЕД КОММИТОМ
+
+> **Всегда выполняй перед `git commit`!** Это сэкономит часы на отладку.
+
+### 1. Проверь синтаксис всех изменённых файлов
+```bash
+python -c "import ast; ast.parse(open('file.py').read())"
+```
+- **Не доверяй** редактированию без валидации
+- Если файл редактировался через скрипт — проверь на null bytes
+
+### 2. Проверь импорт всего приложения
+```bash
+python -c "from app.main import app"
+```
+- Ловит 90% ошибок до деплоя
+- Если падает с `NoForeignKeysError` → проблема в relationship
+- Если падает с `NameError` → проблема в импорте
+
+### 3. Проверь ВСЕ использования при изменении модели
+```bash
+grep -r "old_relationship_name" app/
+grep -r "log_action" app/modules/admin/
+```
+- Не только в новом модуле, а во всём проекте
+- При смене FK — проверь все `back_populates`
+- При удалении relationship — проверь что нигде не используется
+
+### 4. Проверь все импорты в новых файлах
+```bash
+grep -r "def hash_password" app/  # найти точный путь
+grep -r "Query" app/modules/admin/masters/  # проверить все параметры
+```
+- Не гадать, а искать
+- При разделении файла — проверить КАЖДЫЙ endpoint, КАЖДЫЙ параметр
+
+### 5. Проверь что не удалил используемые классы
+```bash
+grep -r "LoginRequest" app/modules/auth/
+```
+- Если удалил класс — проверь что нигде не используется
+
+### 6. Проверь async/sync функции
+- `def` — синхронная, вызывается как `result = func()`
+- `async def` — асинхронная, вызывается как `result = await func()`
+- **Не делай** `async def` для простых конвертеров (они не await'ятся в list comprehension)
+
+### 7. Проверь чувствительные данные
+```bash
+git diff --cached | grep -i "password\|secret\|token\|key"
+```
+- Никаких реальных паролей в коде или документации
+- В DEPLOY.md — только placeholders
+
+### 8. Проверь логирование новых эндпоинтов
+- [ ] `logger = get_logger(__name__)` в каждом новом файле
+- [ ] Intent-лог перед действием, result-лог после
+- [ ] `ERROR + exc_info=True` для unhandled exceptions
+- [ ] `WARNING` для нештатных ситуаций (неверный токен, 404)
+
+### 9. Проверь фронтенд — нет ли `.js` дубликатов
+```bash
+find frontend/src -name "*.js" | wc -l
+```
+- Должен вернуть **0**
+- Если есть — удалить, использовать только `.tsx`/`.ts`
+- `tsc` всегда с `--noEmit`
+
+### 10. Проверь, что `tsc --noEmit` проходит
+```bash
+cd frontend
+npx tsc --noEmit
+```
+- Не должно быть ошибок TypeScript
+- Если есть — исправить типизацию перед коммитом
+
+---
+
+## ТАБЛИЦА ИНЦИДЕНТОВ
+
+> Все ошибки, которые произошли при рефакторинге. Используй для предотвращения повторений.
+
+| Инцидент | Причина | Как обнаружил | Как исправил |
+|----------|---------|---------------|---------------|
+| `NoForeignKeysError` | FK в AuditLog изменён на users.id, но MasterProfile.audit_logs всё ещё ссылается на master_profile.id | `journalctl` → NoForeignKeysError | Удалить `audit_logs` из MasterProfile |
+| `AttributeError: 'NoneType' object has no attribute 'id'` | `master.master_profile.id` для супер-админа (нет MasterProfile) | 502 Bad Gateway | Использовать `master.id` (User.id) |
+| `audit.py` обрезался на строке 85 | Null bytes при редактировании через Python-скрипт | `SyntaxError: '[' was never closed` | Пересоздать файл полностью |
+| `NameError: name 'Query' is not defined` | Забыл `Query` при разделении `masters.py` на модули | `journalctl` → NameError | Добавить `Query` в импорты |
+| `NameError: name 'LoginRequest' is not defined` | Удалил класс, но он использовался в эндпоинтах | `journalctl` → NameError | Заменить на `UserLoginByEmail` из schemas |
+| `ResponseValidationError: coroutine object` | `_to_response` объявлен как `async def`, но не await'ится | 500 Internal Server Error | Убрать `async` |
+| `No module named 'redis'` | Redis не установлен на сервере | `journalctl` → warning | Игнорировать (fallback на отсутствие кэша) |
+| `hash_password` не найден | Путь `app.services.auth` не существует | `journalctl` → ImportError | Использовать `app.modules.auth.service` |
+| **Отсутствие логов в auth** | JWT-валидация без логов — неясно почему токен не проходит | 401 без контекста | Добавить логирование в `dependencies/auth.py` |
+| **Отсутствие global exception handler** | Unhandled exceptions возвращали стандартный 500 без контекста | 500 без traceback | Добавить `@app.exception_handler(Exception)` |
+| **KeyError: 'request_id'** | CorrelationFilter на root logger не применяется к propagated записям | 500 + Logging error | Добавить фильтр на каждый handler, писать в `__dict__` |
+| **TypeError: offset-naive vs offset-aware** | Сравнение `expires_at` (timezone-aware) с naive datetime | 500 на `/auth/refresh` | Убрать `.replace(tzinfo=None)` |
+| **401 на `/admin/dashboard`** | `get_current_master` требовал `master_profile is not None` для ADMIN | 401 для супер-админа | Разрешить ADMIN без master_profile, `require_admin` → `get_current_user` |
+| **Утечка секретов в DEPLOY.md** | PostgreSQL пароль, DADATA ключи, Telegram Bot Token в истории git | Ручная проверка | `git filter-branch --tree-filter` + `--force` push, 193 коммита переписаны |
+| **Дубли `.js`/`.tsx` файлов** | 49 `.js` файлов дублировали `.tsx`, `tsc` генерировал `.js` | `find src -name "*.js"` | `tsc --noEmit` в package.json, удалить `.js` |
+| **`git reset --hard HEAD` в CI/CD** | Мог сбросить изменения при частичном деплое | Ручная проверка | Удалить из `deploy.yml` |

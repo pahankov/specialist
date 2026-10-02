@@ -54,7 +54,6 @@ jobs:
 
             git config --global --add safe.directory /var/www/beauty-specialist
             git pull origin main
-            git reset --hard HEAD
 
             # Export DATABASE_URL for all subsequent commands
             export DATABASE_URL="${DATABASE_URL}"
