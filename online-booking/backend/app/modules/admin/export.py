@@ -2,6 +2,7 @@
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import aliased
 from typing import Optional
 
 from app.database import get_db
@@ -17,12 +18,17 @@ from app.modules.admin.helpers import get_master_profile_id
 
 router = APIRouter()
 
+# Aliases for the same table joined multiple times
+_ClientUser = aliased(User, name="client_user")
+_MasterUser = aliased(User, name="master_user")
+
 
 @router.get("/export/appointments")
 async def export_appointments_csv(
     master: User = Depends(require_master),
     status: Optional[str] = Query(None),
     background: bool = Query(False, description="Run in background"),
+    include_master: bool = Query(False, description="Include master name column"),
     db: AsyncSession = Depends(get_db)
 ):
     """Export appointments to CSV.
@@ -33,7 +39,7 @@ async def export_appointments_csv(
         job_id = bg_task_service.enqueue(
             export_appointments_csv_task,
             status=status,
-            include_master=master.is_admin,
+            include_master=include_master or master.is_admin,
         )
         return {
             "message": "Export started in background",
@@ -44,11 +50,14 @@ async def export_appointments_csv(
     # Synchronous export
     mp_id = await get_master_profile_id(db, master)
     query = (
-        select(Appointment, User.name.label('client_name'), User.phone.label('client_phone'),
-               Service.name.label('service_name'), Service.price.label('service_price'))
+        select(Appointment, _ClientUser.name.label('client_name'), _ClientUser.phone.label('client_phone'),
+               Service.name.label('service_name'), Service.price.label('service_price'),
+               _MasterUser.name.label('master_name'))
         .join(ClientProfile, Appointment.client_id == ClientProfile.id, isouter=True)
-        .join(User, ClientProfile.user_id == User.id, isouter=True)
+        .join(_ClientUser, ClientProfile.user_id == _ClientUser.id, isouter=True)
         .join(Service, Appointment.service_id == Service.id, isouter=True)
+        .join(MasterProfile, Appointment.master_id == MasterProfile.id, isouter=True)
+        .join(_MasterUser, MasterProfile.user_id == _MasterUser.id, isouter=True)
         .where(Appointment.master_id == mp_id)
     )
     if status:
@@ -56,14 +65,20 @@ async def export_appointments_csv(
     query = query.order_by(Appointment.appointment_date.desc())
     result = await db.execute(query)
     rows = result.all()
-    lines = ["ID,Дата,Клиент,Телефон,Услуга,Цена,Статус,Примечания"]
+    header = "ID,Дата,Клиент,Телефон,Услуга,Цена,Статус,Примечания"
+    if include_master:
+        header += ",Мастер"
+    lines = [header]
     for row in rows:
         a = row[0]
-        lines.append(
+        line = (
             f"{a.id},{a.appointment_date.strftime('%Y-%m-%d %H:%M') if a.appointment_date else ''},"
             f"{row[1] or ''},{row[2] or ''},{row[3] or ''},"
             f"{float(row[4]) if row[4] else 0},{a.status},{a.notes or ''}"
         )
+        if include_master:
+            line += f",{row[5] or ''}"
+        lines.append(line)
     return Response(
         content="\n".join(lines) + "\n",
         media_type='text/csv; charset=utf-8',

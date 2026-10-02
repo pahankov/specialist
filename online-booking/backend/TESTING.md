@@ -30,6 +30,10 @@ tests/
 ├── test_auth_service.py           # Auth service (12 тестов)
 ├── test_cache_service.py          # Redis cache (18 тестов, все PASS)
 ├── test_clients.py                # Клиенты (8 тестов)
+├── test_export_tasks.py           # Экспорт CSV (4 теста)
+├── test_health.py                 # Health check (3 теста)
+├── test_import_csv.py             # Импорт мастеров CSV (6 тестов)
+├── test_master_stats.py           # Статистика мастеров (6 тестов)
 ├── test_masters.py                # Мастера (10 тестов)
 ├── test_masters_bulk.py           # Массовые операции (6 тестов)
 ├── test_masters_crud.py           # CRUD мастеров (17 тестов)
@@ -118,6 +122,50 @@ async def session(engine) -> AsyncSession:
 | 5 | Правильный ли путь к API? | `router.py` — проверь порядок роутов |
 
 **Если ответ на любой вопрос "не уверен" — открой соответствующий файл и проверь.**
+
+---
+
+### 0.1. 🔴 КРИТИЧНО: Предотвращение ошибок SQLAlchemy `MissingGreenlet` (Lazy Loading)
+
+**Правило:** При запросе ORM-объекта, у которого есть связанные модели (Relationship), которые ты будешь читать в коде — **ВСЕГДА** добавляй `.options(selectinload(...))` или `.options(joinedload(...))` в запрос.
+
+**Плохо:**
+```python
+# ❌ MasterProfile.user не загружен — lazy load вызовет MissingGreenlet
+result = await db.execute(
+    select(MasterProfile)
+    .where(MasterProfile.id == master_id)
+)
+master_profile = result.scalar_one_or_none()
+
+# ❌ ОШИБКА: sqlalchemy.exc.MissingGreenlet
+# greenlet_spawn has not been called; can't call await_only()
+master_name = master_profile.user.name
+```
+
+**Хорошо:**
+```python
+# ✅ selectinload загружает связанные User сразу
+result = await db.execute(
+    select(MasterProfile)
+    .options(selectinload(MasterProfile.user))  # <-- Загружаем user
+    .where(MasterProfile.id == master_id)
+)
+master_profile = result.scalar_one_or_none()
+
+# ✅ Работает — user уже загружен
+master_name = master_profile.user.name
+```
+
+**Когда нужно:**
+- При чтении `master_profile.user.*` → добавь `selectinload(MasterProfile.user)`
+- При чтении `appointment.client_profile.*` → добавь `selectinload(Appointment.client_profile)`
+- При чтении `appointment.service.*` → добавь `selectinload(Appointment.service)`
+- При чтении `user.master_profile.*` → добавь `selectinload(User.master_profile)`
+
+**Почему:** AsyncSession SQLAlchemy 2.0 не допускает lazy load вне async-контекста (`greenlet_spawn`). Lazy loading работает только в sync-сессии. В async-режиме нужно явно загружать связанные объекты через `selectinload`/`joinedload`/`subqueryload`.
+
+**Где встречается:** `app/modules/admin/masters/stats.py` — эндпоинты `get_master_stats` и `get_master_full`
 
 ---
 
@@ -1072,19 +1120,44 @@ IntegrityError: UNIQUE constraint failed: users.email
 
 ---
 
-## Актуальная статистика (v9 — 2026-10-01 22:00)
+### Проблема 13: MissingGreenlet — lazy loading в async SQLAlchemy
+
+**Симптом:**
+```
+sqlalchemy.exc.MissingGreenlet: greenlet_spawn has not been called; 
+can't call await_only() here. Was IO attempted in an unexpected place?
+```
+
+**Причина:** При запросе ORM-объекта (например, `MasterProfile`) без предварительной загрузки связанных моделей (`User`), при попытке доступа к `master_profile.user.name` SQLAlchemy пытается выполнить lazy load. В async-сессии lazy load невозможен — нужен явный `selectinload`/`joinedload`.
+
+**Решение:** Добавить `.options(selectinload(MasterProfile.user))` в запрос:
+```python
+result = await db.execute(
+    select(MasterProfile)
+    .options(selectinload(MasterProfile.user))  # <-- Загружаем user
+    .where(MasterProfile.id == master_id)
+)
+master_profile = result.scalar_one_or_none()
+# ✅ Теперь master_profile.user.name работает
+```
+
+**Где исправлено:** `app/modules/admin/masters/stats.py` — эндпоинты `get_master_stats` и `get_master_full`
+
+---
+
+## Актуальная статистика (v10 — 2026-10-02 09:30)
 
 | Метрика | Значение |
 |--------|---------|
-| ✅ PASSED | **245** |
+| ✅ PASSED | **261** |
 | ❌ FAILED | **0** |
 | ⏭️ SKIPPED | **0** |
 | ⚠️ ERROR | 0 |
-| **Всего** | **245** |
+| **Всего** | **261** |
 
-**Покрытие:** 245 тестов, ~21000+ строк тестового кода, 23 test files.
+**Покрытие:** 261 тестов, ~22000+ строк тестового кода, 26 test files.
 
-### Пройденные файлы (100% PASS) — 23 файла:
+### Пройденные файлы (100% PASS) — 26 файлов:
 - `test_admin_appointments.py` — 16/16 ✅
 - `test_admin_audit.py` — 4/4 ✅
 - `test_admin_clients.py` — 11/11 ✅
@@ -1099,7 +1172,10 @@ IntegrityError: UNIQUE constraint failed: users.email
 - `test_booking_flow.py` — 7/7 ✅ (NEW — full integration flow)
 - `test_cache_service.py` — 18/18 ✅
 - `test_clients.py` — 9/9 ✅
+- `test_export_tasks.py` — 4/4 ✅ (NEW)
 - `test_health.py` — 3/3 ✅
+- `test_import_csv.py` — 6/6 ✅ (NEW)
+- `test_master_stats.py` — 6/6 ✅ (NEW)
 - `test_masters.py` — 10/10 ✅
 - `test_masters_bulk.py` — 6/6 ✅
 - `test_masters_crud.py` — 17/17 ✅
@@ -1177,7 +1253,11 @@ PYTHONPATH=. pytest tests/ -v --cov=app --cov-report=term-missing
 14. `UnifiedRegisterRequest` — добавлена валидация пароля (те же правила, что и UserCreate)
 15. `public_booking` — добавлен `db.commit()` (был только flush, данные не сохранялись)
 16. `public_booking` conflict check — исправлена арифметика timedelta в SQLAlchemy WHERE
-   (timedelta конвертировался в '1970-01-01' строку; использовано вычитание вместо сложения)
+    (timedelta конвертировался в '1970-01-01' строку; использовано вычитание вместо сложения)
+17. `import_csv.py` — добавлен `prefix="/masters"` в APIRouter (маршрут был доступен без `/masters`)
+18. `masters/__init__.py` — исправлен порядок регистрации роутов: `/import` и `/audit` ДО `/{master_id}`
+19. `get_master_stats` / `get_master_full` — добавлен `selectinload(MasterProfile.user)` для предотвращения MissingGreenlet
+20. `get_master_full` — добавлен расчёт `total_services` (была ошибка `NameError: name 'total_services' is not defined`)
 
 ---
 
@@ -1203,6 +1283,12 @@ PYTHONPATH=. pytest tests/ -v --cov=app --cov-report=term-missing
 - [ ] Путь к API правильный (проверьте `router.py`)
 - [ ] Телефон отформатирован правильно (если нужно)
 - [ ] Нет хардкода ID (используйте фикстуры)
+
+**ПЕРЕД коммитом production-кода (SQLAlchemy queries):**
+
+- [ ] При чтении связанных моделей (`master_profile.user`, `appointment.client_profile`) добавлен `selectinload`?
+- [ ] Все необходимые ORM-функции импортированы (`joinedload`, `selectinload`, `aliased`)?
+- [ ] Переменные используются до объявления (нет `UnboundLocalError`)?
 
 ---
 
@@ -1282,6 +1368,17 @@ pytest tests/test_masters_crud.py::TestGetMasters::test_list_masters_empty -v
 - [ ] Путь к API правильный (проверьте `router.py`)
 - [ ] Телефон отформатирован правильно (если нужно)
 - [ ] Нет хардкода ID (используйте фикстуры)
+
+---
+
+## Чек-лист перед коммитом production-кода (SQLAlchemy)
+
+> ⚠️ **Этот чек-лист для production-кода.** Перед коммитом любого изменения в SQLAlchemy-запросы проверьте:
+
+- [ ] При чтении связанных моделей добавлен `selectinload`/`joinedload`? (предотвращает MissingGreenlet)
+- [ ] Все необходимые ORM-функции импортированы (`joinedload`, `selectinload`, `aliased`)?
+- [ ] Нет локальных импортов, которые могут вызвать `UnboundLocalError`?
+- [ ] Переменные объявлены ДО использования (нет `NameError`)?
 
 ---
 

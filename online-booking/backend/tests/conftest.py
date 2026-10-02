@@ -140,6 +140,7 @@ async def created_master_id(session, test_master_data):
     await session.flush()
     await session.refresh(mp)
 
+    await session.commit()  # Make visible to HTTP client sessions
     return mp.id  # API expects master_profile.id, not user.id
 
 

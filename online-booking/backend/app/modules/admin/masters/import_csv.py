@@ -11,7 +11,7 @@ from app.models.master_profile import MasterProfile
 from app.dependencies.auth import require_super_admin
 from app.modules.auth.service import hash_password
 
-router = APIRouter()
+router = APIRouter(prefix="/masters")
 
 
 @router.post("/import")
