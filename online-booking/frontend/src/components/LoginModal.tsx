@@ -261,28 +261,65 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
         ) : (
           /* ─── REGISTER FORM ─── */
           <form onSubmit={handleRegister}>
+            {/* Country */}
             <div className="login-group">
-              <label>Имя *</label>
-              <input
-                type="text"
-                value={registerForm.name}
-                onChange={(e) => setRegisterForm(prev => ({ ...prev, name: e.target.value }))}
-                placeholder="Иван Иванов"
+              <label>Страна *</label>
+              <select
+                value={selectedCountry || ''}
+                onChange={(e) => {
+                  const countryId = Number(e.target.value)
+                  setSelectedCountry(countryId)
+                  setCitySearch('')
+                  setCities([])
+                  loadCities(countryId)
+                }}
                 required
-              />
+              >
+                <option value="">Выберите страну</option>
+                {countries.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name_ru}</option>
+                ))}
+              </select>
             </div>
 
+            {/* City */}
             <div className="login-group">
-              <label>Email *</label>
-              <input
-                type="email"
-                value={registerForm.email}
-                onChange={(e) => setRegisterForm(prev => ({ ...prev, email: e.target.value }))}
-                placeholder="email@example.com"
-                required
-              />
+              <label>Город *</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  ref={cityInputRef}
+                  value={citySearch}
+                  onChange={(e) => {
+                    handleCitySearch(e.target.value)
+                    setShowCityDropdown(true)
+                  }}
+                  onFocus={() => {
+                    if (cities.length > 0) setShowCityDropdown(true)
+                  }}
+                  placeholder="Начните вводить город..."
+                  required
+                  disabled={!selectedCountry}
+                />
+                {showCityDropdown && cities.length > 0 && (
+                  <div
+                    ref={cityDropdownRef}
+                    className="city-dropdown"
+                  >
+                    {cities.map((city) => (
+                      <div
+                        key={city.id}
+                        className="city-option"
+                        onClick={() => handleCitySelect(city)}
+                      >
+                        {city.name_ru}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
+            {/* Phone */}
             <div className="login-group">
               <label>Телефон *</label>
               <input
@@ -295,9 +332,11 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
                 }}
                 placeholder={PHONE_PLACEHOLDER}
                 required
+                disabled={!selectedCountry}
               />
             </div>
 
+            {/* Password */}
             <div className="login-group">
               <label>Пароль *</label>
               <div style={{ position: 'relative' }}>
@@ -324,59 +363,31 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
               </div>
             </div>
 
-            {/* Country & City */}
+            {/* Name */}
             <div className="login-group">
-              <label>Страна</label>
-              <select
-                value={selectedCountry || ''}
-                onChange={(e) => {
-                  const countryId = Number(e.target.value)
-                  setSelectedCountry(countryId)
-                  setCitySearch('')
-                  loadCities(countryId)
-                }}
-              >
-                <option value="">Выберите страну</option>
-                {countries.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name_ru}</option>
-                ))}
-              </select>
+              <label>Имя *</label>
+              <input
+                type="text"
+                value={registerForm.name}
+                onChange={(e) => setRegisterForm(prev => ({ ...prev, name: e.target.value }))}
+                placeholder="Иван Иванов"
+                required
+              />
             </div>
 
+            {/* Email */}
             <div className="login-group">
-              <label>Город</label>
-              <div style={{ position: 'relative' }}>
-                <input
-                  ref={cityInputRef}
-                  value={citySearch}
-                  onChange={(e) => {
-                    handleCitySearch(e.target.value)
-                    setShowCityDropdown(true)
-                  }}
-                  onFocus={() => {
-                    if (cities.length > 0) setShowCityDropdown(true)
-                  }}
-                  placeholder="Начните вводить город..."
-                />
-                {showCityDropdown && cities.length > 0 && (
-                  <div
-                    ref={cityDropdownRef}
-                    className="city-dropdown"
-                  >
-                    {cities.map((city) => (
-                      <div
-                        key={city.id}
-                        className="city-option"
-                        onClick={() => handleCitySelect(city)}
-                      >
-                        {city.name_ru}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <label>Email *</label>
+              <input
+                type="email"
+                value={registerForm.email}
+                onChange={(e) => setRegisterForm(prev => ({ ...prev, email: e.target.value }))}
+                placeholder="email@example.com"
+                required
+              />
             </div>
 
+            {/* Telegram */}
             <div className="login-group">
               <label>Telegram (необязательно)</label>
               <input
@@ -387,6 +398,7 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
               />
             </div>
 
+            {/* Register as master */}
             <div className="checkbox-group">
               <label className="checkbox-label">
                 <input
