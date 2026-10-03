@@ -1,17 +1,16 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { toast } from 'sonner'
 import { superAdminApi } from '../../api/client'
 import type { Master } from '../../api/types'
 import Modal from '../../components/common/Modal'
 import { Skeleton, EmptyState, Tooltip } from '../../components/common'
 import { PHONE_PLACEHOLDER, PASSWORD_PLACEHOLDER, PASSWORD_EDIT_PLACEHOLDER, TELEGRAM_PLACEHOLDER } from '../../constants'
 import { formatPhone } from '../../utils/formatPhone'
-import { useToast } from '../../components/Toast'
 import './MastersPage.css'
 
 function MastersPage() {
   const navigate = useNavigate()
-  const { addToast } = useToast()
   const [masters, setMasters] = useState<Master[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -88,7 +87,7 @@ function MastersPage() {
       const data: any = { ...editForm }
       if (!data.password) delete data.password
       await superAdminApi.updateMaster(editingMaster.id, data)
-      addToast('Мастер обновлён', 'success')
+      toast.success('Мастер обновлён')
       setShowEditModal(false)
       setEditingMaster(null)
       loadMasters()
@@ -108,15 +107,13 @@ function MastersPage() {
 
     try {
       await superAdminApi.toggleMasterActive(id)
-      addToast(
+      toast.success(
         isCurrentlyActive ? 'Мастер заблокирован' : 'Мастер разблокирован',
-        'success',
-        undoAction,
-        'Отменить'
+        { action: { label: 'Отменить', onClick: undoAction } }
       )
       loadMasters()
     } catch (err: any) {
-      addToast(handleError(err), 'error')
+      toast.error(handleError(err))
     }
   }
 
@@ -146,11 +143,11 @@ function MastersPage() {
     if (ids.length === 0) return
     try {
       const { data } = await superAdminApi.bulkSuspend(ids)
-      addToast(`Заблокировано мастеров: ${data.suspended?.length || 0}`, 'success')
+      toast.success(`Заблокировано мастеров: ${data.suspended?.length || 0}`)
       setSelectedMasters(new Set())
       loadMasters()
     } catch (err: any) {
-      addToast(handleError(err), 'error')
+      toast.error(handleError(err))
     }
   }
 
@@ -161,17 +158,14 @@ function MastersPage() {
     const undoAction = () => {
       // Note: full undo would require re-creating the master, which is complex
       // For now, we just show a toast
-      addToast('Удаление отменено', 'info')
+      toast.info('Удаление отменено')
     }
 
     try {
       await superAdminApi.deleteMaster(id)
-      addToast(
-        'Мастер удалён',
-        'success',
-        undoAction,
-        'Отменить'
-      )
+      toast.success('Мастер удалён', {
+        action: { label: 'Отменить', onClick: undoAction },
+      })
       setDeleteConfirm(null)
       loadMasters()
     } catch (err: any) {
@@ -415,4 +409,4 @@ function MastersPage() {
   )
 }
 
-export default MastersPage
+export defa                

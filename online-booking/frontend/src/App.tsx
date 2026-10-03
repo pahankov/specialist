@@ -1,9 +1,9 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { Toaster } from 'sonner'
 import { HomePage, BookingPage } from './pages/public'
 import { AdminLayout, DashboardPage, AppointmentsPage, ServicesPage, ClientsPage, SchedulePage, LogsPage, MasterDetailPage, RevenuePage } from './pages/admin'
 import MastersPage from './pages/admin/MastersPage'
 import ErrorBoundary from './components/ErrorBoundary'
-import { ToastProvider } from './components/Toast'
 import './App.css'
 
 function getIsAuthenticated() {
@@ -57,8 +57,7 @@ function App() {
 
   return (
     <ErrorBoundary>
-      <ToastProvider>
-        <div className={`app ${isAdminRoute ? 'admin-app' : 'public-app'}`}>
+      <div className={`app ${isAdminRoute ? 'admin-app' : 'public-app'}`}>
         <Routes>
         {/* Public routes */}
         <Route path="/" element={<HomePage />} />
@@ -95,8 +94,8 @@ function App() {
         {/* Catch all */}
         <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
-        </div>
-      </ToastProvider>
+      </div>
+      <Toaster position="top-right" richColors />
     </ErrorBoundary>
     )
   }
