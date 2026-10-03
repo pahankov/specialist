@@ -5,6 +5,7 @@ import type { Client } from '../../api/types'
 import { PHONE_PLACEHOLDER, EMAIL_PLACEHOLDER } from '../../constants'
 import { formatPhone } from '../../utils/formatPhone'
 import { Skeleton, EmptyState, Tooltip } from '../../components/common'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../components/ui/dialog'
 import './ClientsPage.css'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -213,18 +214,18 @@ function ClientsPage() {
         </div>
       )}
 
-      {deletingId && (
-        <div className="modal-overlay" onClick={() => setDeletingId(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>🗑️ Удалить клиента?</h3>
-            <p>Клиент будет удалён вместе со всеми записями. Это действие нельзя отменить.</p>
-            <div className="modal-actions">
-              <button className="btn btn-ghost" onClick={() => setDeletingId(null)}>Отмена</button>
-              <button className="btn btn-delete" onClick={() => handleDelete(deletingId)}>Удалить</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Dialog open={!!deletingId} onOpenChange={(open) => !open && setDeletingId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>🗑️ Удалить клиента?</DialogTitle>
+            <DialogDescription>Клиент будет удалён вместе со всеми записями. Это действие нельзя отменить.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <button className="btn btn-ghost" onClick={() => setDeletingId(null)}>Отмена</button>
+            <button className="btn btn-delete" onClick={() => handleDelete(deletingId!)}>Удалить</button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

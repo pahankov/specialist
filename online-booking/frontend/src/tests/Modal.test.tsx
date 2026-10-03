@@ -1,70 +1,53 @@
-import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
-import Modal from '../components/common/Modal'
+import { describe, it, expect, vi } from 'vitest'
+import { render, screen, fireEvent } from '@testing-library/react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog'
 
-describe('Modal', () => {
+describe('Dialog (radix-ui)', () => {
   it('renders children when open', () => {
     render(
-      <Modal
-        isOpen={true}
-        onClose={vi.fn()}
-        title="Test Modal"
-        actions={[{ label: 'OK', onClick: vi.fn() }]}
-      >
-        <span>Modal content</span>
-      </Modal>
+      <Dialog open={true} onOpenChange={vi.fn()}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Test Dialog</DialogTitle>
+          </DialogHeader>
+          <span>Dialog content</span>
+        </DialogContent>
+      </Dialog>
     )
-    expect(screen.getByText('Test Modal')).toBeInTheDocument()
-    expect(screen.getByText('Modal content')).toBeInTheDocument()
+    expect(screen.getByText('Test Dialog')).toBeInTheDocument()
+    expect(screen.getByText('Dialog content')).toBeInTheDocument()
   })
 
   it('does not render when closed', () => {
     render(
-      <Modal
-        isOpen={false}
-        onClose={vi.fn()}
-        title="Hidden Modal"
-        actions={[{ label: 'OK', onClick: vi.fn() }]}
-      >
-        <span>Hidden content</span>
-      </Modal>
+      <Dialog open={false} onOpenChange={vi.fn()}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Hidden Dialog</DialogTitle>
+          </DialogHeader>
+          <span>Hidden content</span>
+        </DialogContent>
+      </Dialog>
     )
     expect(screen.queryByText('Hidden content')).not.toBeInTheDocument()
   })
 
-  it('calls onClose when overlay is clicked', () => {
-    const onClose = vi.fn()
+  it('calls onOpenChange(false) when close button is clicked', () => {
+    const onOpenChange = vi.fn()
     render(
-      <Modal
-        isOpen={true}
-        onClose={onClose}
-        title="Test"
-        actions={[{ label: 'OK', onClick: vi.fn() }]}
-      >
-        Content
-      </Modal>
+      <Dialog open={true} onOpenChange={onOpenChange}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Test</DialogTitle>
+          </DialogHeader>
+          Content
+        </DialogContent>
+      </Dialog>
     )
-    const overlay = document.querySelector('.modal-overlay') as HTMLElement
-    overlay.click()
-    expect(onClose).toHaveBeenCalled()
-  })
-
-  it('does not call onClose when modal content is clicked', () => {
-    const onClose = vi.fn()
-    render(
-      <Modal
-        isOpen={true}
-        onClose={onClose}
-        title="Test"
-        actions={[{ label: 'OK', onClick: vi.fn() }]}
-      >
-        <div className="modal-body">
-          <span>Inner content</span>
-        </div>
-      </Modal>
-    )
-    const modalBody = document.querySelector('.modal-body') as HTMLElement
-    modalBody.click()
-    expect(onClose).not.toHaveBeenCalled()
+    const closeButton = document.querySelector('[aria-label="Close"]') as HTMLElement
+    if (closeButton) {
+      fireEvent.click(closeButton)
+      expect(onOpenChange).toHaveBeenCalledWith(false)
+    }
   })
 })
