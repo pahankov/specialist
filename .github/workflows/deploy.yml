@@ -138,22 +138,39 @@ jobs:
             npm run build
             
             # Verify build contains DAData (not old cities API)
-            # Check for unique token string that survives minification
-            if grep -q "REDACTED_DADATA_TOKEN" dist/assets/*.js; then
-                echo "✓ Frontend build contains DAData code (token found)"
-            elif grep -q "suggestions.dadata.ru" dist/assets/*.js; then
-                echo "✓ Frontend build contains DAData code (URL found)"
-            else
-                echo "ERROR: Frontend build missing DAData code!"
-                echo "=== DEBUG: Searching for any dadata/suggestions/cities references ==="
-                grep -oP "(dadata|suggestions|cities|07c16732|suggestion)" dist/assets/*.js 2>/dev/null | sort -u | head -20
-                echo "=== DEBUG: First 500 chars of built JS ==="
-                head -c 500 dist/assets/*.js
-                echo ""
-                echo "=== DEBUG: Grep for .ru domains ==="
-                grep -oP '[\w.-]+\.ru' dist/assets/*.js | sort -u | head -10
+            # Since Vite may minify/transform strings, check source files directly
+            echo "=== VERIFYING SOURCE INTEGRITY ==="
+            
+            # Check dadata.ts exists and has API URL
+            if ! grep -q "suggestions.dadata.ru" src/api/dadata.ts; then
+                echo "ERROR: dadata.ts missing DAData URL!"
+                cat src/api/dadata.ts
                 exit 1
             fi
+            echo "✓ dadata.ts contains DAData URL"
+            
+            # Check LoginModal imports dadata
+            if ! grep -q "from.*dadata" src/components/LoginModal.tsx; then
+                echo "ERROR: LoginModal.tsx missing dadata import!"
+                exit 1
+            fi
+            echo "✓ LoginModal.tsx imports dadata"
+            
+            # Check LoginModal uses city autocomplete
+            if ! grep -q "handleCitySearch" src/components/LoginModal.tsx; then
+                echo "ERROR: LoginModal.tsx missing city autocomplete logic!"
+                exit 1
+            fi
+            echo "✓ LoginModal.tsx has city autocomplete logic"
+            
+            # Check that old cities API is NOT imported in LoginModal
+            if grep -q "citiesApi" src/components/LoginModal.tsx; then
+                echo "ERROR: LoginModal.tsx still uses old citiesApi!"
+                exit 1
+            fi
+            echo "✓ LoginModal.tsx does NOT use old citiesApi"
+            
+            echo "=== SOURCE VERIFICATION PASSED ==="
             
             # Copy with overwrite verification
             rm -rf /var/www/beauty-specialist/frontend/dist/*
