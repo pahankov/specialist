@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { superAdminApi } from '../../api/client'
 import type { Master } from '../../api/types'
-import Modal from '../../components/common/Modal'
 import { Skeleton, EmptyState, Tooltip } from '../../components/common'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../components/ui/dialog'
 import { PHONE_PLACEHOLDER, PASSWORD_PLACEHOLDER, PASSWORD_EDIT_PLACEHOLDER, TELEGRAM_PLACEHOLDER } from '../../constants'
 import { formatPhone } from '../../utils/formatPhone'
 import './MastersPage.css'
@@ -340,71 +340,77 @@ function MastersPage() {
         </div>
       )}
 
-      <Modal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} title="Добавить мастера" actions={[
-        { label: 'Отмена', onClick: () => setShowCreateModal(false), variant: 'ghost' },
-      ]}>
-        <form onSubmit={handleCreate} className="master-form">
-          <div className="form-group">
-            <label>Имя *</label>
-            <input type="text" value={createForm.name} onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })} required placeholder="Иван Иванов" />
-          </div>
-          <div className="form-group">
-            <label>Email *</label>
-            <input type="email" value={createForm.email} onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })} required placeholder="master@example.com" />
-          </div>
-          <div className="form-group">
-            <label>Пароль *</label>
-            <input type="password" value={createForm.password} onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })} required placeholder={PASSWORD_PLACEHOLDER} />
-          </div>
-          <div className="form-group">
-            <label>Телефон</label>
-            <input type="tel" value={createForm.phone} onChange={(e) => setCreateForm({ ...createForm, phone: formatPhone(e.target.value) })} placeholder={PHONE_PLACEHOLDER} />
-          </div>
-          <div className="form-group">
-            <label>Telegram</label>
-            <input type="text" value={createForm.telegram_username} onChange={(e) => setCreateForm({ ...createForm, telegram_username: e.target.value })} placeholder={TELEGRAM_PLACEHOLDER} />
-          </div>
-          <div className="form-actions">
-            <button type="submit" className="btn btn-primary">Создать</button>
-          </div>
-        </form>
-      </Modal>
-
-      <Modal isOpen={showEditModal} onClose={() => setShowEditModal(false)} title="Редактировать мастера" actions={[
-        { label: 'Отмена', onClick: () => setShowEditModal(false), variant: 'ghost' },
-      ]}>
-        {editingMaster && (
-          <form onSubmit={handleEdit} className="master-form">
+      <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Добавить мастера</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleCreate} className="master-form">
             <div className="form-group">
               <label>Имя *</label>
-              <input type="text" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} required />
+              <input type="text" value={createForm.name} onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })} required placeholder="Иван Иванов" />
             </div>
             <div className="form-group">
-              <label>Email</label>
-              <input type="text" value={editingMaster.email} disabled className="input-disabled" />
+              <label>Email *</label>
+              <input type="email" value={createForm.email} onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })} required placeholder="master@example.com" />
+            </div>
+            <div className="form-group">
+              <label>Пароль *</label>
+              <input type="password" value={createForm.password} onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })} required placeholder={PASSWORD_PLACEHOLDER} />
             </div>
             <div className="form-group">
               <label>Телефон</label>
-              <input type="tel" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: formatPhone(e.target.value) })} placeholder={PHONE_PLACEHOLDER} />
+              <input type="tel" value={createForm.phone} onChange={(e) => setCreateForm({ ...createForm, phone: formatPhone(e.target.value) })} placeholder={PHONE_PLACEHOLDER} />
             </div>
             <div className="form-group">
               <label>Telegram</label>
-              <input type="text" value={editForm.telegram_username} onChange={(e) => setEditForm({ ...editForm, telegram_username: e.target.value })} placeholder={TELEGRAM_PLACEHOLDER} />
+              <input type="text" value={createForm.telegram_username} onChange={(e) => setCreateForm({ ...createForm, telegram_username: e.target.value })} placeholder={TELEGRAM_PLACEHOLDER} />
             </div>
-            <div className="form-group">
-              <label>Описание</label>
-              <textarea value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} rows={3} />
-            </div>
-            <div className="form-group">
-              <label>Новый пароль (оставьте пустым, если не меняете)</label>
-              <input type="password" value={editForm.password} onChange={(e) => setEditForm({ ...editForm, password: e.target.value })} placeholder={PASSWORD_EDIT_PLACEHOLDER} />
-            </div>
-            <div className="form-actions">
-              <button type="submit" className="btn btn-primary">Сохранить</button>
-            </div>
+            <DialogFooter>
+              <button type="submit" className="btn btn-primary">Создать</button>
+            </DialogFooter>
           </form>
-        )}
-      </Modal>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Редактировать мастера</DialogTitle>
+          </DialogHeader>
+          {editingMaster && (
+            <form onSubmit={handleEdit} className="master-form">
+              <div className="form-group">
+                <label>Имя *</label>
+                <input type="text" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} required />
+              </div>
+              <div className="form-group">
+                <label>Email</label>
+                <input type="text" value={editingMaster.email} disabled className="input-disabled" />
+              </div>
+              <div className="form-group">
+                <label>Телефон</label>
+                <input type="tel" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: formatPhone(e.target.value) })} placeholder={PHONE_PLACEHOLDER} />
+              </div>
+              <div className="form-group">
+                <label>Telegram</label>
+                <input type="text" value={editForm.telegram_username} onChange={(e) => setEditForm({ ...editForm, telegram_username: e.target.value })} placeholder={TELEGRAM_PLACEHOLDER} />
+              </div>
+              <div className="form-group">
+                <label>Описание</label>
+                <textarea value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} rows={3} />
+              </div>
+              <div className="form-group">
+                <label>Новый пароль (оставьте пустым, если не меняете)</label>
+                <input type="password" value={editForm.password} onChange={(e) => setEditForm({ ...editForm, password: e.target.value })} placeholder={PASSWORD_EDIT_PLACEHOLDER} />
+              </div>
+              <DialogFooter>
+                <button type="submit" className="btn btn-primary">Сохранить</button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
