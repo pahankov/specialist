@@ -10,6 +10,7 @@ import bcrypt
 from app.models.user import User, UserRole
 from app.models.master_profile import MasterProfile
 from app.models.client_profile import ClientProfile
+from app.models.city import City
 from app.models.refresh_token import RefreshToken
 from app.models.otp_code import OtpCode
 from app.schemas.user import UserCreate, UserLoginByEmail, UserLoginByPhone
