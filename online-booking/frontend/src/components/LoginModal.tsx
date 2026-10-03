@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
-import { authApi, citiesApi } from '../api/client'
-import { PHONE_PLACEHOLDER, PASSWORD_PLACEHOLDER } from '../constants'
+import { authApi } from '../api/client'
+import { dadataApi, type DadataSuggestion } from '../api/dadata'
+import { PASSWORD_PLACEHOLDER } from '../constants'
 import { formatPhone } from '../utils/formatPhone'
-import type { Country, City } from '../api/types'
 import './LoginModal.css'
 
 interface LoginModalProps {
@@ -26,7 +26,7 @@ interface RegisterFormState {
   email: string
   phone: string
   password: string
-  cityId: number | null
+  cityId: string | null  // DAData returns string value, not number id
   telegramUsername: string
   isMaster: boolean
 }
@@ -54,21 +54,13 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
   const [showLoginPassword, setShowLoginPassword] = useState(false)
   const [showRegisterPassword, setShowRegisterPassword] = useState(false)
 
-  // Cities data
-  const [countries, setCountries] = useState<Country[]>([])
-  const [cities, setCities] = useState<City[]>([])
-  const [citySearch, setCitySearch] = useState('')
+  // DAData city autocomplete
+  const [citySuggestions, setCitySuggestions] = useState<DadataSuggestion[]>([])
   const [showCityDropdown, setShowCityDropdown] = useState(false)
-  const [selectedCountry, setSelectedCountry] = useState<number | null>(null)
+  const [cityInput, setCityInput] = useState('')
 
   const cityInputRef = useRef<HTMLInputElement>(null)
   const cityDropdownRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (isOpen) {
-      loadCountries()
-    }
-  }, [isOpen])
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -81,41 +73,26 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const loadCountries = async () => {
-    try {
-      const { data } = await citiesApi.getCountries()
-      setCountries(data)
-      // Default to Russia
-      const russia = data.find(c => c.code === 'RU')
-      if (russia) {
-        setSelectedCountry(russia.id)
-        loadCities(russia.id)
-      }
-    } catch { /* ignore */ }
-  }
-
-  const loadCities = async (countryId: number, search?: string) => {
-    try {
-      const params: Record<string, any> = { country_id: countryId, page_size: 500 }
-      if (search) params.search = search
-      const { data } = await citiesApi.getCities(params)
-      setCities(data)
-    } catch { /* ignore */ }
-  }
-
-  const handleCitySearch = (value: string) => {
-    setCitySearch(value)
-    if (value.length >= 2 && selectedCountry) {
-      loadCities(selectedCountry, value)
-    } else if (selectedCountry) {
-      loadCities(selectedCountry)
+  const handleCitySearch = async (value: string) => {
+    setCityInput(value)
+    if (value.length >= 2) {
+      try {
+        const suggestions = await dadataApi.searchCities(value, 10)
+        setCitySuggestions(suggestions)
+        setShowCityDropdown(suggestions.length > 0)
+      } catch { /* ignore */ }
+    } else {
+      setCitySuggestions([])
+      setShowCityDropdown(false)
     }
   }
 
-  const handleCitySelect = (city: City) => {
-    setRegisterForm(prev => ({ ...prev, cityId: city.id }))
-    setCitySearch(city.name_ru)
+  const handleCitySelect = (suggestion: DadataSuggestion) => {
+    setCityInput(suggestion.value)
     setShowCityDropdown(false)
+    setCitySuggestions([])
+    // DAData doesn't return cityId, use value as identifier
+    setRegisterForm(prev => ({ ...prev, cityId: suggestion.value }))
   }
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -144,7 +121,7 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
         email: registerForm.email,
         phone: registerForm.phone,
         password: registerForm.password,
-        city_id: registerForm.cityId,
+        city_name: registerForm.cityId,
         telegram_username: registerForm.telegramUsername || null,
         is_master: registerForm.isMaster,
       })
@@ -182,9 +159,8 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
     })
     setShowLoginPassword(false)
     setShowRegisterPassword(false)
-    setCitySearch('')
-    setSelectedCountry(null)
-    setCities([])
+    setCityInput('')
+    setCitySuggestions([])
   }
 
   if (!isOpen) return null
@@ -261,57 +237,32 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
         ) : (
           /* ─── REGISTER FORM ─── */
           <form onSubmit={handleRegister}>
-            {/* Country */}
-            <div className="login-group">
-              <label>Страна *</label>
-              <select
-                value={selectedCountry || ''}
-                onChange={(e) => {
-                  const countryId = Number(e.target.value)
-                  setSelectedCountry(countryId)
-                  setCitySearch('')
-                  setCities([])
-                  loadCities(countryId)
-                }}
-                required
-              >
-                <option value="">Выберите страну</option>
-                {countries.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name_ru}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* City */}
+            {/* City (DAData) */}
             <div className="login-group">
               <label>Город *</label>
               <div style={{ position: 'relative' }}>
                 <input
                   ref={cityInputRef}
-                  value={citySearch}
-                  onChange={(e) => {
-                    handleCitySearch(e.target.value)
-                    setShowCityDropdown(true)
-                  }}
+                  value={cityInput}
+                  onChange={(e) => handleCitySearch(e.target.value)}
                   onFocus={() => {
-                    if (cities.length > 0) setShowCityDropdown(true)
+                    if (citySuggestions.length > 0) setShowCityDropdown(true)
                   }}
                   placeholder="Начните вводить город..."
                   required
-                  disabled={!selectedCountry}
                 />
-                {showCityDropdown && cities.length > 0 && (
+                {showCityDropdown && citySuggestions.length > 0 && (
                   <div
                     ref={cityDropdownRef}
                     className="city-dropdown"
                   >
-                    {cities.map((city) => (
+                    {citySuggestions.map((suggestion, index) => (
                       <div
-                        key={city.id}
+                        key={index}
                         className="city-option"
-                        onClick={() => handleCitySelect(city)}
+                        onClick={() => handleCitySelect(suggestion)}
                       >
-                        {city.name_ru}
+                        {suggestion.value}
                       </div>
                     ))}
                   </div>
@@ -325,14 +276,9 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
               <input
                 type="tel"
                 value={registerForm.phone}
-                onChange={(e) => {
-                  const country = countries.find(c => c.id === selectedCountry)
-                  const countryCode = country?.code || 'RU'
-                  setRegisterForm(prev => ({ ...prev, phone: formatPhone(e.target.value, countryCode as any) }))
-                }}
-                placeholder={PHONE_PLACEHOLDER}
+                onChange={(e) => setRegisterForm(prev => ({ ...prev, phone: formatPhone(e.target.value) }))}
+                placeholder="+7 (999) 123-45-67"
                 required
-                disabled={!selectedCountry}
               />
             </div>
 

@@ -207,7 +207,7 @@ export const authApi = {
     email: string
     phone: string
     password: string
-    city_id?: number | null
+    city_name?: string | null
     telegram_username?: string | null
     is_master: boolean
   }) =>

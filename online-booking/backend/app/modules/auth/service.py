@@ -308,7 +308,7 @@ async def register_unified(
     email: str,
     phone: str,
     password: str,
-    city_id: Optional[int],
+    city_name: Optional[str],
     telegram_username: Optional[str],
     is_master: bool,
     db: AsyncSession
@@ -336,6 +336,14 @@ async def register_unified(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Пользователь с таким телефоном уже существует"
         )
+
+    # Look up city_id by name
+    city_id = None
+    if city_name:
+        result = await db.execute(
+            select(City.id).where(City.name_ru == city_name)
+        )
+        city_id = result.scalar_one_or_none()
 
     # Create user
     new_user = User(
