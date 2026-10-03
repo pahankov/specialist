@@ -5,7 +5,7 @@ import type { Client } from '../../api/types'
 import { PHONE_PLACEHOLDER, EMAIL_PLACEHOLDER } from '../../constants'
 import { formatPhone } from '../../utils/formatPhone'
 import { Skeleton, EmptyState, Tooltip } from '../../components/common'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../../components/ui/dialog'
 import './ClientsPage.css'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
