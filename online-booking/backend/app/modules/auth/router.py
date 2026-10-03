@@ -320,7 +320,7 @@ async def register_unified(
             email=req.email,
             phone=req.phone,
             password=req.password,
-            city_id=req.city_id,
+            city_name=req.city_name,
             telegram_username=req.telegram_username,
             is_master=req.is_master,
             db=db,
