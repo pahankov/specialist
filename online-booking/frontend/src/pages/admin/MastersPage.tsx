@@ -45,7 +45,7 @@ function MastersPage() {
     } catch (err: any) {
       const detail = err.response?.data?.detail
       const msg = typeof detail === 'string' ? detail : (err.response?.data?.message || 'Ошибка загрузки мастеров')
-      addToast(msg, 'error')
+      toast.error(msg)
     } finally {
       setLoading(false)
     }
@@ -71,12 +71,12 @@ function MastersPage() {
     e.preventDefault()
     try {
       await superAdminApi.createMaster(createForm)
-      addToast('Мастер успешно создан', 'success')
+      toast.success('Мастер успешно создан')
       setShowCreateModal(false)
       setCreateForm({ name: '', email: '', password: '', phone: '', telegram_username: '' })
       loadMasters()
     } catch (err: any) {
-      addToast(handleError(err), 'error')
+      toast.error(handleError(err))
     }
   }
 
@@ -92,7 +92,7 @@ function MastersPage() {
       setEditingMaster(null)
       loadMasters()
     } catch (err: any) {
-      addToast(handleError(err), 'error')
+      toast.error(handleError(err))
     }
   }
 
@@ -130,11 +130,11 @@ function MastersPage() {
     if (ids.length === 0) return
     try {
       const { data } = await superAdminApi.bulkToggleActive(ids)
-      addToast(`Выбрано мастеров: ${data.toggled?.length || 0}`, 'success')
+      toast.success(`Выбрано мастеров: ${data.toggled?.length || 0}`)
       setSelectedMasters(new Set())
       loadMasters()
     } catch (err: any) {
-      addToast(handleError(err), 'error')
+      toast.error(handleError(err))
     }
   }
 
@@ -169,7 +169,7 @@ function MastersPage() {
       setDeleteConfirm(null)
       loadMasters()
     } catch (err: any) {
-      addToast(handleError(err), 'error')
+      toast.error(handleError(err))
     }
   }
 
@@ -409,4 +409,4 @@ function MastersPage() {
   )
 }
 
-export defa                
+export default MastersPage
