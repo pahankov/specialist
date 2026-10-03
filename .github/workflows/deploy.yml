@@ -55,6 +55,13 @@ jobs:
             git config --global --add safe.directory /var/www/beauty-specialist
             git pull origin main
 
+            # Verify deployed commit
+            echo "=== DEPLOYED COMMIT ==="
+            git log -1 --oneline
+            echo "=== EXPECTED COMMIT ==="
+            echo "${{ github.sha }}"
+            echo "========================"
+
             # Export DATABASE_URL for all subsequent commands
             export DATABASE_URL="${DATABASE_URL}"
             echo "DB: ${DATABASE_URL:0:30}..."
