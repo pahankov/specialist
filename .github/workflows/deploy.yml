@@ -124,7 +124,21 @@ jobs:
             cd ../frontend
             npm install
             npm run build
-            sudo cp -r dist/* /var/www/beauty-specialist/frontend/dist/
+            
+            # Verify build contains DAData (not old cities API)
+            if grep -q "dapter" dist/assets/*.js; then
+                echo "✓ Frontend build contains DAData code"
+            else
+                echo "ERROR: Frontend build missing DAData code!"
+                exit 1
+            fi
+            
+            # Copy with overwrite verification
+            rm -rf /var/www/beauty-specialist/frontend/dist/*
+            cp -r dist/* /var/www/beauty-specialist/frontend/dist/
+            echo "Frontend files copied:"
+            ls -la /var/www/beauty-specialist/frontend/dist/
+            ls -la /var/www/beauty-specialist/frontend/dist/assets/
 
             # Fix log directory permissions (service runs as www-data)
             sudo chown -R www-data:www-data /var/www/beauty-specialist/online-booking/backend/logs/
