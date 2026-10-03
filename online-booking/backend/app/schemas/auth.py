@@ -28,7 +28,7 @@ class UnifiedRegisterRequest(BaseModel):
     email: EmailStr
     phone: str
     password: str
-    city_id: Optional[int] = None
+    city_name: Optional[str] = None
     telegram_username: Optional[str] = None
     is_master: bool = False
 
