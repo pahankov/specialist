@@ -686,9 +686,20 @@ export DATABASE_URL='postgresql+asyncpg://user:pass@host:5432/dbname'
 - **Проверка:** `git log --all -p | grep -iE "Postgres2024|beauty-specialist-2024|07c167324787848e"` — должен вернуть пустоту
 - **Пример ошибки:** DEPLOY.md содержал реальные PostgreSQL пароль, DADATA ключи, Telegram Bot Token — все 193 коммита были переписаны
 
+### 11. Не использовать slowapi @limiter.limit() на auth endpoint'ах
+**Ошибка:** slowapi rate limiting на /register (5/minute) блокировал тесты — fixture auth_token не мог зарегистрировать мастера после 5 запросов → все последующие тесты падали с ERROR (429 Too Many Requests)
+**Причина:** slowapi @limiter.limit("5/minute") на auth endpoint'ах работает в тестах так же как в продакшене, но тесты создают много пользователей быстро
+**Правило:**
+- **Никогда** не использовать @limiter.limit() на auth endpoint'ах (/register, /login, /verify-otp)
+- Rate limiting на auth — nice-to-have, не critical
+- Если нужен — использовать middleware-уровень с высокими лимитами для auth
+- slowapi можно использовать на обычных API endpoint'ах, но не на auth
+**Исправлено:** Удалены все @limiter.limit() декораторы из app/modules/auth/router.py
+
 ---
 
 ## ЧЕК-ЛИСТ ПЕРЕД КОММИТОМ
+
 
 > **Всегда выполняй перед `git commit`!** Это сэкономит часы на отладку.
 
@@ -1034,9 +1045,20 @@ async def do_action(...):
 **Правило:** Использовать `String(20)` вместо `SAEnum` во ВСЕХ моделях. Enum-типы только в коде (Python enum классы).
 **Проверка:** `grep -r "SAEnum" app/models/` — должен вернуть пустоту
 
+### 11. Не использовать slowapi @limiter.limit() на auth endpoint'ах
+**Ошибка:** slowapi rate limiting на /register (5/minute) блокировал тесты — fixture auth_token не мог зарегистрировать мастера после 5 запросов → все последующие тесты падали с ERROR (429 Too Many Requests)
+**Причина:** slowapi @limiter.limit("5/minute") на auth endpoint'ах работает в тестах так же как в продакшене, но тесты создают много пользователей быстро
+**Правило:**
+- **Никогда** не использовать @limiter.limit() на auth endpoint'ах (/register, /login, /verify-otp)
+- Rate limiting на auth — nice-to-have, не critical
+- Если нужен — использовать middleware-уровень с высокими лимитами для auth
+- slowapi можно использовать на обычных API endpoint'ах, но не на auth
+**Исправлено:** Удалены все @limiter.limit() декораторы из app/modules/auth/router.py
+
 ---
 
 ## ЧЕК-ЛИСТ ПЕРЕД КОММИТОМ
+
 
 > **Всегда выполняй перед `git commit`!** Это сэкономит часы на отладку.
 
@@ -1096,7 +1118,7 @@ git diff --cached | grep -i "password\|secret\|token\|key"
 - [ ] `ERROR + exc_info=True` для unhandled exceptions
 - [ ] `WARNING` для нештатных ситуаций (неверный токен, 404)
 
-### 9. Проверь фронтенд — нет ли `.js` дубликатов
+### 12. Проверь фронтенд — нет ли `.js` дубликатов
 ```bash
 find frontend/src -name "*.js" | wc -l
 ```
@@ -1104,7 +1126,7 @@ find frontend/src -name "*.js" | wc -l
 - Если есть — удалить, использовать только `.tsx`/`.ts`
 - `tsc` всегда с `--noEmit`
 
-### 10. Проверь, что `tsc --noEmit` проходит
+### 13. Проверь, что `tsc --noEmit` проходит
 ```bash
 cd frontend
 npx tsc --noEmit
