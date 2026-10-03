@@ -1,25 +1,55 @@
-/** Format phone number for display.
+import { parsePhoneNumberFromString, CountryCode } from 'libphonenumber-js'
 
-User types 10 digits (e.g. 9991234567) and gets: +7 (999) 123-45-67
-The +7 prefix is auto-added and does NOT count toward the 10-digit limit.
-*/
+/** Format phone number using libphonenumber-js.
+ * 
+ * Supports all countries with proper formatting, validation, and E.164 output.
+ * Defaults to Russia (+7) if no country code specified.
+ * 
+ * @param value - Raw phone input (digits, +, spaces, dashes)
+ * @param defaultCountry - ISO 3166-1 alpha-2 country code (default: 'RU')
+ * @returns Formatted phone number in national format
+ * 
+ * Examples:
+ *   formatPhone('9991234567', 'RU') → '+7 (999) 123-45-67'
+ *   formatPhone('2125551234', 'US') → '(212) 555-1234'
+ *   formatPhone('1712345678', 'DE') → '+49 171 2345678'
+ */
 
-export const PHONE_MAX_DIGITS = 10
+export const PHONE_MAX_DIGITS = 15 // E.164 max length
 
-export function formatPhone(value: string): string {
-  // Remove all non-digits, strip ONE leading 7 (from +7 prefix)
-  const digits = value.replace(/\D/g, '')
-  const cleaned = (digits.startsWith('7') ? digits.slice(1) : digits).slice(0, PHONE_MAX_DIGITS)
-  if (cleaned.length === 0) return ''
+export function formatPhone(value: string, defaultCountry: CountryCode = 'RU'): string {
+  if (!value) return ''
   
-  if (cleaned.length <= 3) {
-    return `+7 (${cleaned}`
+  const phone = parsePhoneNumberFromString(value, defaultCountry)
+  if (!phone || !phone.isValid()) {
+    // If invalid, try to format what we can
+    const digits = value.replace(/\D/g, '')
+    if (digits.length === 0) return ''
+    // Fallback: try to format as-is
+    return value
   }
-  if (cleaned.length <= 6) {
-    return `+7 (${cleaned.slice(0, 3)}) ${cleaned.slice(3)}`
-  }
-  if (cleaned.length <= 8) {
-    return `+7 (${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6)}`
-  }
-  return `+7 (${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6, 8)}-${cleaned.slice(8, 10)}`
+  
+  return phone.formatNational()
+}
+
+/** Validate phone number for a specific country */
+export function validatePhone(value: string, defaultCountry: CountryCode = 'RU'): boolean {
+  const phone = parsePhoneNumberFromString(value, defaultCountry)
+  return phone?.isValid() ?? false
+}
+
+/** Get E.164 format (+79991234567) */
+export function formatPhoneE164(value: string, defaultCountry: CountryCode = 'RU'): string {
+  const phone = parsePhoneNumberFromString(value, defaultCountry)
+  if (!phone) return value
+  // Build E.164 manually: +{countryCode}{nationalNumber}
+  const countryCode = phone.country || defaultCountry
+  const callingCode = countryCode === 'RU' ? '7' : countryCode === 'US' ? '1' : countryCode === 'DE' ? '49' : '1'
+  return `+${callingCode}${phone.number.replace(/\D/g, '')}`
+}
+
+/** Get country code from phone number */
+export function getPhoneCountry(value: string): CountryCode | undefined {
+  const phone = parsePhoneNumberFromString(value)
+  return phone?.country
 }

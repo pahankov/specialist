@@ -289,7 +289,9 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
                 type="tel"
                 value={registerForm.phone}
                 onChange={(e) => {
-                  setRegisterForm(prev => ({ ...prev, phone: formatPhone(e.target.value) }))
+                  const country = countries.find(c => c.id === selectedCountry)
+                  const countryCode = country?.code || 'RU'
+                  setRegisterForm(prev => ({ ...prev, phone: formatPhone(e.target.value, countryCode as any) }))
                 }}
                 placeholder={PHONE_PLACEHOLDER}
                 required
