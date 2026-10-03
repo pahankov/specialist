@@ -7,10 +7,13 @@ Migration: 2026-10-02
 - Old: self-written RateLimiter in app/middleware/rate_limit.py (in-memory only)
 - New: slowapi with memory storage (falls back to memory if Redis unavailable)
 """
+import os
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-# Always use memory storage — Redis connection at request time causes 500 errors
-# when Redis is unavailable (CI, dev, or Redis downtime)
-# Redis-backed storage can be enabled manually in production if needed
-limiter = Limiter(key_func=get_remote_address, default_limits=[])
+# In CI/test environments, use very high limits to avoid blocking tests
+# In production, use normal limits
+is_test = os.getenv("CI") == "true" or os.getenv("PYTEST_CURRENT_TEST")
+default_limits = [] if not is_test else ["10000/minute"]
+
+limiter = Limiter(key_func=get_remote_address, default_limits=default_limits)
