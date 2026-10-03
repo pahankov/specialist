@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { toast } from 'sonner'
 import { authApi, citiesApi } from '../api/client'
 import { PHONE_PLACEHOLDER, PASSWORD_PLACEHOLDER } from '../constants'
 import { formatPhone } from '../utils/formatPhone'
-import { useToast } from '../components/Toast'
 import type { Country, City } from '../api/types'
 import './LoginModal.css'
 
@@ -33,7 +33,7 @@ interface RegisterFormState {
 
 function LoginModal({ isOpen, onClose }: LoginModalProps) {
   const navigate = useNavigate()
-  const { addToast } = useToast()
+
   const [mode, setMode] = useState<ModalMode>('login')
   const [loginForm, setLoginForm] = useState<LoginFormState>({
     identifier: '',
@@ -123,13 +123,13 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
     setLoading(true)
     try {
       await authApi.loginUnified(loginForm.identifier, loginForm.password)
-      addToast('Вход выполнен!', 'success')
+      toast.success('Вход выполнен!')
       setTimeout(() => {
         onClose()
         navigate('/admin/dashboard', { replace: true })
       }, 800)
     } catch (err: any) {
-      addToast(err.response?.data?.detail || 'Ошибка входа', 'error')
+      toast.error(err.response?.data?.detail || 'Ошибка входа')
     } finally {
       setLoading(false)
     }
@@ -148,7 +148,7 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
         telegram_username: registerForm.telegramUsername || null,
         is_master: registerForm.isMaster,
       })
-      addToast('Регистрация успешна! Теперь войдите.', 'success')
+      toast.success('Регистрация успешна! Теперь войдите.')
       setMode('login')
       setLoginForm({
         identifier: registerForm.email,
@@ -157,7 +157,7 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
         isRegister: false,
       })
     } catch (err: any) {
-      addToast(err.response?.data?.detail || 'Ошибка регистрации', 'error')
+      toast.error(err.response?.data?.detail || 'Ошибка регистрации')
     } finally {
       setLoading(false)
     }

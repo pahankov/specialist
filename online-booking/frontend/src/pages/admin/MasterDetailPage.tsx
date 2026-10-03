@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { toast } from 'sonner'
 import { superAdminApi } from '../../api/client'
 import type { AuditLogEntry } from '../../api/types'
 import { Skeleton, EmptyState } from '../../components/common'
-import { useToast } from '../../components/Toast'
 import './MasterDetailPage.css'
 
 type TabType = 'overview' | 'reviews' | 'audit'
@@ -63,7 +63,7 @@ const statusLabels: Record<string, string> = {
 function MasterDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { addToast } = useToast()
+
   const [master, setMaster] = useState<MasterFull | null>(null)
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([])
   const [loading, setLoading] = useState(true)
@@ -81,7 +81,7 @@ function MasterDetailPage() {
       setMaster(data)
     } catch (err: any) {
       const msg = err.response?.data?.detail || 'Ошибка загрузки мастера'
-      addToast(msg, 'error')
+      toast.error(msg)
     } finally {
       setLoading(false)
     }
@@ -150,13 +150,13 @@ function MasterDetailPage() {
         <div className="detail-actions">
           <button
             className="btn btn-sm btn-success"
-            onClick={() => superAdminApi.toggleMasterActive(master.id).then(() => loadMaster()).catch(() => addToast('Ошибка', 'error'))}
+            onClick={() => superAdminApi.toggleMasterActive(master.id).then(() => loadMaster()).catch(() => toast.error('Ошибка'))}
           >
             {master.is_active ? '🔒 Заблокировать' : '🔓 Разблокировать'}
           </button>
           <button
             className="btn btn-sm btn-warn"
-            onClick={() => superAdminApi.suspendMaster(master.id).then(() => loadMaster()).catch(() => addToast('Ошибка', 'error'))}
+            onClick={() => superAdminApi.suspendMaster(master.id).then(() => loadMaster()).catch(() => toast.error('Ошибка'))}
           >
             ⏸ Заблокировать навсегда
           </button>

@@ -1,16 +1,15 @@
 import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { adminApi } from '../../api/client'
 import type { Client } from '../../api/types'
 import { PHONE_PLACEHOLDER, EMAIL_PLACEHOLDER } from '../../constants'
 import { formatPhone } from '../../utils/formatPhone'
-import { useToast } from '../../components/Toast'
 import { Skeleton, EmptyState, Tooltip } from '../../components/common'
 import './ClientsPage.css'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 function ClientsPage() {
-  const { addToast } = useToast()
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -84,7 +83,7 @@ function ClientsPage() {
     if (!client) return
 
     const undoAction = () => {
-      addToast('Удаление отменено', 'info')
+      toast.info('Удаление отменено')
     }
 
     try {
@@ -234,3 +233,4 @@ function ClientsPage() {
 }
 
 export default ClientsPage
+       

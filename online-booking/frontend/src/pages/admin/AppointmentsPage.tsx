@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { adminApi } from '../../api/client'
 import type { Appointment } from '../../api/types'
 import { Skeleton, EmptyState, Tooltip } from '../../components/common'
-import { useToast } from '../../components/Toast'
 import './AppointmentsPage.css'
 
 type SortField = 'appointment_date' | 'client_name' | 'service_name' | 'service_price' | 'status'
@@ -121,12 +121,9 @@ function AppointmentsPage() {
 
     try {
       await adminApi.deleteAppointment(id)
-      addToast(
-        'Запись удалена',
-        'success',
-        undoAction,
-        'Отменить'
-      )
+      toast.success('Запись удалена', {
+        action: { label: 'Отменить', onClick: undoAction },
+      })
       fetch()
     } catch (err: any) {
       showError(err)
@@ -152,7 +149,7 @@ function AppointmentsPage() {
   const handleNoShow = async (id: number) => {
     try {
       await adminApi.noShowAppointment(id)
-      addToast('Отмечено как неявка', 'warning')
+      toast.warning('Отмечено как неявка')
       fetch()
     } catch (err: any) {
       showError(err)
@@ -435,5 +432,4 @@ function AppointmentsPage() {
       </div>
     </div>
   )
-}
-export default AppointmentsPage
+                                  

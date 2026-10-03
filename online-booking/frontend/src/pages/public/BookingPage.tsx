@@ -1,14 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { toast } from 'sonner'
 import { servicesApi, appointmentsApi } from '../../api/client'
 import type { Service } from '../../api/types'
 import { PHONE_PLACEHOLDER } from '../../constants'
 import { formatPhone } from '../../utils/formatPhone'
-import { useToast } from '../../components/Toast'
 import './BookingPage.css'
 
 function BookingPage() {
-  const { addToast } = useToast()
   const [searchParams] = useSearchParams()
   const defaultMasterId = searchParams.get('master_id') ? Number(searchParams.get('master_id')) : undefined
 
@@ -43,7 +42,7 @@ function BookingPage() {
     e.preventDefault()
 
     if (!selectedService || !selectedDate || !clientName || !clientPhone) {
-      addToast('Заполните все поля', 'error')
+      toast.error('Заполните все поля')
       return
     }
 
@@ -60,13 +59,13 @@ function BookingPage() {
 
       await appointmentsApi.create(appointmentData)
 
-      addToast('Вы успешно записаны!', 'success')
+      toast.success('Вы успешно записаны!')
       setSuccess(true)
       setClientName('')
       setClientPhone('')
       setSelectedDate('')
     } catch (err) {
-      addToast('Не удалось записаться', 'error')
+      toast.error('Не удалось записаться')
       console.error(err)
     } finally {
       setSubmitting(false)

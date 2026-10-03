@@ -12,6 +12,18 @@ from app.models.working_hour import WorkingHour
 from app.services.audit import log_action
 
 
+async def _get_active_days_count(db: AsyncSession, master_id: int) -> int:
+    """Count active working days for a master."""
+    result = await db.execute(
+        select(func.count(WorkingHour.id))
+        .where(
+            WorkingHour.master_id == master_id,
+            WorkingHour.is_active == True
+        )
+    )
+    return result.scalar() or 0
+
+
 async def get_master_status(db: AsyncSession, master_profile: MasterProfile) -> MasterStatus:
     """Get current master status.
     
@@ -22,15 +34,7 @@ async def get_master_status(db: AsyncSession, master_profile: MasterProfile) -> 
     if master_profile.status == MasterStatus.SUSPENDED:
         return MasterStatus.SUSPENDED
     
-    # Check for active working days
-    result = await db.execute(
-        select(func.count(WorkingHour.id))
-        .where(
-            WorkingHour.master_id == master_profile.id,
-            WorkingHour.is_active == True
-        )
-    )
-    active_days_count = result.scalar() or 0
+    active_days_count = await _get_active_days_count(db, master_profile.id)
     
     return MasterStatus.ACTIVE if active_days_count > 0 else MasterStatus.INACTIVE
 
@@ -65,14 +69,7 @@ async def update_master_status_from_working_hours(
     if master_profile.status == MasterStatus.SUSPENDED:
         return MasterStatus.SUSPENDED
     
-    result = await db.execute(
-        select(func.count(WorkingHour.id))
-        .where(
-            WorkingHour.master_id == master_profile.id,
-            WorkingHour.is_active == True
-        )
-    )
-    active_days_count = result.scalar() or 0
+    active_days_count = await _get_active_days_count(db, master_profile.id)
     
     new_status = MasterStatus.ACTIVE if active_days_count > 0 else MasterStatus.INACTIVE
     
