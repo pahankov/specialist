@@ -115,9 +115,13 @@ jobs:
 
             # Frontend
             cd ../frontend
-            npm ci
+            npm install
             npm run build
             sudo cp -r dist/* /var/www/beauty-specialist/frontend/dist/
+
+            # Force nginx to not cache JS/CSS
+            sudo bash -c 'echo "location ~* \.(js|css)$ { add_header Cache-Control \"no-cache, no-store, must-revalidate\"; add_header Pragma \"no-cache\"; add_header Expires \"0\"; }" >> /etc/nginx/sites-enabled/beauty-specialist'
+            sudo systemctl reload nginx
 
             # Fix log directory permissions (service runs as www-data)
             sudo chown -R www-data:www-data /var/www/beauty-specialist/online-booking/backend/logs/
