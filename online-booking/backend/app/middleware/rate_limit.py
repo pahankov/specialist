@@ -8,12 +8,25 @@ Migration: 2026-10-02
 - New: slowapi with memory storage (falls back to memory if Redis unavailable)
 """
 import os
+from functools import wraps
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-# In CI/test environments, use very high limits to avoid blocking tests
-# In production, use normal limits
-is_test = os.getenv("CI") == "true" or os.getenv("PYTEST_CURRENT_TEST")
-default_limits = [] if not is_test else ["10000/minute"]
 
-limiter = Limiter(key_func=get_remote_address, default_limits=default_limits)
+class _NoOpLimiter:
+    """No-op limiter that always allows — used in test environments."""
+    def limit(self, limit_str):
+        def decorator(fn):
+            @wraps(fn)
+            def wrapper(*args, **kwargs):
+                return fn(*args, **kwargs)
+            return wrapper
+        return decorator
+
+
+# Disable rate limiting in test environments to avoid 429 errors
+# Set RATE_LIMIT_DISABLED=true in CI/test environment
+if os.getenv("RATE_LIMIT_DISABLED") == "true":
+    limiter = _NoOpLimiter()
+else:
+    limiter = Limiter(key_func=get_remote_address, default_limits=[])

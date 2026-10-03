@@ -24,6 +24,8 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run tests with pytest
+        env:
+          RATE_LIMIT_DISABLED: "true"
         run: |
           cd online-booking/backend
           python -m pytest tests/ -v --tb=short
