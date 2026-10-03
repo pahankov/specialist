@@ -698,6 +698,42 @@ export DATABASE_URL='postgresql+asyncpg://user:pass@host:5432/dbname'
 
 ---
 
+
+### 13. Телефоны - только libphonenumber-js
+
+**Проблема:** Self-written formatPhone.ts поддерживал только +7 (РФ), hard-coded логика.
+
+**Правило:**
+- **Никогда** не писать self-written форматирование телефонов
+- Использовать libphonenumber-js - он обеспечивает:
+  - Поддержка всех стран с правильным форматированием
+  - Валидация номеров (isValid())
+  - Форматирование E.164 (+79991234567)
+  - National формат (+7 (999) 123-45-67)
+- Обертка в src/utils/formatPhone.ts:
+  - formatPhone(value, countryCode) - national формат
+  - validatePhone(value, countryCode) - валидация
+  - formatPhoneE164(value, countryCode) - E.164 формат
+- По умолчанию: RU для обратной совместимости
+- В формах с выбором страны: передавать country code из selectedCountry
+
+**Плохо:**
+```typescript
+// Self-written, только +7
+return `+7 (${cleaned})...`
+```
+
+**Хорошо:**
+```typescript
+import { formatPhone } from utils/formatPhone
+
+// С country code из формы
+const country = countries.find(c => c.id === selectedCountry)
+formatPhone(value, country?.code || RU)
+```
+
+**Исправлено:** formatPhone.ts заменен на libphonenumber-js
+
 ## ЧЕК-ЛИСТ ПЕРЕД КОММИТОМ
 
 
