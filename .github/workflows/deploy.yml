@@ -138,13 +138,20 @@ jobs:
             npm run build
             
             # Verify build contains DAData (not old cities API)
-            # Check for DAData API URL which survives minification
-            if grep -q "suggestions.dadata.ru" dist/assets/*.js; then
-                echo "✓ Frontend build contains DAData code"
+            # Check for unique token string that survives minification
+            if grep -q "07c167324787848e78b070373c5de217fff9fb52" dist/assets/*.js; then
+                echo "✓ Frontend build contains DAData code (token found)"
+            elif grep -q "suggestions.dadata.ru" dist/assets/*.js; then
+                echo "✓ Frontend build contains DAData code (URL found)"
             else
                 echo "ERROR: Frontend build missing DAData code!"
-                echo "Checking build output:"
-                grep -o "suggestions\|dadata\|cities" dist/assets/*.js | sort -u | head -10
+                echo "=== DEBUG: Searching for any dadata/suggestions/cities references ==="
+                grep -oP "(dadata|suggestions|cities|07c16732|suggestion)" dist/assets/*.js 2>/dev/null | sort -u | head -20
+                echo "=== DEBUG: First 500 chars of built JS ==="
+                head -c 500 dist/assets/*.js
+                echo ""
+                echo "=== DEBUG: Grep for .ru domains ==="
+                grep -oP '[\w.-]+\.ru' dist/assets/*.js | sort -u | head -10
                 exit 1
             fi
             
