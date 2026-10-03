@@ -122,6 +122,14 @@ jobs:
 
             # Frontend
             cd ../frontend
+            echo "=== FRONTEND SOURCE CHECK ==="
+            echo "Current commit:"
+            git log -1 --oneline
+            echo "DAData import in LoginModal:"
+            grep -n "dapter" src/components/LoginModal.tsx || echo "NOT FOUND"
+            echo "DAData API file exists:"
+            ls -la src/api/dapter.ts || echo "NOT FOUND"
+            echo "=============================="
             npm install
             npm run build
             
