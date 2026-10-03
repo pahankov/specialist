@@ -126,15 +126,19 @@ jobs:
             echo "Current commit:"
             git log -1 --oneline
             echo "DAData import in LoginModal:"
-            grep -n "dapter" src/components/LoginModal.tsx || echo "NOT FOUND"
+            grep -n "dadata" src/components/LoginModal.tsx || echo "NOT FOUND"
+            echo "City autocomplete UI in LoginModal:"
+            grep -n "city-dropdown" src/components/LoginModal.tsx | head -2 || echo "NOT FOUND"
             echo "DAData API file exists:"
-            ls -la src/api/dapter.ts || echo "NOT FOUND"
+            ls -la src/api/dadata.ts || echo "NOT FOUND"
             echo "=============================="
+            # Clean Vite cache to ensure fresh build from source
+            rm -rf node_modules/.vite
             npm install
             npm run build
             
             # Verify build contains DAData (not old cities API)
-            if grep -q "dapter" dist/assets/*.js; then
+            if grep -q "dadata" dist/assets/*.js; then
                 echo "✓ Frontend build contains DAData code"
             else
                 echo "ERROR: Frontend build missing DAData code!"
