@@ -19,7 +19,6 @@ from app.config import settings
 from app.logging_config import get_logger
 from app.modules.auth import service
 from app.modules.auth.token import create_access_token, create_refresh_token_payload
-from app.middleware.rate_limit import limiter
 
 logger = get_logger(__name__)
 
@@ -53,9 +52,7 @@ def _set_auth_cookies(
 # ─── Registration ─────────────────────────────────────────────────────
 
 @router.post("/register", response_model=dict, status_code=status.HTTP_201_CREATED)
-@limiter.limit("5/minute")
 async def register_master(
-    request: Request,
     user_data: UserCreate,
     db: AsyncSession = Depends(get_db)
 ):
@@ -94,8 +91,7 @@ async def register_master(
 # ─── Login ────────────────────────────────────────────────────────────
 
 @router.post("/login", response_model=TokenResponse)
-@limiter.limit("10/minute")
-async def login(request: Request, response: Response, req: UserLoginByEmail, db: AsyncSession = Depends(get_db)):
+async def login(response: Response, req: UserLoginByEmail, db: AsyncSession = Depends(get_db)):
     """Login master by email+password — returns access token in response body, refresh token in httpOnly cookie."""
     logger.info("Login attempt by email: %s", req.email)
     try:
@@ -126,8 +122,7 @@ async def login(request: Request, response: Response, req: UserLoginByEmail, db:
 
 
 @router.post("/client/login", response_model=TokenResponse)
-@limiter.limit("10/minute")
-async def client_login(request: Request, req: UserLoginByPhone, db: AsyncSession = Depends(get_db)):
+async def client_login(req: UserLoginByPhone, db: AsyncSession = Depends(get_db)):
     """Legacy client login by phone (no password)."""
     logger.info("Client login attempt by phone: %s", req.phone)
     try:
@@ -145,8 +140,7 @@ async def client_login(request: Request, req: UserLoginByPhone, db: AsyncSession
 # ─── OTP Authentication ──────────────────────────────────────────────
 
 @router.post("/send-otp", response_model=OtpResponse)
-@limiter.limit("5/minute")
-async def send_otp(request: Request, req: SendOtpRequest, db: AsyncSession = Depends(get_db)):
+async def send_otp(req: SendOtpRequest, db: AsyncSession = Depends(get_db)):
     """Send OTP code to phone number."""
     logger.info("Send OTP request: phone=%s", req.phone)
     try:
@@ -159,8 +153,7 @@ async def send_otp(request: Request, req: SendOtpRequest, db: AsyncSession = Dep
 
 
 @router.post("/verify-otp", response_model=TokenResponse)
-@limiter.limit("5/minute")
-async def verify_otp(request: Request, req: VerifyOtpRequest, db: AsyncSession = Depends(get_db)):
+async def verify_otp(req: VerifyOtpRequest, db: AsyncSession = Depends(get_db)):
     """Verify OTP code and login/create user."""
     logger.info("Verify OTP request: phone=%s", req.phone)
     try:
@@ -178,7 +171,6 @@ async def verify_otp(request: Request, req: VerifyOtpRequest, db: AsyncSession =
 # ─── Token Refresh ────────────────────────────────────────────────────
 
 @router.post("/refresh", response_model=TokenRefreshResponse)
-@limiter.limit("20/minute")
 async def refresh_token(request: Request, db: AsyncSession = Depends(get_db)):
     """Refresh access token with rotation."""
     cookie_token = request.cookies.get("refresh_token")
@@ -276,9 +268,7 @@ async def logout(request: Request, db: AsyncSession = Depends(get_db)):
 # ─── Unified Login ───────────────────────────────────────────────────
 
 @router.post("/login-unified", response_model=TokenResponse)
-@limiter.limit("10/minute")
 async def login_unified(
-    request: Request,
     response: Response,
     req: UnifiedLoginRequest,
     db: AsyncSession = Depends(get_db)
@@ -315,9 +305,7 @@ async def login_unified(
 # ─── Unified Registration ────────────────────────────────────────────
 
 @router.post("/register-unified", response_model=dict, status_code=status.HTTP_201_CREATED)
-@limiter.limit("5/minute")
 async def register_unified(
-    request: Request,
     req: UnifiedRegisterRequest,
     db: AsyncSession = Depends(get_db)
 ):
