@@ -43,7 +43,7 @@ function ClientsPage() {
       setTotalClients(c.data.total)
     } catch (err: any) {
       if (err.response?.status === 401) { localStorage.removeItem('access_token'); window.location.href = '/admin/login' }
-      else addToast('Ошибка загрузки', 'error')
+      else toast.error('Ошибка загрузки')
     } finally { setLoading(false) }
   }
 
@@ -56,17 +56,17 @@ function ClientsPage() {
     try {
       if (editingId) {
         await adminApi.updateClient(editingId, { name, phone, email: email || undefined })
-        addToast('Клиент обновлён', 'success')
+        toast.success('Клиент обновлён')
       } else {
         await adminApi.createClient({ name, phone, email: email || undefined })
-        addToast('Клиент создан', 'success')
+        toast.success('Клиент создан')
       }
       resetForm()
       fetchData()
     } catch (err: any) {
       const detail = err.response?.data?.detail
       const msg = typeof detail === 'string' ? detail : 'Произошла ошибка'
-      addToast(msg, 'error')
+      toast.error(msg)
     }
   }
 
@@ -88,15 +88,12 @@ function ClientsPage() {
 
     try {
       await adminApi.deleteClient(id)
-      addToast(
-        'Клиент удалён',
-        'success',
-        undoAction,
-        'Отменить'
-      )
+      toast.success('Клиент удалён', {
+        action: { label: 'Отменить', onClick: undoAction },
+      })
       fetchData()
     } catch {
-      addToast('Ошибка удаления', 'error')
+      toast.error('Ошибка удаления')
     } finally { setDeletingId(null) }
   }
 
@@ -233,4 +230,3 @@ function ClientsPage() {
 }
 
 export default ClientsPage
-       

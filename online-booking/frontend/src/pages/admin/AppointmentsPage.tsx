@@ -9,7 +9,7 @@ type SortField = 'appointment_date' | 'client_name' | 'service_name' | 'service_
 type SortDirection = 'asc' | 'desc'
 
 function AppointmentsPage() {
-  const { addToast } = useToast()
+  
   const [appointments, setAppointments] = useState<(Appointment & { client_name?: string; client_phone?: string; service_name?: string; service_price?: number })[]>([])
   const [statusFilter, setStatusFilter] = useState('')
   const [masterIdFilter, setMasterIdFilter] = useState<number | ''>('')
@@ -91,7 +91,7 @@ function AppointmentsPage() {
     try {
       await adminApi.confirmAppointment(id)
       fetch()
-      addToast('Запись подтверждена', 'success')
+      toast.success('Запись подтверждена')
     } catch (err: any) {
       showError(err)
     }
@@ -105,7 +105,7 @@ function AppointmentsPage() {
     try {
       await adminApi.completeAppointment(id)
       fetch()
-      addToast('Запись завершена', 'success')
+      toast.success('Запись завершена')
     } catch (err: any) {
       showError(err)
     }
@@ -116,7 +116,7 @@ function AppointmentsPage() {
     if (!appointment) return
 
     const undoAction = () => {
-      addToast('Удаление отменено', 'info')
+      toast.info('Удаление отменено')
     }
 
     try {
@@ -137,7 +137,7 @@ function AppointmentsPage() {
     try {
       await adminApi.cancelAppointment(cancelingId, cancelReason.trim())
       fetch()
-      addToast('Запись отменена', 'success')
+      toast.success('Запись отменена')
     } catch (err: any) {
       showError(err)
     } finally {
@@ -432,4 +432,5 @@ function AppointmentsPage() {
       </div>
     </div>
   )
-                                  
+}
+export default AppointmentsPage
