@@ -11,6 +11,9 @@ const dadataClient = axios.create({
   },
 })
 
+// eslint-disable-next-line no-console
+console.log('[DAData] Initialized')
+
 export interface DadataSuggestion {
   value: string
   unrestricted_value: string
