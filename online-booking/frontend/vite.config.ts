@@ -10,7 +10,7 @@ export default defineConfig({
       '/api/dadata': {
         target: 'https://suggestions.dadata.ru',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/dadata/, '/suggestions/api/v4/rich'),
+        rewrite: (path) => path.replace(/^\/api\/dadata/, ''),
       },
     },
   },

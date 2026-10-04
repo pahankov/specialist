@@ -20,6 +20,7 @@ from app.modules.schedule import router as schedule_router
 from app.modules.review import router as review_router
 from app.modules.admin import router as admin_router
 from app.modules.city import router as city_router
+from app.modules.dadata import router as dadata_router
 
 # Инициализация логирования (DEBUG для разработки, INFO для продакшена)
 setup_logging("DEBUG")
@@ -152,3 +153,4 @@ app.include_router(service_router, prefix="/api/v1/services", tags=["services"])
 app.include_router(schedule_router, prefix="/api/v1/working-hours", tags=["working-hours"])
 app.include_router(review_router, prefix="/api/v1/reviews", tags=["reviews"])
 app.include_router(admin_router)  # admin endpoints (User model, modules/admin/)
+app.include_router(dadata_router, prefix="/api/dadata")  # DAData address autocomplete proxy

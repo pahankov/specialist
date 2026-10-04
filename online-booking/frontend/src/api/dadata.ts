@@ -4,7 +4,7 @@ const DADATA_TOKEN = 'REDACTED_DADATA_TOKEN'
 const DADATA_SECRET = 'REDACTED_DADATA_SECRET'
 
 const dadataClient = axios.create({
-  baseURL: import.meta.env.DEV ? '/api/dadata' : 'https://suggestions.dadata.ru/suggestions/api/v4/rich',
+  baseURL: '/api/dadata',
   headers: {
     'Authorization': `Api Key ${DADATA_TOKEN}`,
     'X-Secret': DADATA_SECRET,
