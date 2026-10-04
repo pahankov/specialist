@@ -30,6 +30,16 @@ server {
         add_header Expires "0";
     }
 
+    location /api/dadata/ {
+        proxy_pass https://suggestions.dadata.ru/suggestions/api/v4/rich/;
+        proxy_set_header Host suggestions.dadata.ru;
+        proxy_set_header Authorization $http_authorization;
+        proxy_set_header X-Secret $http_x_secret;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
     location /api/ {
         proxy_pass http://127.0.0.1:8000;
         proxy_set_header Host $host;
