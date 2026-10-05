@@ -54,7 +54,9 @@ jobs:
             sudo chmod -R u+rw /var/www/beauty-specialist 2>/dev/null || true
 
             git config --global --add safe.directory /var/www/beauty-specialist
-            git pull origin main
+            git fetch origin main
+            git reset --hard origin/main
+            git clean -fd
 
             # Verify deployed commit
             echo "=== DEPLOYED COMMIT ==="
@@ -82,6 +84,13 @@ jobs:
             pg_dump "${DATABASE_URL}" > /tmp/db-backup-$(date +%Y%m%d-%H%M%S).sql 2>/dev/null || echo "[WARN] Backup skipped (pg_dump not available)"
             echo "=== BACKUP DONE ==="
 
+            # Ensure deploy scripts exist (may have Windows line endings)
+            if [ ! -f deploy_setup.sh ]; then
+                echo "ERROR: deploy_setup.sh not found!"
+                ls -la
+                exit 1
+            fi
+            sed -i 's/\r$//' deploy_setup.sh
             bash deploy_setup.sh
 
             # Backend
@@ -204,6 +213,12 @@ jobs:
             sudo chmod -R 755 /var/www/beauty-specialist/online-booking/backend/logs/
 
             # Write nginx config with SSL (fixes broken configs from previous deploys)
+            if [ ! -f deploy_fix_nginx.sh ]; then
+                echo "ERROR: deploy_fix_nginx.sh not found!"
+                ls -la
+                exit 1
+            fi
+            sed -i 's/\r$//' deploy_fix_nginx.sh
             bash deploy_fix_nginx.sh
 
             # Restart
