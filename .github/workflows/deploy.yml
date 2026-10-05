@@ -157,7 +157,7 @@ jobs:
             echo "DAData import in LoginModal:"
             grep -n "dadata" src/components/LoginModal.tsx || echo "NOT FOUND"
             echo "City autocomplete UI in LoginModal:"
-            grep -n "city-dropdown" src/components/LoginModal.tsx | head -2 || echo "NOT FOUND"
+            grep -n "city-dropdown" src/components/LoginModal.tsx || echo "NOT FOUND"
             echo "DAData API file exists:"
             ls -la src/api/dadata.ts || echo "NOT FOUND"
             echo "=============================="
@@ -230,13 +230,13 @@ jobs:
 
             # Check backend
             echo "=== BACKEND CHECK ==="
-            systemctl status beauty-backend --no-pager 2>&1 | head -10
+            systemctl status beauty-backend --no-pager 2>&1 | head -10 || true
             ss -tlnp | grep 8000 || echo "Port 8000 NOT listening"
 
             # Test API
             echo "=== API TEST ==="
             curl -sf http://127.0.0.1:8000/health || echo "HEALTH FAILED"
-            curl -sf http://127.0.0.1:8000/api/v1/countries/ | head -c 200 || echo "COUNTRIES FAILED"
+            curl -sf http://127.0.0.1:8000/api/v1/countries/ > /dev/null && echo "[COUNTRIES OK]" || echo "COUNTRIES FAILED"
             
             # Test login (should return 401 not 500)
             LOGIN_RESULT=$(curl -sf -X POST http://127.0.0.1:8000/api/v1/auth/login-unified \
