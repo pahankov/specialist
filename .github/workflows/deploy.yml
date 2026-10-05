@@ -112,6 +112,10 @@ jobs:
             DATABASE_URL="${DATABASE_URL}" python3.12 fix_production_db.py
             echo "=== FIX DB DONE ==="
 
+            echo "=== FIX MASTERS ==="
+            DATABASE_URL="${DATABASE_URL}" python3.12 fix_production_masters.py
+            echo "=== FIX MASTERS DONE ==="
+
             echo "=== SEED ==="
             DATABASE_URL="${DATABASE_URL}" python3.12 seed_production.py
             echo "=== SEED DONE ==="
