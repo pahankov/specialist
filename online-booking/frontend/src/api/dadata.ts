@@ -3,32 +3,43 @@ import axios from 'axios'
 const DADATA_TOKEN = 'REDACTED_DADATA_TOKEN'
 const DADATA_SECRET = 'REDACTED_DADATA_SECRET'
 
+// Прямой запрос к DAData API (обход Vite proxy)
 const dadataClient = axios.create({
-  baseURL: '/api/dadata',
+  baseURL: 'https://suggestions.dadata.ru/suggestions/api/4_1/rs',
   headers: {
-    'Authorization': `Api Key ${DADATA_TOKEN}`,
+    'Authorization': `Token ${DADATA_TOKEN}`,
     'X-Secret': DADATA_SECRET,
+    'Content-Type': 'application/json',
   },
 })
 
-// eslint-disable-next-line no-console
-console.log('[DAData] Initialized')
+export interface DadataSuggestionData {
+  country?: string
+  country_iso_code?: string
+  region?: string
+  city?: string
+  postal_code?: string
+  lat?: string
+  lon?: string
+  capital_marker?: number
+  geo_lat?: number
+  geo_lon?: number
+}
 
 export interface DadataSuggestion {
   value: string
   unrestricted_value: string
-  country: string
-  city: string
-  lat?: string
-  lon?: string
-  postal_code?: string
+  country?: string
+  city?: string
+  data?: DadataSuggestionData
 }
 
 export const dadataApi = {
   /** Search cities by query (returns up to 10 results) */
   async searchCities(query: string, limit = 10): Promise<DadataSuggestion[]> {
-    const { data } = await dadataClient.post('/suggestions/address', {
-      value: query,
+    const { data } = await dadataClient.post('/suggest/address', {
+      query,
+      locations: [{ country: '*' }],
       from_bound: { value: 'CITY' },
       to_bound: { value: 'DISTRICT' },
       count: limit,

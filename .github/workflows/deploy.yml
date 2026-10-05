@@ -45,6 +45,7 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           envs: |
             DATABASE_URL
+          script_stop: true
           script: |
             cd /var/www/beauty-specialist
 
@@ -62,9 +63,19 @@ jobs:
             echo "${{ github.sha }}"
             echo "========================"
 
-            # Export DATABASE_URL for all subsequent commands
-            export DATABASE_URL="${DATABASE_URL}"
-            echo "DB: ${DATABASE_URL:0:30}..."
+            # Load DATABASE_URL from .env on server if env var is empty
+            if [ -z "${DATABASE_URL}" ]; then
+              echo "DATABASE_URL not set in env, reading from .env file..."
+              if [ -f online-booking/backend/.env ]; then
+                export $(grep -v '^#' online-booking/backend/.env | xargs)
+                echo "Loaded from .env: ${DATABASE_URL:0:30}..."
+              else
+                echo "ERROR: DATABASE_URL is empty and no .env file found!"
+                exit 1
+              fi
+            else
+              echo "DB: ${DATABASE_URL:0:30}..."
+            fi
 
             # Backup database BEFORE any changes
             echo "=== DATABASE BACKUP ==="
