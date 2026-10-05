@@ -1,6 +1,8 @@
 #!/bin/bash
 # Write nginx config with SSL
-cat > /etc/nginx/sites-enabled/beauty-specialist << 'EOF'
+NGINX_CONF="/etc/nginx/sites-enabled/beauty-specialist"
+
+sudo tee "$NGINX_CONF" > /dev/null << 'EOF'
 server {
     listen 80;
     server_name beauty-specialist.ru www.beauty-specialist.ru;
@@ -53,5 +55,5 @@ server {
 }
 EOF
 
-nginx -t && systemctl restart nginx
+sudo nginx -t && sudo systemctl restart nginx
 echo "nginx config written and restarted"
