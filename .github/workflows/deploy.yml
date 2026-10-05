@@ -110,6 +110,11 @@ jobs:
             # Fix schema mismatches BEFORE migrations (uses file in current directory)
             sudo -u postgres psql -d online_booking -f fix_all_tables.sql || echo "[WARN] Schema fix failed, continuing..."
 
+            # Fix table ownership for audit_logs (created by postgres, migrations run as specialist)
+            echo "=== FIX TABLE OWNERSHIP ==="
+            sudo -u postgres psql -d online_booking -c "ALTER TABLE audit_logs OWNER TO specialist;" 2>/dev/null || echo "[WARN] Ownership fix skipped"
+            echo "=== OWNERSHIP DONE ==="
+
             # Pass DATABASE_URL to each script
             echo "=== ALEMBIC ==="
             DATABASE_URL="${DATABASE_URL}" alembic upgrade head
