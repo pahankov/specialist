@@ -197,7 +197,10 @@
 .carousel-container {
   position: relative;
   background: #fafafa;
-  overflow: hidden;
+}
+
+.carousel-container:hover .swiper-slide {
+  transition: none !important;
 }
 
 .carousel-wrapper {

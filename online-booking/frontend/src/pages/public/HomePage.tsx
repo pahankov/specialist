@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { Swiper, SwiperSlide } from 'swiper/react'
 import { Navigation, Autoplay } from 'swiper/modules'
@@ -32,6 +32,7 @@ function HomePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showLogin, setShowLogin] = useState(false)
+  const swiperInstance = useRef<any>(null)
   
   // Random selection on each page load (memoized)
   const randomServices = useMemo(() => pickRandom(allServices, 6), [allServices])
@@ -75,7 +76,7 @@ function HomePage() {
       </header>
 
       {/* Carousel Section */}
-      <div className="carousel-container">
+      <div className="carousel-container" onMouseEnter={() => swiperInstance.current?.autoplay?.stop()} onMouseLeave={() => swiperInstance.current?.autoplay?.start()}>
         <Swiper
           modules={[Navigation, Autoplay]}
           spaceBetween={30}
@@ -83,7 +84,6 @@ function HomePage() {
           loop={true}
           autoplay={{
             delay: 4000,
-            disableOnInteraction: false,
           }}
           navigation={{
             nextEl: '.carousel-btn-next',
@@ -94,7 +94,7 @@ function HomePage() {
             clickable: true,
           }}
           onSlideChange={() => { /* ignore */ }}
-          onSwiper={() => { /* ignore */ }}
+          onSwiper={(swiper) => { swiperInstance.current = swiper }}
         >
           {/* Slide 1: Services */}
           <SwiperSlide>

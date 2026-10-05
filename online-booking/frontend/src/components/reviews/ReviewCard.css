@@ -1,5 +1,14 @@
 .review-card {
-  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  min-height: 320px;
+  padding: 1.5rem;
+}
+
+.review-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
 }
 
 .review-header {
@@ -7,6 +16,7 @@
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: 0.75rem;
+  flex-shrink: 0;
 }
 
 .review-client {
@@ -45,4 +55,5 @@
   font-size: 0.95rem;
   line-height: 1.6;
   margin: 0;
+  flex-grow: 1;
 }
