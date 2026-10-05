@@ -17,7 +17,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from app.database import AsyncSessionLocal
 from app.models.working_hour import WorkingHour
 from app.models.master_profile import MasterProfile
-from datetime import date, timedelta
+from datetime import date, time, timedelta
 
 
 async def fix_masters(session):
@@ -49,8 +49,8 @@ async def fix_masters(session):
                 wh = WorkingHour(
                     master_id=mp.id,
                     schedule_date=today + timedelta(days=i),
-                    start_time="09:00:00",
-                    end_time="18:00:00",
+                    start_time=time(9, 0),
+                    end_time=time(18, 0),
                     is_active=True,
                 )
                 session.add(wh)
