@@ -45,7 +45,7 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           envs: |
             DATABASE_URL
-          script_stop: true
+          script_stop: false
           script: |
             cd /var/www/beauty-specialist
 
@@ -230,8 +230,8 @@ jobs:
 
             # Check backend
             echo "=== BACKEND CHECK ==="
-            systemctl status beauty-backend --no-pager 2>&1 | head -10 || true
-            ss -tlnp | grep 8000 || echo "Port 8000 NOT listening"
+            (systemctl status beauty-backend --no-pager 2>&1 | head -10) || true
+            (ss -tlnp | grep 8000) || echo "Port 8000 NOT listening"
 
             # Test API
             echo "=== API TEST ==="
