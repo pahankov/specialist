@@ -24,6 +24,7 @@ from app.models.master_profile import MasterProfile
 from app.models.country import Country
 from app.models.city import City
 from app.modules.auth.service import hash_password
+from sqlalchemy import select
 
 
 async def fix_geography(session):
@@ -98,7 +99,6 @@ async def fix_superuser(session, email, password):
             telegram_username="",
             description="Суперпользователь",
             experience_years=10,
-            is_available=True,
         )
         session.add(master_profile)
         await session.commit()
@@ -135,7 +135,6 @@ async def fix_superuser(session, email, password):
                 telegram_username="",
                 description="Суперпользователь",
                 experience_years=10,
-                is_available=True,
             )
             session.add(master_profile)
             await session.commit()
@@ -170,5 +169,4 @@ async def main():
 
 if __name__ == "__main__":
     import asyncio
-    from sqlalchemy import select
     asyncio.run(main())
