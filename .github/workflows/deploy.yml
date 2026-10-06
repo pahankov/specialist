@@ -161,11 +161,11 @@ jobs:
             echo "DAData API file exists:"
             ls -la src/api/dadata.ts || echo "NOT FOUND"
             echo "=============================="
-            # Clean ALL Vite cache + dist to force complete rebuild
-            rm -rf node_modules/.vite
+            # Clean ALL Vite cache + dist + node_modules to force complete rebuild
+            rm -rf node_modules
             rm -rf .vite
             rm -rf dist
-            npm install
+            npm ci --ignore-scripts 2>/dev/null || npm install
             npm run build
             
             # Verify build output exists
