@@ -168,11 +168,16 @@ jobs:
             rm -rf .vite
             rm -rf dist
             rm -rf node_modules
+            # Clean Vite global cache (this is the key!)
+            rm -rf ~/.cache/vite
+            rm -rf ~/.vite
+            rm -rf node_modules/.cache
             npm cache clean --force
             echo "=== INSTALLING DEPENDENCIES ==="
             npm ci --no-audit --no-fund
             echo "=== BUILDING FRONTEND ==="
-            npm run build 2>&1 | tee /tmp/build-output.txt
+            # Use --force to bypass Vite's dependency cache
+            npm run build -- --force 2>&1 | tee /tmp/build-output.txt
             echo "=== BUILD OUTPUT ==="
             cat /tmp/build-output.txt
             
@@ -208,6 +213,9 @@ jobs:
             # Check that built JS contains createPortal (new in this commit)
             if ! grep -q "createPortal" dist/assets/*.js 2>/dev/null; then
                 echo "ERROR: Built JS missing createPortal! Build may be cached!"
+                echo "Checking what's in the built JS..."
+                grep -o "dadata" dist/assets/*.js 2>/dev/null || echo "dadata NOT FOUND"
+                grep -o "createPortal" dist/assets/*.js 2>/dev/null || echo "createPortal NOT FOUND"
                 exit 1
             fi
             echo "✓ Built JS contains createPortal (new code)"
