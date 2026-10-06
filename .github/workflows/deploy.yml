@@ -45,7 +45,7 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           envs: |
             DATABASE_URL
-          script_stop: false
+          script_stop: true
           timeout: 30m
           script: |
             cd /var/www/beauty-specialist
@@ -180,6 +180,25 @@ jobs:
             BUILT_JS=$(grep -o 'assets/[^"]*\.js' dist/index.html | head -1 | sed 's|assets/||')
             echo "Built JS file: $BUILT_JS"
             
+            # Check that we built a NEW file (not the old cached one)
+            if [ "$BUILT_JS" = "index-DC34i42h.js" ]; then
+                echo "ERROR: Built JS is the OLD cached file! Build did not update!"
+                echo "This means Vite cache was not properly cleared."
+                echo "Deleting dist and rebuilding..."
+                rm -rf dist
+                rm -rf node_modules/.vite
+                rm -rf .vite
+                npm cache clean --force
+                npm run build 2>&1 | tee /tmp/build-output-2.txt
+                BUILT_JS=$(grep -o 'assets/[^"]*\.js' dist/index.html | head -1 | sed 's|assets/||')
+                echo "Rebuilt JS file: $BUILT_JS"
+                if [ "$BUILT_JS" = "index-DC34i42h.js" ]; then
+                    echo "ERROR: Still building old file after rebuild!"
+                    exit 1
+                fi
+            fi
+            echo "✓ Built a new JS file: $BUILT_JS"
+            
             # Verify build contains new code (check BUILT JS, not source)
             echo "=== VERIFYING BUILD INTEGRITY ==="
             
@@ -214,9 +233,20 @@ jobs:
             echo "Copied JS file: $COPIED_JS"
             if [ "$BUILT_JS" != "$COPIED_JS" ]; then
                 echo "ERROR: JS file mismatch! Built: $BUILT_JS, Copied: $COPIED_JS"
+                echo "Checking what's in the deploy directory..."
+                ls -la /var/www/beauty-specialist/frontend/dist/
+                ls -la /var/www/beauty-specialist/frontend/dist/assets/
+                cat /var/www/beauty-specialist/frontend/dist/index.html | grep -o 'assets/[^"]*\.js'
                 exit 1
             fi
-            echo "✓ JS file hash matches"
+            echo "✓ JS file hash matches: $COPIED_JS"
+            
+            # Final verification - check that the copied index.html is different from old version
+            if [ "$COPIED_JS" = "index-DC34i42h.js" ]; then
+                echo "ERROR: Copied JS is still the OLD file! Deployment failed!"
+                exit 1
+            fi
+            echo "✓ Copied JS is NEW (not old cached version)"
             
             # Fix log directory permissions (service runs as www-data)
             sudo chown -R www-data:www-data /var/www/beauty-specialist/online-booking/backend/logs/
