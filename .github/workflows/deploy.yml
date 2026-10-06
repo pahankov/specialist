@@ -194,7 +194,8 @@ jobs:
             echo "BUILD_TIMESTAMP: $BUILD_TIMESTAMP"
             
             echo "=== BUILDING FRONTEND ==="
-            npm run build 2>&1 | tee /tmp/build-output.txt
+            tsc --noEmit 2>&1 | tee /tmp/tsc-output.txt
+            npx vite build --force 2>&1 | tee /tmp/build-output.txt
             echo "=== BUILD OUTPUT ==="
             cat /tmp/build-output.txt
             
