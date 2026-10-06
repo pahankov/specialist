@@ -20,9 +20,12 @@ export default defineConfig({
   build: {
     target: 'ES2020',
     outDir: 'dist',
-  },
-  // Disable dependency pre-bundling to force full module transform
-  optimizeDeps: {
-    disabled: true,
+    rollupOptions: {
+      output: {
+        // Force unique filename based on content hash
+        entryFileNames: `assets/[name]-[hash].js`,
+        chunkFileNames: `assets/[name]-[hash].js`,
+      },
+    },
   },
 })
