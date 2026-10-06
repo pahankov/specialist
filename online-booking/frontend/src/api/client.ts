@@ -13,9 +13,6 @@ import type {
   LoginResponse,
   DashboardStats,
   AdminLoginResponse,
-  AdminStats,
-  Country,
-  City,
   UnifiedRegisterResponse,
   PaginatedResponse,
   HealthCheck,
@@ -214,18 +211,7 @@ export const authApi = {
     apiClient.post<UnifiedRegisterResponse>('/api/v1/auth/register-unified', data),
 }
 
-// ─── Geography API ─────────────────────────────────────────────────
-
-export const citiesApi = {
-  getCountries: () => apiClient.get<Country[]>('/api/v1/countries/'),
-  getCities: (params?: { country_id?: number; search?: string; page?: number; page_size?: number }) =>
-    apiClient.get<City[]>('/api/v1/cities/', { params }),
-  searchCities: (q: string, countryId?: number, limit = 20) =>
-    apiClient.get<City[]>('/api/v1/cities/search/', { params: { q, country_id: countryId, limit } }),
-  getCity: (id: number) => apiClient.get<City>(`/api/v1/cities/${id}`),
-}
-
-export const adminApi = {
+// ─── SuperAdmin API ────────────────────────────────────────────────
   // Dashboard
   getDashboard() {
     return apiClient.get<DashboardStats>('/api/v1/admin/dashboard')
