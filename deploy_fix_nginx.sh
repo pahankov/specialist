@@ -24,6 +24,7 @@ server {
         add_header Cache-Control "no-cache, no-store, must-revalidate";
         add_header Pragma "no-cache";
         add_header Expires "0";
+        expires -1;
     }
 
     location / {
@@ -31,6 +32,7 @@ server {
         add_header Cache-Control "no-cache, no-store, must-revalidate";
         add_header Pragma "no-cache";
         add_header Expires "0";
+        expires -1;
     }
 
     location /api/dadata/ {
