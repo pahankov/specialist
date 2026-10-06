@@ -162,11 +162,12 @@ jobs:
             echo "DAData API file exists:"
             ls -la src/api/dadata.ts || echo "NOT FOUND"
             echo "=============================="
-            # Clean Vite cache + dist to force complete rebuild (keep node_modules for speed)
+            # Clean Vite cache + dist + node_modules to force complete rebuild
             rm -rf node_modules/.vite
             rm -rf .vite
             rm -rf dist
-            npm ci --prefer-offline --no-audit --no-fund 2>/dev/null || npm install --prefer-offline --no-audit --no-fund
+            rm -rf node_modules
+            npm ci --no-audit --no-fund
             npm run build
             
             # Verify build output exists
@@ -177,13 +178,18 @@ jobs:
             fi
             echo "OK dist/index.html exists"
             
-            # Verify build contains DAData (not old cities API)
-            # Check BUILT JS file, not source files (Vite may transform strings)
+            # Verify build contains new code (check BUILT JS, not source)
+            # createPortal is a React function that should be in the built JS
             echo "=== VERIFYING BUILD INTEGRITY ==="
             
+            # List all JS files in dist/assets
+            ls -la dist/assets/*.js 2>/dev/null || echo "No JS files found in dist/assets"
+            
             # Check that built JS contains createPortal (new in this commit)
-            if ! grep -l "createPortal" dist/assets/*.js 2>/dev/null; then
+            if ! grep -q "createPortal" dist/assets/*.js 2>/dev/null; then
                 echo "ERROR: Built JS missing createPortal! Build may be cached!"
+                echo "Searching for createPortal in built JS..."
+                grep -o "createPortal" dist/assets/*.js 2>/dev/null || echo "NOT FOUND"
                 ls -la dist/assets/
                 exit 1
             fi
