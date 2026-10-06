@@ -161,10 +161,20 @@ jobs:
             echo "DAData API file exists:"
             ls -la src/api/dadata.ts || echo "NOT FOUND"
             echo "=============================="
-            # Clean Vite cache to ensure fresh build from source
+            # Clean ALL Vite cache + dist to force complete rebuild
             rm -rf node_modules/.vite
+            rm -rf .vite
+            rm -rf dist
             npm install
             npm run build
+            
+            # Verify build output exists
+            if [ ! -f dist/index.html ]; then
+                echo "ERROR: dist/index.html not found after build!"
+                ls -la dist/ || echo "dist/ directory missing!"
+                exit 1
+            fi
+            echo "OK dist/index.html exists"
             
             # Verify build contains DAData (not old cities API)
             # Since Vite may minify/transform strings, check source files directly
@@ -201,8 +211,9 @@ jobs:
             
             echo "=== SOURCE VERIFICATION PASSED ==="
             
-            # Copy with overwrite verification
-            rm -rf /var/www/beauty-specialist/frontend/dist/*
+            # Copy with overwrite verification - remove entire dist first
+            rm -rf /var/www/beauty-specialist/frontend/dist
+            mkdir -p /var/www/beauty-specialist/frontend/dist
             cp -r dist/* /var/www/beauty-specialist/frontend/dist/
             echo "Frontend files copied:"
             ls -la /var/www/beauty-specialist/frontend/dist/
@@ -277,3 +288,4 @@ jobs:
             else
                 echo "=== DEPLOYMENT SUCCESSFUL ==="
             fi
+

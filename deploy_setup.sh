@@ -3,8 +3,8 @@
 # Write to temp script, then run with sudo bash to avoid permission issues
 cat > /tmp/_deploy_unit.sh << 'SCRIPT'
 #!/bin/bash
-sudo bash -c 'cat > /etc/systemd/system/beauty-backend.service' << 'UNIT'
-[Unit]
+# Use sudo tee instead of cat > to avoid permission denied
+echo '[Unit]
 Description=Beauty Specialist Backend API
 After=network.target postgresql.service
 
@@ -19,8 +19,7 @@ Restart=always
 RestartSec=5
 
 [Install]
-WantedBy=multi-user.target
-UNIT
+WantedBy=multi-user.target' | sudo tee /etc/systemd/system/beauty-backend.service > /dev/null
 sudo systemctl daemon-reload
 sudo systemctl restart beauty-backend
 SCRIPT

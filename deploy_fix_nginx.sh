@@ -3,6 +3,7 @@
 NGINX_CONF="/etc/nginx/sites-enabled/beauty-specialist"
 
 sudo tee "$NGINX_CONF" > /dev/null << 'EOF'
+
 server {
     listen 80;
     server_name beauty-specialist.ru www.beauty-specialist.ru;
@@ -55,5 +56,18 @@ server {
 }
 EOF
 
-sudo nginx -t && sudo systemctl restart nginx
+# Validate nginx config before restarting
+if sudo nginx -t 2>&1; then
+    echo "✓ nginx config is valid"
+    if sudo systemctl restart nginx 2>&1; then
+        echo "✓ nginx restarted successfully"
+    else
+        echo "ERROR: nginx failed to restart!"
+        exit 1
+    fi
+else
+    echo "ERROR: nginx config test failed!"
+    sudo nginx -t 2>&1
+    exit 1
+fi
 echo "nginx config written and restarted"
