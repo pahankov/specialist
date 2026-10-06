@@ -162,7 +162,9 @@ jobs:
             echo "DAData API file exists:"
             ls -la src/api/dadata.ts || echo "NOT FOUND"
             echo "=============================="
-            # Clean EVERYTHING to force complete rebuild
+            # Remove stale .js files from src/ — Vite may read them instead of .ts/.tsx
+            echo "=== REMOVING STALE JS FILES ==="
+            find src -name "*.js" -type f -delete 2>/dev/null || true
             echo "=== CLEANING BUILD CACHE ==="
             # Remove ALL possible Vite caches (local + global)
             rm -rf node_modules/.vite
@@ -180,10 +182,14 @@ jobs:
             npm ci --no-audit --no-fund
             echo "=== CLEARING VITE DEPS CACHE (AFTER npm ci) ==="
             # Clear Vite's dependency pre-bundling cache AFTER npm ci
-            # This is critical - npm ci reinstalls packages with same hashes,
-            # so Vite thinks nothing changed and skips 167 modules
             rm -rf node_modules/.vite/deps
             rm -rf node_modules/.vite/deps-cache
+            rm -rf node_modules/.vite
+            
+            # CRITICAL: Clear global Vite cache AGAIN right before build
+            # npm ci restores node_modules with same hashes, Vite uses global cache
+            rm -rf ~/.cache/vite
+            rm -rf ~/.vite/deps
             rm -rf node_modules/.vite
             
             # Set BUILD_ID from the currently deployed commit's short SHA
