@@ -213,22 +213,22 @@ jobs:
             # List all JS files in dist/assets
             ls -la dist/assets/*.js 2>/dev/null || echo "No JS files found in dist/assets"
             
-            # Check that built JS contains dadataApi (new in this commit)
-            if ! grep -q "dadataApi" dist/assets/*.js 2>/dev/null; then
-                echo "ERROR: Built JS missing dadataApi! Build is stale or wrong!"
+            # Check that built JS contains DAData endpoint (string literal survives minification)
+            if ! grep -q "suggestions.dadata.ru" dist/assets/*.js 2>/dev/null; then
+                echo "ERROR: Built JS missing DAData endpoint! Build is stale or wrong!"
                 echo "Checking what's in the built JS..."
-                grep -o "dadata" dist/assets/*.js 2>/dev/null || echo "dadata NOT FOUND"
-                grep -o "createPortal" dist/assets/*.js 2>/dev/null || echo "createPortal NOT FOUND"
+                grep -o "searchCities" dist/assets/*.js 2>/dev/null | head -1 || echo "searchCities NOT FOUND"
+                grep -o "createPortal" dist/assets/*.js 2>/dev/null | head -1 || echo "createPortal NOT FOUND"
                 exit 1
             fi
-            echo "✓ Built JS contains dadataApi (new code)"
+            echo "✓ Built JS contains DAData endpoint"
             
-            # Check that built JS does NOT contain citiesApi (old code)
-            if grep -l "citiesApi" dist/assets/*.js 2>/dev/null; then
-                echo "ERROR: Built JS still contains citiesApi! Build is stale!"
+            # Check that built JS does NOT contain old /cities endpoint
+            if grep -q "/api/v1/cities" dist/assets/*.js 2>/dev/null; then
+                echo "ERROR: Built JS still references old /api/v1/cities endpoint! Build is stale!"
                 exit 1
             fi
-            echo "✓ Built JS does NOT contain citiesApi"
+            echo "✓ Built JS has no legacy /api/v1/cities endpoint"
             
             # Copy with overwrite verification - remove entire dist first
             echo "=== COPYING FRONTEND TO DEPLOY DIRECTORY ==="
