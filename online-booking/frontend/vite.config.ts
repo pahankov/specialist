@@ -28,4 +28,9 @@ export default defineConfig({
       },
     },
   },
+  // Force Vite to rebuild deps cache on every build
+  // This ensures ALL 349 modules are transformed (not just 182)
+  optimizeDeps: {
+    force: true,
+  },
 })
