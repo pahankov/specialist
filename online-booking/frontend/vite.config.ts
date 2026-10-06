@@ -22,15 +22,16 @@ export default defineConfig({
     outDir: 'dist',
     rollupOptions: {
       output: {
-        // Force unique filename based on content hash
-        entryFileNames: `assets/[name]-[hash].js`,
-        chunkFileNames: `assets/[name]-[hash].js`,
+        // Include BUILD_ID in filename to guarantee cache busting
+        // even when content hash is identical across deploys
+        entryFileNames: `assets/[name]-[hash]-${process.env.BUILD_ID || 'dev'}.js`,
+        chunkFileNames: `assets/[name]-[hash]-${process.env.BUILD_ID || 'dev'}.js`,
+        assetFileNames: `assets/[name]-[hash]-${process.env.BUILD_ID || 'dev'}.[ext]`,
       },
     },
   },
-  // Force Vite to rebuild deps cache on every build
-  // This ensures ALL 349 modules are transformed (not just 182)
-  optimizeDeps: {
-    force: true,
+  define: {
+    // Inject build ID into code so it survives minification
+    __BUILD_ID__: JSON.stringify(process.env.BUILD_ID || 'dev'),
   },
 })

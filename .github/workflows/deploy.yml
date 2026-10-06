@@ -186,13 +186,10 @@ jobs:
             rm -rf node_modules/.vite/deps-cache
             rm -rf node_modules/.vite
             
-            # INJECT TIMESTAMP to force Rollup to generate a new content hash
-            # Vite uses Rollup content hash for JS filenames. Without this,
-            # the same source files always produce the same hash (DC34i42h).
-            echo "=== INJECTING BUILD TIMESTAMP ==="
-            TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-            sed -i "1i// BUILD_TIMESTAMP: ${TIMESTAMP}" src/components/LoginModal.tsx
-            echo "Injected: // BUILD_TIMESTAMP: ${TIMESTAMP}"
+            # Set BUILD_ID env var - used by vite.config.ts to bust cache
+            # This goes into entryFileNames AND define, so it survives minification
+            export BUILD_ID="${GITHUB_SHA:0:7}"
+            echo "BUILD_ID: $BUILD_ID"
             
             echo "=== BUILDING FRONTEND ==="
             npm run build 2>&1 | tee /tmp/build-output.txt
