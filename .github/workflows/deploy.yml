@@ -179,6 +179,12 @@ jobs:
             echo "=== INSTALLING DEPENDENCIES ==="
             npm ci --no-audit --no-fund
             echo "=== BUILDING FRONTEND ==="
+            # Disable all Vite caching to force full rebuild
+            export VITE_BUILD_CACHE=false
+            export VITE_DEP_PREBUNDLE_CACHE=false
+            # Also clear the deps cache explicitly
+            rm -rf node_modules/.vite/deps
+            rm -rf node_modules/.vite/deps-cache
             npm run build 2>&1 | tee /tmp/build-output.txt
             echo "=== BUILD OUTPUT ==="
             cat /tmp/build-output.txt
