@@ -13,6 +13,7 @@ import type {
   LoginResponse,
   DashboardStats,
   AdminLoginResponse,
+  AdminStats,
   UnifiedRegisterResponse,
   PaginatedResponse,
   HealthCheck,
@@ -211,7 +212,7 @@ export const authApi = {
     apiClient.post<UnifiedRegisterResponse>('/api/v1/auth/register-unified', data),
 }
 
-// ─── SuperAdmin API ────────────────────────────────────────────────
+export const adminApi = {
   // Dashboard
   getDashboard() {
     return apiClient.get<DashboardStats>('/api/v1/admin/dashboard')
