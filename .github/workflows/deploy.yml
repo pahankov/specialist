@@ -46,6 +46,7 @@ jobs:
           envs: |
             DATABASE_URL
           script_stop: false
+          timeout: 30m
           script: |
             cd /var/www/beauty-specialist
 
@@ -161,11 +162,11 @@ jobs:
             echo "DAData API file exists:"
             ls -la src/api/dadata.ts || echo "NOT FOUND"
             echo "=============================="
-            # Clean ALL Vite cache + dist + node_modules to force complete rebuild
-            rm -rf node_modules
+            # Clean Vite cache + dist to force complete rebuild (keep node_modules for speed)
+            rm -rf node_modules/.vite
             rm -rf .vite
             rm -rf dist
-            npm ci --ignore-scripts 2>/dev/null || npm install
+            npm ci --prefer-offline --no-audit --no-fund 2>/dev/null || npm install --prefer-offline --no-audit --no-fund
             npm run build
             
             # Verify build output exists
