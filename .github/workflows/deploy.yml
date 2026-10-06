@@ -302,9 +302,7 @@ jobs:
             curl -sf http://127.0.0.1:8000/api/v1/countries/ > /dev/null && echo "[COUNTRIES OK]" || echo "COUNTRIES FAILED"
             
             # Test login (should return 401 not 500)
-            LOGIN_RESULT=$(curl -sf -X POST http://127.0.0.1:8000/api/v1/auth/login-unified \
-                -H 'Content-Type: application/json' \
-                -d '{"identifier":"wrong@email.com","password":"wrong"}' 2>&1) || true
+            LOGIN_RESULT=$(curl -sf -X POST http://127.0.0.1:8000/api/v1/auth/login-unified -H 'Content-Type: application/json' -d '{"identifier":"wrong@email.com","password":"wrong"}' 2>&1) || LOGIN_RESULT=""
             if echo "$LOGIN_RESULT" | grep -q "401\|422\|Invalid"; then
                 echo "LOGIN API works (returns 401 for wrong creds - OK)"
             elif echo "$LOGIN_RESULT" | grep -q "500\|Internal"; then
@@ -314,7 +312,7 @@ jobs:
             fi
             
             # Test reviews (carousel data)
-            REVIEWS=$(curl -sf http://127.0.0.1:8000/api/v1/reviews/ 2>&1) || true
+            REVIEWS=$(curl -sf http://127.0.0.1:8000/api/v1/reviews/ 2>&1) || REVIEWS=""
             if echo "$REVIEWS" | grep -q '\['; then
                 echo "REVIEWS API works: $(echo $REVIEWS | python3 -c 'import sys,json; print(len(json.load(sys.stdin)))' 2>/dev/null || echo 'N/A') reviews"
             else
@@ -325,7 +323,7 @@ jobs:
             echo "=== FINAL HEALTH CHECK ==="
             HEALTH_OK=false
             for i in 1 2 3; do
-                HEALTH_RESP=$(curl -sf http://127.0.0.1:8000/health 2>&1) || true
+                HEALTH_RESP=$(curl -sf http://127.0.0.1:8000/health 2>&1) || HEALTH_RESP=""
                 if echo "$HEALTH_RESP" | grep -q '"status"'; then
                     HEALTH_OK=true
                     echo "Health check passed: $HEALTH_RESP"
