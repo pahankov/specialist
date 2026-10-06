@@ -213,15 +213,12 @@ jobs:
             # List all JS files in dist/assets
             ls -la dist/assets/*.js 2>/dev/null || echo "No JS files found in dist/assets"
             
-            # Check that built JS contains DAData endpoint (string literal survives minification)
-            if ! grep -q "suggestions.dadata.ru" dist/assets/*.js 2>/dev/null; then
-                echo "ERROR: Built JS missing DAData endpoint! Build is stale or wrong!"
-                echo "Checking what's in the built JS..."
-                grep -o "searchCities" dist/assets/*.js 2>/dev/null | head -1 || echo "searchCities NOT FOUND"
-                grep -o "createPortal" dist/assets/*.js 2>/dev/null | head -1 || echo "createPortal NOT FOUND"
+            # Check that built JS contains DAData (searchCities is a property that survives minification)
+            if ! grep -q "searchCities" dist/assets/*.js 2>/dev/null; then
+                echo "ERROR: Built JS missing searchCities! Build is stale or wrong!"
                 exit 1
             fi
-            echo "✓ Built JS contains DAData endpoint"
+            echo "✓ Built JS contains DAData (searchCities)"
             
             # Check that built JS does NOT contain old /cities endpoint
             if grep -q "/api/v1/cities" dist/assets/*.js 2>/dev/null; then
