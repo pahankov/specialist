@@ -10,7 +10,10 @@ export default defineConfig({
       '/api/dadata': {
         target: 'https://suggestions.dadata.ru',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/dadata/, ''),
+        rewrite: (path) => path.replace(/^\/api\/dadata/, '/suggestions/api/4_1/rs/suggest/address'),
+        headers: {
+          'Origin': 'http://localhost:3000',
+        },
       },
     },
   },

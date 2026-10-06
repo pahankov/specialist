@@ -27,6 +27,7 @@
   max-width: 460px;
   max-height: 90vh;
   overflow-y: auto;
+  overflow-x: hidden;
   position: relative;
   animation: slideUp 0.3s ease;
 }
@@ -200,7 +201,7 @@
   border-radius: 0 0 8px 8px;
   max-height: 200px;
   overflow-y: auto;
-  z-index: 1000;
+  z-index: 9999;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 

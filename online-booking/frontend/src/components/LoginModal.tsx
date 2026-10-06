@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
 import { authApi } from '../api/client'
 import { dadataApi, type DadataSuggestion } from '../api/dadata'
@@ -26,7 +27,7 @@ interface RegisterFormState {
   email: string
   phone: string
   password: string
-  cityId: string | null  // DAData returns string value, not number id
+  selectedCity: DadataSuggestion | null
   telegramUsername: string
   isMaster: boolean
 }
@@ -46,7 +47,7 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
     email: '',
     phone: '',
     password: '',
-    cityId: null,
+    selectedCity: null,
     telegramUsername: '',
     isMaster: false,
   })
@@ -58,6 +59,7 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
   const [citySuggestions, setCitySuggestions] = useState<DadataSuggestion[]>([])
   const [showCityDropdown, setShowCityDropdown] = useState(false)
   const [cityInput, setCityInput] = useState('')
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 })
 
   const cityInputRef = useRef<HTMLInputElement>(null)
   const cityDropdownRef = useRef<HTMLDivElement>(null)
@@ -91,9 +93,19 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
     setCityInput(suggestion.value)
     setShowCityDropdown(false)
     setCitySuggestions([])
-    // DAData doesn't return cityId, use value as identifier
-    setRegisterForm(prev => ({ ...prev, cityId: suggestion.value }))
+    setRegisterForm(prev => ({ ...prev, selectedCity: suggestion }))
   }
+
+  useEffect(() => {
+    if (showCityDropdown && cityInputRef.current) {
+      const rect = cityInputRef.current.getBoundingClientRect()
+      setDropdownPosition({
+        top: rect.bottom + window.scrollY,
+        left: rect.left + window.scrollX,
+        width: rect.width,
+      })
+    }
+  }, [showCityDropdown, cityInput])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -116,12 +128,28 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
     e.preventDefault()
     setLoading(true)
     try {
+      // Transform DadataSuggestion to backend DadataSuggestion format
+      const cityData = registerForm.selectedCity ? {
+        value: registerForm.selectedCity.value,
+        unrestricted_value: registerForm.selectedCity.unrestricted_value,
+        data: {
+          country: registerForm.selectedCity.country,
+          country_iso_code: registerForm.selectedCity.data?.country_iso_code,
+          region: registerForm.selectedCity.data?.region,
+          city: registerForm.selectedCity.city,
+          postal_code: registerForm.selectedCity.data?.postal_code,
+          geo_lat: registerForm.selectedCity.data?.lat ? parseFloat(registerForm.selectedCity.data.lat) : undefined,
+          geo_lon: registerForm.selectedCity.data?.lon ? parseFloat(registerForm.selectedCity.data.lon) : undefined,
+          capital_marker: registerForm.selectedCity.data?.capital_marker,
+        }
+      } : null
+
       await authApi.registerUnified({
         name: registerForm.name,
         email: registerForm.email,
         phone: registerForm.phone,
         password: registerForm.password,
-        city_name: registerForm.cityId,
+        city_data: cityData,
         telegram_username: registerForm.telegramUsername || null,
         is_master: registerForm.isMaster,
       })
@@ -153,7 +181,7 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
       email: '',
       phone: '',
       password: '',
-      cityId: null,
+      selectedCity: null,
       telegramUsername: '',
       isMaster: false,
     })
@@ -240,7 +268,7 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
             {/* City (DAData) */}
             <div className="login-group">
               <label>Город *</label>
-              <div style={{ position: 'relative' }}>
+              <div style={{ position: 'relative', overflow: 'visible' }}>
                 <input
                   ref={cityInputRef}
                   value={cityInput}
@@ -252,20 +280,32 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
                   required
                 />
                 {showCityDropdown && citySuggestions.length > 0 && (
-                  <div
-                    ref={cityDropdownRef}
-                    className="city-dropdown"
-                  >
-                    {citySuggestions.map((suggestion, index) => (
+                  <>
+                    {createPortal(
                       <div
-                        key={index}
-                        className="city-option"
-                        onClick={() => handleCitySelect(suggestion)}
+                        ref={cityDropdownRef}
+                        className="city-dropdown"
+                        style={{
+                          position: 'fixed',
+                          top: dropdownPosition.top,
+                          left: dropdownPosition.left,
+                          width: dropdownPosition.width,
+                          zIndex: 99999,
+                        }}
                       >
-                        {suggestion.value}
-                      </div>
-                    ))}
-                  </div>
+                        {citySuggestions.map((suggestion, index) => (
+                          <div
+                            key={index}
+                            className="city-option"
+                            onClick={() => handleCitySelect(suggestion)}
+                          >
+                            {suggestion.value}
+                          </div>
+                        ))}
+                      </div>,
+                      document.body
+                    )}
+                  </>
                 )}
               </div>
             </div>
