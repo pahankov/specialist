@@ -178,13 +178,14 @@ jobs:
             npm cache clean --force
             echo "=== INSTALLING DEPENDENCIES ==="
             npm ci --no-audit --no-fund
-            echo "=== BUILDING FRONTEND ==="
-            # Disable all Vite caching to force full rebuild
-            export VITE_BUILD_CACHE=false
-            export VITE_DEP_PREBUNDLE_CACHE=false
-            # Also clear the deps cache explicitly
+            echo "=== CLEARING VITE DEPS CACHE (AFTER npm ci) ==="
+            # Clear Vite's dependency pre-bundling cache AFTER npm ci
+            # This is critical - npm ci reinstalls packages with same hashes,
+            # so Vite thinks nothing changed and skips 167 modules
             rm -rf node_modules/.vite/deps
             rm -rf node_modules/.vite/deps-cache
+            rm -rf node_modules/.vite
+            echo "=== BUILDING FRONTEND ==="
             npm run build 2>&1 | tee /tmp/build-output.txt
             echo "=== BUILD OUTPUT ==="
             cat /tmp/build-output.txt
