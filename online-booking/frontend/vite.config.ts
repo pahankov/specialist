@@ -21,4 +21,8 @@ export default defineConfig({
     target: 'ES2020',
     outDir: 'dist',
   },
+  // Disable dependency pre-bundling to force full module transform
+  optimizeDeps: {
+    disabled: true,
+  },
 })
