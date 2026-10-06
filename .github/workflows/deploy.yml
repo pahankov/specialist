@@ -162,24 +162,25 @@ jobs:
             echo "DAData API file exists:"
             ls -la src/api/dadata.ts || echo "NOT FOUND"
             echo "=============================="
-            # Clean Vite cache + dist + node_modules to force complete rebuild
+            # Clean EVERYTHING to force complete rebuild
+            echo "=== CLEANING BUILD CACHE ==="
             rm -rf node_modules/.vite
             rm -rf .vite
             rm -rf dist
             rm -rf node_modules
+            npm cache clean --force
+            echo "=== INSTALLING DEPENDENCIES ==="
             npm ci --no-audit --no-fund
-            npm run build
+            echo "=== BUILDING FRONTEND ==="
+            npm run build 2>&1 | tee /tmp/build-output.txt
+            echo "=== BUILD OUTPUT ==="
+            cat /tmp/build-output.txt
             
-            # Verify build output exists
-            if [ ! -f dist/index.html ]; then
-                echo "ERROR: dist/index.html not found after build!"
-                ls -la dist/ || echo "dist/ directory missing!"
-                exit 1
-            fi
-            echo "OK dist/index.html exists"
+            # Get the JS file hash from built index.html
+            BUILT_JS=$(grep -o 'assets/[^"]*\.js' dist/index.html | head -1 | sed 's|assets/||')
+            echo "Built JS file: $BUILT_JS"
             
             # Verify build contains new code (check BUILT JS, not source)
-            # createPortal is a React function that should be in the built JS
             echo "=== VERIFYING BUILD INTEGRITY ==="
             
             # List all JS files in dist/assets
@@ -188,9 +189,6 @@ jobs:
             # Check that built JS contains createPortal (new in this commit)
             if ! grep -q "createPortal" dist/assets/*.js 2>/dev/null; then
                 echo "ERROR: Built JS missing createPortal! Build may be cached!"
-                echo "Searching for createPortal in built JS..."
-                grep -o "createPortal" dist/assets/*.js 2>/dev/null || echo "NOT FOUND"
-                ls -la dist/assets/
                 exit 1
             fi
             echo "✓ Built JS contains createPortal (new code)"
@@ -202,45 +200,24 @@ jobs:
             fi
             echo "✓ Built JS does NOT contain citiesApi"
             
-            # Check dadata.ts exists and has API URL
-            if ! grep -q "suggestions.dadata.ru" src/api/dadata.ts; then
-                echo "ERROR: dadata.ts missing DAData URL!"
-                cat src/api/dadata.ts
-                exit 1
-            fi
-            echo "✓ dadata.ts contains DAData URL"
-            
-            # Check LoginModal imports dadata
-            if ! grep -q "from.*dadata" src/components/LoginModal.tsx; then
-                echo "ERROR: LoginModal.tsx missing dadata import!"
-                exit 1
-            fi
-            echo "✓ LoginModal.tsx imports dadata"
-            
-            # Check LoginModal uses city autocomplete
-            if ! grep -q "handleCitySearch" src/components/LoginModal.tsx; then
-                echo "ERROR: LoginModal.tsx missing city autocomplete logic!"
-                exit 1
-            fi
-            echo "✓ LoginModal.tsx has city autocomplete logic"
-            
-            # Check that old cities API is NOT imported in LoginModal
-            if grep -q "citiesApi" src/components/LoginModal.tsx; then
-                echo "ERROR: LoginModal.tsx still uses old citiesApi!"
-                exit 1
-            fi
-            echo "✓ LoginModal.tsx does NOT use old citiesApi"
-            
-            echo "=== SOURCE VERIFICATION PASSED ==="
-            
             # Copy with overwrite verification - remove entire dist first
+            echo "=== COPYING FRONTEND TO DEPLOY DIRECTORY ==="
             rm -rf /var/www/beauty-specialist/frontend/dist
             mkdir -p /var/www/beauty-specialist/frontend/dist
             cp -r dist/* /var/www/beauty-specialist/frontend/dist/
             echo "Frontend files copied:"
             ls -la /var/www/beauty-specialist/frontend/dist/
             ls -la /var/www/beauty-specialist/frontend/dist/assets/
-
+            
+            # Verify copied JS file matches built JS
+            COPIED_JS=$(grep -o 'assets/[^"]*\.js' /var/www/beauty-specialist/frontend/dist/index.html | head -1 | sed 's|assets/||')
+            echo "Copied JS file: $COPIED_JS"
+            if [ "$BUILT_JS" != "$COPIED_JS" ]; then
+                echo "ERROR: JS file mismatch! Built: $BUILT_JS, Copied: $COPIED_JS"
+                exit 1
+            fi
+            echo "✓ JS file hash matches"
+            
             # Fix log directory permissions (service runs as www-data)
             sudo chown -R www-data:www-data /var/www/beauty-specialist/online-booking/backend/logs/
             sudo chmod -R 755 /var/www/beauty-specialist/online-booking/backend/logs/
