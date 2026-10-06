@@ -177,8 +177,23 @@ jobs:
             echo "OK dist/index.html exists"
             
             # Verify build contains DAData (not old cities API)
-            # Since Vite may minify/transform strings, check source files directly
-            echo "=== VERIFYING SOURCE INTEGRITY ==="
+            # Check BUILT JS file, not source files (Vite may transform strings)
+            echo "=== VERIFYING BUILD INTEGRITY ==="
+            
+            # Check that built JS contains createPortal (new in this commit)
+            if ! grep -l "createPortal" dist/assets/*.js 2>/dev/null; then
+                echo "ERROR: Built JS missing createPortal! Build may be cached!"
+                ls -la dist/assets/
+                exit 1
+            fi
+            echo "✓ Built JS contains createPortal (new code)"
+            
+            # Check that built JS does NOT contain citiesApi (old code)
+            if grep -l "citiesApi" dist/assets/*.js 2>/dev/null; then
+                echo "ERROR: Built JS still contains citiesApi! Build is stale!"
+                exit 1
+            fi
+            echo "✓ Built JS does NOT contain citiesApi"
             
             # Check dadata.ts exists and has API URL
             if ! grep -q "suggestions.dadata.ru" src/api/dadata.ts; then
