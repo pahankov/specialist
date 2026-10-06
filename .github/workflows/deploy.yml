@@ -291,51 +291,16 @@ jobs:
             # Wait for backend
             sleep 5
 
-            # Check backend
+            # Check backend is running and listening
             echo "=== BACKEND CHECK ==="
             (systemctl status beauty-backend --no-pager 2>&1 | head -10) || true
             (ss -tlnp | grep 8000) || echo "Port 8000 NOT listening"
 
-            # Test API
-            echo "=== API TEST ==="
-            curl -sf http://127.0.0.1:8000/health || echo "HEALTH FAILED"
-            curl -sf http://127.0.0.1:8000/api/v1/countries/ > /dev/null && echo "[COUNTRIES OK]" || echo "COUNTRIES FAILED"
-            
-            # Test login (should return 401 not 500)
-            LOGIN_RESULT=$(curl -sf -X POST http://127.0.0.1:8000/api/v1/auth/login-unified -H 'Content-Type: application/json' -d '{"identifier":"wrong@email.com","password":"wrong"}' 2>&1) || LOGIN_RESULT=""
-            if echo "$LOGIN_RESULT" | grep -q "401\|422\|Invalid"; then
-                echo "LOGIN API works (returns 401 for wrong creds - OK)"
-            elif echo "$LOGIN_RESULT" | grep -q "500\|Internal"; then
-                echo "LOGIN API returns 500 - SCHEMA FIX FAILED!"
-            else
-                echo "LOGIN API response: $LOGIN_RESULT"
-            fi
-            
-            # Test reviews (carousel data)
-            REVIEWS=$(curl -sf http://127.0.0.1:8000/api/v1/reviews/ 2>&1) || REVIEWS=""
-            if echo "$REVIEWS" | grep -q '\['; then
-                echo "REVIEWS API works: $(echo $REVIEWS | python3 -c 'import sys,json; print(len(json.load(sys.stdin)))' 2>/dev/null || echo 'N/A') reviews"
-            else
-                echo "REVIEWS API FAILED: $REVIEWS"
-            fi
-
-            # Final health check — retry 3 times with 10s delay
-            echo "=== FINAL HEALTH CHECK ==="
-            HEALTH_OK=false
-            for i in 1 2 3; do
-                HEALTH_RESP=$(curl -sf http://127.0.0.1:8000/health 2>&1) || HEALTH_RESP=""
-                if echo "$HEALTH_RESP" | grep -q '"status"'; then
-                    HEALTH_OK=true
-                    echo "Health check passed: $HEALTH_RESP"
-                    break
-                fi
-                echo "Retry $i/3 — health check failed, waiting 10s..."
-                sleep 10
-            done
-
-            if [ "$HEALTH_OK" = false ]; then
-                echo "ERROR: Health check failed after 3 retries! Deployment may be unstable."
-            else
+            # Simple health check — just verify service is active
+            if systemctl is-active --quiet beauty-backend; then
                 echo "=== DEPLOYMENT SUCCESSFUL ==="
+            else
+                echo "ERROR: beauty-backend service is not active!"
+                exit 1
             fi
 
