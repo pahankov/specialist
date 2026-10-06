@@ -189,15 +189,18 @@ jobs:
             # Set BUILD_ID from the currently deployed commit's short SHA
             # GITHUB_SHA is not available via SSH — use git instead
             export BUILD_ID=$(git rev-parse --short=7 HEAD)
-            export BUILD_TIMESTAMP=$(date +%s)
             echo "BUILD_ID: $BUILD_ID"
-            echo "BUILD_TIMESTAMP: $BUILD_TIMESTAMP"
             
             echo "=== BUILDING FRONTEND ==="
-            tsc --noEmit 2>&1 | tee /tmp/tsc-output.txt
-            npx vite build --force 2>&1 | tee /tmp/build-output.txt
+            npm run build 2>&1 | tee /tmp/build-output.txt
             echo "=== BUILD OUTPUT ==="
             cat /tmp/build-output.txt
+            
+            # Verify dist was actually produced
+            if [ ! -f dist/index.html ]; then
+                echo "ERROR: build produced no dist/index.html — aborting"
+                exit 1
+            fi
             
             # Get the JS file hash from built index.html
             BUILT_JS=$(grep -o 'assets/[^"]*\.js' dist/index.html | head -1 | sed 's|assets/||')
@@ -210,15 +213,15 @@ jobs:
             # List all JS files in dist/assets
             ls -la dist/assets/*.js 2>/dev/null || echo "No JS files found in dist/assets"
             
-            # Check that built JS contains createPortal (new in this commit)
-            if ! grep -q "createPortal" dist/assets/*.js 2>/dev/null; then
-                echo "ERROR: Built JS missing createPortal! Build may be cached!"
+            # Check that built JS contains dadataApi (new in this commit)
+            if ! grep -q "dadataApi" dist/assets/*.js 2>/dev/null; then
+                echo "ERROR: Built JS missing dadataApi! Build is stale or wrong!"
                 echo "Checking what's in the built JS..."
                 grep -o "dadata" dist/assets/*.js 2>/dev/null || echo "dadata NOT FOUND"
                 grep -o "createPortal" dist/assets/*.js 2>/dev/null || echo "createPortal NOT FOUND"
                 exit 1
             fi
-            echo "✓ Built JS contains createPortal (new code)"
+            echo "✓ Built JS contains dadataApi (new code)"
             
             # Check that built JS does NOT contain citiesApi (old code)
             if grep -l "citiesApi" dist/assets/*.js 2>/dev/null; then

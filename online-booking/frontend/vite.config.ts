@@ -33,7 +33,5 @@ export default defineConfig({
   define: {
     // Inject build ID into code so it survives minification
     __BUILD_ID__: JSON.stringify(process.env.BUILD_ID || 'dev'),
-    // Force Vite to invalidate its transformation cache on every build
-    __BUILD_TIMESTAMP__: JSON.stringify(Date.now()),
   },
 })
