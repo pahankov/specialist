@@ -1,12 +1,14 @@
 import axios from 'axios'
 
-// Публичный токен — из env (VITE_DADATA_TOKEN), значение — в LOCAL.md / backend/.env (never commit).
-// Секрет DADATA_SECRET во фронте НЕ хранится — только через backend-прокси app/modules/dadata/router.py.
+// Same-origin proxy path (NO direct DaData calls — the secret must never
+// reach the browser bundle):
+// - dev: vite proxies /api/dadata -> suggestions.dadata.ru (needs
+//   VITE_DADATA_TOKEN in frontend .env for the direct dev path)
+// - prod: nginx proxies /api/dadata -> backend proxy (server-side keys)
 const DADATA_TOKEN = import.meta.env.VITE_DADATA_TOKEN ?? ''
 
-// Прямой запрос к DAData API (обход Vite proxy)
 const dadataClient = axios.create({
-  baseURL: 'https://suggestions.dadata.ru/suggestions/api/4_1/rs',
+  baseURL: '/api/dadata',
   headers: {
     'Authorization': `Token ${DADATA_TOKEN}`,
     'Content-Type': 'application/json',
