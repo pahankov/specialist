@@ -2,6 +2,10 @@
 # =============================================================
 # Universal Deploy Script — Beauty Specialist
 # =============================================================
+# Manual runs only (local --local / server SSH).
+# Push-deploy (push -> main) uses .github/workflows/deploy.yml (inline
+# script), NOT this file — keep them in sync when changing the pipeline.
+# =============================================================
 # Работает и локально, и на сервере.
 # Автоматически:
 #   1. Проверяет и исправляет схему БД

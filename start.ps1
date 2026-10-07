@@ -1,4 +1,5 @@
-# Online Booking — Start
+# Online Booking — Start (backend + frontend, main project only).
+# For GigaCode worktrees use run_backend.bat / run_frontend.bat (they auto-detect worktree).
 $ErrorActionPreference = "Stop"
 $ProjectDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $BackendDir = Join-Path $ProjectDir "online-booking\backend"

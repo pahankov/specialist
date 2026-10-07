@@ -236,6 +236,17 @@
 
 ### 13. otp_codes
 
+**Назначение:** OTP коды для SMS-авторизации
+
+| Колонка | Тип | Ограничения | Описание |
+|---------|-----|-------------|----------|
+| id | INTEGER | PK | Автоинкремент |
+| phone | VARCHAR(20) | NOT NULL | Телефон |
+| code_hash | VARCHAR(255) | NOT NULL | Хэш кода |
+| expires_at | TIMESTAMP WITH TIME ZONE | NOT NULL | Срок действия |
+| is_used | BOOLEAN | DEFAULT FALSE | Использован ли |
+| created_at | TIMESTAMP WITH TIME ZONE | | Дата создания |
+
 ---
 
 ## Связи (Relationships)
@@ -569,15 +580,3 @@ WHERE blocked.blocking_pid IS NOT NULL;
 - [ ] Нет `flush()` перед созданием связанных объектов
 - [ ] Нет `master.master_profile.id` для супер-админа
 - [ ] Проверил `grep -r "old_relationship_name" app/` — все использованы
-
-
-**Назначение:** OTP коды для SMS-авторизации
-
-| Колонка | Тип | Ограничения | Описание |
-|---------|-----|-------------|----------|
-| id | INTEGER | PK | Автоинкремент |
-| phone | VARCHAR(20) | NOT NULL | Телефон |
-| code_hash | VARCHAR(255) | NOT NULL | Хэш кода |
-| expires_at | TIMESTAMP WITH TIME ZONE | NOT NULL | Срок действия |
-| is_used | BOOLEAN | DEFAULT FALSE | Использован ли |
-| created_at | TIMESTAMP WITH TIME ZONE | | Дата создания |

@@ -414,17 +414,6 @@ df -h
 
 ## 📊 Checklist перед деплоем
 
-- [ ] `script_stop: false` в `deploy.yml`
-- [ ] Нет `| head` в pipe без `|| true`
-- [ ] Абсолютные пути для файлов вне текущей директории
-- [ ] `git reset --hard` вместо `git pull`
-- [ ] `sudo tee` вместо `cat > /etc/...`
-- [ ] `sed -i 's/\r$//'` для shell-скриптов
-- [ ] `datetime.time` для `Column(Time)`, не строки
-- [ ] `ALTER TABLE ... OWNER TO` вместо `GRANT`
-- [ ] `IF NOT EXISTS` для `ALTER TABLE ADD COLUMN`
-- [ ] Проверить модель перед передачей аргументов в конструктор
-- [ ] Проверить отступы в Python
-- [ ] Проверить **последнюю строку** вывода на `Process exited with status 0`
+> Единый чеклист — [DEPLOYMENT_RULES.md#checklist-перед-деплоем](DEPLOYMENT_RULES.md#checklist-перед-деплоем). Здесь только секретная часть:
 - [ ] Нет реальных секретов в DEPLOY.md (только placeholders)
 - [ ] Секреты в `LOCAL.md` (локальный файл, не пушить в git)
