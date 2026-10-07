@@ -2,8 +2,7 @@
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import InstrumentedAttribute
-from typing import TypeVar, Generic, Optional
+from typing import TypeVar
 
 T = TypeVar("T")
 
@@ -41,13 +40,3 @@ async def get_owned_or_404(
     if not obj:
         raise HTTPException(status_code=404, detail="Not found")
     return obj  # type: ignore
-
-
-async def soft_delete(
-    obj: T,
-    db: AsyncSession,
-    field: str = "is_active"
-) -> None:
-    """Soft-delete object by setting is_active=False."""
-    setattr(obj, field, False)
-    await db.flush()

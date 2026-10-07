@@ -23,7 +23,7 @@ from app.models.user import User, UserRole
 from app.models.master_profile import MasterProfile
 from app.models.country import Country
 from app.models.city import City
-from app.modules.auth.service import hash_password
+from app.utils.security import hash_password
 from sqlalchemy import select
 
 

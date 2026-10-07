@@ -121,7 +121,7 @@ async def created_master_id(session, test_master_data):
     """Create a master directly in DB and return their master_profile ID."""
     from app.models.user import User, UserRole
     from app.models.master_profile import MasterProfile
-    from app.modules.auth.service import hash_password
+    from app.utils.security import hash_password
 
     user = User(
         name=test_master_data["name"],
@@ -185,7 +185,7 @@ def test_appointment_data():
 async def super_admin_user(session):
     """Create a super admin user directly in the database."""
     from app.models.user import User, UserRole
-    from app.modules.auth.service import hash_password
+    from app.utils.security import hash_password
 
     user = User(
         name="Super Admin",
@@ -205,7 +205,7 @@ async def super_admin_user_with_profile(session):
     """Create a super admin user with a MasterProfile for self-blocking tests."""
     from app.models.user import User, UserRole
     from app.models.master_profile import MasterProfile
-    from app.modules.auth.service import hash_password
+    from app.utils.security import hash_password
 
     user = User(
         name="Super Admin 2",

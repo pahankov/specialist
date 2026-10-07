@@ -10,7 +10,7 @@ from app.models.user import User, UserRole
 from app.models.master_profile import MasterProfile
 from app.schemas.master import MasterCreate, MasterResponse, MasterUpdate
 from app.dependencies.auth import require_super_admin
-from app.modules.auth.service import hash_password
+from app.utils.security import hash_password
 from app.logging_config import get_logger
 
 logger = get_logger(__name__)

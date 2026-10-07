@@ -174,7 +174,7 @@ class TestPasswordHelpers:
 
     async def test_password_verification(self):
         """verify_password correctly verifies passwords."""
-        from app.modules.auth.service import verify_password, hash_password
+        from app.utils.security import verify_password, hash_password
 
         password = "SecurePass123!"
         hashed = hash_password(password)

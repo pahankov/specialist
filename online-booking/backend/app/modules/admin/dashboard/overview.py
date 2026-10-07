@@ -1,10 +1,9 @@
-"""Dashboard and monthly statistics endpoints."""
-from fastapi import APIRouter, Depends, Query
+"""Dashboard overview: main stats (master-scoped or global with Redis cache)."""
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select
-from sqlalchemy.orm import selectinload, joinedload
-from datetime import timedelta, datetime
-from typing import Optional
+from sqlalchemy.orm import selectinload, joinedload, aliased
+from datetime import timedelta
 
 from app.database import get_db
 from app.models.appointment import Appointment
@@ -12,7 +11,6 @@ from app.models.client_profile import ClientProfile
 from app.models.service import Service
 from app.models.user import User
 from app.models.master_profile import MasterProfile
-from sqlalchemy.orm import aliased
 from app.dependencies.auth import require_master
 from app.utils import utcnow
 from app.services.cache import cache_service
@@ -35,30 +33,30 @@ async def get_dashboard(
     """Get dashboard statistics.
     For regular masters: returns their own stats.
     For superadmins (is_admin=True): returns global stats across all masters.
-    
+
     Uses Redis cache with 5-minute TTL for superadmin stats.
     """
     logger.info("Get dashboard for master %s (is_admin=%s)", master.id, master.is_admin)
     if master.is_admin:
         cache_key = f"admin:dashboard:global"
-        
+
         # Try cache first
         cached = cache_service.get(cache_key)
         if cached is not None:
             return cached
-        
+
         # Compute and cache
         stats = await _get_global_stats(db)
         cache_service.set(cache_key, stats, ttl=300)  # 5 minutes
         return stats
-    
+
     return await _get_master_stats(master, db)
 
 
 async def _get_master_stats(master: User, db: AsyncSession):
     """Get statistics for a specific master."""
     mp_id = await get_master_profile_id(db, master)
-    
+
     result = await db.execute(
         select(Appointment.status, func.count(Appointment.id))
         .where(Appointment.master_id == mp_id)
@@ -149,11 +147,11 @@ async def _get_global_stats(db: AsyncSession):
         .where(User.role == "MASTER")
     )
     total_masters = total_masters_result.scalar() or 0
-    
+
     active_masters_result = await db.execute(
         select(func.count(MasterProfile.id))
         .join(MasterProfile.user)
-        .where(MasterProfile.is_active == True, User.role == "MASTER")
+        .where(MasterProfile.is_active == True, User.role == "MASTER")  # noqa: E712
     )
     active_masters = active_masters_result.scalar() or 0
 
@@ -240,148 +238,3 @@ async def _get_global_stats(db: AsyncSession):
             } for a in upcoming_appointments
         ]
     }
-
-
-@router.get("/monthly-stats")
-async def get_monthly_stats(
-    year: int = Query(..., description="Year"),
-    month: int = Query(..., description="Month (1-12)"),
-    master: User = Depends(require_master),
-    db: AsyncSession = Depends(get_db)
-):
-    """Get statistics for a specific month."""
-    logger.info("Get monthly stats: master=%s, year=%d, month=%d", master.id, year, month)
-    mp_id = await get_master_profile_id(db, master)
-    start_dt = datetime(year, month, 1)
-    end_dt = datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1)
-
-    confirmed_result = await db.execute(
-        select(func.count(Appointment.id))
-        .where(Appointment.master_id == mp_id, Appointment.appointment_date >= start_dt,
-               Appointment.appointment_date < end_dt, Appointment.status.in_(["confirmed", "completed"]))
-    )
-    confirmed_count = confirmed_result.scalar() or 0
-
-    duration_result = await db.execute(
-        select(func.sum(Service.duration_minutes))
-        .select_from(Appointment).join(Service, Appointment.service_id == Service.id)
-        .where(Appointment.master_id == mp_id, Appointment.appointment_date >= start_dt,
-               Appointment.appointment_date < end_dt, Appointment.status.in_(["confirmed", "completed"]))
-    )
-    total_minutes = duration_result.scalar() or 0
-
-    revenue_result = await db.execute(
-        select(func.sum(Service.price))
-        .select_from(Appointment).join(Service, Appointment.service_id == Service.id)
-        .where(Appointment.master_id == mp_id, Appointment.appointment_date >= start_dt,
-               Appointment.appointment_date < end_dt, Appointment.status == "completed")
-    )
-    month_revenue = revenue_result.scalar() or 0
-
-    return {
-        "confirmed_appointments": confirmed_count,
-        "total_minutes": float(total_minutes),
-        "total_hours": round(total_minutes / 60, 1),
-        "revenue": float(month_revenue)
-    }
-
-
-@router.post("/dashboard/cache/clear")
-async def clear_dashboard_cache(
-    master: User = Depends(require_master)
-):
-    """Clear dashboard cache (superadmin only)."""
-    if not master.is_admin:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=403, detail="Only superadmin can clear cache")
-    
-    cache_service.invalidate_pattern("admin:dashboard:*")
-    return {"detail": "Dashboard cache cleared"}
-
-
-@router.get("/revenue-breakdown")
-async def get_revenue_breakdown(
-    master: User = Depends(require_master),
-    by_master: bool = Query(False, description="Group by master"),
-    by_service: bool = Query(False, description="Group by service"),
-    master_id: Optional[int] = Query(None, description="Filter by master ID (superadmin only)"),
-    date_from: Optional[str] = Query(None, description="Filter by date from (YYYY-MM-DD)"),
-    date_to: Optional[str] = Query(None, description="Filter by date to (YYYY-MM-DD)"),
-    db: AsyncSession = Depends(get_db)
-):
-    """Get revenue breakdown grouped by master, service, or overall."""
-    from datetime import datetime as dt_datetime
-    
-    # Base filter: completed appointments with their services
-    base_conditions = [Appointment.status == "completed"]
-    
-    if date_from:
-        dt_from = dt_datetime.strptime(date_from, "%Y-%m-%d").replace(tzinfo=None)
-        base_conditions.append(Appointment.appointment_date >= dt_from)
-    if date_to:
-        dt_to = dt_datetime.strptime(date_to, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=None)
-        base_conditions.append(Appointment.appointment_date <= dt_to)
-    
-    # For non-admin masters, filter by their master_id
-    if not master.is_admin:
-        result = await db.execute(
-            select(MasterProfile).where(MasterProfile.user_id == master.id)
-        )
-        mp = result.scalar_one_or_none()
-        if not mp:
-            return {"breakdown": [], "total_revenue": 0}
-        base_conditions.append(Appointment.master_id == mp.id)
-    elif master_id is not None:
-        # Superadmin can filter by specific master
-        base_conditions.append(Appointment.master_id == master_id)
-    
-    # Build query based on grouping
-    if by_master:
-        # Group by master
-        query = (
-            select(
-                _MasterUser.name.label('name'),
-                func.sum(Service.price).label('revenue'),
-                func.count(Appointment.id).label('count')
-            )
-            .select_from(Appointment)
-            .join(Service, Appointment.service_id == Service.id)
-            .join(MasterProfile, Appointment.master_id == MasterProfile.id)
-            .join(_MasterUser, MasterProfile.user_id == _MasterUser.id)
-            .where(*base_conditions)
-            .group_by(_MasterUser.name)
-            .order_by(func.sum(Service.price).desc())
-        )
-    elif by_service:
-        # Group by service
-        query = (
-            select(
-                Service.name.label('name'),
-                func.sum(Service.price).label('revenue'),
-                func.count(Appointment.id).label('count')
-            )
-            .select_from(Appointment)
-            .join(Service, Appointment.service_id == Service.id)
-            .where(*base_conditions)
-            .group_by(Service.id, Service.name)
-            .order_by(func.sum(Service.price).desc())
-        )
-    else:
-        # Overall revenue
-        total_result = await db.execute(
-            select(func.sum(Service.price))
-            .select_from(Appointment)
-            .join(Service, Appointment.service_id == Service.id)
-            .where(*base_conditions)
-        )
-        total_revenue = float(total_result.scalar() or 0)
-        return {"breakdown": [], "total_revenue": total_revenue}
-    
-    result = await db.execute(query)
-    breakdown = [
-        {"name": row[0], "revenue": float(row[1]), "count": row[2]}
-        for row in result.all()
-    ]
-    
-    total_revenue = sum(item['revenue'] for item in breakdown)
-    return {"breakdown": breakdown, "total_revenue": total_revenue}

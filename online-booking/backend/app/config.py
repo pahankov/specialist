@@ -51,6 +51,10 @@ class Settings(BaseSettings):
     SMSC_LOGIN: str = ""
     SMSC_PASSWORD: str = ""
 
+    # DaData (address suggestions; secret never leaves the backend proxy)
+    DADATA_API_KEY: str = ""
+    DADATA_SECRET: str = ""
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

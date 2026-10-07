@@ -45,8 +45,8 @@ class _FakeClient:
 
 @pytest.fixture(autouse=True)
 def _creds(monkeypatch):
-    monkeypatch.setattr(dadata_router, "DADATA_TOKEN", "test-token")
-    monkeypatch.setattr(dadata_router, "DADATA_SECRET", "test-secret")
+    monkeypatch.setattr(dadata_router.settings, "DADATA_API_KEY", "test-token")
+    monkeypatch.setattr(dadata_router.settings, "DADATA_SECRET", "test-secret")
     _FakeClient.instances.clear()
     monkeypatch.setattr(dadata_router.httpx, "AsyncClient", _FakeClient)
 
@@ -71,8 +71,8 @@ class TestDadataProxy:
 
     async def test_503_without_credentials(self, client, monkeypatch):
         """Missing env credentials -> 503, no upstream call."""
-        monkeypatch.setattr(dadata_router, "DADATA_TOKEN", "")
-        monkeypatch.setattr(dadata_router, "DADATA_SECRET", "")
+        monkeypatch.setattr(dadata_router.settings, "DADATA_API_KEY", "")
+        monkeypatch.setattr(dadata_router.settings, "DADATA_SECRET", "")
         before = len(_FakeClient.instances)
         resp = await client.post("/api/dadata/suggest/address", json={"query": "x"})
         assert resp.status_code == 503

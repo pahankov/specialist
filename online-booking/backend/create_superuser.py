@@ -17,7 +17,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from app.database import AsyncSessionLocal
 from app.models.user import User, UserRole
 from app.models.master_profile import MasterProfile
-from app.modules.auth.service import hash_password
+from app.utils.security import hash_password
 
 SUPERUSER_EMAIL = "pahankov@mail.ru"
 SUPERUSER_PASSWORD = "REDACTED_SUPERUSER_PASSWORD"
