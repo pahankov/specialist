@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { superAdminApi } from '../../api/client'
 import type { Master } from '../../api/types'
-import { Skeleton, EmptyState, Tooltip } from '../../components/common'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../components/ui/dialog'
+import { Skeleton, EmptyState, Tooltip, Modal } from '../../components/common'
 import { PHONE_PLACEHOLDER, PASSWORD_PLACEHOLDER, PASSWORD_EDIT_PLACEHOLDER, TELEGRAM_PLACEHOLDER } from '../../constants'
 import { formatPhone } from '../../utils/formatPhone'
 import './MastersPage.css'
@@ -340,11 +339,7 @@ function MastersPage() {
         </div>
       )}
 
-      <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Добавить мастера</DialogTitle>
-          </DialogHeader>
+      <Modal open={showCreateModal} onClose={() => setShowCreateModal(false)} title="Добавить мастера" wide>
           <form onSubmit={handleCreate} className="master-form">
             <div className="form-group">
               <label>Имя *</label>
@@ -366,18 +361,13 @@ function MastersPage() {
               <label>Telegram</label>
               <input type="text" value={createForm.telegram_username} onChange={(e) => setCreateForm({ ...createForm, telegram_username: e.target.value })} placeholder={TELEGRAM_PLACEHOLDER} />
             </div>
-            <DialogFooter>
+            <div className="modal-actions">
               <button type="submit" className="btn btn-primary">Создать</button>
-            </DialogFooter>
+            </div>
           </form>
-        </DialogContent>
-      </Dialog>
+      </Modal>
 
-      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Редактировать мастера</DialogTitle>
-          </DialogHeader>
+      <Modal open={showEditModal} onClose={() => setShowEditModal(false)} title="Редактировать мастера" wide>
           {editingMaster && (
             <form onSubmit={handleEdit} className="master-form">
               <div className="form-group">
@@ -404,13 +394,12 @@ function MastersPage() {
                 <label>Новый пароль (оставьте пустым, если не меняете)</label>
                 <input type="password" value={editForm.password} onChange={(e) => setEditForm({ ...editForm, password: e.target.value })} placeholder={PASSWORD_EDIT_PLACEHOLDER} />
               </div>
-              <DialogFooter>
+              <div className="modal-actions">
                 <button type="submit" className="btn btn-primary">Сохранить</button>
-              </DialogFooter>
+              </div>
             </form>
           )}
-        </DialogContent>
-      </Dialog>
+      </Modal>
     </div>
   )
 }

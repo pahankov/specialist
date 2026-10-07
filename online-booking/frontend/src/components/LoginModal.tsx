@@ -6,6 +6,7 @@ import { authApi } from '../api/client'
 import { dadataApi, type DadataSuggestion } from '../api/dadata'
 import { PASSWORD_PLACEHOLDER } from '../constants'
 import { formatPhone } from '../utils/formatPhone'
+import Modal from './common/Modal'
 import './LoginModal.css'
 
 interface LoginModalProps {
@@ -191,14 +192,13 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
     setCitySuggestions([])
   }
 
-  if (!isOpen) return null
-
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal login-modal" onClick={(e) => e.stopPropagation()}>
-        <h3>
-          {mode === 'login' ? 'Вход в систему' : 'Регистрация'}
-        </h3>
+    <Modal
+      open={isOpen}
+      onClose={onClose}
+      title={mode === 'login' ? 'Вход в систему' : 'Регистрация'}
+      className="login-modal"
+    >
 
         {mode === 'login' ? (
           /* ─── LOGIN FORM ─── */
@@ -412,8 +412,7 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
         <button className="btn btn-ghost" onClick={onClose} style={{ marginTop: 12 }}>
           Закрыть
         </button>
-      </div>
-    </div>
+    </Modal>
   )
 }
 

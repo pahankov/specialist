@@ -26,7 +26,7 @@ function RevenuePage() {
     adminApi.getDashboard()
       .then(r => { setStats(r.data); setIsGlobal('total_masters' in r.data) })
       .catch((err: any) => {
-        if (err.response?.status === 401) { localStorage.removeItem('access_token'); window.location.href = '/admin/login' }
+        if (err.response?.status === 401) { window.location.href = '/admin/login' }
         else setError(err.response?.data?.detail || 'Ошибка загрузки')
       })
       .finally(() => setLoading(false))

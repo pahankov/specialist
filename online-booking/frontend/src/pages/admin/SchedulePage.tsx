@@ -4,6 +4,7 @@ import type { Appointment, Client, Service, DaySchedule, MonthlyStats, BookingFo
 import { Calendar } from '../../components/schedule/Calendar'
 import { TimeSlots } from '../../components/schedule/TimeSlots'
 import { BookingModal } from '../../components/schedule/BookingModal'
+import { ConfirmDialog } from '../../components/common'
 import { MonthlyStatsComponent } from '../../components/schedule/MonthlyStats'
 import {
   toggleDayWork,
@@ -238,17 +239,15 @@ function SchedulePage() {
       <MonthlyStatsComponent currentMonth={currentMonth} stats={monthlyStats} />
 
       {/* Error modal */}
-      {error && (
-        <div className="modal-overlay" onClick={() => setError('')}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 450 }}>
-            <h3 style={{ color: '#c62828' }}>⚠️ Внимание</h3>
-            <p style={{ color: '#333', fontSize: 14, marginBottom: 20 }}>{error}</p>
-            <div className="modal-actions">
-              <button className="btn btn-primary" onClick={() => setError('')}>OK</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={error !== ''}
+        onClose={() => setError('')}
+        title="⚠️ Внимание"
+        message={error}
+        confirmLabel="OK"
+        hideCancel
+        onConfirm={() => setError('')}
+      />
 
       <BookingModal
         open={bookingForm.open}

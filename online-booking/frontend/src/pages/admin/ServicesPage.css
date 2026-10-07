@@ -14,10 +14,7 @@
 .actions-cell { display: flex; gap: 8px; }
 .btn-edit { background: #fef3c7; color: #92400e; border: none; padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 14px; }
 .btn-delete { background: #fee2e2; color: #991b1b; border: none; padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 14px; }
-.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-.modal { background: white; border-radius: 16px; padding: 32px; max-width: 400px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
-.modal h3 { margin: 0 0 8px; font-size: 20px; color: #1a1a2e; }
-.modal p { margin: 0 0 24px; color: #666; font-size: 15px; }
+/* Modal shell lives in components/common/Modal.css */
 .modal-actions { display: flex; gap: 12px; justify-content: flex-end; }
 .modal-actions .btn { min-width: 100px; }
 .modal .btn-ghost { background: #f0f0f0; color: #333; border: 1px solid #ddd; padding: 8px 20px; border-radius: 8px; font-weight: 500; }

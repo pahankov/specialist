@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Client, Service } from '../../api/types'
 import { getFilteredClients, getFilteredServices, formatPrice, formatHour } from './helpers'
+import Modal from '../common/Modal'
 import './ScheduleComponents.css'
 
 interface BookingModalProps {
@@ -39,17 +40,13 @@ export function BookingModal({
   const [showClientDropdown, setShowClientDropdown] = useState(false)
   const [showServiceDropdown, setShowServiceDropdown] = useState(false)
 
-  if (!open) return null
-
   const filteredClients = getFilteredClients(clients, clientSearch)
   const filteredServices = getFilteredServices(services, serviceSearch)
   const selectedClient = clients.find(c => c.id === clientId)
   const selectedService = services.find(s => s.id === serviceId)
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h3>📅 Записать клиента</h3>
+    <Modal open={open} onClose={onClose} title="📅 Записать клиента" wide>
         <p className="booking-modal-date">
           {date?.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })} в {formatHour(hour!)}
         </p>
@@ -149,7 +146,6 @@ export function BookingModal({
             {bookingLoading ? 'Запись...' : 'Записать'}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }

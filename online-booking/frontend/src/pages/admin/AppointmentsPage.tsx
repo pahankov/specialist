@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { adminApi } from '../../api/client'
 import type { Appointment } from '../../api/types'
-import { Skeleton, EmptyState, Tooltip } from '../../components/common'
+import { Skeleton, EmptyState, Tooltip, ConfirmDialog } from '../../components/common'
 import './AppointmentsPage.css'
 
 type SortField = 'appointment_date' | 'client_name' | 'service_name' | 'service_price' | 'status'
@@ -73,7 +73,7 @@ function AppointmentsPage() {
       setAppointments(resp.data.items)
       setTotalPages(resp.data.total_pages)
     } catch (err: any) {
-      if (err.response?.status === 401) { localStorage.removeItem('access_token'); window.location.href = '/admin/login' }
+      if (err.response?.status === 401) { window.location.href = '/admin/login' }
       else setError('Ошибка загрузки')
     } finally { setLoading(false) }
   }
@@ -358,55 +358,48 @@ function AppointmentsPage() {
       )}
 
       {/* Delete confirmation modal */}
-      {deletingId && (
-        <div className="modal-overlay" onClick={() => setDeletingId(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>🗑️ Удалить запись?</h3>
-            <p>Это действие нельзя отменить.</p>
-            <div className="modal-actions">
-              <button className="btn btn-ghost" onClick={() => setDeletingId(null)}>Отмена</button>
-              <button className="btn btn-delete" onClick={() => handleDelete(deletingId)}>Удалить</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={deletingId !== null}
+        onClose={() => setDeletingId(null)}
+        title="🗑️ Удалить запись?"
+        message="Это действие нельзя отменить."
+        confirmLabel="Удалить"
+        danger
+        onConfirm={() => deletingId !== null && handleDelete(deletingId)}
+      />
 
       {/* Cancel confirmation modal */}
-      {cancelingId && (
-        <div className="modal-overlay" onClick={() => setCancelingId(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>❌ Отменить запись?</h3>
-            <div className="form-group">
-              <label>Причина отмены</label>
-              <textarea
-                value={cancelReason}
-                onChange={(e) => setCancelReason(e.target.value)}
-                placeholder="Укажите причину..."
-                rows={3}
-                style={{ width: '100%', padding: 10, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14, resize: 'vertical' }}
-              />
-            </div>
-            <div className="modal-actions">
-              <button className="btn btn-ghost" onClick={() => setCancelingId(null)}>Отмена</button>
-              <button className="btn btn-delete" onClick={handleConfirmCancel} disabled={!cancelReason.trim()}>Отменить</button>
-            </div>
-          </div>
+      <ConfirmDialog
+        open={cancelingId !== null}
+        onClose={() => setCancelingId(null)}
+        title="❌ Отменить запись?"
+        confirmLabel="Отменить"
+        danger
+        confirmDisabled={!cancelReason.trim()}
+        onConfirm={handleConfirmCancel}
+      >
+        <div className="form-group">
+          <label>Причина отмены</label>
+          <textarea
+            value={cancelReason}
+            onChange={(e) => setCancelReason(e.target.value)}
+            placeholder="Укажите причину..."
+            rows={3}
+            style={{ width: '100%', padding: 10, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14, resize: 'vertical' }}
+          />
         </div>
-      )}
+      </ConfirmDialog>
 
       {/* No-show confirmation modal */}
-      {noShowingId && (
-        <div className="modal-overlay" onClick={() => setNoShowingId(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>👤 Отметить неявку?</h3>
-            <p>Клиент не появился на записи. Запись будет отменена, счётчик неяв увеличен.</p>
-            <div className="modal-actions">
-              <button className="btn btn-ghost" onClick={() => setNoShowingId(null)}>Отмена</button>
-              <button className="btn btn-delete" onClick={() => handleNoShow(noShowingId)}>Неявка</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={noShowingId !== null}
+        onClose={() => setNoShowingId(null)}
+        title="👤 Отметить неявку?"
+        message="Клиент не появился на записи. Запись будет отменена, счётчик неявок увеличен."
+        confirmLabel="Неявка"
+        danger
+        onConfirm={() => noShowingId !== null && handleNoShow(noShowingId)}
+      />
 
       {/* Pagination */}
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16, marginTop: 20 }}>

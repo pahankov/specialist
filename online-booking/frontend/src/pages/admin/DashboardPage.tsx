@@ -20,7 +20,6 @@ function DashboardPage() {
       .catch((err: any) => {
         console.error('Dashboard error:', err)
         if (err.response?.status === 401) {
-          localStorage.removeItem('access_token')
           window.location.href = '/admin/login'
         } else {
           const detail = err.response?.data?.detail || err.message || 'Неизвестная ошибка'

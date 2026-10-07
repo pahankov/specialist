@@ -4,8 +4,7 @@ import { adminApi } from '../../api/client'
 import type { Client } from '../../api/types'
 import { PHONE_PLACEHOLDER, EMAIL_PLACEHOLDER } from '../../constants'
 import { formatPhone } from '../../utils/formatPhone'
-import { Skeleton, EmptyState, Tooltip } from '../../components/common'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../../components/ui/dialog'
+import { Skeleton, EmptyState, Tooltip, ConfirmDialog } from '../../components/common'
 import './ClientsPage.css'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -43,7 +42,7 @@ function ClientsPage() {
       setClients(c.data.items)
       setTotalClients(c.data.total)
     } catch (err: any) {
-      if (err.response?.status === 401) { localStorage.removeItem('access_token'); window.location.href = '/admin/login' }
+      if (err.response?.status === 401) { window.location.href = '/admin/login' }
       else toast.error('Ошибка загрузки')
     } finally { setLoading(false) }
   }
@@ -214,18 +213,15 @@ function ClientsPage() {
         </div>
       )}
 
-      <Dialog open={!!deletingId} onOpenChange={(open) => !open && setDeletingId(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>🗑️ Удалить клиента?</DialogTitle>
-            <DialogDescription>Клиент будет удалён вместе со всеми записями. Это действие нельзя отменить.</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <button className="btn btn-ghost" onClick={() => setDeletingId(null)}>Отмена</button>
-            <button className="btn btn-delete" onClick={() => handleDelete(deletingId!)}>Удалить</button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        open={deletingId !== null}
+        onClose={() => setDeletingId(null)}
+        title="🗑️ Удалить клиента?"
+        message="Клиент будет удалён вместе со всеми записями. Это действие нельзя отменить."
+        confirmLabel="Удалить"
+        danger
+        onConfirm={() => deletingId !== null && handleDelete(deletingId)}
+      />
     </div>
   )
 }

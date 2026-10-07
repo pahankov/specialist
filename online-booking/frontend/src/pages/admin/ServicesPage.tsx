@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { adminApi } from '../../api/client'
+import { ConfirmDialog } from '../../components/common'
 import type { Service } from '../../api/types'
+import { formatPrice } from '../../components/schedule/helpers'
 import './ServicesPage.css'
 
 function ServicesPage() {
@@ -21,7 +23,7 @@ function ServicesPage() {
       const s = await adminApi.getServices()
       setServices(s.data.items)
     } catch (err: any) {
-      if (err.response?.status === 401) { localStorage.removeItem('access_token'); window.location.href = '/admin/login' }
+      if (err.response?.status === 401) { window.location.href = '/admin/login' }
       else setError('Ошибка загрузки')
     } finally { setLoading(false) }
   }
@@ -110,7 +112,7 @@ function ServicesPage() {
                   <td><strong>{s.name}</strong></td>
                   <td>{s.description || '—'}</td>
                   <td>{s.duration_minutes} мин</td>
-                  <td>{s.price.toLocaleString('ru-RU')} ₽</td>
+                  <td>{formatPrice(s.price)} ₽</td>
                   <td className="actions-cell">
                     <button className="btn btn-sm btn-edit" onClick={() => handleEdit(s)}>✏️ Редактировать</button>
                     <button className="btn btn-sm btn-delete" onClick={() => setDeletingId(s.id)}>🗑️ Удалить</button>
@@ -122,18 +124,15 @@ function ServicesPage() {
         )}
       </div>
 
-      {deletingId && (
-        <div className="modal-overlay" onClick={() => setDeletingId(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>🗑️ Удалить услугу?</h3>
-            <p>Это действие нельзя отменить. Услуга будет скрыта из списка.</p>
-            <div className="modal-actions">
-              <button className="btn btn-ghost" onClick={() => setDeletingId(null)}>Отмена</button>
-              <button className="btn btn-delete" onClick={() => handleDelete(deletingId)}>Удалить</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={!!deletingId}
+        onClose={() => setDeletingId(null)}
+        title="🗑️ Удалить услугу?"
+        message="Это действие нельзя отменить. Услуга будет скрыта из списка."
+        confirmLabel="Удалить"
+        danger
+        onConfirm={() => deletingId !== null && handleDelete(deletingId)}
+      />
     </div>
   )
 }

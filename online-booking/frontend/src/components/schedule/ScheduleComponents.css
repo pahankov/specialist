@@ -387,36 +387,7 @@
   color: #333;
 }
 
-/* Modal */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 2000;
-}
-
-.modal {
-  background: white;
-  border-radius: 12px;
-  padding: 24px;
-  max-width: 450px;
-  width: 90%;
-  max-height: 80vh;
-  overflow: auto;
-}
-
-.modal h3 {
-  margin: 0 0 8px;
-  font-size: 18px;
-  color: #1a1a2e;
-}
-
+/* Modal shell lives in components/common/Modal.css */
 .modal-actions {
   display: flex;
   gap: 12px;
