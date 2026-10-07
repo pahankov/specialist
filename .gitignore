@@ -74,6 +74,9 @@ frontend/
 .env.local
 .env.production
 
+# Local secrets (contains real credentials - NEVER push to git)
+LOCAL.md
+
 # Test coverage
 htmlcov/
 .tox/
@@ -100,3 +103,6 @@ coverage.xml
 # Mypy
 .mypy_cache
 .ruff_cache
+
+# AI assistant plans (may contain secrets)
+.gigacode_vsc/plans/

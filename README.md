@@ -2,8 +2,21 @@
 
 Приложение для онлайн-записи клиентов на услуги через веб-интерфейс. Клиент выбирает мастера, услугу и время — мастер управляет записями через админ-панель.
 
+---
 
-### [1.5.0] — 2026-09-28
+## 📚 Документация
+
+| Документ | Описание |
+|----------|----------|
+| [DEPLOY.md](DEPLOY.md) | Полное руководство по деплою на сервере |
+| [DB.md](DB.md) | Документация по базе данных PostgreSQL |
+| [LOCAL.md](LOCAL.md) | Локальные секреты и настройки (НЕ для git) |
+| [TESTING.md](online-booking/backend/TESTING.md) | Документация по тестированию backend |
+| [DEPLOYMENT_RULES.md](DEPLOYMENT_RULES.md) | Правила и анти-паттерны деплоя |
+
+---
+
+## 🚀 Быстрый старт
 - **Автоматический деплой:** GitHub Actions workflow полностью автоматизирует развёртывание
   - lembic upgrade head — автоприменение миграций при каждом push в main
   - Создание/обновление суперпользователя pahankov@mail.ru (sync SQLAlchemy, без timezone-ошибок)
@@ -196,7 +209,7 @@ utils/
 
 ## 🤖 MCP-серверы
 
-Проект настроен с 7 MCP-серверами для расширения возможностей GigaCode AI-ассистента. Конфигурация в `.gigacode_vsc/gigacode.jsonc`.
+Проект настроен с 15 MCP-серверами для расширения возможностей GigaCode AI-ассистента. Конфигурация в `.gigacode_vsc/gigacode.jsonc`.
 
 | Сервер | Назначение | Статус |
 |--------|-----------|--------|
@@ -205,8 +218,16 @@ utils/
 | **Filesystem** | Чтение/запись файлов проекта | ✅ |
 | **Playwright** | E2E-тестирование браузера | ✅ |
 | **Puppeteer** | Скриншоты и автоматизация браузера | ✅ |
+| **Chrome DevTools** | Отладка браузера: DOM, консоль, сеть, производительность | ✅ |
 | **SQLite** | Запросы к локальной БД (dev) | ✅ |
 | **Docker** | Управление контейнерами и compose | ✅ |
+| **DevTools Utils** | 23 утилиты: Base64, JWT, UUID, хеши, QR, regex, cron | ✅ |
+| **Markdown Editor** | Редактирование и управление Markdown-файлами | ✅ |
+| **Memory** | Граф знаний для сохранения контекста между сессиями | ✅ |
+| **Context7** | Актуальная документация библиотек и фреймворков | ✅ |
+| **Microsoft Learn** | База знаний Microsoft (Azure, .NET, TypeScript, VS Code) | ✅ |
+| **Dynamic MCP** | Динамические инструменты: автоустановка зависимостей, sandbox-выполнение | ✅ |
+| **Forage** | Самообучение: агент находит, устанавливает и изучает новые инструменты | ✅ |
 
 ### Настройка
 
@@ -479,6 +500,8 @@ utils/
 
 ## 🗄️ База данных
 
+> **Полная документация БД:** [DB.md](DB.md) — все таблицы, связи, миграции, частые ошибки.
+
 **Локальная разработка:** SQLite (aiosqlite) — таблицы создаются автоматически при старте через `create_all`.
 
 **Production:** PostgreSQL 16 (через Docker Compose) + Alembic миграции.
@@ -565,82 +588,11 @@ npx vitest                              # Watch mode
 Включает критические правила, известные проблемы и чек-лист перед коммитом.
 
 ## 🌱 Seed-скрипт
-
-Создание суперпользователя:
-
 ```powershell
 cd backend
 $env:PYTHONPATH='.'
 python create_superuser.py
-```
-
-## 🐛 Решение проблем
-
-### Backend не запускается
-```powershell
-cd backend
-pip install -r requirements.txt
-```
-
-### Frontend не подгружается
-```powershell
-cd frontend
-Remove-Item -Recurse -Force node_modules
-npm install
-npm run dev
-```
-
-### Порт уже занят
-```powershell
-# Найти процесс на порту 8000
-netstat -ano | findstr :8000
-
-# Убить процесс (Windows)
-taskkill /PID <PID> /F
-```
-
-## 📋 Логирование
-
-Приложение использует стандартную систему логирования Python с 5 уровнями:
-
-| Уровень | Описание |
-|---------|----------|
-| `DEBUG` | Отладочная информация (разработчик) |
-| `INFO` | Информационные сообщения о штатной работе |
-| `WARNING` | Предупреждения о нештатных ситуациях |
-| `ERROR` | Ошибки выполнения операций |
-| `CRITICAL` | Критические ошибки, угрожающие работе приложения |
-
-**Конфигурация:** `backend/app/logging_config.py`
-
-**Вывод:**
-- **Console** → `stderr` (базовый уровень из конфига)
-- **File** → `backend/logs/app.log` (всё, включая DEBUG)
-- **Rotating** → автоархивация при 10 МБ, 5 файлов
-
-**Примеры логов:**
-```
-[2026-09-20 20:54:59] INFO app.api.auth: Запрос на регистрацию мастера: test@example.com
-[2026-09-20 20:54:59] WARNING app.api.auth: Регистрация заблокирована — мастер уже существует
-[2026-09-20 20:54:59] ERROR app.api.appointments: Запись не найдена: id=999
-[2026-09-20 20:54:59] CRITICAL root: Критическая ошибка
-```
-
-## 📝 Примеры API (curl)
-
-### Регистрация мастера
-```bash
-curl -X POST http://localhost:8000/api/v1/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Елена","email":"elena@example.com","password":"SecurePass123!","phone":"+79991234567","telegram_username":"elena_sugar"}'
-```
-
-### Создание суперпользователя
-```powershell
-cd backend
-$env:PYTHONPATH='.'
-python create_superuser.py
-# Создаёт: pahankov@mail.ru / REDACTED_SUPERUSER_PASSWORD (role=admin)
+# Создаёт суперпользователя с ролью ADMIN
 ```
 
 ### Логин мастера (возвращает cookies)

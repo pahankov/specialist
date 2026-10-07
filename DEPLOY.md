@@ -1,1196 +1,430 @@
-# Деплой beauty-specialist.ru
+# 🚀 Deployment Guide — beauty-specialist.ru
 
-> **ПОСЛЕДНЕЕ ОБНОВЛЕНИЕ:** 1 октября 2026
-> **СТАТУС:** ✅ Сайт работает, деплой автоматизирован
-> **ГЛАВНОЕ ПРАВИЛО:** НЕ использовать `SAEnum` в моделях SQLAlchemy (см. раздел 1)
+> Полное руководство по деплою. Без дублирования, без утечек секретов.
+> **ВАЖНО:** Этот файл не содержит реальных секретов. Локальные секреты — в `LOCAL.md` (не пушить в git).
 
-## Сервер
+---
 
-| Параметр | Значение |
-|----------|----------|
-| Провайдер | Selectel VPS |
-| IP | `REDACTED_SERVER_IP` |
-| ОС | Ubuntu 24.04 LTS |
-| vCPU | 1 ядро |
-| RAM | 1 ГБ (+ 2 ГБ swap) |
-| Диск | 10 ГБ |
-| Домен | `beauty-specialist.ru` (через Cloudflare, DNS only / серая тучка) |
-| SSH | `root` / `REDACTED_SSH_PASSWORD` |
+## 📋 Содержание
 
-## Архитектура
+- [Архитектура](#архитектура)
+- [CI/CD Pipeline](#cicd-pipeline)
+- [Пошаговый деплой](#пошаговый-деплой)
+- [Ручной деплой](#ручной-деплой)
+- [Критические ошибки и как их избежать](#критические-ошибки-и-как-их-избежать)
+- [Troubleshooting](#troubleshooting)
+- [Health Checks](#health-checks)
+
+---
+
+## 🏗 Архитектура
 
 ```
-beauty-specialist.ru (Cloudflare DNS only)
+beauty-specialist.ru (port 443 SSL, Let's Encrypt)
     │
-    └── Nginx (port 80→443, SSL Let's Encrypt)
-        ├── /api/* → http://127.0.0.1:8000 (Backend FastAPI)
-        └── /*     → /var/www/beauty-specialist/frontend/dist (Frontend static)
+    ├── Nginx
+    │   ├── / → frontend/dist (React SPA, Vite build)
+    │   ├── /api/ → backend (FastAPI, port 8000)
+    │   └── JS/CSS → no-cache headers
+    │
+    ├── systemd: beauty-backend (www-data)
+    │   ├── venv (Python 3.12)
+    │   ├── uvicorn → FastAPI
+    │   ├── .env (DATABASE_URL, SECRET_KEY, etc.)
+    │   └── PostgreSQL 16 (online_booking DB)
+    │
+    └── Redis 7 (optional, for caching)
 ```
 
-**Потребление RAM:**
-- Nginx: ~3-5 МБ
-- PostgreSQL: ~50-80 МБ
-- Python/uvicorn: ~120-170 МБ
-- Swap: 2 ГБ (защита от OOM)
-- **Итого: ~200-300 МБ** (из 1 ГБ + swap)
+**Потребление ресурсов (1 vCPU, 1 GB RAM, 10 GB SSD):**
+- Nginx: ~3-5 MB
+- PostgreSQL: ~50-80 MB
+- Python/uvicorn: ~80-120 MB
+- Система: ~100 MB
+- **Итого: ~250-350 MB** (из 1 GB — OK)
+- **Swap: 2 GB** (защита от OOM при пиковой нагрузке)
 
-## Установленные компоненты
+---
 
-### 1. Swap 2 ГБ
+## 🔄 CI/CD Pipeline
+
+### GitHub Actions (`.github/workflows/deploy.yml`)
+
+**Запускается автоматически при push в `main`:**
+
+```
+┌─────────────┐     ┌──────────────┐     ┌────────────────┐
+│   Test Job  │ →   │ Deploy Job   │ →   │  Success/Fail  │
+│ (Ubuntu)    │     │ (Ubuntu SSH) │     │  (GitHub UI)   │
+└─────────────┘     └──────────────┘     └────────────────┘
+      │                     │
+      │  1. pytest          │  1. SSH to server
+      │  2. coverage        │  2. git reset --hard
+      │  3. if fail → stop  │  3. DB backup
+      │                     │  4. Backend deploy
+      │                     │  5. Frontend build
+      │                     │  6. Health check
+```
+
+**Safety Gates:**
+
+| Gate | Что делает | При fail |
+|------|-----------|----------|
+| CI tests | Тесты на SQLite (aiosqlite) | Деплой отменяется |
+| Server tests | Тесты на сервере перед restart | Деплой abort, сервис не перезапускается |
+| DB backup | SQL dump перед миграциями | Warn, но есть бэкап |
+| Health check | 3 попытки проверки /health | Warning, но деплой завершается |
+
+---
+
+## 🚀 Пошаговый деплой
+
+### Шаг 1: Push в main
+
 ```bash
-dd if=/dev/zero of=/swapfile bs=1M count=2048
-chmod 600 /swapfile
-mkswap /swapfile
-swapon /swapfile
-echo '/swapfile none swap sw 0 0' >> /etc/fstab
-echo 'vm.swappiness=10' >> /etc/sysctl.conf
-sysctl -p
+git add .
+git commit -m "Your message"
+git push origin main
 ```
 
-### 2. Базовые утилиты
+GitHub Actions автоматически запустит пайплайн.
+
+### Шаг 2: CI/CD (автоматически)
+
+Пайплайн делает:
+
+1. **Test job** — pytest на SQLite
+2. **Deploy job** (только если тесты прошли):
+   - SSH на сервер
+   - `git reset --hard origin/main` + `git clean -fd`
+   - Бэкап БД: `pg_dump`
+   - Запуск `deploy_setup.sh` (создание systemd service)
+   - Сборка бэкенда (venv + pip install)
+   - Тесты на сервере (SQLite)
+   - Фикс schema: `fix_all_tables.sql`
+   - Фикс ownership: `audit_logs`
+   - Alembic миграции
+   - Создание суперюзера
+   - Фикс БД, мастеров, сиды
+   - Сборка фронтенда (Vite)
+   - Копирование `dist/` в `/var/www/beauty-specialist/frontend/dist/`
+   - Фикс логов
+   - Запись nginx конфига
+   - Рестарт сервисов
+
+### Шаг 3: Ручная проверка
+
 ```bash
-apt install -y curl wget git unzip jq htop
+# На сервере:
+sudo systemctl status beauty-backend
+sudo systemctl status nginx
+curl https://beauty-specialist.ru/health
 ```
 
-### 3. Firewall (UFW)
+---
+
+## 🔧 Ручной деплой (если CI не сработал)
+
 ```bash
-ufw allow OpenSSH
-ufw allow 80/tcp
-ufw allow 443/tcp
-ufw enable
-```
+# SSH на сервер
+ssh deploy@beauty-specialist.ru
 
-### 4. Пользователь deploy
-```bash
-useradd -m -s /bin/bash deploy
-mkdir -p /home/deploy/.ssh
-chmod 700 /home/deploy/.ssh
-echo 'deploy ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/deploy
-chmod 440 /etc/sudoers.d/deploy
-```
+cd /var/www/beauty-specialist
 
-### 5. Docker (установлен, но не используется)
-```bash
-# Docker CE установлен из официального репозитория
-# Не используется из-за ограничений RAM (1 ГБ)
-# Проект запущен нативно
-```
+# 1. Git
+git fetch origin main
+git reset --hard origin/main
+git clean -fd
 
-### 6. PostgreSQL 16
-```bash
-apt install -y postgresql postgresql-contrib
-systemctl enable postgresql
-systemctl start postgresql
+# 2. Fix permissions
+sudo chown -R deploy:deploy /var/www/beauty-specialist 2>/dev/null || true
+sudo chmod -R u+rw /var/www/beauty-specialist 2>/dev/null || true
 
-# БД и пользователь
-sudo -u postgres psql -c "CREATE DATABASE online_booking;"
-sudo -u postgres psql -c "CREATE USER specialist WITH PASSWORD '<POSTGRES_PASSWORD>';"
-sudo -u postgres psql -c "ALTER DATABASE online_booking OWNER TO specialist;"
-sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE online_booking TO specialist;"
-```
+# 3. Бэкап БД
+pg_dump $(grep DATABASE_URL online-booking/backend/.env | cut -d= -f2) > /tmp/db-backup-$(date +%Y%m%d-%H%M%S).sql
 
-**Важно:** При создании таблиц вручную через `psql` нужно также создавать ENUM-типы:
-```sql
-CREATE TYPE userrole AS ENUM ('MASTER', 'CLIENT', 'ADMIN');
-```
-
-> ⚠️ **НЕ создавайте `masterstatus` enum!** В моделях используется `String(20)` вместо `SAEnum`.
-
-### 7. Python 3.12
-```bash
-apt install -y python3.12 python3.12-venv python3.12-dev python3-pip
-```
-
-### 8. Node.js 20
-```bash
-curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-apt install -y nodejs
-```
-
-### 9. Backend (FastAPI + uvicorn)
-```bash
-cd /var/www/beauty-specialist/online-booking/backend
+# 4. Бэкенд
+cd online-booking/backend
 python3.12 -m venv venv
 source venv/bin/activate
-pip install --upgrade pip
 pip install -r requirements.txt
-pip install asyncpg  # async PostgreSQL driver
-```
 
-**Файл `.env`:**
-```bash
-cat > /var/www/beauty-specialist/online-booking/backend/.env << 'ENVEOF'
-APP_NAME=Beauty Specialist API
-APP_ENV=development
+# 5. Тесты
+pip install pytest pytest-asyncio pytest-cov httpx aiosqlite
+PYTHONPATH=. pytest tests/ -v --tb=short --tb=no 2>&1 | tee /tmp/test-results.txt
 
-DATABASE_URL=postgresql+asyncpg://specialist:<POSTGRES_PASSWORD>@localhost:5432/online_booking
+# 6. Фикс schema (ПЕРЕД alembic!)
+sudo -u postgres psql -d online_booking -f fix_all_tables.sql
 
-SECRET_KEY=<SECRET_KEY>
-REFRESH_SECRET_KEY=<REFRESH_SECRET_KEY>
-ACCESS_TOKEN_EXPIRE_MINUTES=30
-REFRESH_TOKEN_EXPIRE_DAYS=7
-ALGORITHM=HS256
+# 7. Ownership
+sudo -u postgres psql -d online_booking -c "ALTER TABLE audit_logs OWNER TO specialist;"
 
-ALLOWED_ORIGINS=https://beauty-specialist.ru
+# 8. Миграции
+DATABASE_URL=$(grep DATABASE_URL .env | cut -d= -f2)
+alembic upgrade head
 
-REDIS_URL=redis://localhost:6379/0
+# 9. Суперюзер
+python3.12 create_superuser.py
 
-SMS_PROVIDER=fake
-SMS_CODE_TTL_SECONDS=300
-SMS_MAX_ATTEMPTS=3
+# 10. Фиксы
+python3.12 fix_production_db.py
+python3.12 fix_production_masters.py
 
-DADATA_API_KEY=<DADATA_API_KEY>
-DADATA_SECRET=<DADATA_SECRET>
+# 11. Сиды
+python3.12 seed_production.py
+python3.12 create_minimal_reviews.py
 
-TELEGRAM_BOT_TOKEN=<TELEGRAM_BOT_TOKEN>
-TELEGRAM_CLIENT_ID=<TELEGRAM_CLIENT_ID>
-TELEGRAM_CLIENT_SECRET=<TELEGRAM_CLIENT_SECRET>
+# 12. Фронтенд
+cd ../frontend
 
-VK_APP_ID=<VK_APP_ID>
-VK_SECRET_KEY=
+# Очистка
+find src -name "*.js" -type f -delete
+rm -rf node_modules/.vite .vite dist node_modules ~/.cache/vite ~/.vite node_modules/.cache .vite-temp .vite-deps
+npm cache clean --force
+npm ci --no-audit --no-fund
+rm -rf node_modules/.vite/deps node_modules/.vite/deps-cache node_modules/.vite
+rm -rf ~/.cache/vite ~/.vite/deps
 
-YANDEX_CLIENT_ID=
-YANDEX_CLIENT_SECRET=
+# BUILD_ID
+export BUILD_ID=$(git rev-parse --short=7 HEAD)
+echo "BUILD_ID: $BUILD_ID"
 
-MAILRU_APP_ID=
-MAILRU_SECRET_KEY=
+# Сборка
+npm run build 2>&1 | tee /tmp/build-output.txt
 
-OAUTH_REDIRECT_URL=https://beauty-specialist.ru/auth/callback
-ENVEOF
-```
+# Проверка
+grep "searchCities" dist/assets/*.js || echo "ERROR: missing searchCities"
+grep "/api/v1/cities" dist/assets/*.js && echo "ERROR: old cities endpoint found"
 
-**Файл `alembic.ini`:**
-Больше не нужно менять вручную — URL берётся из переменной окружения `DATABASE_URL` через `alembic/env.py`.
-
-**Создание таблиц:**
-Больше не нужно создавать вручную — baseline-миграция `4fdb5e791ead` создаёт все 14 таблиц автоматически при `alembic upgrade head`.
-
-**Пометить миграции как применённые:**
-Больше не нужно — `alembic upgrade head` сам применяет все миграции.
-
-**Systemd сервис (КРИТИЧНО!):**
-```bash
-cat > /etc/systemd/system/beauty-backend.service << 'SVCEOF'
-[Unit]
-Description=Beauty Specialist Backend API
-After=network.target postgresql.service
-
-[Service]
-Type=simple
-User=www-data
-WorkingDirectory=/var/www/beauty-specialist/online-booking/backend
-EnvironmentFile=/var/www/beauty-specialist/online-booking/backend/.env
-Environment=APP_ENV=production
-ExecStart=/var/www/beauty-specialist/online-booking/backend/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-SVCEOF
-
-systemctl daemon-reload
-systemctl enable beauty-backend
-systemctl start beauty-backend
-```
-**ВАЖНО:**
-- `EnvironmentFile=.env` — читает `DATABASE_URL` из `.env` (НЕ `Environment="DATABASE_URL=..."!`)
-- `Environment=APP_ENV=production` — форсирует PostgreSQL вместо SQLite
-- Без этих двух строк бэкенд падает на SQLite → 502 Bad Gateway
-
-**Папка логов:**
-```bash
-mkdir -p /var/www/beauty-specialist/online-booking/backend/logs
-chown -R www-data:www-data /var/www/beauty-specialist/online-booking/backend/logs
-```
-
-### 10. Frontend (React + Vite)
-```bash
-cd /var/www/beauty-specialist/online-booking/frontend
-npm ci
-
-# Важно: VITE_API_URL без /api/v1 — путь добавляется в коде фронтенда
-cat > .env.production << 'EOF'
-VITE_API_URL=https://beauty-specialist.ru
-EOF
-
-npm run build
+# Копирование
+rm -rf /var/www/beauty-specialist/frontend/dist
 mkdir -p /var/www/beauty-specialist/frontend/dist
 cp -r dist/* /var/www/beauty-specialist/frontend/dist/
-```
 
-### 11. Nginx
-```bash
-apt install -y nginx
-
-cat > /etc/nginx/sites-available/beauty-specialist << 'NGINXEOF'
-server {
-    listen 80;
-    server_name beauty-specialist.ru www.beauty-specialist.ru;
-
-    location / {
-        root /var/www/beauty-specialist/frontend/dist;
-        try_files $uri $uri/ /index.html;
-    }
-
-    location /api/ {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    location /docs {
-        proxy_pass http://127.0.0.1:8000/docs;
-        proxy_set_header Host $host;
-    }
-
-    location /health {
-        proxy_pass http://127.0.0.1:8000/health;
-        proxy_set_header Host $host;
-    }
-}
-NGINXEOF
-
-ln -s /etc/nginx/sites-available/beauty-specialist /etc/nginx/sites-enabled/
-rm -f /etc/nginx/sites-enabled/default
-nginx -t && systemctl restart nginx
-systemctl enable nginx
-```
-
-### 12. SSL (Let's Encrypt)
-```bash
-apt install -y certbot python3-certbot-nginx
-certbot --nginx -d beauty-specialist.ru -d www.beauty-specialist.ru --non-interactive --agree-tos --email pahankov@mail.ru
-```
-Сертификат действителен до **26 декабря 2026**. Автообновление настроено.
-
-### 13. Cloudflare
-- Домен `beauty-specialist.ru` через Cloudflare
-- **DNS записи A/AAAA должны быть серые** (DNS only, не оранжевая тучка)
-- Иначе Cloudflare возвращает 530 (Origin is down)
-
-### 14. GitHub Actions (CI/CD)
-**Секреты репозитория:**
-- `SERVER_HOST` = `REDACTED_SERVER_IP`
-- `SERVER_SSH_KEY` = содержимое приватного SSH-ключа (файл без `.pub`)
-- `DATABASE_URL` = `postgresql+asyncpg://specialist:<POSTGRES_PASSWORD>@localhost:5432/online_booking`
-
-**Workflow** — файл `.github/workflows/deploy.yml`
-
-## Миграции БД
-
-### Как работают миграции
-
-Миграции Alembic — это скрипты, которые изменяют структуру БД. При каждом push в `main` GitHub Actions автоматически применяет все миграции на сервере через `alembic upgrade head`.
-
-**Полная цепочка миграций (линейная, без ветвлений):**
-→ `9a9c2edb119f` (initial_schema — пустая) → `08fbbef38349` (master_status string + working_hour.is_active) → `f43f84fe3057` (timezone fix) → `sync_missing_columns` (no_show_count, preferred_service_ids) → `aaa7fcc30d47` (name_ru в countries) → `b2e8f1a3c9d0` (name_en в cities) → `4fdb5e791ead` (baseline: IF NOT EXISTS) → `5c72771` (audit_logs FK → users вместо master_profiles, чтобы админ мог логировать действия)
-
-### Как сгенерировать новую миграцию
-
-```bash
-cd online-booking/backend
-# Локально (SQLite)
-$env:DATABASE_URL = "sqlite+aiosqlite:///./dev.db"
-python -m alembic revision --autogenerate -m "описание изменений"
-python -m alembic upgrade head
-```
-
-Alembic читает `DATABASE_URL` из переменной окружения через `alembic/env.py`. Если переменная не set — используется SQLite по умолчанию из `alembic.ini`.
-
-### Проверка миграций
-
-```bash
-python -m alembic history        # показать цепочку
-python -m alembic current        # текущая версия в БД
-python -m alembic upgrade head   # применить все
-python -m alembic downgrade -1   # откат на одну версию
-```
-
-### Как работает деплой
-
-1. Push в main → запускается `.github/workflows/deploy.yml`
-2. Подключение к серверу по SSH (секреты `SERVER_HOST`, `SERVER_SSH_KEY`)
-3. `git pull origin main`
-4. `export DATABASE_URL="${DATABASE_URL}"` — передаёт URL БД из GitHub Secrets
-5. **`fix_all_tables.sql`** — исправляет схему БД (добавляет недостающие колонки, конвертирует enum в VARCHAR)
-6. `alembic upgrade head` — применяет все миграции
-7. `create_superuser.py` — создаёт/обновляет админа (pahankov@mail.ru)
-8. `fix_production_db.py` — дополнительные исправления БД
-9. `seed_production.py` — заполняет БД тестовыми данными если пуста
-10. `create_minimal_reviews.py` — создаёт отзывы для карусели
-11. Сборка фронтенда (`npm ci` + `npm run build`)
-12. Копирование статики в `/var/www/beauty-specialist/frontend/dist/`
-13. Перезапуск beauty-backend + nginx
-14. **Тесты API** — проверка health, countries, login, reviews
-
-### GitHub Secrets
-
-Обязательно настроить в Settings → Secrets and variables → Actions → New repository secret:
-
-| Secret | Описание | Пример |
-|--------|----------|--------|
-| `SERVER_HOST` | IP сервера | `REDACTED_SERVER_IP` |
-| `SERVER_SSH_KEY` | Приватный SSH-ключ | `-----BEGIN OPENSSH PRIVATE KEY-----...` |
-| `DATABASE_URL` | URL PostgreSQL для миграций | `postgresql+asyncpg://specialist:<POSTGRES_PASSWORD>@localhost:5432/online_booking` |
-
-> **Без `DATABASE_URL` миграции не подключатся к БД!**
-
-### Структура миграций
-
-Файлы находятся в `online-booking/backend/alembic/versions/`:
-
-| Файл | Что делает |
-|------|------------|
-| `9a9c2edb119f_initial_schema.py` | Пустая — таблицы создаются через baseline |
-| `08fbbef38349_add_master_status_enum...py` | Enum `MasterStatus` + `WorkingHour.is_active` |
-| `f43f84fe3057_fix_timezone_in_datetime...py` | Все `DateTime` → `TIMESTAMP WITH TIME ZONE`, удаление старых таблиц |
-| `sync_missing_columns.py` | Добавляет `no_show_count`, `preferred_service_ids`, `name_ru`/`name_en` в countries |
-| `aaa7fcc30d47_add_name_ru_to_countries.py` | `name_ru` в countries (idempotent) |
-| `b2e8f1a3c9d0_add_cities_name_en.py` | `name_en` в cities |
-| `4fdb5e791ead_baseline_capture_current_schema.py` | Baseline — создаёт все 14 таблиц, 31+ колонок, индексы |
-
-## Полезные команды
-
-### Проверка сервисов
-```bash
-systemctl status beauty-backend --no-pager
-systemctl status nginx --no-pager
-systemctl status postgresql --no-pager
-```
-
-### Логи
-```bash
-journalctl -u beauty-backend --no-pager -n 30
-journalctl -u nginx --no-pager -n 30
-```
-
-### Файлы логов приложения
-```bash
-# Приложение пишет логи в /var/www/.../backend/logs/app.log
-# Rotating: 10 МБ, 5 файлов
-sudo tail -100 /var/www/beauty-specialist/online-booking/backend/logs/app.log
-
-# Фильтр по request_id (correlation ID)
-grep "abc12345" /var/www/beauty-specialist/online-booking/backend/logs/app.log
-
-# Критические ошибки (CRITICAL)
-grep "CRITICAL" /var/www/beauty-specialist/online-booking/backend/logs/app.log
-
-# Ошибки авторизации
-grep "JWT\|Login\|Logout\|OTP" /var/www/beauty-specialist/online-booking/backend/logs/app.log
-```
-
-### Структура лог-сообщений
-```
-[2026-10-01 09:00:00] INFO [abc12345] app.modules.auth.dependencies: JWT decoded: user_id=5, role=MASTER
-```
-- `[abc12345]` — correlation ID (уникальный для каждого HTTP-запроса)
-- `app.modules.auth.dependencies` — модуль, где записан лог
-- `INFO` — уровень логирования (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-
-### Уровни логирования
-| Уровень | Когда используется | Пример |
-|---------|-------------------|--------|
-| DEBUG | Детали JWT, сессии БД, прогресс CSV | `JWT decoded: user_id=5` |
-| INFO | Штатные действия: login, register, commit | `Master registered: id=5` |
-| WARNING | Предупреждения: неверный токен, 404 | `JWT validation failed` |
-| ERROR | Ошибки: не удалось отправить SMS, Redis | `Failed to send SMS: timeout` |
-| CRITICAL | Unhandled exceptions, full traceback | `UNHANDLED EXCEPTION: POST /api/...` |
-
-### Перезапуск
-```bash
-systemctl restart beauty-backend
-systemctl restart nginx
-```
-
-### Проверка API
-```bash
-curl https://beauty-specialist.ru/api/v1/masters/
-curl https://beauty-specialist.ru/api/v1/services/
-curl https://beauty-specialist.ru/docs  # Swagger
-```
-
-### Проверка RAM
-```bash
-free -h
-top -bn1 | head -10
-```
-
-## Известные проблемы и решения
-
-### 1. Таблицы не видны бэкенду
-Проблема: таблицы создаются от `postgres`, а бэкенд подключается как `specialist`.
-Решение: `ALTER SCHEMA public OWNER TO specialist;`
-
-### 2. Дублирование `/api/v1/api/v1/`
-Проблема: `VITE_API_URL` содержит `/api/v1`, а код фронтенда добавляет его снова.
-Решение: `VITE_API_URL=https://beauty-specialist.ru` (без `/api/v1`)
-
-### 3. Cloudflare 530
-Проблема: Cloudflare проксирует трафик, но origin не доступен.
-Решение: Отключить прокси в Cloudflare (серая тучка в DNS записях)
-
-### 4. PostgreSQL password с `!`
-Проблема: bash интерпретирует `!` в двойных кавычках.
-Решение: использовать одинарные кавычки или `set +H`
-
-### 5. 502 Bad Gateway — бэкенд не запускается
-Проблема: сервис `beauty-backend` неактивен, nginx возвращает 502.
-Причина: сервис запускается от `www-data`, но директория `logs/` принадлежит `deploy`.
-Решение:
-```bash
+# 13. Логи
 sudo chown -R www-data:www-data /var/www/beauty-specialist/online-booking/backend/logs/
-sudo chmod -R 755 /var/www/beauty-specialist/online-booking/backend/logs/
+
+# 14. Nginx
+sed -i 's/\r$//' deploy_fix_nginx.sh
+bash deploy_fix_nginx.sh
+
+# 15. Рестарт
 sudo systemctl restart beauty-backend
-```
-Проверка: `sudo systemctl status beauty-backend --no-pager`
+sudo systemctl restart nginx
+sleep 5
 
-### 6. 500 Internal Server Error — column X does not exist
-Проблема: модель ожидает колонку, которой нет в production БД.
-Причина: схема БД не соответствует модели SQLAlchemy.
-Решение: запустить `fix_all_tables.sql`:
+# 16. Проверка
+sudo systemctl is-active --quiet beauty-backend && echo "SUCCESS" || echo "FAILED"
+```
+
+---
+
+## ⚠️ Критические ошибки и как их избежать
+
+### 1. Stale `.js` файлы в `src/`
+
+**Проблема:** На сервере в `src/` могут остаться старые `.js` файлы от предыдущих сборок. Vite читает их вместо `.ts/.tsx`.
+
+**Решение:**
 ```bash
-cd /var/www/beauty-specialist/online-booking/backend
-sudo -u postgres psql -d online_booking -f fix_all_tables.sql
+# УДАЛЯТЬ ПЕРЕД КАЖДЫМ ДЕПЛОЕМ:
+find src -name "*.js" -type f -delete
 ```
 
-### 7. 500 Internal Server Error — LookupError enum
-Проблема: `LookupError: 'active' is not among the defined enum values`
-Причина: в модели используется `SAEnum`, asyncpg кэширует старый enum-тип.
-Решение: заменить `SAEnum` на `String(20)` в модели и `.value` на прямое значение в коде.
+### 2. BUILD_ID cache busting
 
----
+**Проблема:** Если содержимое JS файла не меняется, Vite генерирует тот же hash. Браузер кэширует старый файл.
 
-## Структура на сервере
-```
-/var/www/beauty-specialist/
-├── online-booking/
-│   ├── backend/
-│   │   ├── .env
-│   │   ├── alembic.ini
-│   │   ├── alembic/
-│   │   ├── app/
-│   │   ├── logs/
-│   │   ├── requirements.txt
-│   │   └── venv/
-│   └── frontend/
-│       ├── .env.production
-│       ├── dist/           # собранный фронтенд
-│       └── src/
-└── frontend/
-    └── dist/               # копия для Nginx
-```
-
-## Системные пользователи
-- `root` — полный доступ
-- `deploy` — для GitHub Actions (sudo без пароля)
-- `www-data` — владелец процесса бэкенда
-- `postgres` — PostgreSQL
-
-## Порты
-- `80` — HTTP (Nginx)
-- `443` — HTTPS (Nginx + SSL)
-- `8000` — Backend (localhost, только Nginx прокси)
-- `5432` — PostgreSQL (localhost)
-
-## Быстрый деплой
-
-### Автоматический скрипт `deploy.sh`
-
-```bash
-# Продакшен (требует DATABASE_URL)
-export DATABASE_URL='postgresql+asyncpg://user:pass@host:5432/dbname'
-./deploy.sh
-
-# Локально (SQLite)
-./deploy.sh --local
-
-# Только проверка без изменений
-./deploy.sh --dry-run
-```
-
-Скрипт автоматически:
-1. Проверяет и исправляет схему БД (добавляет недостающие колонки)
-2. Запускает миграции Alembic
-3. Создаёт/обновляет суперпользователя
-4. Заполняет seed-данными
-5. Собирает фронтенд
-6. Перезапускает сервисы
-7. Проверяет что всё работает
-
----
-
-## Чеклист при добавлении нового функционала
-
-При добавлении **любой новой модели, эндпоинта или изменения БД** — проверяйте все пункты:
-
-### 1. Модель и схема
-- [ ] Модель создана в `app/models/`
-- [ ] Pydantic-схемы (create/update/response) в `app/schemas/`
-- [ ] **НЕТ `SAEnum` или `Enum()` в моделях** — использовать `String(20)` вместо enum
-- [ ] В коде НЕ использовать `.value` у status (например, `mp.status` а не `mp.status.value`)
-
-### 2. Миграция БД
-- [ ] Миграция сгенерирована: `python -m alembic revision --autogenerate -m "описание"`
-- [ ] Миграция протестирована локально: `python -m alembic upgrade head`
-- [ ] Миграция добавлена в цепочку в `DEPLOY.md` (раздел "Полная цепочка миграций")
-- [ ] Миграция idempotent (не падает при повторном запуске)
-
-### 3. Данные (самая частая ошибка!)
-- [ ] **Сид-данные** для новой таблицы созданы (если таблица должна содержать записи)
-- [ ] Сид-данные добавлены в `seed_test_data.py` ИЛИ в отдельный скрипт
-- [ ] Сид-данные вызываются из `seed_production.py`
-- [ ] **Связанные таблицы** заполнены (foreign key записи)
-- [ ] На чистом сервере данные появляются автоматически при деплое
-
-### 4. API и роутер
-- [ ] Эндпоинты добавлены в router
-- [ ] Router подключён в `app/main.py`
-- [ ] API-клиент на фронтенде обновлён (`api/client.ts`)
-- [ ] Swagger документация доступна (`/api/v1/docs`)
-
-### 5. Фронтенд
-- [ ] Компоненты обновлены/добавлены
-- [ ] Стили добавлены (если нужно)
-- [ ] Обработка ошибок и loading states
-- [ ] Пустые состояния (empty states) — что показывать если данных нет
-- [ ] На чистом сервере компонент работает с сид-данными
-
-### 6. Авторизация и роли
-- [ ] Эндпоинты защищены (`Depends(require_admin)` и т.д.)
-- [ ] Роутинг на фронтенде учитывает роли (`getIsAdmin()`)
-- [ ] Суперпользователь создаётся в `create_superuser_sync.py`
-- [ ] Суперпользователь имеет **все связанные записи** (MasterProfile, etc.)
-
-### 7. Деплой
-- [ ] `deploy.yml` запускает все необходимые скрипты в правильном порядке:
-  1. `alembic upgrade head` — миграции
-  2. `create_superuser_sync.py` — суперпользователь
-  3. `fix_production_db.py` — исправления БД
-  4. `seed_production.py` — сид-данные
-  5. `create_minimal_reviews.py` — данные для карусели
-- [ ] Frontend собирается с правильными `.env` переменными
-- [ ] Сервисы перезапускаются после деплоя
-
-### 8. Тесты
-- [ ] Backend-тесты обновлены (`tests/`)
-- [ ] Фронтенд-тесты обновлены (`src/tests/`)
-- [ ] CI pipeline проходит (`ci.yml`)
-
-### 9. Документация
-- [ ] `DEPLOY.md` обновлён (цепочка миграций, новые скрипты)
-- [ ] Изменения в API задокументированы в Swagger
-- [ ] Changelog обновлён (`/api/v1/admin/changelog`)
-
-### 10. Финальная проверка на чистом сервере
-- [ ] `GET /api/v1/health` — 200 OK
-- [ ] `GET /api/v1/masters/` — 200 OK с данными
-- [ ] `GET /api/v1/reviews/` — 200 OK с отзывами
-- [ ] `POST /api/v1/auth/login-unified` — вход суперпользователя работает
-- [ ] Админ-панель открывается
-- [ ] Карусель на главной показывает отзывы
-- [ ] Регистрация/авторизация мастеров работает
-
----
-
-## КРИТИЧЕСКИЕ ОШИБКИ И ИХ ПРИЧИНЫ
-
-### 1. 502 Bad Gateway — бэкенд на SQLite
-**Причина:** systemd юнит не читает `.env` (нет `EnvironmentFile=`) или `APP_ENV=development`.
-**Проверка:** `cat /etc/systemd/system/beauty-backend.service` — должен содержать `EnvironmentFile=` и `APP_ENV=production`.
-**Решение:** Обновить юнит (см. раздел выше) + `sudo systemctl restart beauty-backend`.
-
-### 2. 502 — юнит не обновился после деплоя
-**Причина:** `deploy_setup.sh` не имеет `sudo` для записи в `/etc/systemd/system/`.
-**Решение:** `deploy_setup.sh` пишет в `/tmp`, потом `sudo bash -c 'cat > /etc/systemd/system/...' << 'UNIT'`.
-
-### 3. Alembic: `ValueError: invalid interpolation syntax in '***'`
-**Причина:** `config.set_main_option()` ломается на `!` в пароле.
-**Решение:** В `alembic/env.py` НЕ использовать `config.set_main_option()`, передавать URL напрямую в `engine_from_config()`.
-
-### 4. Alembic: `MissingGreenlet`
-**Причина:** `config.get_main_option()` возвращает SQLite URL из `alembic.ini` (не пустая строка → fallback не срабатывает).
-**Решение:** В `env.py` всегда проверять `DATABASE_URL` из env ПЕРВЫМ.
-
-### 5. 500 — `ForeignKeyViolationError` (FK ссылается на users вместо master_profiles)
-**Причина:** старая БД имеет FK `appointments.master_id → users`, модель ожидает `→ master_profiles`.
-**Решение:** `fix_all_tables.sql` содержит блок "Fix FK constraints" — DROP и CREATE FK заново.
-
-### 6. 500 — `ForeignKeyViolationError: audit_logs.master_id → master_profiles`
-**Причина:** `audit_logs.master_id` ссылается на `master_profiles`, но админ не мастер. `log_action()` вставляет `master_id=1` (id админа).
-**Решение:** `audit_logs.master_id` должен ссылаться на `users(id)`. Фикс в `fix_all_tables.sql` (строки 110-117).
-
-### 7. seed_test_data.py падает на `MasterStatus`
-**Решение:** Использовать `status="active"` вместо `status=MasterStatus.ACTIVE`.
-
----
-
-## ПРАВИЛА БЕЗОПАСНОСТИ И КАЧЕСТВА КОДА
-
-### 1. Никогда не коммить чувствительные данные
-- **Никогда** не добавляй реальные пароли, API-ключи, токены в код или документацию
-- В DEPLOY.md используй placeholders: `<POSTGRES_PASSWORD>`, `<SECRET_KEY>`, `<TELEGRAM_BOT_TOKEN>`
-- Реальные секреты хранятся в:
-  - `.env` на сервере (не в git!)
-  - GitHub Secrets (`DATABASE_URL`, `SERVER_SSH_KEY`)
-  - `.env.production` на сервере (не в git!)
-- **Проверка:** перед коммитом выполни `git diff --cached` и убедись что нет `password`, `secret`, `token`, `key` со значениями
-
-### 2. После любого редактирования файла — проверяй синтаксис
-- Python: `python -c "import ast; ast.parse(open('file.py').read())"` или `python -c "import module_name"`
-- TypeScript: `npm run type-check`
-- **Никогда** не доверяй редактированию без валидации
-- Если файл редактируется через скрипт — проверяй что нет null bytes (`\x00`)
-- **Пример ошибки:** `audit.py` обрезался на строке 85 → `SyntaxError: '[' was never closed`
-
-### 3. При изменении моделей SQLAlchemy — проверяй все relationship
-- Если меняешь FK в модели — проверь все `back_populates` в других моделях
-- Если удаляешь relationship — проверь что нигде не используется
-- **Проверка:** `python -c "from app.main import app"` — если импорт падает с NoForeignKeysError — проблема в relationship
-- **Пример ошибки:** `AuditLog.master_profile` удалён, но `admin/audit.py` всё ещё использовал `selectinload(AuditLog.master_profile)`
-
-### 4. При изменении log_action — проверяй все вызовы
-- log_action принимает `master_id` — убедись что это User.id (не MasterProfile.id)
-- Супер-админ (role=ADMIN) не имеет MasterProfile → `master.master_profile.id` = None → AttributeError
-- **Проверка:** `grep -r "log_action" app/modules/admin/` — все вызовы должны использовать `master.id`
-
-### 5. Деплой при пуше — изменения должны быть минимальными и проверенными
-- Перед коммитом: локальная проверка импорта `python -c "from app.main import app"`
-- Изменения должны быть обратимыми (git commit с понятным сообщением)
-- После коммита: подождать деплой, проверить логи `sudo journalctl -u beauty-backend -n 100`
-- **Логи с сервера:** `ssh root@REDACTED_SERVER_IP` → `sudo journalctl -u beauty-backend --no-pager -n 100`
-
-### 6. Модульная структура
-- Файлы > 300 строк — делить на модули
-- Один файл — одна ответственность (SRP)
-- Роутеры агрегируются в `__init__.py` модуля
-- Не меняй API пути — только внутреннюю структуру
-- **При разделении файла — копируй ВСЕ импорты!**
-- **Пример ошибки:** `crud.py` — забыл `Query` из `fastapi` → `NameError: name 'Query' is not defined`
-
-### 7. При создании новых модулей — проверяй все зависимости
-- Каждый новый файл должен пройти `python -c "import ast; ast.parse(open('file.py').read())"`
-- Проверь что все импорты существуют: `from app.modules.auth.service import hash_password` (не `app.services.auth`)
-- **Пример ошибки:** `hash_password` в `app.modules.auth.service`, а не в `app.services.auth`
-
-### 8. Никогда не пушить чувствительные данные в git
-- **Никогда** не коммить `.env`, пароли, API-ключи, токены, секретные ключи
-- `.env` файлы в `.gitignore` — но это не гарантия, `.gitignore` можно отключить
-- **Правило:** перед `git commit` — `git diff --cached | grep -iE "password|secret|token|key|api_key|DADATA|TELEGRAM_BOT"`
-- **В DEPLOY.md** — только плейсхолдеры: `<POSTGRES_PASSWORD>`, `<SECRET_KEY>`, `<TELEGRAM_BOT_TOKEN>`
-- **На сервере** — `.env` не трогает деплой, он только `git pull`
-- **Если уже запушил секреты** — `git filter-branch --tree-filter` для очистки истории + `--force` push
-- **Проверка:** `git log --all -p | grep -iE "Postgres2024|beauty-specialist-2024|07c167324787848e"` — должен вернуть пустоту
-- **Пример ошибки:** DEPLOY.md содержал реальные PostgreSQL пароль, DADATA ключи, Telegram Bot Token — все 193 коммита были переписаны
-
-### 11. Не использовать slowapi @limiter.limit() на auth endpoint'ах
-**Ошибка:** slowapi rate limiting на /register (5/minute) блокировал тесты — fixture auth_token не мог зарегистрировать мастера после 5 запросов → все последующие тесты падали с ERROR (429 Too Many Requests)
-**Причина:** slowapi @limiter.limit("5/minute") на auth endpoint'ах работает в тестах так же как в продакшене, но тесты создают много пользователей быстро
-**Правило:**
-- **Никогда** не использовать @limiter.limit() на auth endpoint'ах (/register, /login, /verify-otp)
-- Rate limiting на auth — nice-to-have, не critical
-- Если нужен — использовать middleware-уровень с высокими лимитами для auth
-- slowapi можно использовать на обычных API endpoint'ах, но не на auth
-**Исправлено:** Удалены все @limiter.limit() декораторы из app/modules/auth/router.py
-
----
-
-
-### 13. Телефоны - только libphonenumber-js
-
-**Проблема:** Self-written formatPhone.ts поддерживал только +7 (РФ), hard-coded логика.
-
-**Правило:**
-- **Никогда** не писать self-written форматирование телефонов
-- Использовать libphonenumber-js - он обеспечивает:
-  - Поддержка всех стран с правильным форматированием
-  - Валидация номеров (isValid())
-  - Форматирование E.164 (+79991234567)
-  - National формат (+7 (999) 123-45-67)
-- Обертка в src/utils/formatPhone.ts:
-  - formatPhone(value, countryCode) - national формат
-  - validatePhone(value, countryCode) - валидация
-  - formatPhoneE164(value, countryCode) - E.164 формат
-- По умолчанию: RU для обратной совместимости
-- В формах с выбором страны: передавать country code из selectedCountry
-
-**Плохо:**
+**Решение (vite.config.ts):**
 ```typescript
-// Self-written, только +7
-return `+7 (${cleaned})...`
+entryFileNames: `assets/[name]-[hash]-${process.env.BUILD_ID || 'dev'}.js`
+chunkFileNames: `assets/[name]-[hash]-${process.env.BUILD_ID || 'dev'}.js`
+assetFileNames: `assets/[name]-[hash]-${process.env.BUILD_ID || 'dev'}.[ext]`
 ```
 
-**Хорошо:**
-```typescript
-import { formatPhone } from utils/formatPhone
-
-// С country code из формы
-const country = countries.find(c => c.id === selectedCountry)
-formatPhone(value, country?.code || RU)
-```
-
-**Исправлено:** formatPhone.ts заменен на libphonenumber-js
-
-## ЧЕК-ЛИСТ ПЕРЕД КОММИТОМ
-
-
-> **Всегда выполняй перед `git commit`!** Это сэкономит часы на отладку.
-
-### 1. Проверь синтаксис всех изменённых файлов
+**В deploy.yml:**
 ```bash
-python -c "import ast; ast.parse(open('file.py').read())"
+export BUILD_ID=$(git rev-parse --short=7 HEAD)
 ```
-- **Не доверяй** редактированию без валидации
-- Если файл редактировался через скрипт — проверь на null bytes
 
-### 2. Проверь импорт всего приложения
+### 3. Очистка кэшей Vite
+
+**ПЕРЕД КАЖДЫМ ДЕПЛОЕМ:**
 ```bash
-python -c "from app.main import app"
-```
-- Ловит 90% ошибок до деплоя
-- Если падает с `NoForeignKeysError` → проблема в relationship
-- Если падает с `NameError` → проблема в импорте
+# Удалить stale .js
+find src -name "*.js" -type f -delete
 
-### 3. Проверь ВСЕ использования при изменении модели
+# Все возможные кэши Vite:
+rm -rf node_modules/.vite
+rm -rf .vite
+rm -rf dist
+rm -rf node_modules
+rm -rf ~/.cache/vite
+rm -rf ~/.vite
+rm -rf node_modules/.cache
+rm -rf .vite-temp
+rm -rf .vite-deps
+npm cache clean --force
+
+# После npm ci — снова очистить:
+npm ci --no-audit --no-fund
+rm -rf node_modules/.vite/deps
+rm -rf node_modules/.vite/deps-cache
+rm -rf node_modules/.vite
+rm -rf ~/.cache/vite
+rm -rf ~/.vite/deps
+```
+
+### 4. Проверка собранного JS
+
+**НЕ ПРОВЕРЯТЬ ИСХОДНИКИ — проверять СБОРКУ!**
+
 ```bash
-grep -r "old_relationship_name" app/
-grep -r "log_action" app/modules/admin/
-```
-- Не только в новом модуле, а во всём проекте
-- При смене FK — проверь все `back_populates`
-- При удалении relationship — проверь что нигде не используется
+# Правильная проверка (свойство объекта выживает минификацию):
+grep "searchCities" dist/assets/*.js
 
-### 4. Проверь все импорты в новых файлах
+# НЕЛЬЗЯ проверять (переменная переименовывается минификатором):
+grep "dadataApi" dist/assets/*.js  # ❌ ВСЕГДА падает!
+
+# URL конвертируется в unicode escapes:
+grep "suggestions.dadata.ru" dist/assets/*.js  # ❌ Может не работать!
+
+# Проверка отсутствия старого кода:
+grep "/api/v1/cities" dist/assets/*.js  # ❌ Должно быть пусто!
+```
+
+### 5. Windows CRLF
+
+**ВСЕ shell скрипты должны быть в LF:**
 ```bash
-grep -r "def hash_password" app/  # найти точный путь
-grep -r "Query" app/modules/admin/masters/  # проверить все параметры
+sed -i 's/\r$//' deploy_setup.sh
+sed -i 's/\r$//' deploy_fix_nginx.sh
 ```
-- Не гадать, а искать
-- При разделении файла — проверить КАЖДЫЙ endpoint, КАЖДЫЙ параметр
 
-### 5. Проверь что не удалил используемые классы
+### 6. `sudo tee` вместо `cat >`
+
 ```bash
-grep -r "LoginRequest" app/modules/auth/
+# НЕЛЬЗЯ:
+cat > /etc/nginx/sites-enabled/beauty-specialist << 'EOF'
+
+# МОЖНО:
+sudo tee /etc/nginx/sites-enabled/beauty-specialist > /dev/null << 'EOF'
 ```
-- Если удалил класс — проверь что нигде не используется
 
-### 6. Проверь async/sync функции
-- `def` — синхронная, вызывается как `result = func()`
-- `async def` — асинхронная, вызывается как `result = await func()`
-- **Не делай** `async def` для простых конвертеров (они не await'ятся в list comprehension)
+### 7. Удаление `dist` — целиком!
 
-### 7. Проверь чувствительные данные
 ```bash
-git diff --cached | grep -i "password\|secret\|token\|key"
+# НЕЛЬЗЯ (оставляет скрытые файлы):
+rm -rf dist/*
+
+# МОЖНО:
+rm -rf dist
+mkdir -p dist
 ```
-- Никаких реальных паролей в коде или документации
-- В DEPLOY.md — только placeholders
 
-### 8. Проверь логирование новых эндпоинтов
-- [ ] `logger = get_logger(__name__)` в каждом новом файле
-- [ ] Intent-лог перед действием, result-лог после
-- [ ] `ERROR + exc_info=True` для unhandled exceptions
-- [ ] `WARNING` для нештатных ситуаций (неверный токен, 404)
+### 8. Тесты на сервере
 
-### 8. Проверь логирование новых эндпоинтов
-- [ ] `logger = get_logger(__name__)` в каждом новом файле
-- [ ] Intent-лог перед действием, result-лог после
-- [ ] `ERROR + exc_info=True` для unhandled exceptions
-- [ ] `WARNING` для нештатных ситуаций (неверный токен, 404)
+**Тесты падают на PostgreSQL! Они проходят только на SQLite.**
+
+```bash
+# В deploy.yml — тесты запускаются с aiosqlite:
+pip install pytest pytest-asyncio pytest-cov httpx aiosqlite
+PYTHONPATH=. pytest tests/ -v --tb=short
+
+# Проверка результатов:
+if grep -qE "^[=]+.*failed" /tmp/test-results.txt || \
+   grep -qE "^[=]+.*error" /tmp/test-results.txt; then
+    exit 1
+fi
+```
+
+### 9. `script_stop: false` в CI/CD
+
+**Проблема:** `script_stop: true` включает `set -e` — скрипт прерывается от любой ошибки (SIGPIPE от `head`/`tail`, `grep` без совпадений).
+
+**Решение:** `script_stop: false`. Критические ошибки имеют явную проверку с `exit 1`.
+
+### 10. `git reset --hard` вместо `git pull`
+
+**Проблема:** `git pull` не удаляет файлы, которых нет в репозитории, и не подтягивает удалённые.
+
+**Решение:**
+```bash
+git fetch origin main
+git reset --hard origin/main
+git clean -fd
+```
 
 ---
 
-## ТАБЛИЦА ИНЦИДЕНТОВ
+## 🐛 Troubleshooting
 
-> Все ошибки, которые произошли при рефакторинге. Используй для предотвращения повторений.
+### Изменения не применяются
 
-| Инцидент | Причина | Как обнаружил | Как исправил |
-|----------|---------|---------------|---------------|
-| `NoForeignKeysError` | FK в AuditLog изменён на users.id, но MasterProfile.audit_logs всё ещё ссылается на master_profile.id | `journalctl` → NoForeignKeysError | Удалить `audit_logs` из MasterProfile |
-| `AttributeError: 'NoneType' object has no attribute 'id'` | `master.master_profile.id` для супер-админа (нет MasterProfile) | 502 Bad Gateway | Использовать `master.id` (User.id) |
-| `audit.py` обрезался на строке 85 | Null bytes при редактировании через Python-скрипт | `SyntaxError: '[' was never closed` | Пересоздать файл полностью |
-| `NameError: name 'Query' is not defined` | Забыл `Query` при разделении `masters.py` на модули | `journalctl` → NameError | Добавить `Query` в импорты |
-| `NameError: name 'LoginRequest' is not defined` | Удалил класс, но он использовался в эндпоинтах | `journalctl` → NameError | Заменить на `UserLoginByEmail` из schemas |
-| `ResponseValidationError: coroutine object` | `_to_response` объявлен как `async def`, но не await'ится | 500 Internal Server Error | Убрать `async` |
-| `No module named 'redis'` | Redis не установлен на сервере | `journalctl` → warning | Игнорировать (fallback на отсутствие кэша) |
-| `hash_password` не найден | Путь `app.services.auth` не существует | `journalctl` → ImportError | Использовать `app.modules.auth.service` |
-| **Отсутствие логов в auth** | JWT-валидация без логов — неясно почему токен не проходит | 401 без контекста | Добавить логирование в `dependencies/auth.py` |
-| **Отсутствие global exception handler** | Unhandled exceptions возвращали стандартный 500 без контекста | 500 без traceback | Добавить `@app.exception_handler(Exception)` |
-| **KeyError: 'request_id'** | CorrelationFilter на root logger не применяется к propagated записям | 500 + Logging error | Добавить фильтр на каждый handler, писать в `__dict__` |
-| **TypeError: offset-naive vs offset-aware** | Сравнение `expires_at` (timezone-aware) с naive datetime | 500 на `/auth/refresh` | Убрать `.replace(tzinfo=None)` |
-| **401 на `/admin/dashboard`** | `get_current_master` требовал `master_profile is not None` для ADMIN | 401 для супер-админа | Разрешить ADMIN без master_profile, `require_admin` → `get_current_user` |
-| **Утечка секретов в DEPLOY.md** | PostgreSQL пароль, DADATA ключи, Telegram Bot Token в истории git | Ручная проверка | `git filter-branch --tree-filter` + `--force` push, 193 коммита переписаны |
+1. Проверить stale `.js` в `src/`: `find src -name "*.js" -type f`
+2. Проверить BUILD_ID в имени файла: `ls dist/assets/*.js`
+3. Проверить содержимое JS: `grep "searchCities" dist/assets/*.js`
+4. Проверить копирование: `ls /var/www/beauty-specialist/frontend/dist/assets/`
+5. Проверить nginx: `grep "Cache-Control" /etc/nginx/sites-enabled/beauty-specialist`
+6. Hard reload: `Ctrl+Shift+R`
 
----
+### Бэкенд не запускается
 
-## ЧАСТЫЕ ОШИБКИ ПРИ ЗАБЫВАНИИ ПУНКТОВ
+1. Проверить `.env`: `cat online-booking/backend/.env`
+2. Проверить БД: `sudo -u postgres psql -d online_booking -c "SELECT 1"`
+3. Проверить логи: `sudo journalctl -u beauty-backend --no-pager -n 50`
+4. Проверить порт: `ss -tlnp | grep 8000`
 
-| Забыли | Результат | Как обнаружить | Как исправить |
-|--------|-----------|----------------|---------------|
-| SAEnum в модели | 500 ошибка на ВСЕХ endpoint'ах | `journalctl -u beauty-backend -n 50` | Заменить на `String(20)` |
-| `.value` у status | 500 AttributeError | `journalctl -u beauty-backend -n 50` | Убрать `.value` |
-| Сид-данные для новой таблицы | 500 ошибка на API | `curl https://beauty-specialist.ru/api/v1/new-endpoint/` | Запустить `seed_production.py` |
-| Связанную запись (MasterProfile) | 500 ошибка при логине | `journalctl -u beauty-backend -n 50` | Создать запись через SQL |
-| Сид-данные для отзывов | Пустая карусель | Открыть главную страницу | Запустить `create_minimal_reviews.py` |
-| Обновить `deploy.yml` | На сервере старые данные | Проверить логи деплоя | Добавить шаги в workflow |
-| Empty state компонента | Белый экран | Открыть страницу на чистом сервере | Добавить empty state |
-| Фикс схемы БД | 500 ошибка (column X does not exist) | `journalctl -u beauty-backend -n 50` | Запустить `fix_all_tables.sql` |
-| Права на логи | 502 Bad Gateway | `systemctl status beauty-backend` | `chown -R www-data:www-data logs/` |
+### Nginx возвращает 502
+
+1. Проверить бэкенд: `curl http://localhost:8000/health`
+2. Проверить nginx конфиг: `sudo nginx -t`
+3. Проверить логи: `sudo tail -n 50 /var/log/nginx/error.log`
+
+### База данных недоступна
+
+1. Проверить PostgreSQL: `sudo systemctl status postgresql`
+2. Проверить подключение: `sudo -u postgres psql -d online_booking -c "SELECT 1"`
+3. Проверить место на диске: `df -h`
 
 ---
 
-## ИТОГОВЫЕ ПРАВИЛА РАБОТЫ С КОДОМ
+## ✅ Health Checks
 
-> **Эти правила были выведены в процессе рефакторинга и должны соблюдаться всегда.**
-
-### 1. Перед коммитом — ОБЯЗАТЕЛЬНАЯ проверка (5 команд)
 ```bash
-# 1. Синтаксис всех изменённых файлов
-python -c "import ast; ast.parse(open('file.py').read())"
+# Backend
+curl https://beauty-specialist.ru/health
 
-# 2. Импорт всего приложения (ловит 90% ошибок)
-python -c "from app.main import app"
+# Frontend
+curl -s https://beauty-specialist.ru/ | grep -o "beauty-specialist"
 
-# 3. Проверка использований при изменении модели
-grep -r "old_name" app/
+# Database
+sudo -u postgres psql -d online_booking -c "SELECT count(*) FROM users;"
 
-# 4. Проверка импортов
-grep -r "def function_name" app/
+# Nginx
+sudo systemctl status nginx
+sudo nginx -t
 
-# 5. Проверка чувствительных данных
-git diff --cached | grep -i "password\|secret\|token\|key"
+# System
+free -h
+df -h
 ```
-
-### 2. При разделении файлов — ВСЕГДА проверять каждый endpoint
-- Копировать ВСЕ импорты (не только основные)
-- Проверить каждый параметр в каждом эндпоинте
-- Проверить что все async/sync функции правильные
-
-### 3. При изменении моделей SQLAlchemy — проверять ВСЕ relationship
-- `FK` → все `back_populates` в других моделях
-- Удаление relationship → `grep -r` по всему проекту
-- `NoForeignKeysError` = рассинхрон relationship
-
-### 4. Никогда не доверять редактированию без валидации
-- После редактирования — `ast.parse()` или `python -c "import module"`
-- Если файл редактировался через скрипт — проверить на null bytes
-
-### 5. При изменении log_action — проверять ВСЕ вызовы
-- `master.id` (User.id), НЕ `master.master_profile.id`
-- Супер-админ не имеет MasterProfile → None.id → AttributeError
-
-### 6. При удалении классов — проверять что нигде не используются
-- `grep -r "ClassName" app/` перед удалением
-- Если удалил класс из router.py — проверить эндпоинты
-
-### 7. При создании новых модулей — проверять пути импортов
-- `hash_password` в `app.modules.auth.service`, НЕ `app.services.auth`
-- Искать точный путь через `grep`, НЕ гадать
-
-### 8. Деплой при пуше — изменения должны быть минимальными
-- Один коммит = одно изменение
-- Понятное сообщение коммита
-- После коммита — проверить логи деплоя и `journalctl`
-
-### 9. Логирование — ОБЯЗАТЕЛЬНО для всех новых эндпоинтов
-- Каждый endpoint должен иметь `logger = get_logger(__name__)`
-- **Intent** перед действием: `logger.info("Intent: action X by user Y")`
-- **Result** после действия: `logger.info("Result: action X completed")`
-- **Ошибки** — `ERROR` + `exc_info=True` для traceback
-- **Предупреждения** — `WARNING` для нештатных ситуаций
-- Correlation ID (request_id) подставляется автоматически через `logging_config.py`
-- **Пример:**
-  ```python
-  from app.logging_config import get_logger
-  logger = get_logger(__name__)
-  
-  logger.info("Intent: toggle master id=%s by admin %s", master_id, admin.email)
-  # ... действие ...
-  logger.info("Result: master id=%s toggled to %s", master_id, new_status)
-  ```
-
-### 9. Для доступа к master_profile.id — использовать helper `get_master_profile_id()`
-**Ошибка:** `AttributeError: 'NoneType' object has no attribute 'id'` на `/working-hours`, `/monthly-stats`, `/appointments/by-date`, `/services`
-**Причина:** Супер-админ (role=ADMIN) не имеет MasterProfile → `master.master_profile` = `None`
-**Правило:** Никогда не использовать `master.master_profile.id` напрямую. Использовать helper:
-```python
-from app.modules.admin.helpers import get_master_profile_id
-mp_id = await get_master_profile_id(db, master)
-```
-**Проверка:** `grep -r "master\.master_profile\.id" app/modules/admin/` — должен вернуть только helper
-**Проверка:** `python -c "from app.main import app"` — если падает с AttributeError → проблема в master_profile
-
-### 10. Логирование — ОБЯЗАТЕЛЬНО для всех эндпоинтов
-**Правило:** Каждый модуль и endpoint должен логировать:
-- `logger = get_logger(__name__)` — в начале файла
-- **Intent** перед действием: `logger.info("Intent: action X by user Y")`
-- **Result** после действия: `logger.info("Result: action X completed")`
-- **Ошибки** — `ERROR + exc_info=True` для traceback
-- **Предупреждения** — `WARNING` для нештатных ситуаций
-
-**Correlation ID:** автоматически подставляется через `logging_config.py` + `RequestLoggingMiddleware`. Каждый лог содержит `[request_id]` для связывания с HTTP-запросом.
-
-**Пример:**
-```python
-from app.logging_config import get_logger
-logger = get_logger(__name__)
-
-@router.post("/action")
-async def do_action(...):
-    logger.info("Intent: action X by user_id=%s", user.id)
-    try:
-        # ... действие ...
-        logger.info("Result: action X completed for user_id=%s", user.id)
-    except Exception as e:
-        logger.error("Action X failed: %s", e, exc_info=True)
-        raise
-```
-
-**Проверка:** `grep -r "get_logger" app/` — должен быть в каждом модуле
-**Проверка:** `grep -r "logger\." app/` — каждый endpoint должен иметь хотя бы 1 лог
-
-### 11. При изменении моделей SQLAlchemy — проверять ВСЕ relationship
-**Ошибка:** `NoForeignKeysError` при импорте приложения
-**Причина:** Изменил FK в `AuditLog` на `users.id`, но `MasterProfile.audit_logs` всё ещё ссылался на `master_profile`
-**Правило:** При изменении модели — `grep -r "old_relationship_name" app/` по ВСЕМ файлам
-**Проверка:** `python -c "from app.main import app"` — падает с NoForeignKeysError = проблема в relationship
-
-### 12. `get_current_master` — не требует `master_profile` для ADMIN
-**Ошибка:** `TypeError: Master user found but master_profile is None` на `/admin/dashboard`
-**Причина:** Супер-админ (role=ADMIN) не имеет MasterProfile. `get_current_master` требовал `master_profile is not None` для ВСЕХ пользователей, включая ADMIN. `require_admin` использовал `get_current_master` вместо `get_current_user`.
-**Правило:** 
-- `get_current_master` — разрешает ADMIN без `master_profile`, требует `master_profile` только для MASTER
-- `require_admin` — использует `get_current_user`, НЕ `get_current_master`
-- `require_master` — использует `get_current_master` (только для MASTER)
-**Проверка:** `python -c "from app.main import app"` — если падает с AttributeError → проблема в master_profile
 
 ---
 
-## ИТОГИ ИСПРАВЛЁННЫХ ОШИБОК (REFRAIN FROM)
+## 📊 Checklist перед деплоем
 
-> Все ошибки, возникшие при рефакторинге. **Никогда не делать так:**
-
-### 1. Никогда не использовать `master.master_profile.id` для супер-админа
-**Ошибка:** `AttributeError: 'NoneType' object has no attribute 'id'` на `/masters`, `/services`, `/appointments`
-**Причина:** Супер-админ (role=ADMIN) не имеет MasterProfile → `master.master_profile` = `None`
-**Правило:** Всегда проверять `if master.role == UserRole.ADMIN` перед доступом к `master.master_profile`
-**Проверка:** `grep -r "master.master_profile.id" app/modules/admin/` — все места должны иметь проверку роли
-
-### 2. Никогда не удалять relationship без проверки всех использований
-**Ошибка:** `NoForeignKeysError` при импорте приложения
-**Причина:** Изменил FK в `AuditLog` на `users.id`, но `MasterProfile.audit_logs` всё ещё ссылался на `master_profile`
-**Правило:** При изменении модели — `grep -r "old_relationship_name" app/` по ВСЕМ файлам
-**Проверка:** `python -c "from app.main import app"` — падает с NoForeignKeysError = проблема в relationship
-
-### 3. Никогда не использовать `async def` для конвертеров внутри list comprehension
-**Ошибка:** `ResponseValidationError: coroutine object` на `/masters`
-**Причина:** `_to_response` объявлен как `async def`, но вызывается в `[... for u in users]` без `await`
-**Правило:** Конвертеры данных (`_to_response`, `_to_dict`) — всегда `def`, НЕ `async def`
-**Проверка:** `grep -r "async def.*_to_" app/` — не должно быть
-
-### 4. Никогда не удалять классы из router.py без проверки эндпоинтов
-**Ошибка:** `NameError: name 'LoginRequest' is not defined`
-**Причина:** Удалил `LoginRequest` и `ClientLoginRequest` из `router.py`, но они использовались в эндпоинтах
-**Правило:** Перед удалением класса — `grep -r "ClassName" app/` по всему проекту
-**Проверка:** `python -c "import ast; ast.parse(open('file.py').read())"`
-
-### 5. Никогда не забывать импорты при разделении файлов
-**Ошибка:** `NameError: name 'Query' is not defined`
-**Причина:** Разделил `masters.py` на 6 модулей, но забыл `Query` в `crud.py`
-**Правило:** При разделении файла — копировать ВСЕ импорты, проверять КАЖДЫЙ endpoint
-**Проверка:** `python -c "from app.main import app"`
-
-### 6. Никогда не использовать неверный путь импорта
-**Ошибка:** `ImportError: No module named 'app.services.auth'`
-**Причина:** `hash_password` в `app.modules.auth.service`, а не `app.services.auth`
-**Правило:** Искать точный путь через `grep -r "def function_name" app/`, НЕ гадать
-**Проверка:** `python -c "from app.modules.auth.service import hash_password"`
-
-### 7. Никогда не доверять редактированию без валидации синтаксиса
-**Ошибка:** `SyntaxError: '[' was never closed` в `audit.py`
-**Причина:** Null bytes при редактировании через Python-скрипт обрезали строку
-**Правило:** После любого редактирования — `python -c "import ast; ast.parse(open('file.py').read())"`
-**Проверка:** Если файл редактировался через скрипт — проверить на null bytes
-
-### 8. Никогда не использовать `settings.get()` у Pydantic BaseSettings
-**Ошибка:** `AttributeError: 'BaseSettings' object has no attribute 'get'`
-**Причина:** `settings` — Pydantic модель, у неё нет метода `.get()`
-**Правило:** Использовать `settings.REDIS_URL` напрямую, НЕ `settings.get("REDIS_URL", ...)`
-**Проверка:** `grep -r "settings.get(" app/` — не должно быть
-
-### 9. Никогда не использовать `MasterStatus.ACTIVE` в коде (кроме service)
-**Ошибка:** Инконсистентность — некоторые места используют `MasterStatus.ACTIVE`, другие `"active"`
-**Причина:** Колонка `String(20)`, enum `MasterStatus` только в `master_status.py`
-**Правило:** Использовать строки `"active"`, `"inactive"`, `"suspended"` везде, кроме `services/master_status.py`
-**Проверка:** `grep -r "MasterStatus\." app/` — должен быть только в `master_status.py`
-
-### 10. Никогда не использовать `role="CLIENT"` вместо enum
-**Ошибка:** Инконсистентность — некоторые места используют `"CLIENT"`, другие `UserRole.CLIENT`
-**Правило:** Всегда `UserRole.CLIENT`, `UserRole.ADMIN`, `UserRole.MASTER`
-**Проверка:** `grep -r 'role=".*"' app/modules/admin/` — не должно быть
-
-### 11. Никогда не добавлять CorrelationFilter на root logger
-**Ошибка:** `KeyError: 'request_id'` в RotatingFileHandler
-**Причина:** Фильтры на root logger не применяются к записям от дочерних логгеров (propagation). `logging.Formatter` использует `self._fmt % record.__dict__`, а `CorrelationFilter` ставил только `record.request_id`.
-**Правило:** 
-- Добавлять `CorrelationFilter` на КАЖДЫЙ handler (console + file), а не на logger
-- Писать `record.request_id` И в `record.__dict__['request_id']`, formatter использует `__dict__`
-**Проверка:** `grep -r "addFilter" app/logging_config.py` — должен быть на каждом handler
-
-### 12. Никогда не сравнивать timezone-aware и naive datetime
-**Ошибка:** `TypeError: can't compare offset-naive and offset-aware datetimes` на `/auth/refresh`
-**Причина:** `RefreshToken.expires_at` — `DateTime(timezone=True)` в PostgreSQL, SQLAlchemy возвращает timezone-aware datetime. Сравнение с naive datetime (`.replace(tzinfo=None)`) вызывало TypeError.
-**Правило:** Всегда использовать timezone-aware datetime для сравнения. Не вызывать `.replace(tzinfo=None)` на aware datetime.
-**Проверка:** `grep -r "\.replace(tzinfo=None)" app/` — не должно быть при сравнении с БД
-
-### 13. Никогда не пушить чувствительные данные в git
-**Ошибка:** DEPLOY.md содержал PostgreSQL пароль, DADATA ключи, Telegram Bot Token, VK_APP_ID — все 193 коммита были переписаны
-**Причина:** `.gitignore` работает, но DEPLOY.md — обычный файл, и в нём были реальные секреты
-**Правило:**
-- **Никогда** не коммить `.env`, пароли, API-ключи, токены, секретные ключи
-- В DEPLOY.md — только плейсхолдеры: `<POSTGRES_PASSWORD>`, `<SECRET_KEY>`, `<TELEGRAM_BOT_TOKEN>`
-- Перед коммитом: `git diff --cached | grep -iE "password|secret|token|key|api_key|DADATA|TELEGRAM_BOT"`
-- Если уже запушил — `git filter-branch --tree-filter` для очистки истории + `--force` push
-**Проверка:** `git log --all -p | grep -iE "Postgres2024|beauty-specialist-2024|07c167324787848e"` — должен вернуть пустоту
-
-### 14. Никогда не допускать дублирования файлов `.js` и `.tsx`/`.ts` во фронтенде
-**Ошибка:** 49 `.js` файлов дублировали `.tsx` версии, `tsc` по умолчанию генерировал `.js` рядом с `.ts`
-**Причина:** `tsc` без флага `--noEmit` компилирует `.ts` → `.js` в той же директории. Vite при `import './App'` выбирает `.tsx` (приоритет: `.tsx` > `.ts` > `.jsx` > `.js`), но на CI/CD мог собраться `.js` если порядок файлов изменился.
-**Правило:**
-- **Никогда** не использовать `.js` файлы в `frontend/src/`
-- `tsc` всегда запускать с `--noEmit` — только проверка типов, без генерации `.js`
-- В `frontend/.gitignore` есть `src/**/*.js` — любые `.js` в `src/` должны удаляться
-- `.tsx` версии всегда полнее и актуальнее
-- При добавлении нового компонента — только `.tsx`, НЕ `.js`
-**Решение:** `tsc --noEmit` в `package.json` (строка build)
-**Проверка:** `find frontend/src -name "*.js" | wc -l` — должен вернуть 0
-**На сервере:** деплой делает `npm run build` → `tsc --noEmit && vite build` → Vite автоматически выберет `.tsx`
-
-### 15. Никогда не использовать `git reset --hard HEAD` в CI/CD
-**Ошибка:** `git reset --hard HEAD` в `deploy.yml` мог сбросить изменения при частичном деплое
-**Причина:** Если `git pull` не сработал полностью, `reset --hard` удалил бы все изменения
-**Правило:** Использовать только `git pull origin main` без дополнительных команд
-**Исправлено:** Удалена строка `git reset --hard HEAD` из `.github/workflows/deploy.yml`
-
-### 16. Никогда не использовать `SAEnum` в моделях SQLAlchemy
-**Ошибка:** `LookupError: 'active' is not among the defined enum types` — ВСЕ endpoint'ы падали с 500
-**Причина:** asyncpg кэширует enum-типы из БД. При изменении enum (добавление/удаление значений) asyncpg не обновляет кэш.
-**Правило:** Использовать `String(20)` вместо `SAEnum` во ВСЕХ моделях. Enum-типы только в коде (Python enum классы).
-**Проверка:** `grep -r "SAEnum" app/models/` — должен вернуть пустоту
-
-### 11. Не использовать slowapi @limiter.limit() на auth endpoint'ах
-**Ошибка:** slowapi rate limiting на /register (5/minute) блокировал тесты — fixture auth_token не мог зарегистрировать мастера после 5 запросов → все последующие тесты падали с ERROR (429 Too Many Requests)
-**Причина:** slowapi @limiter.limit("5/minute") на auth endpoint'ах работает в тестах так же как в продакшене, но тесты создают много пользователей быстро
-**Правило:**
-- **Никогда** не использовать @limiter.limit() на auth endpoint'ах (/register, /login, /verify-otp)
-- Rate limiting на auth — nice-to-have, не critical
-- Если нужен — использовать middleware-уровень с высокими лимитами для auth
-- slowapi можно использовать на обычных API endpoint'ах, но не на auth
-**Исправлено:** Удалены все @limiter.limit() декораторы из app/modules/auth/router.py
-
----
-
-## ЧЕК-ЛИСТ ПЕРЕД КОММИТОМ
-
-
-> **Всегда выполняй перед `git commit`!** Это сэкономит часы на отладку.
-
-### 1. Проверь синтаксис всех изменённых файлов
-```bash
-python -c "import ast; ast.parse(open('file.py').read())"
-```
-- **Не доверяй** редактированию без валидации
-- Если файл редактировался через скрипт — проверь на null bytes
-
-### 2. Проверь импорт всего приложения
-```bash
-python -c "from app.main import app"
-```
-- Ловит 90% ошибок до деплоя
-- Если падает с `NoForeignKeysError` → проблема в relationship
-- Если падает с `NameError` → проблема в импорте
-
-### 3. Проверь ВСЕ использования при изменении модели
-```bash
-grep -r "old_relationship_name" app/
-grep -r "log_action" app/modules/admin/
-```
-- Не только в новом модуле, а во всём проекте
-- При смене FK — проверь все `back_populates`
-- При удалении relationship — проверь что нигде не используется
-
-### 4. Проверь все импорты в новых файлах
-```bash
-grep -r "def hash_password" app/  # найти точный путь
-grep -r "Query" app/modules/admin/masters/  # проверить все параметры
-```
-- Не гадать, а искать
-- При разделении файла — проверить КАЖДЫЙ endpoint, КАЖДЫЙ параметр
-
-### 5. Проверь что не удалил используемые классы
-```bash
-grep -r "LoginRequest" app/modules/auth/
-```
-- Если удалил класс — проверь что нигде не используется
-
-### 6. Проверь async/sync функции
-- `def` — синхронная, вызывается как `result = func()`
-- `async def` — асинхронная, вызывается как `result = await func()`
-- **Не делай** `async def` для простых конвертеров (они не await'ятся в list comprehension)
-
-### 7. Проверь чувствительные данные
-```bash
-git diff --cached | grep -i "password\|secret\|token\|key"
-```
-- Никаких реальных паролей в коде или документации
-- В DEPLOY.md — только placeholders
-
-### 8. Проверь логирование новых эндпоинтов
-- [ ] `logger = get_logger(__name__)` в каждом новом файле
-- [ ] Intent-лог перед действием, result-лог после
-- [ ] `ERROR + exc_info=True` для unhandled exceptions
-- [ ] `WARNING` для нештатных ситуаций (неверный токен, 404)
-
-### 12. Проверь фронтенд — нет ли `.js` дубликатов
-```bash
-find frontend/src -name "*.js" | wc -l
-```
-- Должен вернуть **0**
-- Если есть — удалить, использовать только `.tsx`/`.ts`
-- `tsc` всегда с `--noEmit`
-
-### 13. Проверь, что `tsc --noEmit` проходит
-```bash
-cd frontend
-npx tsc --noEmit
-```
-- Не должно быть ошибок TypeScript
-- Если есть — исправить типизацию перед коммитом
-
----
-
-## ТАБЛИЦА ИНЦИДЕНТОВ
-
-> Все ошибки, которые произошли при рефакторинге. Используй для предотвращения повторений.
-
-| Инцидент | Причина | Как обнаружил | Как исправил |
-|----------|---------|---------------|---------------|
-| `NoForeignKeysError` | FK в AuditLog изменён на users.id, но MasterProfile.audit_logs всё ещё ссылается на master_profile.id | `journalctl` → NoForeignKeysError | Удалить `audit_logs` из MasterProfile |
-| `AttributeError: 'NoneType' object has no attribute 'id'` | `master.master_profile.id` для супер-админа (нет MasterProfile) | 502 Bad Gateway | Использовать `master.id` (User.id) |
-| `audit.py` обрезался на строке 85 | Null bytes при редактировании через Python-скрипт | `SyntaxError: '[' was never closed` | Пересоздать файл полностью |
-| `NameError: name 'Query' is not defined` | Забыл `Query` при разделении `masters.py` на модули | `journalctl` → NameError | Добавить `Query` в импорты |
-| `NameError: name 'LoginRequest' is not defined` | Удалил класс, но он использовался в эндпоинтах | `journalctl` → NameError | Заменить на `UserLoginByEmail` из schemas |
-| `ResponseValidationError: coroutine object` | `_to_response` объявлен как `async def`, но не await'ится | 500 Internal Server Error | Убрать `async` |
-| `No module named 'redis'` | Redis не установлен на сервере | `journalctl` → warning | Игнорировать (fallback на отсутствие кэша) |
-| `hash_password` не найден | Путь `app.services.auth` не существует | `journalctl` → ImportError | Использовать `app.modules.auth.service` |
-| **Отсутствие логов в auth** | JWT-валидация без логов — неясно почему токен не проходит | 401 без контекста | Добавить логирование в `dependencies/auth.py` |
-| **Отсутствие global exception handler** | Unhandled exceptions возвращали стандартный 500 без контекста | 500 без traceback | Добавить `@app.exception_handler(Exception)` |
-| **KeyError: 'request_id'** | CorrelationFilter на root logger не применяется к propagated записям | 500 + Logging error | Добавить фильтр на каждый handler, писать в `__dict__` |
-| **TypeError: offset-naive vs offset-aware** | Сравнение `expires_at` (timezone-aware) с naive datetime | 500 на `/auth/refresh` | Убрать `.replace(tzinfo=None)` |
-| **401 на `/admin/dashboard`** | `get_current_master` требовал `master_profile is not None` для ADMIN | 401 для супер-админа | Разрешить ADMIN без master_profile, `require_admin` → `get_current_user` |
-| **Утечка секретов в DEPLOY.md** | PostgreSQL пароль, DADATA ключи, Telegram Bot Token в истории git | Ручная проверка | `git filter-branch --tree-filter` + `--force` push, 193 коммита переписаны |
-| **Дубли `.js`/`.tsx` файлов** | 49 `.js` файлов дублировали `.tsx`, `tsc` генерировал `.js` | `find src -name "*.js"` | `tsc --noEmit` в package.json, удалить `.js` |
-| **`git reset --hard HEAD` в CI/CD** | Мог сбросить изменения при частичном деплое | Ручная проверка | Удалить из `deploy.yml` |
+- [ ] `script_stop: false` в `deploy.yml`
+- [ ] Нет `| head` в pipe без `|| true`
+- [ ] Абсолютные пути для файлов вне текущей директории
+- [ ] `git reset --hard` вместо `git pull`
+- [ ] `sudo tee` вместо `cat > /etc/...`
+- [ ] `sed -i 's/\r$//'` для shell-скриптов
+- [ ] `datetime.time` для `Column(Time)`, не строки
+- [ ] `ALTER TABLE ... OWNER TO` вместо `GRANT`
+- [ ] `IF NOT EXISTS` для `ALTER TABLE ADD COLUMN`
+- [ ] Проверить модель перед передачей аргументов в конструктор
+- [ ] Проверить отступы в Python
+- [ ] Проверить **последнюю строку** вывода на `Process exited with status 0`
+- [ ] Нет реальных секретов в DEPLOY.md (только placeholders)
+- [ ] Секреты в `LOCAL.md` (локальный файл, не пушить в git)
