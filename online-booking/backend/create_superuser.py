@@ -10,6 +10,11 @@ Behavior:
   ONLY when SUPERUSER_PASSWORD is set; otherwise the stored hash is kept.
 - Missing user: requires both SUPERUSER_EMAIL and SUPERUSER_PASSWORD,
   otherwise exits non-zero (fail fast instead of creating a broken account).
+- Missing SUPERUSER_EMAIL entirely (routine deploy before the server .env
+  was provisioned): prints a warning and skips with exit 0 so the deploy
+  pipeline is not blocked; the admin must then be provisioned manually.
+  (The systemd unit restarts the backend early in the deploy, so aborting
+  the pipeline mid-way would leave the service down.)
 
 Usage:
     SUPERUSER_EMAIL=admin@example.com SUPERUSER_PASSWORD=<secret> \\
@@ -107,10 +112,10 @@ async def main():
     password = os.getenv("SUPERUSER_PASSWORD") or None
     if not email:
         print(
-            "ERROR: SUPERUSER_EMAIL is not set (server .env / GitHub Secrets).",
-            file=sys.stderr,
+            "WARNING: SUPERUSER_EMAIL is not set (server .env / GitHub Secrets) — "
+            "skipping superuser provisioning (exit 0 to not block deploy)."
         )
-        raise SystemExit(1)
+        return
     print(f"Creating/updating superuser: {email} (password {_masked()})")
 
     async with AsyncSessionLocal() as session:
