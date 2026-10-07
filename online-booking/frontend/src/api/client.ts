@@ -50,6 +50,16 @@ apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   return config
 })
 
+// ─── Bare instance for token refresh (NO interceptors) ─────────────
+// Refresh must never go through apiClient: its 401 would re-enter the
+// interceptor while isRefreshing=true and queue behind itself (deadlock).
+// Exported for tests (authRefresh.test.ts drives it via defaults.adapter).
+export const refreshClient: AxiosInstance = axios.create({
+  baseURL: API_BASE,
+  headers: { 'Content-Type': 'application/json' },
+  withCredentials: true, // httpOnly refresh cookie is sent automatically
+})
+
 // Handle 401 — try refresh, then redirect to login
 let isRefreshing = false
 let failedQueue: {
@@ -63,7 +73,6 @@ function processQueue(error: any, token: string | null = null) {
     else prom.resolve(token!)
   })
   failedQueue = []
-  isRefreshing = false
 }
 
 apiClient.interceptors.response.use(
@@ -76,6 +85,8 @@ apiClient.interceptors.response.use(
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject })
         }).then(token => {
+          // Mark retried: a second 401 must not trigger another refresh storm
+          originalRequest._retry = true
           originalRequest.headers.Authorization = `Bearer ${token}`
           return apiClient(originalRequest)
         })
@@ -85,15 +96,15 @@ apiClient.interceptors.response.use(
       isRefreshing = true
 
       try {
-        // Call refresh endpoint — token comes from httpOnly cookie automatically
-        const { data } = await apiClient.post<{ access_token: string }>('/api/v1/auth/refresh')
-        
+        // Bare instance: no interceptors, so a 401 here cannot deadlock
+        const { data } = await refreshClient.post<{ access_token: string }>('/api/v1/auth/refresh')
+
         // Update access token in cookie (set via Set-Cookie header from backend)
         // Also update axios defaults
         apiClient.defaults.headers.common.Authorization = `Bearer ${data.access_token}`
-        
+
         processQueue(null, data.access_token)
-        
+
         originalRequest.headers.Authorization = `Bearer ${data.access_token}`
         return apiClient(originalRequest)
       } catch (refreshError) {
@@ -103,6 +114,8 @@ apiClient.interceptors.response.use(
         document.cookie = 'refresh_token=; path=/; max-age=0'
         window.location.href = '/admin/login'
         return Promise.reject(refreshError)
+      } finally {
+        isRefreshing = false
       }
     }
 

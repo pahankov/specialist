@@ -1,8 +1,8 @@
 """Online Booking API — main application entry point."""
 from fastapi import FastAPI, Request, HTTPException
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import ValidationError
 from app.config import settings
 from app.database import engine, Base
 from app.logging_config import setup_logging, get_logger
@@ -22,8 +22,8 @@ from app.modules.admin import router as admin_router
 from app.modules.city import router as city_router
 from app.modules.dadata.router import router as dadata_router
 
-# Инициализация логирования (DEBUG для разработки, INFO для продакшена)
-setup_logging("DEBUG")
+# Инициализация логирования (LOG_LEVEL из env, иначе INFO в проде / DEBUG локально)
+setup_logging(settings.log_level)
 logger = get_logger(__name__)
 logger.info("Инициализация приложения %s", settings.APP_NAME)
 
@@ -65,17 +65,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# ─── Custom 422 handler (better error messages) ────────────────
+# ─── Custom validation handlers (user-friendly error messages) ───
 
-@app.exception_handler(422)
-async def validation_exception_handler(request: Request, exc):
-    """Return user-friendly validation errors."""
-    # Only handle Pydantic ValidationErrors, not HTTPException(422)
-    if not isinstance(exc, ValidationError):
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={"detail": exc.detail},
-        )
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Return user-friendly validation errors (request body/query/path)."""
     details = []
     for error in exc.errors():
         loc = " -> ".join(str(l) for l in error.get("loc", []))
@@ -84,6 +78,15 @@ async def validation_exception_handler(request: Request, exc):
     return JSONResponse(
         status_code=422,
         content={"detail": details},
+    )
+
+
+@app.exception_handler(422)
+async def http_422_handler(request: Request, exc: HTTPException):
+    """Pass through manually raised HTTPException(422) untouched."""
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.detail},
     )
 
 

@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     APP_NAME: str = "Online Booking API"
     DEBUG: bool = True
+    # Logging: explicit level wins, otherwise INFO in production, DEBUG locally
+    LOG_LEVEL: str = ""
     ALLOWED_ORIGINS: str = "http://localhost:3000"
     APP_ENV: str = "development"
 
@@ -59,6 +61,12 @@ class Settings(BaseSettings):
     @property
     def allowed_origins_list(self) -> list[str]:
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
+
+    @property
+    def log_level(self) -> str:
+        if self.LOG_LEVEL:
+            return self.LOG_LEVEL.upper()
+        return "INFO" if self.APP_ENV == "production" else "DEBUG"
 
     def validate_secrets(self) -> None:
         """Validate that required secrets are set in production."""
