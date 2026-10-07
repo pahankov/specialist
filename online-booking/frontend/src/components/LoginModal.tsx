@@ -56,7 +56,7 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
   const [showLoginPassword, setShowLoginPassword] = useState(false)
   const [showRegisterPassword, setShowRegisterPassword] = useState(false)
 
-  // DAData city autocomplete
+  // DAData city autocomplete (debounced: each keystroke must not burn quota)
   const [citySuggestions, setCitySuggestions] = useState<DadataSuggestion[]>([])
   const [showCityDropdown, setShowCityDropdown] = useState(false)
   const [cityInput, setCityInput] = useState('')
@@ -64,6 +64,8 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
 
   const cityInputRef = useRef<HTMLInputElement>(null)
   const cityDropdownRef = useRef<HTMLDivElement>(null)
+  const citySearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const citySearchSeq = useRef(0)
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -73,21 +75,29 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      if (citySearchTimer.current) clearTimeout(citySearchTimer.current)
+    }
   }, [])
 
-  const handleCitySearch = async (value: string) => {
+  const handleCitySearch = (value: string) => {
     setCityInput(value)
-    if (value.length >= 2) {
-      try {
-        const suggestions = await dadataApi.searchCities(value, 10)
-        setCitySuggestions(suggestions)
-        setShowCityDropdown(suggestions.length > 0)
-      } catch { /* ignore */ }
-    } else {
+    if (citySearchTimer.current) clearTimeout(citySearchTimer.current)
+    if (value.length < 2) {
       setCitySuggestions([])
       setShowCityDropdown(false)
+      return
     }
+    const seq = ++citySearchSeq.current
+    citySearchTimer.current = setTimeout(async () => {
+      try {
+        const suggestions = await dadataApi.searchCities(value, 10)
+        if (seq !== citySearchSeq.current) return // stale response
+        setCitySuggestions(suggestions)
+        setShowCityDropdown(suggestions.length > 0)
+      } catch { /* ignore: quota/network — dropdown stays empty */ }
+    }, 400)
   }
 
   const handleCitySelect = (suggestion: DadataSuggestion) => {
