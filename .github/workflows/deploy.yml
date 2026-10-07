@@ -66,18 +66,18 @@ jobs:
             echo "${{ github.sha }}"
             echo "========================"
 
-            # Load DATABASE_URL from .env on server if env var is empty
+            # Load DATABASE_URL from server-side .env (canonical, never committed) if env var is empty
             if [ -z "${DATABASE_URL}" ]; then
-              echo "DATABASE_URL not set in env, reading from .env file..."
+              echo "DATABASE_URL not set in env, reading from server .env file..."
               if [ -f online-booking/backend/.env ]; then
                 export $(grep -v '^#' online-booking/backend/.env | xargs)
-                echo "Loaded from .env: ${DATABASE_URL:0:30}..."
+                echo "Loaded DATABASE_URL from server .env: [masked]"
               else
                 echo "ERROR: DATABASE_URL is empty and no .env file found!"
                 exit 1
               fi
             else
-              echo "DB: ${DATABASE_URL:0:30}..."
+              echo "DATABASE_URL from GitHub Secrets: [masked]"
             fi
 
             # Backup database BEFORE any changes

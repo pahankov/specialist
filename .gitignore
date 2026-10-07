@@ -106,3 +106,23 @@ coverage.xml
 
 # AI assistant plans (may contain secrets)
 .gigacode_vsc/plans/
+
+# Secrets bootstrap (real credentials - NEVER push to git)
+secrets-to-remove.txt
+
+# git filter-repo backup
+.git-rewrite/
+
+# MCP / Playwright local artifacts
+.dynamic-mcp/
+.playwright-mcp/
+.gigacode/
+.gigaide/
+.gigacode_vsc/*.jsonc
+
+# Local test screenshots
+test-*.png
+
+# Seed dumps (canonical seed lives in backend scripts, not dumps)
+seed_data.sql
+**/seed_data.sql

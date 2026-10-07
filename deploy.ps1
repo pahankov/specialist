@@ -1,8 +1,13 @@
-# deploy.ps1 — Автоматический деплой на сервер beauty-specialist.ru
+# deploy.ps1 — Одноразовый bootstrap сервера beauty-specialist.ru (НЕ часть push-деплоя).
+# Push-деплой: push в main -> .github/workflows/deploy.yml (читает серверный backend/.env, ничего не пишет).
+# Значения — из LOCAL.md / online-booking/backend/.env (never commit). Секреты сюда не вписывать.
 
-$ServerIP = "REDACTED_SERVER_IP"
-$ServerUser = "root"
-$ServerPass = "REDACTED_SSH_PASSWORD"
+$ServerIP = if ($env:DEPLOY_HOST) { $env:DEPLOY_HOST } else { "<server-ip>" }
+$ServerUser = if ($env:DEPLOY_USER) { $env:DEPLOY_USER } else { "root" }
+$ServerPassSecure = Read-Host "SSH пароль для $ServerUser@$ServerIP" -AsSecureString
+$ServerPass = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+    [Runtime.InteropServices.Marshal]::SecureStringToBSTR($ServerPassSecure)
+)
 
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "   Deploy to beauty-specialist.ru" -ForegroundColor Cyan
@@ -78,7 +83,7 @@ apt install -y postgresql postgresql-contrib
 systemctl enable postgresql
 systemctl start postgresql
 sudo -u postgres psql -c "CREATE DATABASE online_booking;"
-sudo -u postgres psql -c "CREATE USER specialist WITH PASSWORD 'REDACTED_DB_PASSWORD';"
+sudo -u postgres psql -c "CREATE USER specialist WITH PASSWORD '<db-password>';"
 sudo -u postgres psql -c "ALTER DATABASE online_booking OWNER TO specialist;"
 sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE online_booking TO specialist;"
 "@
@@ -117,17 +122,17 @@ pip install -r requirements.txt
 "@
 Write-Host "  OK" -ForegroundColor Green
 
-# Шаг 7.1: Создание .env
+# Шаг 7.1: Создание .env (значения — из LOCAL.md / online-booking/backend/.env, never commit)
 Write-Host "[7.1/12] Создание .env..." -ForegroundColor Yellow
 Invoke-RemoteCommand @"
 cat > /var/www/beauty-specialist/online-booking/backend/.env << 'ENVEOF'
 APP_NAME=Beauty Specialist API
 APP_ENV=development
 
-DATABASE_URL=postgresql+psycopg2://specialist:REDACTED_DB_PASSWORD@localhost:5432/online_booking
+DATABASE_URL=postgresql+psycopg2://specialist:<db-password>@localhost:5432/online_booking
 
-SECRET_KEY=REDACTED_SECRET_KEY
-REFRESH_SECRET_KEY=REDACTED_REFRESH_SECRET_KEY
+SECRET_KEY=<secret-key>
+REFRESH_SECRET_KEY=<refresh-secret-key>
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 REFRESH_TOKEN_EXPIRE_DAYS=7
 ALGORITHM=HS256
@@ -140,21 +145,21 @@ SMS_PROVIDER=fake
 SMS_CODE_TTL_SECONDS=300
 SMS_MAX_ATTEMPTS=3
 
-DADATA_API_KEY=REDACTED_DADATA_TOKEN
-DADATA_SECRET=REDACTED_DADATA_SECRET
+DADATA_API_KEY=<dadata-api-key>
+DADATA_SECRET=<dadata-secret>
 
-TELEGRAM_BOT_TOKEN=REDACTED_TELEGRAM_BOT_TOKEN
-TELEGRAM_CLIENT_ID=8709786941
-TELEGRAM_CLIENT_SECRET=REDACTED_TELEGRAM_CLIENT_SECRET
+TELEGRAM_BOT_TOKEN=<telegram-bot-token>
+TELEGRAM_CLIENT_ID=<telegram-client-id>
+TELEGRAM_CLIENT_SECRET=<telegram-client-secret>
 
-VK_APP_ID=54789256
-VK_SECRET_KEY=
+VK_APP_ID=<vk-app-id>
+VK_SECRET_KEY=<vk-secret-key>
 
-YANDEX_CLIENT_ID=
-YANDEX_CLIENT_SECRET=
+YANDEX_CLIENT_ID=<yandex-client-id>
+YANDEX_CLIENT_SECRET=<yandex-client-secret>
 
-MAILRU_APP_ID=
-MAILRU_SECRET_KEY=
+MAILRU_APP_ID=<mailru-app-id>
+MAILRU_SECRET_KEY=<mailru-secret-key>
 
 OAUTH_REDIRECT_URL=https://beauty-specialist.ru/auth/callback
 ENVEOF
@@ -288,7 +293,7 @@ Write-Host "[12/12] Настройка SSH для GitHub Actions..." -Foreground
 Invoke-RemoteCommand @"
 mkdir -p /home/deploy/.ssh
 chmod 700 /home/deploy/.ssh
-echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILc2F+wSnap84R5iUAm/m46qMx7K+XIroYfXKmHWreMk github-actions' > /home/deploy/.ssh/authorized_keys
+echo '<github-actions-pubkey>' > /home/deploy/.ssh/authorized_keys
 chmod 600 /home/deploy/.ssh/authorized_keys
 chown -R deploy:deploy /home/deploy/.ssh
 "@
