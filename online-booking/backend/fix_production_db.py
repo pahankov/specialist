@@ -73,13 +73,20 @@ async def fix_geography(session):
 
 
 async def fix_superuser(session, email, password):
-    """Verify superuser exists with ADMIN role and has MasterProfile."""
+    """Verify superuser exists with ADMIN role and has MasterProfile.
+
+    password=None keeps the existing hash (routine deploys must never
+    reset the production password to a placeholder).
+    """
     print("\n👑 Checking superuser...")
     
     result = await session.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
     
     if not user:
+        if not password:
+            print("  ERROR: superuser does not exist and SUPERUSER_PASSWORD is not set.")
+            raise SystemExit(1)
         print(f"  Creating superuser: {email}")
         user = User(
             name="Павел",
@@ -118,8 +125,11 @@ async def fix_superuser(session, email, password):
         else:
             print(f"  ✓ User is active")
         
-        print(f"  Updating password")
-        user.hashed_password = hash_password(password)
+        if password:
+            print(f"  Updating password")
+            user.hashed_password = hash_password(password)
+        else:
+            print(f"  Password kept (SUPERUSER_PASSWORD not set)")
         
         await session.commit()
         
@@ -147,8 +157,10 @@ async def fix_superuser(session, email, password):
 
 async def main():
     DATABASE_URL = os.environ.get("DATABASE_URL", "Not set")
-    SUPERUSER_EMAIL = "pahankov@mail.ru"
-    SUPERUSER_PASSWORD = "REDACTED_SUPERUSER_PASSWORD"
+    # Credentials ONLY from env (server .env / Secrets) — never hardcoded:
+    # a scrubbed placeholder here would silently reset the prod password.
+    SUPERUSER_EMAIL = os.getenv("SUPERUSER_EMAIL", "")
+    SUPERUSER_PASSWORD = os.getenv("SUPERUSER_PASSWORD") or None
     
     print(f"Connecting to: {DATABASE_URL}")
     
@@ -160,8 +172,8 @@ async def main():
         print("✅ All fixes applied successfully!")
         print("="*60)
         print(f"\nSuperuser credentials:")
-        print(f"  Email: {SUPERUSER_EMAIL}")
-        print(f"  Password: {SUPERUSER_PASSWORD}")
+        print(f"  Email: {SUPERUSER_EMAIL or '<not set>'}")
+        print(f"  Password: {'<set>' if SUPERUSER_PASSWORD else '<kept>'}")
         print(f"  Role: {user.role.value}")
         print(f"  Admin: {user.role == UserRole.ADMIN}")
         print(f"\nGo to https://beauty-specialist.ru and login!")
