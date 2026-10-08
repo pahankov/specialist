@@ -33,6 +33,7 @@ class AppointmentWithDetails(BaseModel):
     client_phone: Optional[str]
     service_name: Optional[str]
     service_price: Optional[Decimal]
+    master_name: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 class AvailableDay(BaseModel):

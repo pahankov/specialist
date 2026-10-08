@@ -89,6 +89,7 @@ export interface Appointment {
   client_phone?: string
   service_name?: string
   service_price?: number | string
+  master_name?: string | null
 }
 
 export interface AppointmentCreate {

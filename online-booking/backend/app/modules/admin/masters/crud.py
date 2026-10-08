@@ -12,6 +12,7 @@ from app.models.city import City
 from app.schemas.master import MasterCreate, MasterResponse, MasterUpdate
 from app.dependencies.auth import require_super_admin
 from app.utils.security import hash_password
+from app.services.audit import log_action
 from app.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -131,16 +132,19 @@ async def create_master(
     """Create a new master (superadmin only)."""
     result = await db.execute(select(User).where(User.email == data.email, User.role == UserRole.MASTER))
     if result.scalar_one_or_none():
+        logger.warning("Создание мастера отклонено %s: email %s уже существует", super_admin.email, data.email)
         raise HTTPException(status_code=400, detail="Мастер с таким email уже существует")
 
     if data.phone:
         result = await db.execute(select(User).where(User.phone == data.phone))
         if result.scalar_one_or_none():
+            logger.warning("Создание мастера отклонено %s: телефон %s уже существует", super_admin.email, data.phone)
             raise HTTPException(status_code=400, detail="Мастер с таким телефоном уже существует")
 
     if data.city_id is not None:
         city = await db.execute(select(City).where(City.id == data.city_id))
         if city.scalar_one_or_none() is None:
+            logger.warning("Создание мастера отклонено %s: город id=%s не найден", super_admin.email, data.city_id)
             raise HTTPException(status_code=400, detail="Город не найден")
 
     new_user = User(
@@ -162,6 +166,8 @@ async def create_master(
 
     await db.commit()
     logger.info("Суперпользователь %s создал мастера: %s", super_admin.email, data.email)
+    await log_action(db, super_admin.id, "create", "master", new_user.id, data.name, level="info")
+    await db.commit()
 
     return _to_response(new_user, new_master_profile)
 
@@ -200,6 +206,9 @@ async def update_master(
     await db.commit()
     await db.refresh(master_profile)
     logger.info("Суперпользователь %s обновил мастера %s", super_admin.email, master_profile.user.email)
+    await log_action(db, super_admin.id, "update", "master", master_profile.user_id,
+                     f"Обновлён мастер {master_profile.user.email}", level="info")
+    await db.commit()
 
     return _to_response(master_profile.user, master_profile)
 
@@ -222,4 +231,7 @@ async def delete_master(
     await db.delete(master_profile)
     await db.commit()
     logger.info("Суперпользователь %s удалил мастера (user_id=%s)", super_admin.email, master_profile.user_id)
+    await log_action(db, super_admin.id, "delete", "master", master_profile.user_id,
+                     f"Удалён мастер (user_id={master_profile.user_id})", level="warning")
+    await db.commit()
     return {"detail": "Мастер удалён"}

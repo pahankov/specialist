@@ -219,6 +219,16 @@
   white-space: nowrap;
 }
 
+/* Clickable tariff badge: opens the tariff switcher */
+button.tariff-badge.tariff-btn {
+  border: none;
+  cursor: pointer;
+}
+
+button.tariff-badge.tariff-btn:hover {
+  background: #c8e6c9;
+}
+
 .tariff-ends {
   font-size: 11px;
   color: #999;

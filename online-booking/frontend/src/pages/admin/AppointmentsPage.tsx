@@ -3,16 +3,23 @@ import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { adminApi } from '../../api/client'
 import type { Appointment } from '../../api/types'
-import { Skeleton, EmptyState, Tooltip, ConfirmDialog, MasterSelect } from '../../components/common'
+import { Skeleton, EmptyState, Tooltip, ConfirmDialog, MasterSelect, ResizableTh, useColumnWidths } from '../../components/common'
+import { useSectionPrefix, SUPER_PREFIX } from '../../utils/section'
 import { getApiErrorMessage } from '../../utils/apiError'
 import '../../styles/filters.css'
+import '../../styles/tables.css'
 import './AppointmentsPage.css'
 
 type SortField = 'appointment_date' | 'client_name' | 'service_name' | 'service_price' | 'status'
 type SortDirection = 'asc' | 'desc'
 
 function AppointmentsPage() {
-  
+  const section = useSectionPrefix()
+  const isSuperSection = section === SUPER_PREFIX
+  const { widths: colW, setWidth: setColW } = useColumnWidths('appointments', {
+    date: 150, client: 160, phone: 130, service: 180, price: 90, status: 140, master: 150, actions: 110, del: 56,
+  })
+
   const [appointments, setAppointments] = useState<(Appointment & { client_name?: string; client_phone?: string; service_name?: string; service_price?: number })[]>([])
   const [searchParams, setSearchParams] = useSearchParams()
   const [statusFilter, setStatusFilter] = useState('')
@@ -255,7 +262,7 @@ function AppointmentsPage() {
             </div>
 
             {/* Client filter */}
-            <div className="form-group" style={{ marginBottom: 0 }}>
+            <div className="filter-cell">
               <label className="filter-label">Клиент</label>
               <select className="filter-control" value={clientIdFilter} onChange={(e) => setClientIdFilter(e.target.value === '' ? '' : Number(e.target.value))}>
                 <option value="">Все клиенты</option>
@@ -264,7 +271,7 @@ function AppointmentsPage() {
             </div>
 
             {/* Service filter */}
-            <div className="form-group" style={{ marginBottom: 0 }}>
+            <div className="filter-cell">
               <label className="filter-label">Услуга</label>
               <select className="filter-control" value={serviceIdFilter} onChange={(e) => setServiceIdFilter(e.target.value === '' ? '' : Number(e.target.value))}>
                 <option value="">Все услуги</option>
@@ -273,19 +280,19 @@ function AppointmentsPage() {
             </div>
 
             {/* Date from */}
-            <div className="form-group" style={{ marginBottom: 0 }}>
+            <div className="filter-cell">
               <label className="filter-label">Дата от</label>
               <input type="date" className="filter-control" value={dateFrom} disabled={allTime} onChange={(e) => setDateFrom(e.target.value)} />
             </div>
 
             {/* Date to */}
-            <div className="form-group" style={{ marginBottom: 0 }}>
+            <div className="filter-cell">
               <label className="filter-label">Дата до</label>
               <input type="date" className="filter-control" value={dateTo} disabled={allTime} onChange={(e) => setDateTo(e.target.value)} />
             </div>
 
             {/* All time */}
-            <div className="form-group filter-bottom" style={{ marginBottom: 0 }}>
+            <div className="filter-cell-bottom">
               <label className="filter-check">
                 <input type="checkbox" checked={allTime} onChange={() => setAllTime(v => !v)} />
                 За всё время
@@ -293,7 +300,7 @@ function AppointmentsPage() {
             </div>
 
             {/* Reset filters button */}
-            <div className="form-group filter-bottom" style={{ marginBottom: 0 }}>
+            <div className="filter-cell-bottom">
               <button className="btn btn-ghost" onClick={() => { setStatusFilter(''); setMasterIdFilter(''); setClientIdFilter(''); setServiceIdFilter(''); setDateFrom(''); setDateTo('') }} style={{ width: '100%', fontSize: 13, height: 38 }}>
                 ✕ Сбросить
               </button>
@@ -322,16 +329,19 @@ function AppointmentsPage() {
       ) : (
         <div className="card">
           <div className="appointments-table-wrapper">
-          <table className="appointments-table">
+          <table className="appointments-table resizable-table">
             <thead><tr>
-              <th className={`sortable ${sortField === 'appointment_date' ? 'active' : ''}`} onClick={() => handleSort('appointment_date')}>Дата <span className="sort-arrow">{sortField === 'appointment_date' ? (sortDirection === 'asc' ? '↑' : '↓') : '⇅'}</span></th>
-              <th className={`sortable ${sortField === 'client_name' ? 'active' : ''}`} onClick={() => handleSort('client_name')}>Клиент <span className="sort-arrow">{sortField === 'client_name' ? (sortDirection === 'asc' ? '↑' : '↓') : '⇅'}</span></th>
-              <th>Телефон</th>
-              <th className={`sortable ${sortField === 'service_name' ? 'active' : ''}`} onClick={() => handleSort('service_name')}>Услуга <span className="sort-arrow">{sortField === 'service_name' ? (sortDirection === 'asc' ? '↑' : '↓') : '⇅'}</span></th>
-              <th className={`sortable ${sortField === 'service_price' ? 'active' : ''}`} onClick={() => handleSort('service_price')}>Сумма <span className="sort-arrow">{sortField === 'service_price' ? (sortDirection === 'asc' ? '↑' : '↓') : '⇅'}</span></th>
-              <th className={`sortable ${sortField === 'status' ? 'active' : ''}`} onClick={() => handleSort('status')}>Статус <span className="sort-arrow">{sortField === 'status' ? (sortDirection === 'asc' ? '↑' : '↓') : '⇅'}</span></th>
-              <th>Действия</th>
-              <th></th>
+              <ResizableTh width={colW.date} onResize={(w) => setColW('date', w)} className={`sortable ${sortField === 'appointment_date' ? 'active' : ''}`} onClick={() => handleSort('appointment_date')}>Дата <span className="sort-arrow">{sortField === 'appointment_date' ? (sortDirection === 'asc' ? '↑' : '↓') : '⇅'}</span></ResizableTh>
+              <ResizableTh width={colW.client} onResize={(w) => setColW('client', w)} className={`sortable ${sortField === 'client_name' ? 'active' : ''}`} onClick={() => handleSort('client_name')}>Клиент <span className="sort-arrow">{sortField === 'client_name' ? (sortDirection === 'asc' ? '↑' : '↓') : '⇅'}</span></ResizableTh>
+              <ResizableTh width={colW.phone} onResize={(w) => setColW('phone', w)}>Телефон</ResizableTh>
+              <ResizableTh width={colW.service} onResize={(w) => setColW('service', w)} className={`sortable ${sortField === 'service_name' ? 'active' : ''}`} onClick={() => handleSort('service_name')}>Услуга <span className="sort-arrow">{sortField === 'service_name' ? (sortDirection === 'asc' ? '↑' : '↓') : '⇅'}</span></ResizableTh>
+              <ResizableTh width={colW.price} onResize={(w) => setColW('price', w)} className={`sortable ${sortField === 'service_price' ? 'active' : ''}`} onClick={() => handleSort('service_price')}>Сумма <span className="sort-arrow">{sortField === 'service_price' ? (sortDirection === 'asc' ? '↑' : '↓') : '⇅'}</span></ResizableTh>
+              <ResizableTh width={colW.status} onResize={(w) => setColW('status', w)} className={`sortable ${sortField === 'status' ? 'active' : ''}`} onClick={() => handleSort('status')}>Статус <span className="sort-arrow">{sortField === 'status' ? (sortDirection === 'asc' ? '↑' : '↓') : '⇅'}</span></ResizableTh>
+              {isSuperSection && (
+                <ResizableTh width={colW.master} onResize={(w) => setColW('master', w)}>Мастер</ResizableTh>
+              )}
+              <ResizableTh width={colW.actions} onResize={(w) => setColW('actions', w)}>Действия</ResizableTh>
+              <ResizableTh width={colW.del} onResize={(w) => setColW('del', w)}></ResizableTh>
             </tr></thead>
             <tbody>
               {filteredAppointments.map(a => (<tr key={a.id}>
@@ -345,6 +355,9 @@ function AppointmentsPage() {
                     <span className={`status-badge status-${a.status}`}>{statusLabels[a.status] || a.status}</span>
                   </Tooltip>
                 </td>
+                {isSuperSection && (
+                  <td title={a.master_name || ''}>{a.master_name || '—'}</td>
+                )}
                 <td className="actions-cell">
                   {a.status === 'pending' && (
                     <>

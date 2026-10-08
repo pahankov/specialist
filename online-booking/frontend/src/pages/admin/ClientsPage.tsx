@@ -6,9 +6,10 @@ import type { Client } from '../../api/types'
 import { PHONE_PLACEHOLDER, EMAIL_PLACEHOLDER } from '../../constants'
 import { isCompletePhone } from '../../components/common/PhoneInput'
 import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError'
-import { Skeleton, EmptyState, Tooltip, ConfirmDialog, MasterSelect, PhoneInput } from '../../components/common'
+import { Skeleton, EmptyState, Tooltip, ConfirmDialog, MasterSelect, PhoneInput, ResizableTh, useColumnWidths } from '../../components/common'
 import { useSectionPrefix } from '../../utils/section'
 import '../../styles/filters.css'
+import '../../styles/tables.css'
 import './ClientsPage.css'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -16,6 +17,9 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 function ClientsPage() {
   const navigate = useNavigate()
   const section = useSectionPrefix()
+  const { widths: colW, setWidth: setColW } = useColumnWidths('clients', {
+    name: 200, phone: 150, email: 200, noshow: 90, lock: 64, actions: 110,
+  })
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -146,7 +150,7 @@ function ClientsPage() {
       {/* Search and filter bar */}
       <div className="card" style={{ marginBottom: 16, padding: 16 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 12 }}>
-          <div className="form-group" style={{ marginBottom: 0 }}>
+          <div className="filter-cell">
             <label className="filter-label">🔍 Поиск по имени или телефону</label>
             <input
               type="text"
@@ -163,7 +167,7 @@ function ClientsPage() {
             style={{ marginBottom: 0 }}
           />
           {(search || masterIdFilter !== '') && (
-            <div className="form-group filter-bottom" style={{ marginBottom: 0 }}>
+            <div className="filter-cell-bottom">
               <button className="btn btn-ghost" onClick={() => { setSearch(''); setMasterIdFilter('') }} style={{ width: '100%', fontSize: 13, height: 38 }}>
                 ✕ Сбросить
               </button>
@@ -216,17 +220,18 @@ function ClientsPage() {
             />
           ) : (
           <div style={{ overflowX: 'auto' }}>
-            <table className="clients-table" style={{ minWidth: 640 }}>
+            <table className="clients-table resizable-table" style={{ minWidth: 640 }}>
               <thead><tr>
-                <th onClick={() => toggleSort('name')} style={{ cursor: 'pointer', userSelect: 'none' }} title="Сортировать по имени">
+                <ResizableTh width={colW.name} onResize={(w) => setColW('name', w)} onClick={() => toggleSort('name')} style={{ cursor: 'pointer', userSelect: 'none' }} title="Сортировать по имени">
                   Имя{sortArrow('name')}
-                </th>
-                <th>Телефон</th>
-                <th>Email</th>
-                <th onClick={() => toggleSort('no_show')} style={{ cursor: 'pointer', userSelect: 'none' }} title="Сортировать по неявкам">
+                </ResizableTh>
+                <ResizableTh width={colW.phone} onResize={(w) => setColW('phone', w)}>Телефон</ResizableTh>
+                <ResizableTh width={colW.email} onResize={(w) => setColW('email', w)}>Email</ResizableTh>
+                <ResizableTh width={colW.noshow} onResize={(w) => setColW('noshow', w)} onClick={() => toggleSort('no_show')} style={{ cursor: 'pointer', userSelect: 'none' }} title="Сортировать по неявкам">
                   Неявки{sortArrow('no_show')}
-                </th>
-                <th>Действия</th>
+                </ResizableTh>
+                <ResizableTh width={colW.lock} onResize={(w) => setColW('lock', w)} title="Блокировка"></ResizableTh>
+                <ResizableTh width={colW.actions} onResize={(w) => setColW('actions', w)}>Действия</ResizableTh>
               </tr></thead>
               <tbody>
                 {clients.map(c => (

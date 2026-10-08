@@ -1,23 +1,44 @@
 /* Shared admin filter controls: one label height, one control height.
- * Use these classes instead of inline styles so selects, date inputs,
- * custom selects and checkboxes always line up in a row. */
+ * Use these classes INSTEAD of .form-group in filter grids: .form-group
+ * leaks globally (flex-direction:column) from page stylesheets and breaks
+ * bottom-aligned cells. These selectors beat the leaks by specificity. */
 
-.filter-label {
+.filter-cell {
+  margin-bottom: 0;
+  min-width: 0;
+}
+
+/* Bottom-aligned cell (checkbox / reset button): explicit row direction —
+ * without it a leaked column direction pushes content to the right. */
+.filter-cell-bottom {
+  margin-bottom: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+}
+
+label.filter-label {
   font-size: 12px;
+  font-weight: 400;
   color: #666;
   margin: 0 0 4px;
+  padding: 0;
   display: block;
   line-height: 18px;
   min-height: 18px;
 }
 
-.filter-control {
+input.filter-control,
+select.filter-control {
   width: 100%;
   height: 38px;
+  margin: 0;
   padding: 8px 12px;
   border: 2px solid #e0e0e0;
   border-radius: 8px;
   font-size: 14px;
+  font-weight: 400;
   box-sizing: border-box;
   background: #fff;
   color: inherit;

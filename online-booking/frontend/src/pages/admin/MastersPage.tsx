@@ -3,11 +3,12 @@ import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { superAdminApi } from '../../api/client'
 import type { Master } from '../../api/types'
-import { Skeleton, EmptyState, Tooltip, Modal, ConfirmDialog, CitySelect, PhoneInput } from '../../components/common'
+import { Skeleton, EmptyState, Tooltip, Modal, ConfirmDialog, CitySelect, PhoneInput, ResizableTh, useColumnWidths } from '../../components/common'
 import type { CityOption } from '../../components/common/CitySelect'
 import { isCompletePhone } from '../../components/common/PhoneInput'
 import { PHONE_PLACEHOLDER, PASSWORD_PLACEHOLDER, PASSWORD_EDIT_PLACEHOLDER, TELEGRAM_PLACEHOLDER } from '../../constants'
 import { useSectionPrefix, ADMIN_PREFIX } from '../../utils/section'
+import '../../styles/tables.css'
 import { getApiErrorMessage } from '../../utils/apiError'
 import { getCookie } from '../../utils/cookies'
 import { startImpersonation } from '../../utils/impersonation'
@@ -16,6 +17,12 @@ import './MastersPage.css'
 function MastersPage() {
   const navigate = useNavigate()
   const section = useSectionPrefix()
+  const { widths: colW, setWidth: setColW } = useColumnWidths('masters', {
+    check: 44, name: 170, email: 200, phone: 140, status: 120, role: 170, tariff: 130, actions: 176,
+  })
+  const [tariffMaster, setTariffMaster] = useState<Master | null>(null)
+  const [tariffDraft, setTariffDraft] = useState('')
+  const [trialDraft, setTrialDraft] = useState('')
   const [masters, setMasters] = useState<Master[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -97,7 +104,7 @@ function MastersPage() {
     try {
       await superAdminApi.createMaster({
         ...createForm,
-        ...(createCity ? { city_id: createCity.id } : {}),
+        ...(createCity?.id != null ? { city_id: createCity.id } : {}),
       })
       toast.success('Мастер успешно создан')
       setShowCreateModal(false)
@@ -276,10 +283,10 @@ function MastersPage() {
         />
       ) : (
         <div className="masters-table-wrapper">
-          <table className="masters-table">
+          <table className="masters-table resizable-table">
             <thead>
               <tr>
-                <th className="col-checkbox">
+                <ResizableTh width={colW.check} onResize={(w) => setColW('check', w)} className="col-checkbox">
                   <input
                     type="checkbox"
                     checked={masters.length > 0 && selectedMasters.size === masters.length}
@@ -291,20 +298,20 @@ function MastersPage() {
                       }
                     }}
                   />
-                </th>
-                <th onClick={() => toggleSort('name')} style={{ cursor: 'pointer', userSelect: 'none' }} title="Сортировать по имени">
+                </ResizableTh>
+                <ResizableTh width={colW.name} onResize={(w) => setColW('name', w)} onClick={() => toggleSort('name')} style={{ cursor: 'pointer', userSelect: 'none' }} title="Сортировать по имени">
                   Имя{sortArrow('name')}
-                </th>
-                <th onClick={() => toggleSort('email')} style={{ cursor: 'pointer', userSelect: 'none' }} title="Сортировать по email">
+                </ResizableTh>
+                <ResizableTh width={colW.email} onResize={(w) => setColW('email', w)} onClick={() => toggleSort('email')} style={{ cursor: 'pointer', userSelect: 'none' }} title="Сортировать по email">
                   Email{sortArrow('email')}
-                </th>
-                <th>Телефон</th>
-                <th onClick={() => toggleSort('status')} style={{ cursor: 'pointer', userSelect: 'none' }} title="Сортировать по статусу">
+                </ResizableTh>
+                <ResizableTh width={colW.phone} onResize={(w) => setColW('phone', w)}>Телефон</ResizableTh>
+                <ResizableTh width={colW.status} onResize={(w) => setColW('status', w)} onClick={() => toggleSort('status')} style={{ cursor: 'pointer', userSelect: 'none' }} title="Сортировать по статусу">
                   Статус{sortArrow('status')}
-                </th>
-                <th>Роль</th>
-                <th>Тариф</th>
-                <th>Действия</th>
+                </ResizableTh>
+                <ResizableTh width={colW.role} onResize={(w) => setColW('role', w)}>Роль</ResizableTh>
+                <ResizableTh width={colW.tariff} onResize={(w) => setColW('tariff', w)}>Тариф</ResizableTh>
+                <ResizableTh width={colW.actions} onResize={(w) => setColW('actions', w)}>Действия</ResizableTh>
               </tr>
             </thead>
             <tbody>
@@ -345,10 +352,18 @@ function MastersPage() {
                     </Tooltip>
                   </td>
                   <td>
-                    <Tooltip content={master.trial_ends_at ? `Триал до ${new Date(master.trial_ends_at).toLocaleDateString('ru-RU')}` : 'Тариф'} position="top">
-                      <span className="tariff-badge">
+                    <Tooltip content={master.trial_ends_at ? `Триал до ${new Date(master.trial_ends_at).toLocaleDateString('ru-RU')}. Нажмите, чтобы сменить тариф` : 'Нажмите, чтобы сменить тариф'} position="top">
+                      <button
+                        type="button"
+                        className="tariff-badge tariff-btn"
+                        onClick={() => {
+                          setTariffMaster(master)
+                          setTariffDraft(master.tariff || 'trial')
+                          setTrialDraft(master.trial_ends_at ? master.trial_ends_at.slice(0, 10) : '')
+                        }}
+                      >
                         {master.tariff === 'trial' ? '🆓 Триал' : (master.tariff || '—')}
-                      </span>
+                      </button>
                     </Tooltip>
                     {master.trial_ends_at && (
                       <div className="tariff-ends">{new Date(master.trial_ends_at).toLocaleDateString('ru-RU')}</div>
@@ -399,6 +414,44 @@ function MastersPage() {
         danger
         onConfirm={() => deleteConfirm !== null && handleDelete(deleteConfirm)}
       />
+
+      <Modal open={tariffMaster !== null} onClose={() => setTariffMaster(null)} title={`Тариф — ${tariffMaster?.name ?? ''}`}>
+        <div className="form-group">
+          <label>Тариф</label>
+          <select value={tariffDraft} onChange={(e) => setTariffDraft(e.target.value)}>
+            <option value="trial">🆓 Триал</option>
+            <option value="basic">Базовый</option>
+            <option value="pro">Профи</option>
+            <option value="business">Бизнес</option>
+          </select>
+        </div>
+        <div className="form-group">
+          <label>Конец триала</label>
+          <input type="date" value={trialDraft} onChange={(e) => setTrialDraft(e.target.value)} />
+        </div>
+        <div className="modal-actions">
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={async () => {
+              if (!tariffMaster) return
+              try {
+                const patch: { tariff?: string; trial_ends_at?: string } = {}
+                if (tariffDraft) patch.tariff = tariffDraft
+                if (trialDraft) patch.trial_ends_at = trialDraft
+                await superAdminApi.updateMaster(tariffMaster.id, patch)
+                toast.success('Тариф обновлён')
+                setTariffMaster(null)
+                loadMasters()
+              } catch (err: unknown) {
+                toast.error(handleError(err))
+              }
+            }}
+          >
+            Сохранить
+          </button>
+        </div>
+      </Modal>
 
       <Modal open={showCreateModal} onClose={() => setShowCreateModal(false)} title="Добавить мастера" wide>
           <form onSubmit={handleCreate} className="master-form">

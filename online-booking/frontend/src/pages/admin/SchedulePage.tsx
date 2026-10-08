@@ -10,7 +10,6 @@ import { getCookie, decodeJwtPayload } from '../../utils/cookies'
 import { MonthlyStatsComponent } from '../../components/schedule/MonthlyStats'
 import {
   toggleDayWork,
-  toggleHour,
   openBookingForm,
   closeBookingForm,
   handleBookAppointment,
@@ -117,12 +116,16 @@ function SchedulePage() {
   }, [])
 
   const handleToggleDay = useCallback(async (date: Date) => {
-    const result = await toggleDayWork(date, schedule, activeHours, appointments, setError)
+    if (isSuperAdmin && selectedMasterId === '') {
+      setError('Выберите мастера, чтобы менять расписание')
+      return
+    }
+    const result = await toggleDayWork(date, schedule, activeHours, appointments, setError, selectedMasterId)
     if (result) {
       setSchedule(result.newSchedule)
       setActiveHours(result.newActiveHours)
     }
-  }, [schedule, activeHours, appointments])
+  }, [schedule, activeHours, appointments, selectedMasterId, isSuperAdmin])
 
   const handleAddSlot = useCallback(async (date: Date) => {
     const dateStr = date.toISOString().split('T')[0]
@@ -156,9 +159,87 @@ function SchedulePage() {
     }
   }, [schedule, selectedMasterId, isSuperAdmin])
 
-  const handleToggleHour = useCallback((dateStr: string, hour: number) => {
-    toggleHour(dateStr, hour, setActiveHours)
-  }, [])
+  // Toggling an hour persists to the server AND drives the day state:
+  // turning any hour ON activates the whole day (it turns green),
+  // turning the last hour OFF deactivates the day.
+  const handleToggleHour = useCallback(async (dateStr: string, hour: number) => {
+    const key = `${dateStr}-${hour}`
+    const turningOn = !activeHours[key]
+    if (isSuperAdmin && selectedMasterId === '') {
+      setError('Выберите мастера, чтобы менять расписание')
+      return
+    }
+    const masterParam = selectedMasterId !== '' ? selectedMasterId : undefined
+    const pad = (h: number) => `${String(h).padStart(2, '0')}:00`
+
+    if (turningOn) {
+      setActiveHours(prev => ({ ...prev, [key]: true }))
+      try {
+        const resp = await adminApi.getWorkingHours(masterParam)
+        const existing = resp.data.find((h: any) => h.schedule_date === dateStr)
+        if (existing) {
+          const curStart = Number(String(existing.start_time).split(':')[0])
+          const curEnd = Number(String(existing.end_time).split(':')[0])
+          const start = Math.min(curStart, hour)
+          const end = Math.max(curEnd, hour + 1)
+          await adminApi.updateWorkingHour(existing.id, {
+            schedule_date: dateStr, start_time: pad(start), end_time: pad(end),
+          })
+          setSchedule(prev => ({ ...prev, [dateStr]: { start, end } }))
+        } else {
+          await adminApi.createWorkingHour({
+            master_id: masterParam, schedule_date: dateStr,
+            start_time: pad(hour), end_time: pad(hour + 1),
+          })
+          setSchedule(prev => ({ ...prev, [dateStr]: { start: hour, end: hour + 1 } }))
+        }
+      } catch (err: unknown) {
+        setActiveHours(prev => ({ ...prev, [key]: false }))
+        setError(getApiErrorMessage(err, 'Не удалось включить час'))
+      }
+      return
+    }
+
+    // Turning OFF
+    const remaining = Object.keys(activeHours)
+      .filter(k => k.startsWith(`${dateStr}-`) && k !== key && activeHours[k])
+      .map(k => Number(k.split('-').pop()))
+    setActiveHours(prev => ({ ...prev, [key]: false }))
+    try {
+      const resp = await adminApi.getWorkingHours(masterParam)
+      const existing = resp.data.find((h: any) => h.schedule_date === dateStr)
+      if (!existing) {
+        if (remaining.length === 0) {
+          setSchedule(prev => {
+            const next = { ...prev }
+            delete next[dateStr]
+            return next
+          })
+        }
+        return
+      }
+      if (remaining.length === 0) {
+        await adminApi.deleteWorkingHour(existing.id)
+        setSchedule(prev => {
+          const next = { ...prev }
+          delete next[dateStr]
+          return next
+        })
+      } else {
+        // Backend stores one range per day: shrink to the remaining edges
+        // (a hole in the middle stays visually off but covered by the range)
+        const start = Math.min(...remaining)
+        const end = Math.max(...remaining) + 1
+        await adminApi.updateWorkingHour(existing.id, {
+          schedule_date: dateStr, start_time: pad(start), end_time: pad(end),
+        })
+        setSchedule(prev => ({ ...prev, [dateStr]: { start, end } }))
+      }
+    } catch (err: unknown) {
+      setActiveHours(prev => ({ ...prev, [key]: true }))
+      setError(getApiErrorMessage(err, 'Не удалось выключить час'))
+    }
+  }, [activeHours, selectedMasterId, isSuperAdmin])
 
   const handleOpenBooking = useCallback((date: Date, hour: number) => {
     openBookingForm(date, hour, setBookingForm)
@@ -215,6 +296,9 @@ function SchedulePage() {
         </div>
       )}
 
+      {/* No calendar without a master: nothing to display yet */}
+      {!(isSuperAdmin && selectedMasterId === '') && (
+      <>
       {/* Legend */}
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 20, padding: 14, background: '#f9f9f9', borderRadius: 10, justifyContent: 'center' }}>
         {[
@@ -255,6 +339,8 @@ function SchedulePage() {
       )}
 
       <MonthlyStatsComponent currentMonth={currentMonth} stats={monthlyStats} />
+      </>
+      )}
 
       {/* Error modal */}
       <ConfirmDialog

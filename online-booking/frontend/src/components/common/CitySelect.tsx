@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import apiClient from '../../api/http'
+import { dadataApi } from '../../api/dadata'
 import './MasterSelect.css'
 
 export interface CityOption {
-  id: number
+  id: number | null
   name: string
+  /** Where the pick came from (dadata picks resolve to a local id on select). */
+  source?: 'local' | 'dadata'
 }
 
 interface CitySelectProps {
@@ -18,7 +21,18 @@ interface CitySelectProps {
   style?: CSSProperties
 }
 
-/** City picker over the local DB (no DaData quota burn). */
+interface Row {
+  key: string
+  id: number | null
+  name: string
+  source: 'local' | 'dadata'
+}
+
+/**
+ * City picker: DaData suggestions first, local DB merged in.
+ * A DaData pick with no local match is resolved (get-or-created) via
+ * POST /cities/resolve so the master form always gets a real city_id.
+ */
 export default function CitySelect({
   value,
   valueName = '',
@@ -27,12 +41,13 @@ export default function CitySelect({
   required = false,
   style,
 }: CitySelectProps) {
-  const [options, setOptions] = useState<CityOption[]>([])
+  const [rows, setRows] = useState<Row[]>([])
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const [focused, setFocused] = useState(false)
   const [loading, setLoading] = useState(false)
   const [failed, setFailed] = useState(false)
+  const [resolving, setResolving] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const seq = useRef(0)
   const boxRef = useRef<HTMLDivElement>(null)
@@ -77,7 +92,7 @@ export default function CitySelect({
       window.removeEventListener('scroll', place, true)
       window.removeEventListener('resize', place)
     }
-  }, [open ])
+  }, [open])
 
   const openDropdown = () => {
     if (inputRef.current) {
@@ -92,7 +107,7 @@ export default function CitySelect({
     setFailed(false)
     if (timer.current) clearTimeout(timer.current)
     if (text.trim().length < 2) {
-      setOptions([])
+      setRows([])
       setLoading(false)
       setOpen(false)
       return
@@ -101,17 +116,47 @@ export default function CitySelect({
     const cur = ++seq.current
     timer.current = setTimeout(async () => {
       try {
-        const { data } = await apiClient.get('/api/v1/cities/search/', {
-          params: { q: text.trim(), limit: 10 },
-        })
+        const q = text.trim()
+        let dadata: { city?: string; value: string }[] = []
+        let dadataOk = true
+        let localRes: { id: number; name_ru: string }[] = []
+        let localOk = true
+        try {
+          dadata = await dadataApi.searchCities(q, 7)
+        } catch { dadataOk = false }
+        try {
+          const r = await apiClient.get('/api/v1/cities/search/', { params: { q, limit: 10 } })
+          localRes = (Array.isArray(r.data) ? r.data : []) as { id: number; name_ru: string }[]
+        } catch { localOk = false }
         if (cur !== seq.current) return
-        const list = (Array.isArray(data) ? data : []) as { id: number; name_ru: string }[]
-        setOptions(list.map(c => ({ id: c.id, name: c.name_ru })))
+        if (!dadataOk && !localOk) {
+          setRows([])
+          setFailed(true)
+          openDropdown()
+          return
+        }
+        const seen = new Set<string>()
+        const merged: Row[] = []
+        for (const c of localRes) {
+          const key = c.name_ru.toLowerCase()
+          if (seen.has(key)) continue
+          seen.add(key)
+          merged.push({ key: `local-${c.id}`, id: c.id, name: c.name_ru, source: 'local' })
+        }
+        for (const s of dadata) {
+          const name = (s.city || s.value || '').trim()
+          if (!name) continue
+          const key = name.toLowerCase()
+          if (seen.has(key)) continue
+          seen.add(key)
+          merged.push({ key: `dadata-${key}`, id: null, name, source: 'dadata' })
+        }
+        setRows(merged)
         setFailed(false)
         openDropdown()
       } catch {
         if (cur === seq.current) {
-          setOptions([])
+          setRows([])
           setFailed(true)
           openDropdown()
         }
@@ -121,7 +166,30 @@ export default function CitySelect({
     }, 350)
   }
 
-  const selectedName = value != null ? (valueName || options.find(o => o.id === value)?.name || '') : ''
+  const pick = async (row: Row) => {
+    if (row.id != null) {
+      onChange({ id: row.id, name: row.name, source: row.source })
+      setQuery('')
+      setRows([])
+      setOpen(false)
+      return
+    }
+    // DaData-only pick: resolve to a local id (get-or-create on the server)
+    setResolving(true)
+    try {
+      const { data } = await apiClient.post('/api/v1/cities/resolve', { name: row.name })
+      onChange({ id: data.id, name: data.name_ru ?? row.name, source: 'dadata' })
+      setQuery('')
+      setRows([])
+      setOpen(false)
+    } catch {
+      setFailed(true)
+    } finally {
+      setResolving(false)
+    }
+  }
+
+  const selectedName = value != null ? (valueName || '') : ''
   // While focused (or open) always show the live query — otherwise typed
   // characters are swallowed (input would render selectedName instead).
   const shown = (focused || open) ? query : selectedName
@@ -157,7 +225,7 @@ export default function CitySelect({
             type="button"
             className="master-select-clear"
             aria-label="Сбросить"
-            onClick={() => { setQuery(''); setOptions([]); setOpen(false); setFailed(false); onChange(null) }}
+            onClick={() => { setQuery(''); setRows([]); setOpen(false); setFailed(false); onChange(null) }}
           >
             ✕
           </button>
@@ -180,20 +248,23 @@ export default function CitySelect({
             <div className="master-select-empty">Поиск…</div>
           ) : failed ? (
             <div className="master-select-empty">Не удалось загрузить города. Проверьте соединение.</div>
-          ) : options.length === 0 ? (
+          ) : resolving ? (
+            <div className="master-select-empty">Привязываем город…</div>
+          ) : rows.length === 0 ? (
             <div className="master-select-empty">
               {query.trim().length >= 2 ? 'Ничего не найдено' : 'Введите минимум 2 буквы'}
             </div>
           ) : (
-            options.map(o => (
+            rows.map(r => (
               <div
-                key={o.id}
-                className={`master-select-item${o.id === value ? ' selected' : ''}`}
-                onClick={() => { onChange(o); setQuery(''); setOptions([]); setOpen(false) }}
+                key={r.key}
+                className="master-select-item"
+                onClick={() => pick(r)}
                 role="option"
-                aria-selected={o.id === value}
+                aria-selected={false}
               >
-                <span className="master-select-name">{o.name}</span>
+                <span className="master-select-name">{r.name}</span>
+                {r.source === 'dadata' && <span className="master-select-tariff">🌐 DaData</span>}
               </div>
             ))
           )}

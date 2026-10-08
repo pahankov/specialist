@@ -1,0 +1,48 @@
+/* Shared admin table behaviour: fixed layout + manual column widths.
+ * Tables using ResizableTh must add .resizable-table so stored widths hold
+ * and long text ellipsizes instead of pushing action buttons off-screen. */
+
+table.resizable-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.resizable-table th {
+  position: relative;
+  overflow: visible;
+  white-space: nowrap;
+}
+
+.resizable-table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resizable-table td.allow-wrap {
+  white-space: normal;
+  overflow: visible;
+}
+
+.col-resizer {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 5;
+}
+
+.col-resizer:hover,
+.col-resizer:active {
+  background: rgba(102, 126, 234, 0.35);
+  border-radius: 4px;
+}
+
+/* Page titles stay on one line (was wrapping to two). */
+.page-header h1 {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

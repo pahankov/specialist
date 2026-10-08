@@ -1,5 +1,6 @@
 """City and Country API endpoints."""
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import func
@@ -10,6 +11,8 @@ from app.models.country import Country
 from app.models.city import City
 from app.schemas.country import CountryResponse, CountryCreate, CountryUpdate
 from app.schemas.city import CityResponse, CityCreate, CityUpdate
+from app.dependencies.auth import require_super_admin
+from app.models.user import User
 from app.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -103,4 +106,63 @@ async def get_city(city_id: int, db: AsyncSession = Depends(get_db)):
     city = result.scalar_one_or_none()
     if not city:
         raise HTTPException(status_code=404, detail="City not found")
+    return city
+
+
+class CityResolveRequest(BaseModel):
+    """Resolve a DaData-picked city name to a local id (creating it if new)."""
+    name: str
+    country_code: str = "RU"
+
+
+@router.post("/cities/resolve", response_model=CityResponse, status_code=200)
+async def resolve_city(
+    body: CityResolveRequest,
+    admin: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get-or-create a city by exact Russian name.
+
+    Used when a DaData suggestion has no local match yet: the name comes
+    from a DaData pick (not free text), so junk rows are unlikely.
+    """
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Пустое название города")
+
+    country_result = await db.execute(
+        select(Country).where(Country.code == body.country_code.upper())
+    )
+    country = country_result.scalar_one_or_none()
+    if not country:
+        raise HTTPException(status_code=400, detail="Страна не найдена")
+
+    # Case-insensitive match in Python: SQL lower() is ASCII-only in
+    # SQLite and would miss Cyrillic duplicates. Per-country city counts
+    # are small (hundreds), so this is cheap.
+    existing = await db.execute(
+        select(City).where(City.country_id == country.id)
+    )
+    wanted = name.lower()
+    city = next((c for c in existing.scalars().all() if (c.name_ru or "").lower() == wanted), None)
+    if city:
+        return city
+
+    base_slug = name.lower().replace(" ", "-").replace("'", "")
+    slug = base_slug
+    suffix = 2
+    while True:
+        clash = await db.execute(
+            select(City.id).where(City.country_id == country.id, City.slug == slug)
+        )
+        if clash.scalar_one_or_none() is None:
+            break
+        slug = f"{base_slug}-{suffix}"
+        suffix += 1
+
+    city = City(country_id=country.id, name_ru=name, slug=slug, is_active=True)
+    db.add(city)
+    await db.commit()
+    await db.refresh(city)
+    logger.info("Суперпользователь %s добавил город %s (id=%s)", admin.email, name, city.id)
     return city

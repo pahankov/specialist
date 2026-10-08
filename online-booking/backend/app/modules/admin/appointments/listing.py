@@ -146,7 +146,9 @@ async def get_admin_appointments(
             id=appt.id, master_id=appt.master_id, service_id=appt.service_id,
             client_id=appt.client_id, appointment_date=appt.appointment_date,
             status=appt.status, notes=appt.notes,
-            client_name=row[1], client_phone=row[2], service_name=row[3], service_price=row[4]
+            client_name=row[1], client_phone=row[2], service_name=row[3], service_price=row[4],
+            # Admin branch selects master_name as 6th column; master branch has none
+            master_name=row[5] if is_admin and len(row) > 5 else None
         ))
 
     return PaginatedResponse(

@@ -96,7 +96,7 @@ function RevenuePage() {
       <div className="card" style={{ marginBottom: 16, padding: 16 }}>
         <h3 style={{ margin: '0 0 12px', fontSize: 16 }}>Фильтры дохода</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
-          <div className="form-group" style={{ marginBottom: 0 }}>
+          <div className="filter-cell">
             <label className="filter-label">Группировка</label>
             <select className="filter-control" value={groupBy} onChange={(e) => setGroupBy(e.target.value as 'overall' | 'master' | 'service')}>
               <option value="overall">Общий доход</option>
@@ -109,23 +109,23 @@ function RevenuePage() {
             onChange={setMasterIdFilter}
             style={{ marginBottom: 0 }}
           />
-          <div className="form-group" style={{ marginBottom: 0 }}>
+          <div className="filter-cell">
             <label className="filter-label">Дата от</label>
             <input type="date" className="filter-control" value={dateFrom} disabled={allTime} onChange={(e) => setDateFrom(e.target.value)} />
           </div>
-          <div className="form-group" style={{ marginBottom: 0 }}>
+          <div className="filter-cell">
             <label className="filter-label">Дата до</label>
             <input type="date" className="filter-control" value={dateTo} disabled={allTime} onChange={(e) => setDateTo(e.target.value)} />
           </div>
-          <div className="form-group filter-bottom" style={{ marginBottom: 0 }}>
+          <div className="filter-cell-bottom">
             <label className="filter-check">
               <input type="checkbox" checked={allTime} onChange={() => setAllTime(v => !v)} />
               За всё время
             </label>
           </div>
           {(groupBy !== 'overall' || masterIdFilter !== '' || dateFrom || dateTo) && (
-            <div className="form-group" style={{ marginBottom: 0, display: 'flex', alignItems: 'flex-end' }}>
-              <button className="btn btn-ghost" onClick={() => { setGroupBy('overall'); setMasterIdFilter(''); setDateFrom(''); setDateTo('') }} style={{ width: '100%', fontSize: 13 }}>Сбросить</button>
+            <div className="filter-cell-bottom">
+              <button className="btn btn-ghost" onClick={() => { setGroupBy('overall'); setMasterIdFilter(''); setDateFrom(''); setDateTo('') }} style={{ width: '100%', fontSize: 13, height: 38 }}>Сбросить</button>
             </div>
           )}
         </div>

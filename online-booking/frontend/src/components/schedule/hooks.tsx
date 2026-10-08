@@ -7,10 +7,12 @@ export async function toggleDayWork(
   schedule: Record<string, DaySchedule>,
   activeHours: Record<string, boolean>,
   appointments: Appointment[],
-  setError: (msg: string) => void
+  setError: (msg: string) => void,
+  masterId?: number | ''
 ): Promise<{ newSchedule: Record<string, DaySchedule>; newActiveHours: Record<string, boolean> } | null> {
   const dateStr = formatDate(date)
   const isActive = !!schedule[dateStr]
+  const masterParam = masterId !== '' && masterId != null ? masterId : undefined
 
   if (isActive) {
     const dayAppointments = appointments.filter(a => a.appointment_date?.split('T')[0] === dateStr)
@@ -31,14 +33,14 @@ export async function toggleDayWork(
     for (let h = 8; h < 22; h++) { newActiveHours[`${dateStr}-${h}`] = true }
   }
 
-  // Sync with backend
+  // Sync with backend (scoped to the selected master for superadmins)
   try {
     if (isActive) {
-      const resp = await adminApi.getWorkingHours()
+      const resp = await adminApi.getWorkingHours(masterParam)
       const existing = resp.data.find((h: any) => h.schedule_date === dateStr)
       if (existing) await adminApi.deleteWorkingHour(existing.id)
     } else {
-      const resp = await adminApi.getWorkingHours()
+      const resp = await adminApi.getWorkingHours(masterParam)
       const existing = resp.data.find((h: any) => h.schedule_date === dateStr)
       if (existing) {
         await adminApi.updateWorkingHour(existing.id, {
@@ -48,6 +50,7 @@ export async function toggleDayWork(
         })
       } else {
         await adminApi.createWorkingHour({
+          master_id: masterParam,
           schedule_date: dateStr,
           start_time: '08:00',
           end_time: '22:00'

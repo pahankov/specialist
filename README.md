@@ -13,6 +13,7 @@
 | [LOCAL.md](LOCAL.md) | Локальные секреты и настройки (НЕ для git) |
 | [docs/TESTING.md](docs/TESTING.md) | Документация по тестированию backend |
 | [docs/DEPLOYMENT_RULES.md](docs/DEPLOYMENT_RULES.md) | Правила и анти-паттерны деплоя |
+| [docs/SECRETS.md](docs/SECRETS.md) | Где живут секреты, как достать/добавить (без значений) |
 | [docs/API.md](docs/API.md) | Справочник API: таблицы эндпоинтов и curl-кукбук |
 
 ---
