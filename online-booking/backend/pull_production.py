@@ -28,6 +28,12 @@ Usage (run from online-booking/backend):
     python pull_production.py --entities masters,clients
     python pull_production.py --db ./my_local.db
 
+Automatic mode (Windows Task Scheduler, see setup_auto_sync.bat):
+    values are read from backend/.env (gitignored, never commit!):
+    PROD_API / PROD_EMAIL / PROD_PASSWORD / LOCAL_DEV_PASSWORD / LOCAL_DB.
+    The scheduled wrapper runs: pull_production.py --yes --quiet
+    (backups are pruned to --keep-backups, default 5).
+
 Credentials are NEVER taken from CLI args (shell history / process list).
 """
 import argparse
@@ -263,29 +269,35 @@ async def upsert_client(session: AsyncSession, row: dict, dev_password_hash: str
 
 
 async def run(api: str, email: str, password: str, db_path: str,
-              entities, dry_run: bool, dev_password: str) -> dict:
+              entities, dry_run: bool, dev_password: str, quiet: bool = False) -> dict:
     prod = ProdClient(api)
-    print(f"Login to {api} as {email} ...")
+    if not quiet:
+        print(f"Login to {api} as {email} ...")
     prod.login(email, password)
-    print("  OK")
+    if not quiet:
+        print("  OK")
+
+    def progress(msg: str) -> None:
+        if not quiet:
+            print(msg)
 
     fetched = {}
     if "geo" in entities:
         fetched["countries"] = prod.get_all("/api/v1/countries/")
         fetched["cities"] = prod.get_all("/api/v1/cities/", {"page_size": 1000})
-        print(f"  geo: {len(fetched['countries'])} countries, {len(fetched['cities'])} cities")
+        progress(f"  geo: {len(fetched['countries'])} countries, {len(fetched['cities'])} cities")
     if "masters" in entities:
         fetched["masters"] = prod.get_all("/api/v1/admin/masters")
-        print(f"  masters: {len(fetched['masters'])}")
+        progress(f"  masters: {len(fetched['masters'])}")
     if "services" in entities:
         fetched["services"] = list(prod.get_paged("/api/v1/admin/services/all"))
-        print(f"  services: {len(fetched['services'])}")
+        progress(f"  services: {len(fetched['services'])}")
     if "working-hours" in entities:
         fetched["working_hours"] = prod.get_all("/api/v1/admin/working-hours")
-        print(f"  working-hours: {len(fetched['working_hours'])}")
+        progress(f"  working-hours: {len(fetched['working_hours'])}")
     if "clients" in entities:
         fetched["clients"] = list(prod.get_paged("/api/v1/admin/clients"))
-        print(f"  clients: {len(fetched['clients'])}")
+        progress(f"  clients: {len(fetched['clients'])}")
 
     if dry_run:
         print("DRY-RUN: nothing written.")
@@ -329,16 +341,44 @@ async def run(api: str, email: str, password: str, db_path: str,
     return summary
 
 
-def backup_db(db_path: str) -> str:
+def prune_backups(db_path: str, keep: int) -> list:
+    """Delete oldest *.bak-* files, keep newest `keep`. Returns removed list."""
+    import glob as _glob
+    olds = sorted(_glob.glob(f"{db_path}.bak-*"))
+    removed = []
+    if keep >= 0 and len(olds) > keep:
+        for stale in olds[:len(olds) - keep]:
+            try:
+                os.remove(stale)
+                removed.append(stale)
+            except OSError:
+                pass
+    return removed
+
+
+def backup_db(db_path: str, keep: int = 5) -> str:
+    """Copy the local DB aside, then prune old backups."""
     import datetime as _dt
     dst = f"{db_path}.bak-{_dt.datetime.now():%Y%m%d-%H%M%S}"
     if os.path.exists(db_path):
         shutil.copy2(db_path, dst)
         print(f"Local DB backed up to {dst}")
+        pruned = prune_backups(db_path, keep)
+        if pruned:
+            print(f"  pruned {len(pruned)} old backup(s)")
     return dst
 
 
 def main() -> None:
+    # Local .env (gitignored) provides PROD_EMAIL/PROD_PASSWORD/LOCAL_* for
+    # unattended runs (Task Scheduler). Explicit process env wins.
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"),
+                    override=False)
+    except ImportError:
+        pass
+
     ap = argparse.ArgumentParser(description="Pull production data into local DB (one way).")
     ap.add_argument("--api", default=os.getenv("PROD_API", DEFAULT_API))
     ap.add_argument("--db", default=os.getenv("LOCAL_DB", DEFAULT_DB))
@@ -347,6 +387,9 @@ def main() -> None:
                     help=f"subset of {','.join(ENTITIES)}")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--yes", action="store_true", help="skip confirm prompt")
+    ap.add_argument("--quiet", action="store_true", help="summary only (for scheduler)")
+    ap.add_argument("--keep-backups", type=int, default=5,
+                    help="local .db backups to keep (default 5)")
     args = ap.parse_args()
 
     entities = [e.strip() for e in args.entities.split(",") if e.strip()]
@@ -359,17 +402,18 @@ def main() -> None:
     password = os.getenv("PROD_PASSWORD", "") or getpass.getpass("Prod admin password: ")
     dev_password = os.getenv("LOCAL_DEV_PASSWORD", "DevPass123!")
 
-    if not args.dry_run and not args.yes:
-        print(f"This will UPSERT prod data into local DB: {args.db}")
-        print("Passwords of pulled users will be reset to the dev password.")
-        answer = input("Continue? [y/N]: ").strip().lower()
-        if answer not in ("y", "yes"):
-            print("Aborted.")
-            return
-        backup_db(args.db)
+    if not args.dry_run:
+        if not args.yes:
+            print(f"This will UPSERT prod data into local DB: {args.db}")
+            print("Passwords of pulled users will be reset to the dev password.")
+            answer = input("Continue? [y/N]: ").strip().lower()
+            if answer not in ("y", "yes"):
+                print("Aborted.")
+                return
+        backup_db(args.db, keep=args.keep_backups)
 
     summary = asyncio.run(run(args.api, email, password, args.db, entities,
-                              args.dry_run, dev_password))
+                              args.dry_run, dev_password, quiet=args.quiet))
     print("Summary:")
     for entity, counts in summary.items():
         if isinstance(counts, dict):

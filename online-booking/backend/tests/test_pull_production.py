@@ -10,6 +10,7 @@ from app.models.user import User
 from app.utils.security import hash_password, verify_password
 from pull_production import (
     dt_parse,
+    prune_backups,
     upsert_client,
     upsert_master,
     upsert_working_hour,
@@ -132,3 +133,22 @@ class TestDtParse:
 
     def test_none_passthrough(self):
         assert dt_parse(None) is None
+
+
+class TestPruneBackups:
+    def test_keeps_newest_n(self, tmp_path):
+        db = str(tmp_path / "test.db")
+        open(db, "w").close()
+        names = []
+        for tag in ("1", "2", "3", "4"):
+            p = tmp_path / f"test.db.bak-2026010{tag}-000000"
+            p.write_text("x")
+            names.append(str(p))
+        removed = prune_backups(db, keep=2)
+        assert len(removed) == 2
+        import glob as _glob
+        left = sorted(_glob.glob(f"{db}.bak-*"))
+        assert [n.split("bak-")[-1] for n in left] == ["20260103-000000", "20260104-000000"]
+
+    def test_missing_db_is_noop(self, tmp_path):
+        assert prune_backups(str(tmp_path / "nope.db"), keep=5) == []
