@@ -1,7 +1,8 @@
 # Online Booking — Start (backend + frontend, main project only).
 # For GigaCode worktrees use run_backend.bat / run_frontend.bat (they auto-detect worktree).
 $ErrorActionPreference = "Stop"
-$ProjectDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+# Script lives in scripts/ — repo root is one level up.
+$ProjectDir = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $BackendDir = Join-Path $ProjectDir "online-booking\backend"
 $FrontendDir = Join-Path $ProjectDir "online-booking\frontend"
 

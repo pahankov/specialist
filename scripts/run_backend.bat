@@ -1,6 +1,7 @@
 @echo off
 REM Автоопределение worktree или корневого каталога
-set "PROJECT_DIR=%~dp0"
+REM Scripts live in scripts/ — repo root is one level up
+set "PROJECT_DIR=%~dp0..\"
 set "WORKTREE_DIR=%PROJECT_DIR%.gigacode_vsc\worktrees\open-brick"
 
 if exist "%WORKTREE_DIR%\online-booking\backend\" (

@@ -59,7 +59,7 @@ done
 # ─── Переменные окружения ──────────────────────────────────────
 if [ "$MODE" = "local" ]; then
     export DATABASE_URL="sqlite+aiosqlite:///./dev.db"
-    BACKEND_DIR="$(dirname "$0")/online-booking/backend"
+    BACKEND_DIR="$(dirname "$0")/../online-booking/backend"
     info "Локальный режим (SQLite)"
 else
     if [ -z "$DATABASE_URL" ]; then

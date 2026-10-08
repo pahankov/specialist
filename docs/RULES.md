@@ -21,7 +21,7 @@
 | [DB.md](DB.md) | Схема БД, миграции, частые ошибки |
 | [LOCAL.md](LOCAL.md) | Реальные секреты и настройки (НЕ для git) |
 | [README.md](README.md) | Быстрый старт, стек, API endpoints |
-| [TESTING.md](online-booking/backend/TESTING.md) | Документация по тестированию |
+| [TESTING.md](TESTING.md) | Документация по тестированию |
 | [DEPLOYMENT_RULES.md](DEPLOYMENT_RULES.md) | Правила и анти-паттерны деплоя |
 | [RULES.md](RULES.md) | Этот файл — правила работы с документацией |
 

@@ -98,7 +98,7 @@ GitHub Actions автоматически запустит пайплайн.
    - SSH на сервер
    - `git reset --hard origin/main` + `git clean -fd`
    - Бэкап БД: `pg_dump`
-   - Запуск `deploy_setup.sh` (создание systemd service)
+   - Запуск `scripts/deploy_setup.sh` (создание systemd service)
    - Сборка бэкенда (venv + pip install)
    - Тесты на сервере (SQLite)
    - Фикс schema: `fix_all_tables.sql`
@@ -204,9 +204,9 @@ cp -r dist/* /var/www/beauty-specialist/frontend/dist/
 # 13. Логи
 sudo chown -R www-data:www-data /var/www/beauty-specialist/online-booking/backend/logs/
 
-# 14. Nginx
-sed -i 's/\r$//' deploy_fix_nginx.sh
-bash deploy_fix_nginx.sh
+# 14. Nginx (запуск из корня репозитория)
+sed -i 's/\r$//' scripts/deploy_fix_nginx.sh
+bash scripts/deploy_fix_nginx.sh
 
 # 15. Рестарт
 sudo systemctl restart beauty-backend
@@ -297,8 +297,8 @@ grep "/api/v1/cities" dist/assets/*.js  # ❌ Должно быть пусто!
 
 **ВСЕ shell скрипты должны быть в LF:**
 ```bash
-sed -i 's/\r$//' deploy_setup.sh
-sed -i 's/\r$//' deploy_fix_nginx.sh
+sed -i 's/\r$//' scripts/deploy_setup.sh
+sed -i 's/\r$//' scripts/deploy_fix_nginx.sh
 ```
 
 ### 6. `sudo tee` вместо `cat >`

@@ -86,13 +86,13 @@ jobs:
             echo "=== BACKUP DONE ==="
 
             # Ensure deploy scripts exist (may have Windows line endings)
-            if [ ! -f deploy_setup.sh ]; then
-                echo "ERROR: deploy_setup.sh not found!"
+            if [ ! -f scripts/deploy_setup.sh ]; then
+                echo "ERROR: scripts/deploy_setup.sh not found!"
                 ls -la
                 exit 1
             fi
-            sed -i 's/\r$//' deploy_setup.sh
-            bash deploy_setup.sh
+            sed -i 's/\r$//' scripts/deploy_setup.sh
+            bash scripts/deploy_setup.sh
 
             # Backend
             cd online-booking/backend
@@ -282,13 +282,13 @@ jobs:
             sudo chmod -R 755 /var/www/beauty-specialist/online-booking/backend/logs/
 
             # Write nginx config with SSL (fixes broken configs from previous deploys)
-            if [ ! -f /var/www/beauty-specialist/deploy_fix_nginx.sh ]; then
-                echo "ERROR: deploy_fix_nginx.sh not found!"
+            if [ ! -f /var/www/beauty-specialist/scripts/deploy_fix_nginx.sh ]; then
+                echo "ERROR: scripts/deploy_fix_nginx.sh not found!"
                 ls -la /var/www/beauty-specialist/
                 exit 1
             fi
-            sed -i 's/\r$//' /var/www/beauty-specialist/deploy_fix_nginx.sh
-            bash /var/www/beauty-specialist/deploy_fix_nginx.sh
+            sed -i 's/\r$//' /var/www/beauty-specialist/scripts/deploy_fix_nginx.sh
+            bash /var/www/beauty-specialist/scripts/deploy_fix_nginx.sh
 
             # Restart
             sudo systemctl restart beauty-backend

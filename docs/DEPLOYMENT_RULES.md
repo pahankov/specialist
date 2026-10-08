@@ -50,11 +50,11 @@ curl -sf http://.../countries/ > /dev/null && echo "OK" || echo "FAILED"
 **Решение:** Использовать абсолютные пути для файлов, которые не в текущей директории.
 
 ```bash
-# BAD — deploy_fix_nginx.sh в корне, а мы в frontend/
+# BAD — скрипт в scripts/, а мы в frontend/
 bash deploy_fix_nginx.sh  # FileNotFoundError
 
 # GOOD — абсолютный путь
-bash /var/www/beauty-specialist/deploy_fix_nginx.sh
+bash /var/www/beauty-specialist/scripts/deploy_fix_nginx.sh
 ```
 
 ---
@@ -137,8 +137,8 @@ EOF
 **Решение:** `sed -i 's/\r$//'` перед выполнением.
 
 ```bash
-sed -i 's/\r$//' deploy_fix_nginx.sh
-bash deploy_fix_nginx.sh
+sed -i 's/\r$//' scripts/deploy_fix_nginx.sh
+bash scripts/deploy_fix_nginx.sh
 ```
 
 ---

@@ -8,12 +8,12 @@
 
 | Документ | Описание |
 |----------|----------|
-| [DEPLOY.md](DEPLOY.md) | Полное руководство по деплою на сервере |
-| [DB.md](DB.md) | Документация по базе данных PostgreSQL |
+| [docs/DEPLOY.md](docs/DEPLOY.md) | Полное руководство по деплою на сервере |
+| [docs/DB.md](docs/DB.md) | Документация по базе данных PostgreSQL |
 | [LOCAL.md](LOCAL.md) | Локальные секреты и настройки (НЕ для git) |
-| [TESTING.md](online-booking/backend/TESTING.md) | Документация по тестированию backend |
-| [DEPLOYMENT_RULES.md](DEPLOYMENT_RULES.md) | Правила и анти-паттерны деплоя |
-| [API.md](API.md) | Справочник API: таблицы эндпоинтов и curl-кукбук |
+| [docs/TESTING.md](docs/TESTING.md) | Документация по тестированию backend |
+| [docs/DEPLOYMENT_RULES.md](docs/DEPLOYMENT_RULES.md) | Правила и анти-паттерны деплоя |
+| [docs/API.md](docs/API.md) | Справочник API: таблицы эндпоинтов и curl-кукбук |
 
 ---
 
@@ -47,9 +47,9 @@
 **Быстрый запуск (Windows):**
 
 ```
-start.bat              # Backend + Frontend
-run_backend.bat        # Только backend
-run_frontend.bat       # Только frontend
+scripts\start.bat              # Backend + Frontend
+scripts\run_backend.bat        # Только backend
+scripts\run_frontend.bat       # Только frontend
 ```
 
 **Ручной запуск:**
@@ -103,73 +103,46 @@ python pull_production.py --yes       # залить (сначала спрос�
 ```
 Тянет: страны/города, мастеров (+профили), услуги, рабочие часы, клиентов. Не тянет: записи, пароли (всем ставится dev-пароль из `LOCAL_DEV_PASSWORD`), города пользователей. Обратного направления нет осознанно — прод правится только через сайт/API.
 
-**Автоматически при старте:** `start.bat` на шаге `[4/8]` подтягивает прод в локальную БД (мастера, клиенты, расписание). Креды берутся из `backend/.env` (`PROD_EMAIL`/`PROD_PASSWORD`, не пушатся); без сети просто предупредит и продолжит с локальной БД. Ничего лишнего запускать не надо.
+**Автоматически при старте:** `scripts\start.bat` на шаге `[4/8]` подтягивает прод в локальную БД (мастера, клиенты, расписание). Креды берутся из `backend/.env` (`PROD_EMAIL`/`PROD_PASSWORD`, не пушатся); без сети просто предупредит и продолжит с локальной БД. Ничего лишнего запускать не надо.
 
 **Вручную:**
 
 ## 📦 Структура проекта
 
 ```
-online-booking/
-├── backend/
-│   ├── app/
-│   │   ├── main.py           # FastAPI приложение (lifespan, router registration)
-│   │   ├── config.py         # Настройки (SQLite/PostgreSQL, JWT, refresh tokens)
-│   │   ├── database.py       # Подключение к БД (aiosqlite / asyncpg)
-│   │   ├── logging_config.py # Цветное логирование (ANSI) + rotating file handler
-│   │   ├── dependencies/     # Общие зависимости (зависят от моделей)
-│   │   │   ├── auth.py       # JWT: get_current_user, require_master, require_admin
-│   │   │   └── crud.py       # CRUD: get_or_404, get_owned_or_404
-│   │   ├── middleware/       # Мидлвари
-│   │   │   └── rate_limit.py # RateLimiter (60 req/min default)
-│   │   ├── services/         # Бизнес-логика (зависят от БД)
-│   │   │   ├── audit.py      # Audit logging (логирование действий)
-│   │   │   ├── sms/          # SMS провайдеры (FakeSmsProvider, Twilio, SMS.ru)
-│   │   │   ├── cache.py      # Redis cache (dashboard stats, graceful degradation)
-│   │   │   ├── background_tasks.py  # RQ background task queue (CSV export)
-│   │   │   └── export_tasks.py     # Background export functions
-│   │   ├── models/           # SQLAlchemy ORM (User, MasterProfile, ClientProfile, Country, City, OtpCode + др.)
-│   │   ├── schemas/          # Pydantic schemas (request/response validation)
-│   │   │   ├── pagination.py # PaginatedResponse[T] — generic пагинация со total count
-│   │   ├── utils/            # Утилиты (timezone, formatPhone)
-│   │   └── modules/          # Модульная архитектура (self-contained packages)
-│   │       ├── auth/         # Регистрация, логин, JWT, OTP, refresh token rotation
-│   │       │   ├── router.py         # Эндпоинты: register, login, send-otp, verify-otp, refresh, logout
-│   │       │   ├── service.py        # Бизнес-логика: register_master, login_master, send_otp, verify_otp
-│   │       │   ├── token.py          # JWT: create_access_token, create_refresh_token
-│   │       │   ├── dependencies.py   # JWT зависимости: get_current_user, require_master, require_admin
-│   │       │   └── schemas.py        # TokenResponse, TokenRefreshResponse
-│   │       ├── city/         # Страны и города (CRUD + поиск)
-│   │       │   ├── router.py         # Эндпоинты: get_countries, get_cities
-│   │       ├── user/         # CRUD мастеров и клиентов (через User + MasterProfile/ClientProfile)
-│   │       ├── booking/      # CRUD записей + публичная запись
-│   │       ├── service/      # CRUD услуг
-│   │       ├── schedule/     # Рабочее расписание
-│   │       ├── review/       # Отзывы и рейтинги
-│   │       └── admin/        # Админ-панель (17 эндпоинт-модулей)
-│   ├── alembic/              # Alembic миграции для PostgreSQL
-│   ├── alembic.ini           # Конфиг Alembic
-│   ├── tests/                # pytest тесты (~270: auth, masters, services, appointments, clients, reviews, admin CRUD, rate limiting, refresh tokens, password security, no-show, dadata, superuser)
-│   ├── requirements.txt      # Зависимости Python
-│   └── pyproject.toml        # Конфиг pytest
-├── frontend/
-│   ├── src/
-│   │   ├── api/              # http (axios + refresh), public/auth/admin/superadmin, dadata (прокси + фолбэк)
-│   │   ├── components/       # Общие компоненты (Modal, ConfirmDialog, Skeleton, EmptyState, Tooltip, ReviewsSection)
-│   │   ├── pages/            # Публичные + админ-панель (12 страниц)
-│   │   ├── tests/            # Vitest автотесты (41 тест)
-│   │   ├── utils/            # Утилиты (formatPhone — единый форматировщик телефонов)
-│   │   ├── App.tsx           # Роутинг
-│   │   └── main.tsx          # Точка входа
-│   ├── package.json
-│   ├── vitest.config.ts      # Vitest конфиг
-│   ├── .eslintrc.cjs         # ESLint конфиг
-│   └── .prettierrc           # Prettier конфиг
-├── docker-compose.yml        # Docker-конфиг (PostgreSQL + Redis, production)
-├ .env.example                # Шаблон переменных окружения
-├ start.bat                   # Запуск backend + frontend (Windows)
-├ run_backend.bat             # Запуск backend только (Windows)
-└── run_frontend.bat          # Запуск frontend только (Windows)
+beauty-specialist/              # корень репозитория
+├── docs/                   # вся документация: API, DB, DEPLOY, DEPLOYMENT_RULES, RULES, TESTING
+├── scripts/                # запуск (start/run_*) + серверные скрипты деплоя (*.sh)
+├── db/                     # SQL-дампы и сиды (не для git)
+├── docker-compose.yml      # Docker-конфиг (PostgreSQL + Redis, production)
+├── .env.example            # Шаблон переменных окружения
+├── .github/workflows/      # CI: тесты + push-деплой на сервер
+└── online-booking/
+    ├── backend/
+    │   ├── app/
+    │   │   ├── main.py           # FastAPI приложение (lifespan, router registration)
+    │   │   ├── config.py         # Настройки (SQLite/PostgreSQL, JWT, refresh tokens)
+    │   │   ├── database.py       # Подключение к БД (aiosqlite / asyncpg)
+    │   │   ├── dependencies/     # auth (JWT, require_master/admin), crud (get_or_404)
+    │   │   ├── services/         # audit, sms, cache, background_tasks, export
+    │   │   ├── models/           # SQLAlchemy ORM (User, MasterProfile, ClientProfile, City, ...)
+    │   │   ├── schemas/          # Pydantic schemas (pagination, client, city, ...)
+    │   │   └── modules/          # self-contained пакеты: auth, city, user, booking,
+    │   │                         # service, schedule, review, admin/*, dadata
+    │   ├── alembic/              # миграции PostgreSQL
+    │   ├── tests/                # pytest (~310)
+    │   └── requirements.txt
+    └── frontend/
+        ├── src/
+        │   ├── api/              # http (axios + refresh), public/auth/admin/superadmin, dadata
+        │   ├── components/common/# Modal, ConfirmDialog, PhoneInput, CitySelect, MasterSelect, ...
+        │   ├── pages/admin/      # AdminLayout (/admin) + SuperAdminLayout (/super) + страницы
+        │   ├── pages/public/     # HomePage, BookingPage
+        │   ├── styles/           # общие стили (filters.css — сетка фильтров)
+        │   ├── tests/            # Vitest (~70)
+        │   ├── utils/            # section (префикс /admin|/super), formatPhone, apiError, ...
+        │   └── App.tsx           # роутинг: / → /booking → /admin/* → /super/*
+        └── package.json
 ```
 
 ### Модульная архитектура
@@ -337,48 +310,42 @@ utils/
 
 ## API Endpoints
 
-> Полный справочник по эндпоинтам — [API.md](API.md).
+> Полный справочник по эндпоинтам — [docs/API.md](docs/API.md).
 
 
-## 🔐 Админ-панель
+## 🔐 Разделы интерфейса: /admin и /super
 
-**Обычный мастер** (любой зарегистрированный мастер):
-- Вход: `/admin/login` — используйте email и пароль зарегистрированного мастера.
-- Видит только свои данные: свои записи, свои услуги, своих клиентов.
+Панель мастера и панель суперадмина — **два отдельных раздела** одного SPA: свои URL, свой layout, своё меню, свои guards. Общие только UI-компоненты (`PhoneInput`, `CitySelect`, `MasterSelect`, `Modal`) и API-клиент.
+
+| | Мастер (`/admin/*`) | Суперадмин (`/super/*`) |
+|---|---|---|
+| Layout | `AdminLayout` — «🍬 Мастерская» | `SuperAdminLayout` — «🛡️ Суперпанель» (тёмная тема) |
+| Меню | Дашборд, Мои записи, Мои услуги, Клиенты, Расписание | Дашборд, Доход, Мастера, Все записи, Все клиенты, Расписание, Логи |
+| Данные | Только свои | Все по системе |
+| Guard | Суперадмина редиректит в `/super/dashboard` | Не-суперадмина редиректит в `/admin/dashboard` |
+
+Вход — через модалку на главной (`/`), дальше редирект по роли. Префикс текущей секции отдаёт хук `useSectionPrefix()` (`src/utils/section.ts`) — все внутренние ссылки строятся через него, перекрёстных прыжков между разделами нет.
 
 **Суперпользователь** (мастер с `is_admin=true`):
-- Вход: тот же `/admin/login` — но видит все данные системы.
 - **Дашборд** — глобальная статистика (все мастера, все записи, все клиенты, общий доход)
-- **Мастера** — управление мастерами:
-  - Поиск и фильтрация (по имени/email, статус, роль)
-  - Создание, редактирование, удаление мастеров
-  - Массовые операции: bulk toggle active, bulk suspend/unsuspend
-  - Импорт из CSV
-  - Детальная карточка: статистика, рейтинг, отзывы, последние записи, история действий
-  - Блокировка/разблокировка мастеров (active/inactive/suspended)
-  - Просмотр статистики по каждому мастеру
-- **Записи** — видит все записи всех мастеров, пагинация, фильтрация
-- **Клиенты** — видит всех клиентов системы, пагинация, поиск
-- **Услуги** — пагинация, фильтрация по активности
-- **Отзывы** — модерация: approve, unpublish, delete, средний рейтинг
-- **Глобальная статистика** — карточки с метриками, breakdown по статусам, последние записи
-- **Логи** — журнал всех действий с фильтрацией по мастеру
-- **Экспорт** — CSV с фоновой обработкой (RQ), статус задач
-- **Health check** — проверка DB, Redis cache, RQ queue
+- **Доход** — финансовая аналитика, breakdown по мастерам/услугам
+- **Мастера** — CRUD, блокировка, bulk-операции, импорт CSV, детальная карточка (статистика, отзывы, аудит, сессии), имперсонация («войти как мастер» → приземление в `/admin`, выход — обратно в `/super/masters`)
+- **Все записи / Все клиенты** — пагинация, фильтры, deep-link `?client_id=`
+- **Логи** — журнал действий с фильтром по мастеру
+- **Экспорт** — CSV с фоновой обработкой (RQ)
 
 **Различие ролей:**
 | Функция | Мастер | Суперпользователь |
 |---------|--------|-------------------|
 | Дашборд | Свои записи, клиенты, услуги | Всё по системе |
 | Записи | Только свои | Все записи |
-| Услуги | Только свои | — |
+| Услуги | Только свои | — (раздела нет) |
 | Мастера | — | CRUD + права + блокировка |
-| Статистика | Своя | Глобальная |
-| Навигация | Дашборд, Записи, Услуги, Клиенты, Расписание | Дашборд, Мастера, Все записи, Все клиенты, Расписание, Логи |
+| Доход | — (карточка скрыта) | Полная аналитика |
 
 ## 🗄️ База данных
 
-> **Полная документация БД:** [DB.md](DB.md) — все таблицы, связи, миграции, частые ошибки.
+> **Полная документация БД:** [docs/DB.md](docs/DB.md) — все таблицы, связи, миграции, частые ошибки.
 
 **Локальная разработка:** SQLite (aiosqlite) — таблицы создаются автоматически при старте через `create_all`.
 
@@ -449,28 +416,32 @@ OtpCode (id, phone, code_hash, expires_at, is_used, created_at)
 
 ```powershell
 # Backend
-cd backend
+cd online-booking\backend
 $env:PYTHONPATH='.'
-pytest tests/ -v                          # Все тесты (~200)
+pytest tests/ -v                          # Все тесты (~310)
 pytest tests/test_reviews.py -v           # Только reviews
 pytest tests/ -v --cov=app                # С покрытием
 
 # Frontend
-cd frontend
-npx vitest run                            # Все тесты (41)
+cd online-booking\frontend
+npx vitest run                            # Все тесты (~70)
 npx vitest run src/tests/helpers.test.ts  # Только helpers
 npx vitest                              # Watch mode
 ```
 
-**Важно:** Подробная документация по тестированию — [TESTING.md](online-booking/backend/TESTING.md).
+**Важно:** Подробная документация по тестированию — [docs/TESTING.md](docs/TESTING.md).
 Включает критические правила, известные проблемы и чек-лист перед коммитом.
 
 ## Seed и curl-кукбук
 
-> Seed-скрипты и примеры curl — [API.md](API.md).
+> Seed-скрипты и примеры curl — [docs/API.md](docs/API.md).
 
 
 ## 📚 История версий
+
+### [1.9.0] — 2026-10-08
+- **Разделение секций:** суперадмин переехал на `/super/*` (свой layout, меню, guards), мастер остался на `/admin/*`; общий `PhoneInput`, переписанный `CitySelect`, общий `styles/filters.css`, детерминированная пагинация (tiebreak по id)
+- **Реорганизация корня:** `docs/` (вся документация), `scripts/` (запуск + серверные скрипты), `db/` (SQL-дампы); удалён leftover `secrets-to-remove.txt`
 
 ### [1.8.0] — 2026-10-08
 - **Тарифы (фундамент биллинга):** `tariff` + `trial_ends_at` на мастере, всем — trial +180 дней (миграция с ретро-начислением); бейджи в таблице и карточке
@@ -591,7 +562,7 @@ npx vitest                              # Watch mode
 - **Фикс lazy-load:** `clients.py` — добавлен `joinedload` для User при загрузке клиентов
 - **Фикс телефона:** `slice(0, 11)` → `replace(/^7/, '')` — пользователь вводит 10 цифр, +7 добавляется автоматически
 - **Фикс дубликата телефона:** проверка `UNIQUE constraint` → понятная ошибка "Мастер с таким телефоном уже существует"
-- **Фикс бэкапа:** `start.bat` — автоматический бэкап БД перед запуском
+- **Фикс бэкапа:** `scripts\start.bat` — автоматический бэкап БД перед запуском
 - **Фикс структуры:** `backend/` и `frontend/` перемещены в `online-booking/`
 
 ### [0.13.0] — 2026-09-22
