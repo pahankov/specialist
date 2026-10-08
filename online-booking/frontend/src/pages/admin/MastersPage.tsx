@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { superAdminApi } from '../../api/client'
 import type { Master } from '../../api/types'
-import { Skeleton, EmptyState, Tooltip, Modal, ConfirmDialog } from '../../components/common'
+import { Skeleton, EmptyState, Tooltip, Modal, ConfirmDialog, CitySelect } from '../../components/common'
+import type { CityOption } from '../../components/common/CitySelect'
 import { PHONE_PLACEHOLDER, PASSWORD_PLACEHOLDER, PASSWORD_EDIT_PLACEHOLDER, TELEGRAM_PLACEHOLDER } from '../../constants'
 import { formatPhone } from '../../utils/formatPhone'
 import { getApiErrorMessage } from '../../utils/apiError'
@@ -30,6 +31,7 @@ function MastersPage() {
   const [createForm, setCreateForm] = useState({
     name: '', email: '', password: '', phone: '', telegram_username: '',
   })
+  const [createCity, setCreateCity] = useState<CityOption | null>(null)
 
   const [editForm, setEditForm] = useState({
     name: '', phone: '', telegram_username: '', description: '', password: '',
@@ -87,10 +89,14 @@ function MastersPage() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      await superAdminApi.createMaster(createForm)
+      await superAdminApi.createMaster({
+        ...createForm,
+        ...(createCity ? { city_id: createCity.id } : {}),
+      })
       toast.success('Мастер успешно создан')
       setShowCreateModal(false)
       setCreateForm({ name: '', email: '', password: '', phone: '', telegram_username: '' })
+      setCreateCity(null)
       loadMasters()
     } catch (err: unknown) {
       toast.error(handleError(err))
@@ -405,6 +411,11 @@ function MastersPage() {
               <label>Telegram</label>
               <input type="text" value={createForm.telegram_username} onChange={(e) => setCreateForm({ ...createForm, telegram_username: e.target.value })} placeholder={TELEGRAM_PLACEHOLDER} />
             </div>
+            <CitySelect
+              value={createCity?.id ?? null}
+              valueName={createCity?.name ?? ''}
+              onChange={setCreateCity}
+            />
             <div className="modal-actions">
               <button type="submit" className="btn btn-primary">Создать</button>
             </div>

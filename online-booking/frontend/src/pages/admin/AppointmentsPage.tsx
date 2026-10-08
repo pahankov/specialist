@@ -28,6 +28,7 @@ function AppointmentsPage() {
   const [sortField, setSortField] = useState<SortField>('appointment_date')
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
   const [showCompleted, setShowCompleted] = useState(false)
+  const [allTime, setAllTime] = useState(true)
   const [totalPages, setTotalPages] = useState(1)
   const [allClients, setAllClients] = useState<{ id: number; name: string }[]>([])
   const [allServices, setAllServices] = useState<{ id: number; name: string }[]>([])
@@ -60,8 +61,10 @@ function AppointmentsPage() {
       if (masterIdFilter !== '') params.master_id = masterIdFilter
       if (clientIdFilter !== '') params.client_id = clientIdFilter
       if (serviceIdFilter !== '') params.service_id = serviceIdFilter
-      if (dateFrom) params.date_from = dateFrom
-      if (dateTo) params.date_to = dateTo
+      if (!allTime) {
+        if (dateFrom) params.date_from = dateFrom
+        if (dateTo) params.date_to = dateTo
+      }
       
       const resp = await adminApi.getAppointments(params)
       setAppointments(resp.data.items)
@@ -72,7 +75,7 @@ function AppointmentsPage() {
     } finally { setLoading(false) }
   }
 
-  useEffect(() => { setCurrentPage(0); fetch() }, [statusFilter, masterIdFilter, clientIdFilter, serviceIdFilter, dateFrom, dateTo])
+  useEffect(() => { setCurrentPage(0); fetch() }, [statusFilter, masterIdFilter, clientIdFilter, serviceIdFilter, dateFrom, dateTo, allTime])
 
   const showError = (err: unknown) => {
     setError(getApiErrorMessage(err, 'Ошибка сервера'))
@@ -103,18 +106,10 @@ function AppointmentsPage() {
   }
 
   const handleDelete = async (id: number) => {
-    const appointment = appointments.find(a => a.id === id)
-    if (!appointment) return
-
-    const undoAction = () => {
-      toast.info('Удаление отменено')
-    }
-
     try {
       await adminApi.deleteAppointment(id)
-      toast.success('Запись удалена', {
-        action: { label: 'Отменить', onClick: undoAction },
-      })
+      // No undo: backend has no undelete, a fake "cancel" toast would lie.
+      toast.success('Запись удалена')
       fetch()
     } catch (err: unknown) {
       showError(err)
@@ -225,12 +220,14 @@ function AppointmentsPage() {
       {showFilters && (
         <div className="card" style={{ marginBottom: 16, padding: 16 }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
-            {/* Master filter */}
-            <MasterSelect
-              value={masterIdFilter}
-              onChange={setMasterIdFilter}
-              style={{ marginBottom: 0 }}
-            />
+            {/* Master filter — full-width first row */}
+            <div style={{ gridColumn: '1 / -1' }}>
+              <MasterSelect
+                value={masterIdFilter}
+                onChange={setMasterIdFilter}
+                style={{ marginBottom: 0, maxWidth: 480 }}
+              />
+            </div>
 
             {/* Client filter */}
             <div className="form-group" style={{ marginBottom: 0 }}>
@@ -252,14 +249,22 @@ function AppointmentsPage() {
 
             {/* Date from */}
             <div className="form-group" style={{ marginBottom: 0 }}>
-              <label style={{ fontSize: 12, color: '#666', marginBottom: 4, display: 'block' }}>Дата от</label>
-              <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} style={{ width: '100%', padding: 8, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }} />
+              <label style={{ fontSize: 12, color: '#666', marginBottom: 4, display: 'block', lineHeight: '18px', minHeight: 18 }}>Дата от</label>
+              <input type="date" value={dateFrom} disabled={allTime} onChange={(e) => setDateFrom(e.target.value)} style={{ width: '100%', padding: 8, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14, height: 38, boxSizing: 'border-box' }} />
             </div>
 
             {/* Date to */}
             <div className="form-group" style={{ marginBottom: 0 }}>
-              <label style={{ fontSize: 12, color: '#666', marginBottom: 4, display: 'block' }}>Дата до</label>
-              <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} style={{ width: '100%', padding: 8, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }} />
+              <label style={{ fontSize: 12, color: '#666', marginBottom: 4, display: 'block', lineHeight: '18px', minHeight: 18 }}>Дата до</label>
+              <input type="date" value={dateTo} disabled={allTime} onChange={(e) => setDateTo(e.target.value)} style={{ width: '100%', padding: 8, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14, height: 38, boxSizing: 'border-box' }} />
+            </div>
+
+            {/* All time */}
+            <div className="form-group" style={{ marginBottom: 0, display: 'flex', alignItems: 'flex-end' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14, color: '#333', height: 38 }}>
+                <input type="checkbox" checked={allTime} onChange={() => setAllTime(v => !v)} style={{ width: 16, height: 16 }} />
+                За всё время
+              </label>
             </div>
 
             {/* Reset filters button */}
@@ -333,8 +338,6 @@ function AppointmentsPage() {
                   {a.status === 'confirmed' && isAppointmentTimePassed(a.appointment_date) && (
                     <Tooltip content="Отметить неявку"><button className="btn btn-sm btn-no-show" onClick={() => setNoShowingId(a.id)}>👤</button></Tooltip>
                   )}
-                  {a.status === 'completed' && <span className="text-muted">Завершена</span>}
-                  {a.status === 'cancelled' && <span className="text-muted">Отменена</span>}
                 </td>
                 <td>
                   <Tooltip content="Удалить запись">

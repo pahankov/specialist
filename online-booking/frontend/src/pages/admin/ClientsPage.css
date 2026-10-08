@@ -1,9 +1,23 @@
 .clients-table { width: 100%; border-collapse: collapse; }
 .clients-table th, .clients-table td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #f0f0f0; }
 .clients-table th { font-weight: 600; color: #666; font-size: 13px; text-transform: uppercase; }
-.clients-table td { font-size: 14px; color: #333; }
+.clients-table td { font-size: 14px; color: #333; background: #fff; }
 .clients-table td a { color: #667eea; text-decoration: none; }
 .clients-table td a:hover { text-decoration: underline; }
+
+/* Sticky action column: edit/delete stay visible while scrolling */
+.clients-table th:last-child,
+.clients-table td:last-child {
+  position: sticky;
+  right: 0;
+  background: #fff;
+  box-shadow: -8px 0 12px -8px rgba(0, 0, 0, 0.15);
+  white-space: nowrap;
+}
+
+.clients-table thead th:last-child {
+  z-index: 2;
+}
 
 .client-count {
   font-weight: 400;

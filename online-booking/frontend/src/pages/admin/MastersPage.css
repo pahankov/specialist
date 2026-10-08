@@ -230,6 +230,19 @@
   flex-shrink: 0;
 }
 
+/* Sticky action column: delete/block buttons stay visible while scrolling */
+.masters-table th:last-child,
+.masters-table td:last-child {
+  position: sticky;
+  right: 0;
+  background: #fff;
+  box-shadow: -8px 0 12px -8px rgba(0, 0, 0, 0.15);
+}
+
+.masters-table thead th:last-child {
+  z-index: 2;
+}
+
 .btn-sm {
   padding: 6px 10px;
   font-size: 13px;

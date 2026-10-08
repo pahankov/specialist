@@ -98,7 +98,7 @@ export function Calendar({
             <div
               key={i}
               data-date={day.date.toISOString()}
-              className={`calendar-day ${day.isCurrentMonth ? '' : 'other-month'} ${active ? 'active' : 'inactive'} ${today ? 'today' : ''} ${selected ? 'selected' : ''}`}
+              className={`calendar-day ${day.isCurrentMonth ? '' : 'other-month'} ${active ? 'active' : 'inactive'} ${today ? 'today' : ''} ${selected ? 'selected' : ''} ${past ? 'past' : ''}`}
               onClick={() => day.isCurrentMonth && !past && !longPressTriggered && onSelectDate(day.date)}
               onPointerDown={(e) => handlePointerDown(e, day.date)}
               onPointerUp={handlePointerUp}

@@ -21,6 +21,7 @@ function RevenuePage() {
   const [masterIdFilter, setMasterIdFilter] = useState<number | ''>('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  const [allTime, setAllTime] = useState(true)
 
   useEffect(() => {
     setLoading(true)
@@ -41,25 +42,29 @@ function RevenuePage() {
     }
     // Per-master mode: reload the WHOLE stat block for the master (with dates)
     const params: { date_from?: string; date_to?: string } = {}
-    if (dateFrom) params.date_from = dateFrom
-    if (dateTo) params.date_to = dateTo
+    if (!allTime) {
+      if (dateFrom) params.date_from = dateFrom
+      if (dateTo) params.date_to = dateTo
+    }
     superAdminApi.getMasterStats(masterIdFilter, params)
       .then(r => setMasterStats(r.data))
       .catch(() => setMasterStats(null))
-  }, [masterIdFilter, dateFrom, dateTo, isGlobal])
+  }, [masterIdFilter, dateFrom, dateTo, allTime, isGlobal])
 
   useEffect(() => {
     if (!isGlobal) return
     setLoading(true)
     const params: Record<string, unknown> = { by_master: groupBy === 'master', by_service: groupBy === 'service' }
     if (masterIdFilter !== '') params.master_id = masterIdFilter
-    if (dateFrom) params.date_from = dateFrom
-    if (dateTo) params.date_to = dateTo
+    if (!allTime) {
+      if (dateFrom) params.date_from = dateFrom
+      if (dateTo) params.date_to = dateTo
+    }
     adminApi.getRevenueBreakdown(params)
       .then(r => setRevenueBreakdown(r.data))
       .catch(() => setRevenueBreakdown(null))
       .finally(() => setLoading(false))
-  }, [groupBy, masterIdFilter, dateFrom, dateTo, isGlobal])
+  }, [groupBy, masterIdFilter, dateFrom, dateTo, allTime, isGlobal])
 
   if (error) return <div className="error-message">{error}</div>
   if (!stats) return null
@@ -104,12 +109,18 @@ function RevenuePage() {
             style={{ marginBottom: 0 }}
           />
           <div className="form-group" style={{ marginBottom: 0 }}>
-            <label style={{ fontSize: 12, color: '#666', marginBottom: 4, display: 'block' }}>Дата от</label>
-            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} style={{ width: '100%', padding: 8, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }} />
+            <label style={{ fontSize: 12, color: '#666', marginBottom: 4, display: 'block', lineHeight: '18px', minHeight: 18 }}>Дата от</label>
+            <input type="date" value={dateFrom} disabled={allTime} onChange={(e) => setDateFrom(e.target.value)} style={{ width: '100%', padding: 8, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14, height: 38, boxSizing: 'border-box' }} />
           </div>
           <div className="form-group" style={{ marginBottom: 0 }}>
-            <label style={{ fontSize: 12, color: '#666', marginBottom: 4, display: 'block' }}>Дата до</label>
-            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} style={{ width: '100%', padding: 8, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }} />
+            <label style={{ fontSize: 12, color: '#666', marginBottom: 4, display: 'block', lineHeight: '18px', minHeight: 18 }}>Дата до</label>
+            <input type="date" value={dateTo} disabled={allTime} onChange={(e) => setDateTo(e.target.value)} style={{ width: '100%', padding: 8, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14, height: 38, boxSizing: 'border-box' }} />
+          </div>
+          <div className="form-group" style={{ marginBottom: 0, display: 'flex', alignItems: 'flex-end' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14, color: '#333', height: 38 }}>
+              <input type="checkbox" checked={allTime} onChange={() => setAllTime(v => !v)} style={{ width: 16, height: 16 }} />
+              За всё время
+            </label>
           </div>
           {(groupBy !== 'overall' || masterIdFilter !== '' || dateFrom || dateTo) && (
             <div className="form-group" style={{ marginBottom: 0, display: 'flex', alignItems: 'flex-end' }}>

@@ -27,6 +27,7 @@ class MasterCreate(BaseModel):
     password: str
     phone: Optional[str] = None
     telegram_username: Optional[str] = None
+    city_id: Optional[int] = None
 
     @field_validator('phone')
     @classmethod

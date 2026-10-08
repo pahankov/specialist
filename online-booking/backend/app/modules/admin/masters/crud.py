@@ -8,6 +8,7 @@ from typing import List, Optional
 from app.database import get_db
 from app.models.user import User, UserRole
 from app.models.master_profile import MasterProfile
+from app.models.city import City
 from app.schemas.master import MasterCreate, MasterResponse, MasterUpdate
 from app.dependencies.auth import require_super_admin
 from app.utils.security import hash_password
@@ -137,12 +138,18 @@ async def create_master(
         if result.scalar_one_or_none():
             raise HTTPException(status_code=400, detail="Мастер с таким телефоном уже существует")
 
+    if data.city_id is not None:
+        city = await db.execute(select(City).where(City.id == data.city_id))
+        if city.scalar_one_or_none() is None:
+            raise HTTPException(status_code=400, detail="Город не найден")
+
     new_user = User(
         name=data.name,
         email=data.email,
         hashed_password=hash_password(data.password),
         phone=data.phone,
         role=UserRole.MASTER,
+        city_id=data.city_id,
     )
     db.add(new_user)
     await db.flush()

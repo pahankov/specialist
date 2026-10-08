@@ -33,7 +33,7 @@ export const superAdminApi = {
   getMasterById(id: number) {
     return apiClient.get<Master>(`/api/v1/admin/masters/${id}`)
   },
-  createMaster(data: { name: string; email: string; password: string; phone?: string; telegram_username?: string }) {
+  createMaster(data: { name: string; email: string; password: string; phone?: string; telegram_username?: string; city_id?: number }) {
     return apiClient.post<Master>('/api/v1/admin/masters', data)
   },
   updateMaster(id: number, data: { name?: string; phone?: string; telegram_username?: string; description?: string; password?: string; tariff?: string; trial_ends_at?: string }) {
