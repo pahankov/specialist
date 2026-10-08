@@ -146,6 +146,10 @@ jobs:
             DATABASE_URL="${DATABASE_URL}" python3.12 seed_production.py
             echo "=== SEED DONE ==="
 
+            echo "=== SEED CITIES (idempotent top-up) ==="
+            DATABASE_URL="${DATABASE_URL}" python3.12 seed_cities.py
+            echo "=== SEED CITIES DONE ==="
+
             echo "=== MINIMAL REVIEWS ==="
             DATABASE_URL="${DATABASE_URL}" python3.12 create_minimal_reviews.py
             echo "=== MINIMAL REVIEWS DONE ==="

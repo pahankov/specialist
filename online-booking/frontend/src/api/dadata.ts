@@ -72,8 +72,8 @@ export const dadataApi = {
 
 /** Local DB fallback: same DadataSuggestion shape, enough for registration. */
 async function searchLocalCities(query: string, limit: number): Promise<DadataSuggestion[]> {
-  const { data } = await apiClient.get('/api/v1/cities/', {
-    params: { search: query, page_size: limit },
+  const { data } = await apiClient.get('/api/v1/cities/search/', {
+    params: { q: query, limit },
   })
   const list: LocalCity[] = Array.isArray(data) ? data : (data.items ?? [])
   return list.map((c) => ({

@@ -47,8 +47,8 @@ describe('dadataApi.searchCities', () => {
     const result = await dadataApi.searchCities('Моск', 10)
 
     expect(apiGet).toHaveBeenCalledWith(
-      '/api/v1/cities/',
-      expect.objectContaining({ params: expect.objectContaining({ search: 'Моск' }) }),
+      '/api/v1/cities/search/',
+      expect.objectContaining({ params: expect.objectContaining({ q: 'Моск' }) }),
     )
     expect(result).toEqual([
       { value: 'Москва', unrestricted_value: 'Москва', city: 'Москва', data: {} },
