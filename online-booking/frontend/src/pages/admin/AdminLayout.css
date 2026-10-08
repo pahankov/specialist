@@ -3,6 +3,21 @@
   min-height: 100vh;
 }
 
+/* Impersonation banner (support view-as mode) */
+.impersonation-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 8px;
+  padding: 10px 16px;
+  margin-bottom: 16px;
+  font-size: 14px;
+  color: #664d03;
+}
+
 .admin-layout .app {
   background: none !important;
 }

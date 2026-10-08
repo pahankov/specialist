@@ -121,6 +121,10 @@
 | `POST` | `/admin/masters/bulk/suspend` | Массовая блокировка |
 | `POST` | `/admin/masters/bulk/unsuspend` | Массовая разблокировка |
 | `POST` | `/admin/masters/import` | Импорт мастеров из CSV |
+| `POST` | `/admin/masters/{id}/impersonate` | Вход от имени мастера (support view-as, пишется в аудит) |
+| `PATCH` | `/admin/masters/{id}/password` | Сброс пароля мастера (+ отзыв сессий) |
+| `GET` | `/admin/masters/{id}/sessions` | Активные сессии (без значений токенов) |
+| `DELETE` | `/admin/masters/{id}/sessions` | Отозвать все сессии мастера |
 | `GET` | `/admin/reviews` | Все отзывы (пагинация, фильтры: master_id, is_published) |
 | `GET` | `/admin/reviews/average/{master_id}` | Средний рейтинг мастера |
 | `PATCH` | `/admin/reviews/{id}/publish` | Опубликовать отзыв |

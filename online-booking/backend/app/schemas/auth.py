@@ -3,6 +3,8 @@ from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional
 from enum import Enum
 
+from app.utils.security import validate_password_strength
+
 
 class UserRoleEnum(str, Enum):
     CLIENT = "client"
@@ -52,19 +54,7 @@ class UnifiedRegisterRequest(BaseModel):
     @field_validator('password')
     @classmethod
     def validate_password(cls, v: str) -> str:
-        if len(v) < 8:
-            raise ValueError('Пароль должен содержать минимум 8 символов')
-        if not any(c.isupper() for c in v):
-            raise ValueError('Пароль должен содержать хотя бы одну заглавную букву')
-        if not any(c.islower() for c in v):
-            raise ValueError('Пароль должен содержать хотя бы одну строчную букву')
-        if not any(c.isdigit() for c in v):
-            raise ValueError('Пароль должен содержать хотя бы одну цифру')
-        if not any(c in '!@#$%^&*()_+-=[]{}|;:,.<>?' for c in v):
-            raise ValueError('Пароль должен содержать хотя бы один спецсимвол')
-        if len(set(v)) < 4:
-            raise ValueError('Пароль должен содержать минимум 4 уникальных символа')
-        return v
+        return validate_password_strength(v)
 
     @field_validator('telegram_username')
     @classmethod

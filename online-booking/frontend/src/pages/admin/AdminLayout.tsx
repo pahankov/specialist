@@ -3,6 +3,7 @@ import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom'
 import { authApi } from '../../api/client'
 import { Breadcrumb, KeyboardShortcutsHint } from '../../components/common'
 import { getCookie, decodeJwtPayload, clearAuthCookies } from '../../utils/cookies'
+import { getImpersonation, stopImpersonation } from '../../utils/impersonation'
 import './AdminLayout.css'
 
 interface MasterInfo {
@@ -39,9 +40,18 @@ function AdminLayout({ navItems, isAdmin }: AdminLayoutProps) {
   const [master, setMaster] = useState<MasterInfo | null>(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [impersonatedName, setImpersonatedName] = useState<string | null>(null)
+
+  const exitImpersonation = () => {
+    stopImpersonation()
+    setImpersonatedName(null)
+    navigate('/admin/masters')
+    window.location.reload()
+  }
 
   useEffect(() => {
     setMaster(getMasterInfo())
+    setImpersonatedName(getImpersonation()?.masterName ?? null)
   }, [])
 
   // Close mobile menu on route change
@@ -144,6 +154,14 @@ function AdminLayout({ navItems, isAdmin }: AdminLayoutProps) {
       </aside>
 
       <main className="admin-main">
+        {impersonatedName !== null && (
+          <div className="impersonation-banner" role="alert">
+            <span>👁 Вы смотрите глазами мастера <strong>{impersonatedName}</strong> (режим поддержки)</span>
+            <button className="btn btn-sm btn-primary" onClick={exitImpersonation}>
+              Выйти из режима
+            </button>
+          </div>
+        )}
         {breadcrumbs.length > 0 && (
           <Breadcrumb items={breadcrumbs} />
         )}

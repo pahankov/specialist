@@ -5,6 +5,8 @@ from datetime import datetime
 from app.models.user import UserRole
 import re
 
+from app.utils.security import validate_password_strength
+
 
 def normalize_phone(phone: str) -> str:
     """Normalize phone to +7 (XXX) XXX-XX-XX format."""
@@ -46,19 +48,7 @@ class UserCreate(UserBase):
     def validate_password(cls, v: Optional[str]) -> Optional[str]:
         if v is None:
             return v
-        if len(v) < 8:
-            raise ValueError('Пароль должен содержать минимум 8 символов')
-        if not any(c.isupper() for c in v):
-            raise ValueError('Пароль должен содержать хотя бы одну заглавную букву')
-        if not any(c.islower() for c in v):
-            raise ValueError('Пароль должен содержать хотя бы одну строчную букву')
-        if not any(c.isdigit() for c in v):
-            raise ValueError('Пароль должен содержать хотя бы одну цифру')
-        if not any(c in '!@#$%^&*()_+-=[]{}|;:,.<>?' for c in v):
-            raise ValueError('Пароль должен содержать хотя бы один спецсимвол')
-        if len(set(v)) < 4:
-            raise ValueError('Пароль должен содержать минимум 4 уникальных символа')
-        return v
+        return validate_password_strength(v)
 
 
 class UserLoginByEmail(BaseModel):

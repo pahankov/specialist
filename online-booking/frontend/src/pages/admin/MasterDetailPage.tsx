@@ -3,11 +3,19 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { superAdminApi } from '../../api/client'
 import type { AuditLogEntry } from '../../api/types'
-import { Skeleton, EmptyState } from '../../components/common'
+import { Skeleton, EmptyState, Modal } from '../../components/common'
 import { getApiErrorMessage } from '../../utils/apiError'
+import { getCookie } from '../../utils/cookies'
+import { startImpersonation } from '../../utils/impersonation'
 import './MasterDetailPage.css'
 
-type TabType = 'overview' | 'reviews' | 'audit'
+type TabType = 'overview' | 'reviews' | 'audit' | 'sessions'
+
+interface MasterSession {
+  id: number
+  created_at: string
+  expires_at: string
+}
 
 interface MasterStats {
   total_appointments: number
@@ -70,6 +78,11 @@ function MasterDetailPage() {
   const [loading, setLoading] = useState(true)
   const [auditLoading, setAuditLoading] = useState(false)
   const [activeTab, setActiveTab] = useState<TabType>('overview')
+  const [sessions, setSessions] = useState<MasterSession[]>([])
+  const [sessionsLoading, setSessionsLoading] = useState(false)
+  const [showPasswordModal, setShowPasswordModal] = useState(false)
+  const [newPassword, setNewPassword] = useState('')
+  const [actionBusy, setActionBusy] = useState(false)
   // Placeholder for bulk selection (used in MastersPage, kept for future use)
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_selectedMasters, _setSelectedMasters] = useState<Set<number>>(new Set())
@@ -105,6 +118,69 @@ function MasterDetailPage() {
   useEffect(() => {
     if (activeTab === 'audit') loadAuditLogs()
   }, [activeTab, id])
+  useEffect(() => {
+    if (activeTab === 'sessions') loadSessions()
+  }, [activeTab, id])
+
+  const loadSessions = async () => {
+    if (!id) return
+    setSessionsLoading(true)
+    try {
+      const { data } = await superAdminApi.getMasterSessions(parseInt(id))
+      setSessions(data)
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Ошибка загрузки сессий'))
+    } finally {
+      setSessionsLoading(false)
+    }
+  }
+
+  const handleImpersonate = async () => {
+    if (!master || actionBusy) return
+    setActionBusy(true)
+    try {
+      const { data } = await superAdminApi.impersonateMaster(master.id)
+      const adminToken = getCookie('access_token') ?? ''
+      startImpersonation(adminToken, data.access_token, data.name)
+      toast.success(`Вы вошли как ${data.name}`)
+      navigate('/admin/dashboard')
+      window.location.reload()
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Не удалось войти от имени мастера'))
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
+  const handlePasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!master || actionBusy) return
+    setActionBusy(true)
+    try {
+      await superAdminApi.resetMasterPassword(master.id, newPassword)
+      toast.success('Пароль обновлён, сессии отозваны')
+      setShowPasswordModal(false)
+      setNewPassword('')
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Не удалось сбросить пароль'))
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
+  const handleRevokeSessions = async () => {
+    if (!master || actionBusy) return
+    setActionBusy(true)
+    try {
+      const { data } = await superAdminApi.revokeMasterSessions(master.id)
+      toast.success(`Отозвано сессий: ${data.revoked ?? 0}`)
+      loadSessions()
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Не удалось отозвать сессии'))
+    } finally {
+      setActionBusy(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -162,6 +238,21 @@ function MasterDetailPage() {
             ⏸ Заблокировать навсегда
           </button>
           <button
+            className="btn btn-sm btn-secondary"
+            onClick={handleImpersonate}
+            disabled={actionBusy}
+            title="Войти в панель глазами этого мастера (для поддержки)"
+          >
+            👁 Войти как
+          </button>
+          <button
+            className="btn btn-sm btn-secondary"
+            onClick={() => setShowPasswordModal(true)}
+            title="Установить новый пароль (старые сессии будут отозваны)"
+          >
+            🔑 Сбросить пароль
+          </button>
+          <button
             className="btn btn-sm btn-primary"
             onClick={() => navigate(`/admin/masters/${master.id}/edit`)}
           >
@@ -189,6 +280,12 @@ function MasterDetailPage() {
           onClick={() => setActiveTab('audit')}
         >
           📋 Логи
+        </button>
+        <button
+          className={`tab-btn ${activeTab === 'sessions' ? 'active' : ''}`}
+          onClick={() => setActiveTab('sessions')}
+        >
+          🔐 Сессии
         </button>
       </div>
 
@@ -346,7 +443,71 @@ function MasterDetailPage() {
             )}
           </div>
         )}
+        {activeTab === 'sessions' && (
+          <div>
+            <div className="reviews-header">
+              <h3>Активные сессии</h3>
+              <button
+                className="btn btn-sm btn-delete"
+                onClick={handleRevokeSessions}
+                disabled={actionBusy || sessions.length === 0}
+                title="Завершить все сессии мастера на всех устройствах"
+              >
+                Отозвать все
+              </button>
+            </div>
+            {sessionsLoading ? (
+              <Skeleton rows={2} height="48px" />
+            ) : sessions.length === 0 ? (
+              <EmptyState icon="🔐" title="Нет активных сессий" description="Мастер нигде не вошёл" />
+            ) : (
+              <div className="audit-list">
+                {sessions.map(s => (
+                  <div key={s.id} className="audit-item">
+                    <span className="audit-level audit-info">active</span>
+                    <div className="audit-content">
+                      <div className="audit-action">Сессия #{s.id}</div>
+                      <div className="audit-details">
+                        создана {s.created_at ? new Date(s.created_at).toLocaleString('ru-RU') : '—'},
+                        истекает {s.expires_at ? new Date(s.expires_at).toLocaleString('ru-RU') : '—'}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
+      <Modal
+        open={showPasswordModal}
+        onClose={() => { setShowPasswordModal(false); setNewPassword('') }}
+        title="🔑 Новый пароль мастера"
+      >
+        <form onSubmit={handlePasswordReset}>
+          <div className="form-group">
+            <label>Пароль (мин. 8 символов, Aa, цифра, спецсимвол)</label>
+            <input
+              type="text"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="Сгенерируй и передай мастеру лично"
+              required
+              minLength={8}
+              className="form-input"
+            />
+          </div>
+          <div className="modal-actions">
+            <button type="button" className="btn btn-ghost" onClick={() => setShowPasswordModal(false)}>
+              Отмена
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={actionBusy}>
+              Установить
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   )
 }

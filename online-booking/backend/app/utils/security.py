@@ -21,3 +21,23 @@ def hash_password(password: str) -> str:
         password.encode("utf-8"),
         bcrypt.gensalt(rounds=12)
     ).decode("utf-8")
+
+
+def validate_password_strength(password: str) -> str:
+    """Enforce the platform password policy. Returns password or raises ValueError.
+
+    Single source of truth — used by pydantic schemas and admin endpoints.
+    """
+    if len(password) < 8:
+        raise ValueError("Пароль должен содержать минимум 8 символов")
+    if not any(c.isupper() for c in password):
+        raise ValueError("Пароль должен содержать хотя бы одну заглавную букву")
+    if not any(c.islower() for c in password):
+        raise ValueError("Пароль должен содержать хотя бы одну строчную букву")
+    if not any(c.isdigit() for c in password):
+        raise ValueError("Пароль должен содержать хотя бы одну цифру")
+    if not any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?" for c in password):
+        raise ValueError("Пароль должен содержать хотя бы один спецсимвол")
+    if len(set(password)) < 4:
+        raise ValueError("Пароль должен содержать минимум 4 уникальных символа")
+    return password

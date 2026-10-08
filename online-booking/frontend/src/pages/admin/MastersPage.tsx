@@ -7,6 +7,8 @@ import { Skeleton, EmptyState, Tooltip, Modal, ConfirmDialog } from '../../compo
 import { PHONE_PLACEHOLDER, PASSWORD_PLACEHOLDER, PASSWORD_EDIT_PLACEHOLDER, TELEGRAM_PLACEHOLDER } from '../../constants'
 import { formatPhone } from '../../utils/formatPhone'
 import { getApiErrorMessage } from '../../utils/apiError'
+import { getCookie } from '../../utils/cookies'
+import { startImpersonation } from '../../utils/impersonation'
 import './MastersPage.css'
 
 function MastersPage() {
@@ -151,8 +153,20 @@ function MastersPage() {
     }
   }
 
-  const openEditModal = (master: Master) => {
-    setEditingMaster(master)
+  const handleImpersonate = async (master: Master) => {
+    try {
+      const { data } = await superAdminApi.impersonateMaster(master.id)
+      const adminToken = getCookie('access_token') ?? ''
+      startImpersonation(adminToken, data.access_token, data.name)
+      toast.success(`Вы вошли как ${data.name}`)
+      navigate('/admin/dashboard')
+      window.location.reload()
+    } catch (err: unknown) {
+      toast.error(handleError(err))
+    }
+  }
+
+  const openEditModal = (master: Master) => {    setEditingMaster(master)
     setEditForm({
       name: master.name,
       phone: master.phone || '',
@@ -289,6 +303,14 @@ function MastersPage() {
                         onClick={() => handleToggleActive(master.id)}
                       >
                         {master.is_active ? '🔒' : '🔓'}
+                      </button>
+                    </Tooltip>
+                    <Tooltip content="Войти как мастер (поддержка)" position="top">
+                      <button
+                        className="btn btn-sm btn-secondary"
+                        onClick={() => handleImpersonate(master)}
+                      >
+                        👁
                       </button>
                     </Tooltip>
                     <Tooltip content="Удалить" position="top">

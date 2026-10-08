@@ -113,4 +113,24 @@ export const superAdminApi = {
       params: { master_id: masterId, page, page_size: pageSize },
     })
   },
+
+  // Security actions (support)
+  impersonateMaster(masterId: number) {
+    return apiClient.post<{ access_token: string; user_id: number; name: string }>(
+      `/api/v1/admin/masters/${masterId}/impersonate`,
+    )
+  },
+  resetMasterPassword(masterId: number, password: string) {
+    return apiClient.patch(`/api/v1/admin/masters/${masterId}/password`, { password })
+  },
+  getMasterSessions(masterId: number) {
+    return apiClient.get<{ id: number; created_at: string; expires_at: string }[]>(
+      `/api/v1/admin/masters/${masterId}/sessions`,
+    )
+  },
+  revokeMasterSessions(masterId: number) {
+    return apiClient.delete<{ revoked: number }>(
+      `/api/v1/admin/masters/${masterId}/sessions`,
+    )
+  },
 }
