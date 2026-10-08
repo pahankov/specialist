@@ -47,7 +47,7 @@ from datetime import date, datetime, time, timezone
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import httpx  # noqa: E402
-from sqlalchemy import select  # noqa: E402
+from sqlalchemy import or_, select  # noqa: E402
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine  # noqa: E402
 
 from app.models.city import City  # noqa: E402
@@ -96,8 +96,15 @@ class ProdClient:
         self.client = httpx.Client(base_url=self.base, timeout=30.0)
 
     def login(self, email: str, password: str) -> None:
+        # Backend auth reads ONLY the Authorization header (cookies alone
+        # give 403 from HTTPBearer), so mirror what the frontend interceptor
+        # does: take access_token from the login body and attach it.
         r = self.client.post("/api/v1/auth/login", json={"email": email, "password": password})
         r.raise_for_status()
+        token = r.json().get("access_token", "")
+        if not token:
+            raise RuntimeError("Login response has no access_token")
+        self.client.headers["Authorization"] = f"Bearer {token}"
 
     def get_paged(self, path: str, params=None):
         """Yield items from a PaginatedResponse endpoint (items/total)."""
@@ -158,7 +165,24 @@ async def _get_user(session: AsyncSession, user_id: int):
 
 
 async def upsert_master(session: AsyncSession, row: dict, dev_password_hash: str, counts: dict) -> None:
-    """Upsert User + MasterProfile keeping prod IDs (FKs for services/hours)."""
+    """Upsert User + MasterProfile keeping prod IDs (FKs for services/hours).
+
+    A local user holding the same email/phone under a different id is left
+    untouched and the row is skipped (no destructive merges).
+    """
+    clash_filters = []
+    if row.get("email"):
+        clash_filters.append(User.email == row["email"])
+    if row.get("phone"):
+        clash_filters.append(User.phone == row["phone"])
+    if clash_filters:
+        clash = await session.execute(
+            select(User.id).where(or_(*clash_filters), User.id != row["user_id"])
+        )
+        if clash.scalar_one_or_none() is not None:
+            print(f"  SKIP master user_id={row['user_id']}: email/phone used by another local user")
+            counts["skipped"] += 1
+            return
     user = await _get_user(session, row["user_id"])
     if user is None:
         user = User(
@@ -198,6 +222,9 @@ async def upsert_master(session: AsyncSession, row: dict, dev_password_hash: str
 
 
 async def upsert_service(session: AsyncSession, row: dict, counts: dict) -> None:
+    if await session.get(MasterProfile, row["master_id"]) is None:
+        counts["skipped_no_master"] = counts.get("skipped_no_master", 0) + 1
+        return
     obj = await session.get(Service, row["id"])
     if obj is None:
         session.add(Service(
@@ -215,6 +242,9 @@ async def upsert_service(session: AsyncSession, row: dict, counts: dict) -> None
 
 
 async def upsert_working_hour(session: AsyncSession, row: dict, counts: dict) -> None:
+    if await session.get(MasterProfile, row["master_id"]) is None:
+        counts["skipped_no_master"] = counts.get("skipped_no_master", 0) + 1
+        return
     obj = await session.get(WorkingHour, row["id"])
     if obj is None:
         session.add(WorkingHour(
@@ -290,10 +320,22 @@ async def run(api: str, email: str, password: str, db_path: str,
         fetched["masters"] = prod.get_all("/api/v1/admin/masters")
         progress(f"  masters: {len(fetched['masters'])}")
     if "services" in entities:
-        fetched["services"] = list(prod.get_paged("/api/v1/admin/services/all"))
+        # /services/all is scoped to the caller's own profile (empty for a
+        # profile-less superadmin), so collect per master via the public
+        # endpoint which accepts master_id.
+        fetched["services"] = []
+        for m in fetched.get("masters", []) or prod.get_all("/api/v1/admin/masters"):
+            fetched["services"].extend(
+                prod.get_all("/api/v1/services/", {"master_id": m["id"]})
+            )
         progress(f"  services: {len(fetched['services'])}")
     if "working-hours" in entities:
-        fetched["working_hours"] = prod.get_all("/api/v1/admin/working-hours")
+        # Same story: superadmin must pass ?master_id= explicitly.
+        fetched["working_hours"] = []
+        for m in fetched.get("masters", []) or prod.get_all("/api/v1/admin/masters"):
+            fetched["working_hours"].extend(
+                prod.get_all("/api/v1/admin/working-hours", {"master_id": m["id"]})
+            )
         progress(f"  working-hours: {len(fetched['working_hours'])}")
     if "clients" in entities:
         fetched["clients"] = list(prod.get_paged("/api/v1/admin/clients"))
@@ -304,6 +346,9 @@ async def run(api: str, email: str, password: str, db_path: str,
         return {"dry_run": True, "fetched": {k: len(v) for k, v in fetched.items()}}
 
     engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
+    if not quiet:
+        import os as _os
+        print(f"  local db: {_os.path.abspath(db_path)}")
     maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     dev_hash = hash_password(dev_password)
     summary = {}
@@ -316,7 +361,8 @@ async def run(api: str, email: str, password: str, db_path: str,
                 await upsert_city(session, row, c)
             summary["geo"] = c
         if "masters" in entities:
-            c = {"created": 0, "updated": 0, "users_created": 0, "users_updated": 0}
+            c = {"created": 0, "updated": 0, "users_created": 0,
+                 "users_updated": 0, "skipped": 0}
             for row in fetched["masters"]:
                 await upsert_master(session, row, dev_hash, c)
             summary["masters"] = c

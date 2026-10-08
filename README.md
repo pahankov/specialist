@@ -103,13 +103,9 @@ python pull_production.py --yes       # залить (сначала спрос�
 ```
 Тянет: страны/города, мастеров (+профили), услуги, рабочие часы, клиентов. Не тянет: записи, пароли (всем ставится dev-пароль из `LOCAL_DEV_PASSWORD`), города пользователей. Обратного направления нет осознанно — прод правится только через сайт/API.
 
-**Автоматически (планировщик Windows):** значения берутся из `backend/.env` (gitignored — сначала впиши туда `PROD_API/PROD_EMAIL/PROD_PASSWORD`), дальше:
-```powershell
-cd online-booking\backend
-setup_auto_sync.bat 30    # каждые 30 минут (на 365 дней), лог: logs\pull_production.log
-remove_auto_sync.bat      # выключить
-```
-Ручной прогон без планировщика: `sync_production.bat`. Бэкапы `.db` ротируются (последние 5).
+**Автоматически при старте:** `start.bat` на шаге `[4/8]` подтягивает прод в локальную БД (мастера, клиенты, расписание). Креды берутся из `backend/.env` (`PROD_EMAIL`/`PROD_PASSWORD`, не пушатся); без сети просто предупредит и продолжит с локальной БД. Ничего лишнего запускать не надо.
+
+**Вручную:**
 
 ## 📦 Структура проекта
 
@@ -123,7 +119,7 @@ online-booking/
 │   │   ├── logging_config.py # Цветное логирование (ANSI) + rotating file handler
 │   │   ├── dependencies/     # Общие зависимости (зависят от моделей)
 │   │   │   ├── auth.py       # JWT: get_current_user, require_master, require_admin
-│   │   │   └── crud.py       # CRUD: get_or_404, get_owned_or_404, soft_delete
+│   │   │   └── crud.py       # CRUD: get_or_404, get_owned_or_404
 │   │   ├── middleware/       # Мидлвари
 │   │   │   └── rate_limit.py # RateLimiter (60 req/min default)
 │   │   ├── services/         # Бизнес-логика (зависят от БД)

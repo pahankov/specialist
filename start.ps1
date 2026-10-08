@@ -12,7 +12,7 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
 # ─── Clean compiled JS files ─────────────────────────────────────
-Write-Host "[0/7] Cleaning compiled files..." -ForegroundColor Yellow
+Write-Host "[0/8] Cleaning compiled files..." -ForegroundColor Yellow
 $JsFiles = Get-ChildItem -Path "$FrontendDir\src" -Recurse -Filter "*.js" -File -ErrorAction SilentlyContinue
 if ($JsFiles) {
     $JsFiles | Remove-Item -Force -ErrorAction SilentlyContinue
@@ -25,7 +25,7 @@ if (Test-Path "$FrontendDir\node_modules\.vite") {
 Write-Host "  OK" -ForegroundColor Green
 
 # ─── Check dependencies ──────────────────────────────────────────
-Write-Host "[1/7] Checking dependencies..." -ForegroundColor Yellow
+Write-Host "[1/8] Checking dependencies..." -ForegroundColor Yellow
 if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
     Write-Host "[ERROR] Python not found" -ForegroundColor Red
     pause; exit 1
@@ -37,13 +37,13 @@ if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
 Write-Host "  OK" -ForegroundColor Green
 
 # ─── Free ports ──────────────────────────────────────────────────
-Write-Host "[2/7] Freeing ports..." -ForegroundColor Yellow
+Write-Host "[2/8] Freeing ports..." -ForegroundColor Yellow
 Get-NetTCPConnection -LocalPort 8000 -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 1
 
 # ─── Backup DB ───────────────────────────────────────────────────
-Write-Host "[3/7] Backup DB..." -ForegroundColor Yellow
+Write-Host "[3/8] Backup DB..." -ForegroundColor Yellow
 $DbFile = Join-Path $BackendDir "online_booking.db"
 if (Test-Path $DbFile) {
     $PyExe = Join-Path $BackendDir "venv\Scripts\python.exe"
@@ -51,12 +51,29 @@ if (Test-Path $DbFile) {
 }
 Write-Host "  OK" -ForegroundColor Green
 
+# ─── Sync production DB ──────────────────────────────────────
+# Pulls prod masters/clients/schedule into local DB (creds from backend/.env).
+# Best-effort: never blocks startup (offline/prod down => warning only).
+Write-Host "[4/8] Syncing production DB..." -ForegroundColor Yellow
+$PyExe = Join-Path $BackendDir "venv\Scripts\python.exe"
+if (Test-Path $PyExe) {
+    try {
+        & $PyExe (Join-Path $BackendDir "pull_production.py") --yes --quiet --db (Join-Path $BackendDir "online_booking.db")
+        if ($LASTEXITCODE -eq 0) { Write-Host "  OK Synced" -ForegroundColor Green }
+        else { Write-Host "  WARN Sync failed (exit $LASTEXITCODE), continuing with local DB" -ForegroundColor Yellow }
+    } catch {
+        Write-Host "  WARN Sync failed, continuing with local DB" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "  SKIP No venv python" -ForegroundColor Gray
+}
+
 # ─── Start backend ───────────────────────────────────────────────
-Write-Host "[4/7] Starting backend (port 8000)..." -ForegroundColor Yellow
+Write-Host "[5/8] Starting backend (port 8000)..." -ForegroundColor Yellow
 Start-Process "cmd.exe" -ArgumentList "/k", "cd /d `"$BackendDir`" && call venv\Scripts\activate.bat && python -m uvicorn app.main:app --host 0.0.0.0 --port 8000" -WindowStyle Minimized -WorkingDirectory $BackendDir
 
 # ─── Health-check ────────────────────────────────────────────────
-Write-Host "[5/7] Waiting for backend..." -ForegroundColor Yellow
+Write-Host "[6/8] Waiting for backend..." -ForegroundColor Yellow
 for ($i = 0; $i -lt 15; $i++) {
     Start-Sleep -Seconds 1
     try {
@@ -67,7 +84,7 @@ for ($i = 0; $i -lt 15; $i++) {
 }
 
 # ─── Start frontend ──────────────────────────────────────────────
-Write-Host "[6/7] Starting frontend (port 3000)..." -ForegroundColor Yellow
+Write-Host "[7/8] Starting frontend (port 3000)..." -ForegroundColor Yellow
 Start-Process "cmd.exe" -ArgumentList "/k", "cd /d `"$FrontendDir`" && npx vite --host 0.0.0.0 --port 3000" -WindowStyle Minimized -WorkingDirectory $FrontendDir
 
 # ─── Done ────────────────────────────────────────────────────────

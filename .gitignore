@@ -68,6 +68,9 @@ frontend/
 *.db
 *.sqlite
 *.sqlite3
+# Local DB backups (pull_production.py auto-backups)
+*.bak-*
+*.bak
 
 # Env
 .env

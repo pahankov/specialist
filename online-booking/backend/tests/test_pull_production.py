@@ -13,6 +13,7 @@ from pull_production import (
     prune_backups,
     upsert_client,
     upsert_master,
+    upsert_service,
     upsert_working_hour,
 )
 
@@ -47,7 +48,8 @@ def master_row(**over):
 
 class TestUpsertMaster:
     async def test_creates_user_and_profile_with_prod_ids(self, psession):
-        c = {"created": 0, "updated": 0, "users_created": 0, "users_updated": 0}
+        c = {"created": 0, "updated": 0, "users_created": 0, "users_updated": 0,
+             "skipped": 0}
         await upsert_master(psession, master_row(), DEV_HASH, c)
         await psession.commit()
 
@@ -59,7 +61,8 @@ class TestUpsertMaster:
         assert c["created"] == 1 and c["users_created"] == 1
 
     async def test_rerun_updates_without_duplicates(self, psession):
-        c = {"created": 0, "updated": 0, "users_created": 0, "users_updated": 0}
+        c = {"created": 0, "updated": 0, "users_created": 0, "users_updated": 0,
+             "skipped": 0}
         await upsert_master(psession, master_row(), DEV_HASH, c)
         await upsert_master(psession, master_row(name="Elena V."), DEV_HASH, c)
         await psession.commit()
@@ -70,6 +73,20 @@ class TestUpsertMaster:
         user = await psession.get(User, 20)
         assert user.name == "Elena V."
         assert c["updated"] == 1 and c["users_updated"] == 1
+
+    async def test_email_conflict_skips_row(self, psession):
+        from app.models.user import UserRole
+        psession.add(User(id=99, name="Local Twin", email="elena@example.com",
+                          phone="+79990009999", hashed_password=DEV_HASH,
+                          role=UserRole.MASTER))
+        await psession.commit()
+        c = {"created": 0, "updated": 0, "users_created": 0, "users_updated": 0,
+             "skipped": 0}
+        await upsert_master(psession, master_row(), DEV_HASH, c)
+        assert c["skipped"] == 1
+        assert await psession.get(User, 20) is None
+        twin = await psession.get(User, 99)
+        assert twin.name == "Local Twin"
 
 
 class TestUpsertClient:
@@ -110,6 +127,14 @@ class TestUpsertClient:
 
 class TestUpsertWorkingHour:
     async def test_parses_date_and_time(self, psession):
+        mc = {"created": 0, "updated": 0, "users_created": 0, "users_updated": 0,
+              "skipped": 0}
+        await upsert_master(psession, {
+            "id": 10, "user_id": 20, "name": "Elena", "email": "wh@example.com",
+            "phone": "+79990003333", "telegram_username": None, "description": None,
+            "status": "active", "is_active": True, "is_admin": False,
+            "created_at": None, "updated_at": None,
+        }, DEV_HASH, mc)
         c = {"created": 0, "updated": 0}
         await upsert_working_hour(psession, {
             "id": 5, "master_id": 10, "schedule_date": "2026-10-09",
@@ -123,6 +148,28 @@ class TestUpsertWorkingHour:
         assert wh.schedule_date.isoformat() == "2026-10-09"
         assert wh.start_time.hour == 9 and wh.end_time.hour == 18
         assert c["created"] == 1
+
+
+class TestOrphanGuards:
+    async def test_service_without_master_skipped(self, psession):
+        from app.models.service import Service
+        c = {"created": 0, "updated": 0}
+        await upsert_service(psession, {
+            "id": 1, "master_id": 999, "name": "S", "description": None,
+            "duration_minutes": 60, "price": 1000, "is_active": True,
+        }, c)
+        assert c.get("skipped_no_master") == 1
+        assert await psession.get(Service, 1) is None
+
+    async def test_working_hour_without_master_skipped(self, psession):
+        from app.models.working_hour import WorkingHour
+        c = {"created": 0, "updated": 0}
+        await upsert_working_hour(psession, {
+            "id": 1, "master_id": 999, "schedule_date": "2026-10-09",
+            "start_time": "09:00:00", "end_time": "18:00:00", "is_active": True,
+        }, c)
+        assert c.get("skipped_no_master") == 1
+        assert await psession.get(WorkingHour, 1) is None
 
 
 class TestDtParse:
