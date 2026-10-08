@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom'
-import { adminApi } from '../../api/client'
+import { authApi } from '../../api/client'
 import { Breadcrumb, KeyboardShortcutsHint } from '../../components/common'
+import { getCookie, decodeJwtPayload, clearAuthCookies } from '../../utils/cookies'
 import './AdminLayout.css'
 
 interface MasterInfo {
@@ -20,17 +21,15 @@ interface AdminLayoutProps {
   isAdmin: boolean
 }
 
-function getCookie(name: string): string | null {
-  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
-  return match ? match[2] : null
-}
-
-function decodeJwtPayload(token: string): any {
-  try {
-    const payload = token.split('.')[1]
-    return JSON.parse(atob(payload))
-  } catch {
-    return null
+function getMasterInfo(): MasterInfo | null {
+  const token = getCookie('access_token')
+  if (!token) return null
+  const payload = decodeJwtPayload(token)
+  if (!payload?.sub) return null
+  return {
+    id: parseInt(payload.sub, 10),
+    name: payload.name || 'Мастер',
+    is_admin: payload.is_admin === true,
   }
 }
 
@@ -42,20 +41,7 @@ function AdminLayout({ navItems, isAdmin }: AdminLayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   useEffect(() => {
-    const token = getCookie('access_token')
-    if (!token) return
-
-    try {
-      const payload = decodeJwtPayload(token)
-      if (payload) {
-        const masterId = parseInt(payload.sub)
-        const isAdminUser = payload.is_admin === true
-        const name = payload.name || 'Мастер'
-        setMaster({ id: masterId, name, is_admin: isAdminUser })
-      }
-    } catch {
-      adminApi.getDashboard().catch(() => { /* ignore */ })
-    }
+    setMaster(getMasterInfo())
   }, [])
 
   // Close mobile menu on route change
@@ -75,11 +61,13 @@ function AdminLayout({ navItems, isAdmin }: AdminLayoutProps) {
   }, [])
 
   const handleLogout = async () => {
+    // Revoke server-side (httpOnly refresh cookie) first, then drop the
+    // readable access token. Old code called getDashboard() — no-op leak.
     try {
-      await adminApi.getDashboard()
-    } catch { /* ignore */ }
-    
-    document.cookie = 'access_token=; path=/; max-age=0'
+      await authApi.logout()
+    } catch { /* ignore: proceed with local cleanup anyway */ }
+
+    clearAuthCookies()
     navigate('/')
   }
 
@@ -156,7 +144,7 @@ function AdminLayout({ navItems, isAdmin }: AdminLayoutProps) {
       </aside>
 
       <main className="admin-main">
-        {!sidebarCollapsed && breadcrumbs.length > 0 && (
+        {breadcrumbs.length > 0 && (
           <Breadcrumb items={breadcrumbs} />
         )}
         <div className="main-content">

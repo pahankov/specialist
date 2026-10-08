@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { authApi } from '../../api/client'
 import { EMAIL_PLACEHOLDER } from '../../constants'
+import { getApiErrorMessage } from '../../utils/apiError'
 import './LoginPage.css'
 
 function LoginPage() {
@@ -20,7 +21,7 @@ function LoginPage() {
       await authApi.login(email, password)
       navigate('/admin/dashboard')
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Ошибка входа')
+      setError(getApiErrorMessage(err, 'Ошибка входа'))
     } finally {
       setLoading(false)
     }

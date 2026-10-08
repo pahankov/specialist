@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { adminApi } from '../../api/client'
 import type { DashboardStats, AdminStats } from '../../api/types'
 import { Skeleton, EmptyState } from '../../components/common'
+import { getApiErrorMessage } from '../../utils/apiError'
 import './RevenuePage.css'
 
 interface RevenueBreakdown {
@@ -27,7 +28,7 @@ function RevenuePage() {
       .then(r => { setStats(r.data); setIsGlobal('total_masters' in r.data) })
       .catch((err: any) => {
         if (err.response?.status === 401) { window.location.href = '/admin/login' }
-        else setError(err.response?.data?.detail || 'Ошибка загрузки')
+        else setError(getApiErrorMessage(err, 'Ошибка загрузки'))
       })
       .finally(() => setLoading(false))
   }, [])

@@ -1,13 +1,7 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig } from 'axios'
+import { getCookie } from '../utils/cookies'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-
-// ─── Cookie helper ──────────────────────────────────────────────────
-
-function getCookie(name: string): string | null {
-  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
-  return match ? match[2] : null
-}
 
 // ─── Unified axios instance ────────────────────────────────────────
 

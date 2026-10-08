@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import { adminApi } from '../../api/client'
 import type { DashboardStats, AdminStats } from '../../api/types'
 import { Skeleton, EmptyState } from '../../components/common'
+import { getApiErrorMessage } from '../../utils/apiError'
 import './DashboardPage.css'
 
 function DashboardPage() {
@@ -22,7 +23,7 @@ function DashboardPage() {
         if (err.response?.status === 401) {
           window.location.href = '/admin/login'
         } else {
-          const detail = err.response?.data?.detail || err.message || 'Неизвестная ошибка'
+          const detail = getApiErrorMessage(err, 'Неизвестная ошибка')
           setError(`Ошибка загрузки: ${detail}`)
         }
       })

@@ -4,6 +4,7 @@ import { adminApi } from '../../api/client'
 import type { Client } from '../../api/types'
 import { PHONE_PLACEHOLDER, EMAIL_PLACEHOLDER } from '../../constants'
 import { formatPhone } from '../../utils/formatPhone'
+import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError'
 import { Skeleton, EmptyState, Tooltip, ConfirmDialog } from '../../components/common'
 import './ClientsPage.css'
 
@@ -35,14 +36,14 @@ function ClientsPage() {
   const fetchData = async () => {
     setLoading(true)
     try {
-      const params: Record<string, any> = { page: 1, page_size: 200 }
+      const params: { page: number; page_size: number; search?: string; master_id?: number } = { page: 1, page_size: 200 }
       if (search?.trim()) params.search = search.trim()
       if (masterIdFilter !== '') params.master_id = masterIdFilter
       const c = await adminApi.getClients(params)
       setClients(c.data.items)
       setTotalClients(c.data.total)
-    } catch (err: any) {
-      if (err.response?.status === 401) { window.location.href = '/admin/login' }
+    } catch (err: unknown) {
+      if (getApiErrorStatus(err) === 401) { window.location.href = '/admin/login' }
       else toast.error('Ошибка загрузки')
     } finally { setLoading(false) }
   }
@@ -63,10 +64,8 @@ function ClientsPage() {
       }
       resetForm()
       fetchData()
-    } catch (err: any) {
-      const detail = err.response?.data?.detail
-      const msg = typeof detail === 'string' ? detail : 'Произошла ошибка'
-      toast.error(msg)
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Произошла ошибка'))
     }
   }
 
@@ -79,18 +78,10 @@ function ClientsPage() {
   }
 
   const handleDelete = async (id: number) => {
-    const client = clients.find(c => c.id === id)
-    if (!client) return
-
-    const undoAction = () => {
-      toast.info('Удаление отменено')
-    }
-
     try {
       await adminApi.deleteClient(id)
-      toast.success('Клиент удалён', {
-        action: { label: 'Отменить', onClick: undoAction },
-      })
+      // No undo: backend has no undelete, a fake "cancel" toast would lie.
+      toast.success('Клиент удалён')
       fetchData()
     } catch {
       toast.error('Ошибка удаления')
@@ -131,7 +122,7 @@ function ClientsPage() {
           </div>
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label style={{ fontSize: 12, color: '#666', marginBottom: 4, display: 'block' }}>👨‍💼 Мастер</label>
-            <select value={masterIdFilter} onChange={(e) => setMasterIdFilter(e.target.value as any)} style={{ width: '100%', padding: 8, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }}>
+            <select value={masterIdFilter} onChange={(e) => setMasterIdFilter(e.target.value === '' ? '' : Number(e.target.value))} style={{ width: '100%', padding: 8, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }}>
               <option value="">Все клиенты</option>
               {allMasters.map(m => (<option key={m.id} value={m.id}>{m.name}</option>))}
             </select>

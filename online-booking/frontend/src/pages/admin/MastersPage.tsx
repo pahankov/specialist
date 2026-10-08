@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { superAdminApi } from '../../api/client'
 import type { Master } from '../../api/types'
-import { Skeleton, EmptyState, Tooltip, Modal } from '../../components/common'
+import { Skeleton, EmptyState, Tooltip, Modal, ConfirmDialog } from '../../components/common'
 import { PHONE_PLACEHOLDER, PASSWORD_PLACEHOLDER, PASSWORD_EDIT_PLACEHOLDER, TELEGRAM_PLACEHOLDER } from '../../constants'
 import { formatPhone } from '../../utils/formatPhone'
+import { getApiErrorMessage } from '../../utils/apiError'
 import './MastersPage.css'
 
 function MastersPage() {
@@ -41,30 +42,18 @@ function MastersPage() {
 
       const { data } = await superAdminApi.getAllMasters(Object.keys(params).length ? params : undefined)
       setMasters(data)
-    } catch (err: any) {
-      const detail = err.response?.data?.detail
-      const msg = typeof detail === 'string' ? detail : (err.response?.data?.message || 'Ошибка загрузки мастеров')
-      toast.error(msg)
+    } catch (err: unknown) {
+      toast.error(handleError(err))
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => { loadMasters() }, [])
-
   const handleSearch = () => loadMasters()
 
-  const handleError = (err: any): string => {
-    const detail = err.response?.data?.detail
-    if (typeof detail === 'string') return detail
-    if (Array.isArray(detail)) {
-      return detail.map((e: any) => e.msg || e.message).join(', ')
-    }
-    if (typeof detail === 'object' && detail !== null) {
-      return detail.msg || detail.message || 'Ошибка сервера'
-    }
-    return err.response?.data?.message || 'Ошибка сервера'
-  }
+  useEffect(() => { loadMasters() }, [])
+
+  const handleError = (err: unknown): string => getApiErrorMessage(err)
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -74,7 +63,7 @@ function MastersPage() {
       setShowCreateModal(false)
       setCreateForm({ name: '', email: '', password: '', phone: '', telegram_username: '' })
       loadMasters()
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error(handleError(err))
     }
   }
@@ -83,14 +72,14 @@ function MastersPage() {
     e.preventDefault()
     if (!editingMaster) return
     try {
-      const data: any = { ...editForm }
+      const data: Record<string, string> = { ...editForm }
       if (!data.password) delete data.password
       await superAdminApi.updateMaster(editingMaster.id, data)
       toast.success('Мастер обновлён')
       setShowEditModal(false)
       setEditingMaster(null)
       loadMasters()
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error(handleError(err))
     }
   }
@@ -111,7 +100,7 @@ function MastersPage() {
         { action: { label: 'Отменить', onClick: undoAction } }
       )
       loadMasters()
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error(handleError(err))
     }
   }
@@ -132,7 +121,7 @@ function MastersPage() {
       toast.success(`Выбрано мастеров: ${data.toggled?.length || 0}`)
       setSelectedMasters(new Set())
       loadMasters()
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error(handleError(err))
     }
   }
@@ -145,29 +134,19 @@ function MastersPage() {
       toast.success(`Заблокировано мастеров: ${data.suspended?.length || 0}`)
       setSelectedMasters(new Set())
       loadMasters()
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error(handleError(err))
     }
   }
 
   const handleDelete = async (id: number) => {
-    const master = masters.find(m => m.id === id)
-    if (!master) return
-
-    const undoAction = () => {
-      // Note: full undo would require re-creating the master, which is complex
-      // For now, we just show a toast
-      toast.info('Удаление отменено')
-    }
-
     try {
       await superAdminApi.deleteMaster(id)
-      toast.success('Мастер удалён', {
-        action: { label: 'Отменить', onClick: undoAction },
-      })
+      // No undo: backend has no undelete, a fake "cancel" toast would lie.
+      toast.success('Мастер удалён')
       setDeleteConfirm(null)
       loadMasters()
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error(handleError(err))
     }
   }
@@ -212,12 +191,12 @@ function MastersPage() {
             className="filter-input"
           />
           <button className="btn btn-secondary" onClick={handleSearch}>Найти</button>
-          <select value={filterActive} onChange={(e) => setFilterActive(e.target.value as any)} className="filter-select">
+          <select value={filterActive} onChange={(e) => setFilterActive(e.target.value as 'all' | 'active' | 'inactive')} className="filter-select">
             <option value="all">Все статусы</option>
             <option value="active">Активные</option>
             <option value="inactive">Заблокированные</option>
           </select>
-          <select value={filterAdmin} onChange={(e) => setFilterAdmin(e.target.value as any)} className="filter-select">
+          <select value={filterAdmin} onChange={(e) => setFilterAdmin(e.target.value as 'all' | 'admin' | 'user')} className="filter-select">
             <option value="all">Все роли</option>
             <option value="admin">Суперпользователи</option>
             <option value="user">Обычные мастера</option>
@@ -312,25 +291,14 @@ function MastersPage() {
                         {master.is_active ? '🔒' : '🔓'}
                       </button>
                     </Tooltip>
-                    {deleteConfirm === master.id ? (
-                      <div className="delete-confirm">
-                        <Tooltip content="Подтвердить удаление" position="top">
-                          <button className="btn btn-sm btn-danger" onClick={() => handleDelete(master.id)}>✓</button>
-                        </Tooltip>
-                        <Tooltip content="Отмена" position="top">
-                          <button className="btn btn-sm btn-ghost" onClick={() => setDeleteConfirm(null)}>✗</button>
-                        </Tooltip>
-                      </div>
-                    ) : (
-                      <Tooltip content="Удалить" position="top">
-                        <button
-                          className="btn btn-sm btn-danger"
-                          onClick={() => setDeleteConfirm(master.id)}
-                        >
-                          🗑️
-                        </button>
-                      </Tooltip>
-                    )}
+                    <Tooltip content="Удалить" position="top">
+                      <button
+                        className="btn btn-sm btn-danger"
+                        onClick={() => setDeleteConfirm(master.id)}
+                      >
+                        🗑️
+                      </button>
+                    </Tooltip>
                   </td>
                 </tr>
               ))}
@@ -338,6 +306,16 @@ function MastersPage() {
           </table>
         </div>
       )}
+
+      <ConfirmDialog
+        open={deleteConfirm !== null}
+        onClose={() => setDeleteConfirm(null)}
+        title="🗑️ Удалить мастера?"
+        message="Мастер будет удалён вместе со всеми данными. Это действие нельзя отменить."
+        confirmLabel="Удалить"
+        danger
+        onConfirm={() => deleteConfirm !== null && handleDelete(deleteConfirm)}
+      />
 
       <Modal open={showCreateModal} onClose={() => setShowCreateModal(false)} title="Добавить мастера" wide>
           <form onSubmit={handleCreate} className="master-form">

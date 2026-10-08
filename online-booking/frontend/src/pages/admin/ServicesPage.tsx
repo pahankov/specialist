@@ -3,6 +3,7 @@ import { adminApi } from '../../api/client'
 import { ConfirmDialog } from '../../components/common'
 import type { Service } from '../../api/types'
 import { formatPrice } from '../../components/schedule/helpers'
+import { getApiErrorMessage } from '../../utils/apiError'
 import './ServicesPage.css'
 
 function ServicesPage() {
@@ -33,11 +34,8 @@ function ServicesPage() {
   const resetForm = () => { setName(''); setDescription(''); setDuration(30); setPrice(1000); setEditingId(null); setShowForm(false) }
   const clearSuccess = () => { setSuccessMsg(''); setError('') }
 
-  const showError = (err: any) => {
-    const detail = err.response?.data?.detail
-    if (typeof detail === 'string') setError(detail)
-    else if (detail && typeof detail === 'object') setError(JSON.stringify(detail))
-    else setError('Произошла ошибка')
+  const showError = (err: unknown) => {
+    setError(getApiErrorMessage(err, 'Ошибка сервера'))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {

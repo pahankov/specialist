@@ -5,6 +5,7 @@ import { Calendar } from '../../components/schedule/Calendar'
 import { TimeSlots } from '../../components/schedule/TimeSlots'
 import { BookingModal } from '../../components/schedule/BookingModal'
 import { ConfirmDialog } from '../../components/common'
+import { getApiErrorMessage } from '../../utils/apiError'
 import { MonthlyStatsComponent } from '../../components/schedule/MonthlyStats'
 import {
   toggleDayWork,
@@ -140,8 +141,8 @@ function SchedulePage() {
         newActiveHours[`${dateStr}-${h}`] = true
       }
       setActiveHours(prev => ({ ...prev, ...newActiveHours }))
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Не удалось добавить рабочий день')
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, 'Не удалось добавить рабочий день'))
     }
   }, [schedule])
 

@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { superAdminApi } from '../../api/client'
 import type { AuditLogEntry } from '../../api/types'
 import { Skeleton, EmptyState } from '../../components/common'
+import { getApiErrorMessage } from '../../utils/apiError'
 import './MasterDetailPage.css'
 
 type TabType = 'overview' | 'reviews' | 'audit'
@@ -79,8 +80,8 @@ function MasterDetailPage() {
     try {
       const { data } = await superAdminApi.getMasterFull(parseInt(id))
       setMaster(data)
-    } catch (err: any) {
-      const msg = err.response?.data?.detail || 'Ошибка загрузки мастера'
+    } catch (err: unknown) {
+      const msg = getApiErrorMessage(err, 'Ошибка загрузки мастера')
       toast.error(msg)
     } finally {
       setLoading(false)

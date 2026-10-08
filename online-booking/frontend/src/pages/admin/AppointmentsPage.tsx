@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import { adminApi } from '../../api/client'
 import type { Appointment } from '../../api/types'
 import { Skeleton, EmptyState, Tooltip, ConfirmDialog } from '../../components/common'
+import { getApiErrorMessage } from '../../utils/apiError'
 import './AppointmentsPage.css'
 
 type SortField = 'appointment_date' | 'client_name' | 'service_name' | 'service_price' | 'status'
@@ -80,11 +81,8 @@ function AppointmentsPage() {
 
   useEffect(() => { setCurrentPage(0); fetch() }, [statusFilter, masterIdFilter, clientIdFilter, serviceIdFilter, dateFrom, dateTo])
 
-  const showError = (err: any) => {
-    const detail = err.response?.data?.detail
-    if (typeof detail === 'string') setError(detail)
-    else if (detail && typeof detail === 'object') setError(JSON.stringify(detail))
-    else setError('Произошла ошибка')
+  const showError = (err: unknown) => {
+    setError(getApiErrorMessage(err, 'Ошибка сервера'))
   }
 
   const handleConfirm = async (id: number) => {
@@ -92,7 +90,7 @@ function AppointmentsPage() {
       await adminApi.confirmAppointment(id)
       fetch()
       toast.success('Запись подтверждена')
-    } catch (err: any) {
+    } catch (err: unknown) {
       showError(err)
     }
   }
@@ -106,7 +104,7 @@ function AppointmentsPage() {
       await adminApi.completeAppointment(id)
       fetch()
       toast.success('Запись завершена')
-    } catch (err: any) {
+    } catch (err: unknown) {
       showError(err)
     }
   }
@@ -125,7 +123,7 @@ function AppointmentsPage() {
         action: { label: 'Отменить', onClick: undoAction },
       })
       fetch()
-    } catch (err: any) {
+    } catch (err: unknown) {
       showError(err)
     } finally {
       setDeletingId(null)
@@ -138,7 +136,7 @@ function AppointmentsPage() {
       await adminApi.cancelAppointment(cancelingId, cancelReason.trim())
       fetch()
       toast.success('Запись отменена')
-    } catch (err: any) {
+    } catch (err: unknown) {
       showError(err)
     } finally {
       setCancelingId(null)
@@ -151,7 +149,7 @@ function AppointmentsPage() {
       await adminApi.noShowAppointment(id)
       toast.warning('Отмечено как неявка')
       fetch()
-    } catch (err: any) {
+    } catch (err: unknown) {
       showError(err)
     } finally {
       setNoShowingId(null)

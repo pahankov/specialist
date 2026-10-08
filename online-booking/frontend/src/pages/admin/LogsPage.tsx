@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { adminApi } from '../../api/client'
+import { getApiErrorMessage } from '../../utils/apiError'
 import './LogsPage.css'
 
 function getCookie(name: string): string | null {
@@ -70,7 +71,7 @@ function LogsPage() {
       if (err.response?.status === 401) {
         window.location.href = '/admin/login'
       } else {
-        const detail = err.response?.data?.detail || err.message || 'Ошибка загрузки логов'
+        const detail = getApiErrorMessage(err, 'Ошибка загрузки логов')
         setError(typeof detail === 'string' ? detail : JSON.stringify(detail))
       }
     } finally {
