@@ -3,6 +3,7 @@ import { adminApi, superAdminApi } from '../../api/client'
 import type { DashboardStats, AdminStats } from '../../api/types'
 import { Skeleton, EmptyState, MasterSelect } from '../../components/common'
 import { getApiErrorMessage } from '../../utils/apiError'
+import '../../styles/filters.css'
 import './RevenuePage.css'
 
 interface RevenueBreakdown {
@@ -96,8 +97,8 @@ function RevenuePage() {
         <h3 style={{ margin: '0 0 12px', fontSize: 16 }}>Фильтры дохода</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
           <div className="form-group" style={{ marginBottom: 0 }}>
-            <label style={{ fontSize: 12, color: '#666', marginBottom: 4, display: 'block' }}>Группировка</label>
-            <select value={groupBy} onChange={(e) => setGroupBy(e.target.value as 'overall' | 'master' | 'service')} style={{ width: '100%', padding: 8, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }}>
+            <label className="filter-label">Группировка</label>
+            <select className="filter-control" value={groupBy} onChange={(e) => setGroupBy(e.target.value as 'overall' | 'master' | 'service')}>
               <option value="overall">Общий доход</option>
               <option value="master">По мастерам</option>
               <option value="service">По услугам</option>
@@ -109,16 +110,16 @@ function RevenuePage() {
             style={{ marginBottom: 0 }}
           />
           <div className="form-group" style={{ marginBottom: 0 }}>
-            <label style={{ fontSize: 12, color: '#666', marginBottom: 4, display: 'block', lineHeight: '18px', minHeight: 18 }}>Дата от</label>
-            <input type="date" value={dateFrom} disabled={allTime} onChange={(e) => setDateFrom(e.target.value)} style={{ width: '100%', padding: 8, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14, height: 38, boxSizing: 'border-box' }} />
+            <label className="filter-label">Дата от</label>
+            <input type="date" className="filter-control" value={dateFrom} disabled={allTime} onChange={(e) => setDateFrom(e.target.value)} />
           </div>
           <div className="form-group" style={{ marginBottom: 0 }}>
-            <label style={{ fontSize: 12, color: '#666', marginBottom: 4, display: 'block', lineHeight: '18px', minHeight: 18 }}>Дата до</label>
-            <input type="date" value={dateTo} disabled={allTime} onChange={(e) => setDateTo(e.target.value)} style={{ width: '100%', padding: 8, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14, height: 38, boxSizing: 'border-box' }} />
+            <label className="filter-label">Дата до</label>
+            <input type="date" className="filter-control" value={dateTo} disabled={allTime} onChange={(e) => setDateTo(e.target.value)} />
           </div>
-          <div className="form-group" style={{ marginBottom: 0, display: 'flex', alignItems: 'flex-end' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14, color: '#333', height: 38 }}>
-              <input type="checkbox" checked={allTime} onChange={() => setAllTime(v => !v)} style={{ width: 16, height: 16 }} />
+          <div className="form-group filter-bottom" style={{ marginBottom: 0 }}>
+            <label className="filter-check">
+              <input type="checkbox" checked={allTime} onChange={() => setAllTime(v => !v)} />
               За всё время
             </label>
           </div>

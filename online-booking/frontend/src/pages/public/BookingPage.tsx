@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { servicesApi, appointmentsApi } from '../../api/client'
 import type { Service } from '../../api/types'
 import { PHONE_PLACEHOLDER } from '../../constants'
-import { formatPhone } from '../../utils/formatPhone'
+import PhoneInput, { isCompletePhone } from '../../components/common/PhoneInput'
 import './BookingPage.css'
 
 function BookingPage() {
@@ -43,6 +43,10 @@ function BookingPage() {
 
     if (!selectedService || !selectedDate || !clientName || !clientPhone) {
       toast.error('Заполните все поля')
+      return
+    }
+    if (!isCompletePhone(clientPhone)) {
+      toast.error('Введите корректный номер телефона (11 цифр)')
       return
     }
 
@@ -138,11 +142,10 @@ function BookingPage() {
               className="input"
               required
             />
-            <input
-              type="tel"
+            <PhoneInput
               placeholder={PHONE_PLACEHOLDER}
               value={clientPhone}
-              onChange={(e) => setClientPhone(formatPhone(e.target.value))}
+              onChange={setClientPhone}
               className="input"
               required
             />

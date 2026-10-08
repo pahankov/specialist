@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { authApi } from '../api/client'
 import { dadataApi, type DadataSuggestion } from '../api/dadata'
 import { PASSWORD_PLACEHOLDER } from '../constants'
-import { formatPhone } from '../utils/formatPhone'
+import PhoneInput from './common/PhoneInput'
 import Modal from './common/Modal'
 import './LoginModal.css'
 
@@ -323,10 +323,9 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
             {/* Phone */}
             <div className="login-group">
               <label>Телефон *</label>
-              <input
-                type="tel"
+              <PhoneInput
                 value={registerForm.phone}
-                onChange={(e) => setRegisterForm(prev => ({ ...prev, phone: formatPhone(e.target.value) }))}
+                onChange={(phone) => setRegisterForm(prev => ({ ...prev, phone }))}
                 placeholder="+7 (999) 123-45-67"
                 required
               />

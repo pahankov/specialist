@@ -79,7 +79,9 @@ async def get_admin_clients(
         order = User.name.asc()  # legacy default
     data_query = (
         base_query
-        .order_by(order)
+        # id tiebreak: names repeat (seed clones), without it rows jump
+        # between pages and the same names reappear on every page
+        .order_by(order, User.id.asc())
         .offset(offset)
         .limit(page_size)
     )

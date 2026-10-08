@@ -5,6 +5,7 @@ import { adminApi } from '../../api/client'
 import type { Appointment } from '../../api/types'
 import { Skeleton, EmptyState, Tooltip, ConfirmDialog, MasterSelect } from '../../components/common'
 import { getApiErrorMessage } from '../../utils/apiError'
+import '../../styles/filters.css'
 import './AppointmentsPage.css'
 
 type SortField = 'appointment_date' | 'client_name' | 'service_name' | 'service_price' | 'status'
@@ -255,8 +256,8 @@ function AppointmentsPage() {
 
             {/* Client filter */}
             <div className="form-group" style={{ marginBottom: 0 }}>
-              <label style={{ fontSize: 12, color: '#666', marginBottom: 4, display: 'block' }}>Клиент</label>
-              <select value={clientIdFilter} onChange={(e) => setClientIdFilter(e.target.value === '' ? '' : Number(e.target.value))} style={{ width: '100%', padding: 8, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }}>
+              <label className="filter-label">Клиент</label>
+              <select className="filter-control" value={clientIdFilter} onChange={(e) => setClientIdFilter(e.target.value === '' ? '' : Number(e.target.value))}>
                 <option value="">Все клиенты</option>
                 {allClients.map(c => (<option key={c.id} value={c.id}>{c.name}</option>))}
               </select>
@@ -264,8 +265,8 @@ function AppointmentsPage() {
 
             {/* Service filter */}
             <div className="form-group" style={{ marginBottom: 0 }}>
-              <label style={{ fontSize: 12, color: '#666', marginBottom: 4, display: 'block' }}>Услуга</label>
-              <select value={serviceIdFilter} onChange={(e) => setServiceIdFilter(e.target.value === '' ? '' : Number(e.target.value))} style={{ width: '100%', padding: 8, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }}>
+              <label className="filter-label">Услуга</label>
+              <select className="filter-control" value={serviceIdFilter} onChange={(e) => setServiceIdFilter(e.target.value === '' ? '' : Number(e.target.value))}>
                 <option value="">Все услуги</option>
                 {allServices.map(s => (<option key={s.id} value={s.id}>{s.name}</option>))}
               </select>
@@ -273,27 +274,27 @@ function AppointmentsPage() {
 
             {/* Date from */}
             <div className="form-group" style={{ marginBottom: 0 }}>
-              <label style={{ fontSize: 12, color: '#666', marginBottom: 4, display: 'block', lineHeight: '18px', minHeight: 18 }}>Дата от</label>
-              <input type="date" value={dateFrom} disabled={allTime} onChange={(e) => setDateFrom(e.target.value)} style={{ width: '100%', padding: 8, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14, height: 38, boxSizing: 'border-box' }} />
+              <label className="filter-label">Дата от</label>
+              <input type="date" className="filter-control" value={dateFrom} disabled={allTime} onChange={(e) => setDateFrom(e.target.value)} />
             </div>
 
             {/* Date to */}
             <div className="form-group" style={{ marginBottom: 0 }}>
-              <label style={{ fontSize: 12, color: '#666', marginBottom: 4, display: 'block', lineHeight: '18px', minHeight: 18 }}>Дата до</label>
-              <input type="date" value={dateTo} disabled={allTime} onChange={(e) => setDateTo(e.target.value)} style={{ width: '100%', padding: 8, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14, height: 38, boxSizing: 'border-box' }} />
+              <label className="filter-label">Дата до</label>
+              <input type="date" className="filter-control" value={dateTo} disabled={allTime} onChange={(e) => setDateTo(e.target.value)} />
             </div>
 
             {/* All time */}
-            <div className="form-group" style={{ marginBottom: 0, display: 'flex', alignItems: 'flex-end' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14, color: '#333', height: 38 }}>
-                <input type="checkbox" checked={allTime} onChange={() => setAllTime(v => !v)} style={{ width: 16, height: 16 }} />
+            <div className="form-group filter-bottom" style={{ marginBottom: 0 }}>
+              <label className="filter-check">
+                <input type="checkbox" checked={allTime} onChange={() => setAllTime(v => !v)} />
                 За всё время
               </label>
             </div>
 
             {/* Reset filters button */}
-            <div className="form-group" style={{ marginBottom: 0, display: 'flex', alignItems: 'flex-end' }}>
-              <button className="btn btn-ghost" onClick={() => { setStatusFilter(''); setMasterIdFilter(''); setClientIdFilter(''); setServiceIdFilter(''); setDateFrom(''); setDateTo('') }} style={{ width: '100%', fontSize: 13 }}>
+            <div className="form-group filter-bottom" style={{ marginBottom: 0 }}>
+              <button className="btn btn-ghost" onClick={() => { setStatusFilter(''); setMasterIdFilter(''); setClientIdFilter(''); setServiceIdFilter(''); setDateFrom(''); setDateTo('') }} style={{ width: '100%', fontSize: 13, height: 38 }}>
                 ✕ Сбросить
               </button>
             </div>

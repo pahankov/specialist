@@ -134,8 +134,8 @@ async def get_admin_appointments(
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
 
-    # Get data
-    query = query.order_by(Appointment.appointment_date.desc()).offset(offset).limit(page_size)
+    # Get data (id tiebreak keeps pages deterministic on equal timestamps)
+    query = query.order_by(Appointment.appointment_date.desc(), Appointment.id.desc()).offset(offset).limit(page_size)
     result = await db.execute(query)
     rows = result.all()
 

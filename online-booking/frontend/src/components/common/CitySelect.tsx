@@ -30,11 +30,16 @@ export default function CitySelect({
   const [options, setOptions] = useState<CityOption[]>([])
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
+  const [focused, setFocused] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [failed, setFailed] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const seq = useRef(0)
   const boxRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const dropRef = useRef<HTMLDivElement>(null)
+  // Viewport-relative coords: the portal uses position:fixed, so NO scroll
+  // offsets here (adding scrollY pushed the dropdown off-screen on scroll).
   const [dropPos, setDropPos] = useState({ top: 0, left: 0, width: 0 })
 
   useEffect(() => {
@@ -56,28 +61,43 @@ export default function CitySelect({
     }
   }, [])
 
+  // Keep a fixed-position portal glued under the input while open
+  useEffect(() => {
+    if (!open) return
+    const place = () => {
+      if (inputRef.current) {
+        const rect = inputRef.current.getBoundingClientRect()
+        setDropPos({ top: rect.bottom + 4, left: rect.left, width: rect.width })
+      }
+    }
+    place()
+    window.addEventListener('scroll', place, true)
+    window.addEventListener('resize', place)
+    return () => {
+      window.removeEventListener('scroll', place, true)
+      window.removeEventListener('resize', place)
+    }
+  }, [open ])
+
   const openDropdown = () => {
-    // Position a body-level portal under the input (modal has overflow:auto
-    // which would clip an in-tree dropdown).
     if (inputRef.current) {
       const rect = inputRef.current.getBoundingClientRect()
-      setDropPos({
-        top: rect.bottom + window.scrollY + 4,
-        left: rect.left + window.scrollX,
-        width: rect.width,
-      })
+      setDropPos({ top: rect.bottom + 4, left: rect.left, width: rect.width })
     }
     setOpen(true)
   }
 
   const search = (text: string) => {
     setQuery(text)
+    setFailed(false)
     if (timer.current) clearTimeout(timer.current)
     if (text.trim().length < 2) {
       setOptions([])
+      setLoading(false)
       setOpen(false)
       return
     }
+    setLoading(true)
     const cur = ++seq.current
     timer.current = setTimeout(async () => {
       try {
@@ -87,17 +107,24 @@ export default function CitySelect({
         if (cur !== seq.current) return
         const list = (Array.isArray(data) ? data : []) as { id: number; name_ru: string }[]
         setOptions(list.map(c => ({ id: c.id, name: c.name_ru })))
+        setFailed(false)
         openDropdown()
       } catch {
         if (cur === seq.current) {
           setOptions([])
-          setOpen(false)
+          setFailed(true)
+          openDropdown()
         }
+      } finally {
+        if (cur === seq.current) setLoading(false)
       }
     }, 350)
   }
 
   const selectedName = value != null ? (valueName || options.find(o => o.id === value)?.name || '') : ''
+  // While focused (or open) always show the live query — otherwise typed
+  // characters are swallowed (input would render selectedName instead).
+  const shown = (focused || open) ? query : selectedName
 
   return (
     <div className="master-select" ref={boxRef} style={style}>
@@ -108,12 +135,18 @@ export default function CitySelect({
         <input
           ref={inputRef}
           type="text"
-          value={open ? query : selectedName}
+          value={shown}
           onChange={(e) => {
             search(e.target.value)
             if (value != null) onChange(null)
           }}
-          onFocus={() => { if (query.trim().length >= 2) openDropdown() }}
+          onFocus={() => {
+            setFocused(true)
+            // Restore the selected name as editable text when focusing a set value
+            if (value != null && query === '') setQuery(selectedName)
+            else if (query.trim().length >= 2) openDropdown()
+          }}
+          onBlur={() => setFocused(false)}
           placeholder="Начните вводить город..."
           className="master-select-input"
           aria-label={label}
@@ -124,7 +157,7 @@ export default function CitySelect({
             type="button"
             className="master-select-clear"
             aria-label="Сбросить"
-            onClick={() => { setQuery(''); setOptions([]); setOpen(false); onChange(null) }}
+            onClick={() => { setQuery(''); setOptions([]); setOpen(false); setFailed(false); onChange(null) }}
           >
             ✕
           </button>
@@ -143,8 +176,14 @@ export default function CitySelect({
             zIndex: 99999,
           }}
         >
-          {options.length === 0 ? (
-            <div className="master-select-empty">Ничего не найдено</div>
+          {loading ? (
+            <div className="master-select-empty">Поиск…</div>
+          ) : failed ? (
+            <div className="master-select-empty">Не удалось загрузить города. Проверьте соединение.</div>
+          ) : options.length === 0 ? (
+            <div className="master-select-empty">
+              {query.trim().length >= 2 ? 'Ничего не найдено' : 'Введите минимум 2 буквы'}
+            </div>
           ) : (
             options.map(o => (
               <div

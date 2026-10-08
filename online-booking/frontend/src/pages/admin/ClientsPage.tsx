@@ -4,9 +4,10 @@ import { toast } from 'sonner'
 import { adminApi } from '../../api/client'
 import type { Client } from '../../api/types'
 import { PHONE_PLACEHOLDER, EMAIL_PLACEHOLDER } from '../../constants'
-import { formatPhone } from '../../utils/formatPhone'
+import { isCompletePhone } from '../../components/common/PhoneInput'
 import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError'
-import { Skeleton, EmptyState, Tooltip, ConfirmDialog, MasterSelect } from '../../components/common'
+import { Skeleton, EmptyState, Tooltip, ConfirmDialog, MasterSelect, PhoneInput } from '../../components/common'
+import '../../styles/filters.css'
 import './ClientsPage.css'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -87,6 +88,10 @@ function ClientsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (phone && !isCompletePhone(phone)) {
+      toast.error('Введите корректный номер телефона (11 цифр)')
+      return
+    }
     try {
       if (editingId) {
         await adminApi.updateClient(editingId, { name, phone, email: email || undefined })
@@ -121,10 +126,6 @@ function ClientsPage() {
     } finally { setDeletingId(null) }
   }
 
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setPhone(formatPhone(e.target.value))
-  }
-
   return (
     <div>
       <div className="page-header" style={{ display: 'flex', alignItems: 'center', gap: 16, justifyContent: 'center' }}>
@@ -144,13 +145,13 @@ function ClientsPage() {
       <div className="card" style={{ marginBottom: 16, padding: 16 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 12 }}>
           <div className="form-group" style={{ marginBottom: 0 }}>
-            <label style={{ fontSize: 12, color: '#666', marginBottom: 4, display: 'block' }}>🔍 Поиск по имени или телефону</label>
+            <label className="filter-label">🔍 Поиск по имени или телефону</label>
             <input
               type="text"
               placeholder="Введите имя или телефон..."
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              style={{ width: '100%', padding: 8, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }}
+              className="filter-control"
             />
           </div>
           <MasterSelect
@@ -160,8 +161,8 @@ function ClientsPage() {
             style={{ marginBottom: 0 }}
           />
           {(search || masterIdFilter !== '') && (
-            <div className="form-group" style={{ marginBottom: 0, display: 'flex', alignItems: 'flex-end' }}>
-              <button className="btn btn-ghost" onClick={() => { setSearch(''); setMasterIdFilter('') }} style={{ width: '100%', fontSize: 13 }}>
+            <div className="form-group filter-bottom" style={{ marginBottom: 0 }}>
+              <button className="btn btn-ghost" onClick={() => { setSearch(''); setMasterIdFilter('') }} style={{ width: '100%', fontSize: 13, height: 38 }}>
                 ✕ Сбросить
               </button>
             </div>
@@ -175,7 +176,7 @@ function ClientsPage() {
           <form onSubmit={handleSubmit}>
             <div className="form-row">
               <div className="form-group"><label>Имя</label><input value={name} onChange={(e) => setName(e.target.value)} required placeholder="Иван Иванов" /></div>
-              <div className="form-group"><label>Телефон</label><input value={phone} onChange={handlePhoneChange} required placeholder={PHONE_PLACEHOLDER} /></div>
+              <div className="form-group"><label>Телефон</label><PhoneInput value={phone} onChange={setPhone} required placeholder={PHONE_PLACEHOLDER} /></div>
               <div className="form-group"><label>Email</label><input value={email} onChange={(e) => setEmail(e.target.value)} placeholder={EMAIL_PLACEHOLDER} /></div>
             </div>
             <div className="form-actions">

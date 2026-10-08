@@ -28,9 +28,25 @@
   color: white;
 }
 
+/* Table scrolls INSIDE the card on every viewport — action buttons
+ * can never spill past the card edge (was desktop-only overflow). */
+.appointments-table-wrapper {
+  overflow-x: auto;
+  margin: 0 -16px;
+  padding: 0 16px;
+}
+
 .appointments-table {
   width: 100%;
+  min-width: 760px;
   border-collapse: collapse;
+}
+
+/* Actions column never wraps: buttons stay in one row inside the scroll */
+.appointments-table th:last-child,
+.appointments-table td:last-child {
+  white-space: nowrap;
+  width: 1%;
 }
 
 .appointments-page .page-header {
@@ -252,10 +268,6 @@
   .appointments-table th,
   .appointments-table td {
     padding: 8px 6px;
-  }
-
-  .appointments-table-wrapper {
-    overflow-x: auto;
   }
 
   .actions-cell {

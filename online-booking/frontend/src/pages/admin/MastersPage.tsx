@@ -3,10 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { superAdminApi } from '../../api/client'
 import type { Master } from '../../api/types'
-import { Skeleton, EmptyState, Tooltip, Modal, ConfirmDialog, CitySelect } from '../../components/common'
+import { Skeleton, EmptyState, Tooltip, Modal, ConfirmDialog, CitySelect, PhoneInput } from '../../components/common'
 import type { CityOption } from '../../components/common/CitySelect'
+import { isCompletePhone } from '../../components/common/PhoneInput'
 import { PHONE_PLACEHOLDER, PASSWORD_PLACEHOLDER, PASSWORD_EDIT_PLACEHOLDER, TELEGRAM_PLACEHOLDER } from '../../constants'
-import { formatPhone } from '../../utils/formatPhone'
 import { getApiErrorMessage } from '../../utils/apiError'
 import { getCookie } from '../../utils/cookies'
 import { startImpersonation } from '../../utils/impersonation'
@@ -88,6 +88,10 @@ function MastersPage() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (createForm.phone && !isCompletePhone(createForm.phone)) {
+      toast.error('Введите корректный номер телефона (11 цифр)')
+      return
+    }
     try {
       await superAdminApi.createMaster({
         ...createForm,
@@ -106,6 +110,10 @@ function MastersPage() {
   const handleEdit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!editingMaster) return
+    if (editForm.phone && !isCompletePhone(editForm.phone)) {
+      toast.error('Введите корректный номер телефона (11 цифр)')
+      return
+    }
     try {
       const data: Record<string, string> = { ...editForm }
       if (!data.password) delete data.password
@@ -405,7 +413,7 @@ function MastersPage() {
             </div>
             <div className="form-group">
               <label>Телефон</label>
-              <input type="tel" value={createForm.phone} onChange={(e) => setCreateForm({ ...createForm, phone: formatPhone(e.target.value) })} placeholder={PHONE_PLACEHOLDER} />
+              <PhoneInput value={createForm.phone} onChange={(phone) => setCreateForm({ ...createForm, phone })} placeholder={PHONE_PLACEHOLDER} />
             </div>
             <div className="form-group">
               <label>Telegram</label>
@@ -435,7 +443,7 @@ function MastersPage() {
               </div>
               <div className="form-group">
                 <label>Телефон</label>
-                <input type="tel" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: formatPhone(e.target.value) })} placeholder={PHONE_PLACEHOLDER} />
+                <PhoneInput value={editForm.phone} onChange={(phone) => setEditForm({ ...editForm, phone })} placeholder={PHONE_PLACEHOLDER} />
               </div>
               <div className="form-group">
                 <label>Telegram</label>
