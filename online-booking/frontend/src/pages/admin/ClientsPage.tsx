@@ -7,6 +7,7 @@ import { PHONE_PLACEHOLDER, EMAIL_PLACEHOLDER } from '../../constants'
 import { isCompletePhone } from '../../components/common/PhoneInput'
 import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError'
 import { Skeleton, EmptyState, Tooltip, ConfirmDialog, MasterSelect, PhoneInput } from '../../components/common'
+import { useSectionPrefix } from '../../utils/section'
 import '../../styles/filters.css'
 import './ClientsPage.css'
 
@@ -14,6 +15,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 function ClientsPage() {
   const navigate = useNavigate()
+  const section = useSectionPrefix()
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -233,7 +235,7 @@ function ClientsPage() {
                       <Tooltip content="Показать записи клиента">
                         <button
                           className="link-button"
-                          onClick={() => navigate(`/admin/appointments?client_id=${c.id}`)}
+                          onClick={() => navigate(`${section}/appointments?client_id=${c.id}`)}
                         >
                           <strong>{c.name}</strong>
                         </button>

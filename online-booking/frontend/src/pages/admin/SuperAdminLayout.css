@@ -1,0 +1,33 @@
+@import url('./AdminLayout.css');
+
+/* Superadmin theme: same shell structure, distinct dark-slate accent
+ * so the two sections are visually unmistakable. */
+
+.super-layout .admin-sidebar {
+  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+}
+
+.super-layout .sidebar-brand h2,
+.super-layout .sidebar-user,
+.super-layout .sidebar-subtitle {
+  color: #e2e8f0;
+}
+
+.super-layout .nav-item {
+  color: #cbd5e1;
+}
+
+.super-layout .nav-item:hover {
+  background: rgba(148, 163, 184, 0.15);
+  color: #fff;
+}
+
+.super-layout .nav-item.active {
+  background: rgba(56, 189, 248, 0.2);
+  color: #fff;
+}
+
+.super-layout .collapse-btn,
+.super-layout .btn-logout {
+  color: #cbd5e1;
+}

@@ -5,37 +5,39 @@ import { Breadcrumb, KeyboardShortcutsHint } from '../../components/common'
 import { getCookie, decodeJwtPayload, clearAuthCookies } from '../../utils/cookies'
 import { getImpersonation, stopImpersonation } from '../../utils/impersonation'
 import { SUPER_PREFIX } from '../../utils/section'
-import './AdminLayout.css'
+import './SuperAdminLayout.css'
 
-interface MasterInfo {
+interface SuperInfo {
   id: number
   name: string
 }
 
-interface NavItem {
-  path: string
-  label: string
-}
+const SUPER_NAV = [
+  { path: `${SUPER_PREFIX}/dashboard`, label: '📊 Дашборд' },
+  { path: `${SUPER_PREFIX}/revenue`, label: '💰 Доход' },
+  { path: `${SUPER_PREFIX}/masters`, label: '👨‍💼 Мастера' },
+  { path: `${SUPER_PREFIX}/appointments`, label: '📅 Все записи' },
+  { path: `${SUPER_PREFIX}/clients`, label: '👥 Все клиенты' },
+  { path: `${SUPER_PREFIX}/schedule`, label: '🕐 Расписание' },
+  { path: `${SUPER_PREFIX}/logs`, label: '📋 Логи' },
+]
 
-interface AdminLayoutProps {
-  navItems: NavItem[]
-}
-
-function getMasterInfo(): MasterInfo | null {
+function getSuperInfo(): SuperInfo | null {
   const token = getCookie('access_token')
   if (!token) return null
   const payload = decodeJwtPayload(token)
   if (!payload?.sub) return null
-  return {
-    id: parseInt(payload.sub, 10),
-    name: payload.name || 'Мастер',
-  }
+  return { id: parseInt(payload.sub, 10), name: payload.name || 'Суперпользователь' }
 }
 
-function AdminLayout({ navItems }: AdminLayoutProps) {
+/**
+ * Standalone superadmin shell: own URL section (/super), own navigation,
+ * own visual theme. Never renders master UI — masters live under /admin.
+ */
+function SuperAdminLayout() {
   const navigate = useNavigate()
   const location = useLocation()
-  const [master, setMaster] = useState<MasterInfo | null>(null)
+  const [superUser, setSuperUser] = useState<SuperInfo | null>(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [impersonatedName, setImpersonatedName] = useState<string | null>(null)
@@ -43,48 +45,28 @@ function AdminLayout({ navItems }: AdminLayoutProps) {
   const exitImpersonation = () => {
     stopImpersonation()
     setImpersonatedName(null)
-    // Admin token restored → hard-land in the superadmin section
     window.location.href = `${SUPER_PREFIX}/masters`
   }
 
   useEffect(() => {
-    setMaster(getMasterInfo())
+    setSuperUser(getSuperInfo())
     setImpersonatedName(getImpersonation()?.masterName ?? null)
   }, [])
 
-  // Close mobile menu on route change
   useEffect(() => {
     setMobileMenuOpen(false)
   }, [location.pathname])
 
-  // Close mobile menu on resize to desktop
-  useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth > 1024) {
-        setMobileMenuOpen(false)
-      }
-    }
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [])
-
   const handleLogout = async () => {
-    // Revoke server-side (httpOnly refresh cookie) first, then drop the
-    // readable access token. Old code called getDashboard() — no-op leak.
     try {
       await authApi.logout()
     } catch { /* ignore: proceed with local cleanup anyway */ }
-
     clearAuthCookies()
     navigate('/')
   }
 
   const isActive = (path: string) => location.pathname === path
 
-  const layoutTitle = '🍬 Мастерская'
-  const userRole = 'Мастер'
-
-  // Build breadcrumb from current path
   const breadcrumbs = location.pathname.split('/').filter(Boolean).map((segment, index, array) => {
     const path = '/' + array.slice(0, index + 1).join('/')
     const label = segment.charAt(0).toUpperCase() + segment.slice(1)
@@ -92,8 +74,7 @@ function AdminLayout({ navItems }: AdminLayoutProps) {
   })
 
   return (
-    <div className="admin-layout">
-      {/* Mobile hamburger button */}
+    <div className="admin-layout super-layout">
       <button
         className="hamburger-btn"
         onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -104,7 +85,6 @@ function AdminLayout({ navItems }: AdminLayoutProps) {
         <span className="hamburger-line"></span>
       </button>
 
-      {/* Mobile overlay */}
       {mobileMenuOpen && (
         <div className="sidebar-overlay" onClick={() => setMobileMenuOpen(false)} />
       )}
@@ -121,16 +101,16 @@ function AdminLayout({ navItems }: AdminLayoutProps) {
               {sidebarCollapsed ? '›' : '‹'}
             </button>
             <div className="sidebar-brand">
-              <h2>{layoutTitle}</h2>
-              {!sidebarCollapsed && <p className="sidebar-subtitle">{userRole}</p>}
+              <h2>🛡️ Суперпанель</h2>
+              {!sidebarCollapsed && <p className="sidebar-subtitle">Суперпользователь</p>}
             </div>
           </div>
-          {master && !sidebarCollapsed && (
-            <p className="sidebar-user">👤 {master.name}</p>
+          {superUser && !sidebarCollapsed && (
+            <p className="sidebar-user">👤 {superUser.name}</p>
           )}
         </div>
         <nav className="sidebar-nav">
-          {navItems.map((item) => (
+          {SUPER_NAV.map((item) => (
             <Link
               key={item.path}
               to={item.path}
@@ -173,4 +153,4 @@ function AdminLayout({ navItems }: AdminLayoutProps) {
   )
 }
 
-export default AdminLayout
+export default SuperAdminLayout

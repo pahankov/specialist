@@ -4,10 +4,13 @@ import { adminApi } from '../../api/client'
 import type { DashboardStats, AdminStats } from '../../api/types'
 import { Skeleton, EmptyState } from '../../components/common'
 import { getApiErrorMessage } from '../../utils/apiError'
+import { useSectionPrefix, SUPER_PREFIX } from '../../utils/section'
 import './DashboardPage.css'
 
 function DashboardPage() {
   const navigate = useNavigate()
+  const section = useSectionPrefix()
+  const isSuperSection = section === SUPER_PREFIX
   const [stats, setStats] = useState<DashboardStats | AdminStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -39,8 +42,8 @@ function DashboardPage() {
   const isGlobal = 'total_masters' in stats
   const g = stats as AdminStats
 
-  const handleCardClick = (path: string) => {
-    navigate(path)
+  const handleCardClick = (suffix: string) => {
+    navigate(`${section}${suffix}`)
   }
 
   const statusCounts = stats.status_counts || {}
@@ -71,7 +74,7 @@ function DashboardPage() {
           {/* ─── Main stat cards — clickable ─── */}
           <div className="stats-grid">
             {isGlobal && (
-              <div className="stat-card clickable" onClick={() => handleCardClick('/admin/masters')}>
+              <div className="stat-card clickable" onClick={() => handleCardClick('/masters')}>
                 <div className="stat-icon">👨‍💼</div>
                 <div className="stat-value">{g.total_masters || 0}</div>
                 <div className="stat-label">
@@ -86,30 +89,36 @@ function DashboardPage() {
                 <div className="card-hint">Нажмите для перехода →</div>
               </div>
             )}
-            <div className="stat-card clickable" onClick={() => handleCardClick('/admin/appointments')}>
+            <div className="stat-card clickable" onClick={() => handleCardClick('/appointments')}>
               <div className="stat-icon">📅</div>
               <div className="stat-value">{stats.total_appointments}</div>
               <div className="stat-label">Всего записей</div>
               <div className="card-hint">Нажмите для перехода →</div>
             </div>
-            <div className="stat-card clickable" onClick={() => handleCardClick('/admin/clients')}>
+            <div className="stat-card clickable" onClick={() => handleCardClick('/clients')}>
               <div className="stat-icon">👥</div>
               <div className="stat-value">{stats.total_clients}</div>
               <div className="stat-label">Клиентов</div>
               <div className="card-hint">Нажмите для перехода →</div>
             </div>
-            <div className="stat-card clickable" onClick={() => handleCardClick('/admin/services')}>
+            {/* Master-only: the super section has no services page */}
+            {!isSuperSection && (
+            <div className="stat-card clickable" onClick={() => handleCardClick('/services')}>
               <div className="stat-icon">💇</div>
               <div className="stat-value">{stats.total_services}</div>
               <div className="stat-label">Услуг</div>
               <div className="card-hint">Нажмите для перехода →</div>
             </div>
-            <div className="stat-card clickable" onClick={() => handleCardClick('/admin/revenue')}>
+            )}
+            {/* Global stats only: masters have no revenue section anymore */}
+            {isGlobal && (
+            <div className="stat-card clickable" onClick={() => handleCardClick('/revenue')}>
               <div className="stat-icon">💰</div>
               <div className="stat-value">{stats.total_revenue.toLocaleString('ru-RU')} ₽</div>
               <div className="stat-label">Доход</div>
               <div className="card-hint">Нажмите для перехода →</div>
             </div>
+            )}
           </div>
 
           {/* ─── Revenue breakdown section ─── */}
@@ -216,7 +225,7 @@ function DashboardPage() {
               </div>
             </div>
             <div className="card">
-              <div className="card-header"><h3>Ближайшие записи</h3><Link to="/admin/appointments" className="link">Все →</Link></div>
+              <div className="card-header"><h3>Ближайшие записи</h3><Link to={`${section}/appointments`} className="link">Все →</Link></div>
               <div className="appointment-list">
                 {(g.recent_appointments || []).slice(0, 5).map(a => (
                   <div key={a.id} className="appointment-row">

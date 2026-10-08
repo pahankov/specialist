@@ -6,6 +6,8 @@ import { authApi } from '../api/client'
 import { dadataApi, type DadataSuggestion } from '../api/dadata'
 import { PASSWORD_PLACEHOLDER } from '../constants'
 import PhoneInput from './common/PhoneInput'
+import { getCookie, decodeJwtPayload } from '../utils/cookies'
+import { ADMIN_PREFIX, SUPER_PREFIX } from '../utils/section'
 import Modal from './common/Modal'
 import './LoginModal.css'
 
@@ -126,7 +128,14 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
       toast.success('Вход выполнен!')
       setTimeout(() => {
         onClose()
-        navigate('/admin/dashboard', { replace: true })
+        // Role-based landing: superadmins get their own section
+        let home = `${ADMIN_PREFIX}/dashboard`
+        try {
+          if (decodeJwtPayload(getCookie('access_token') ?? '')?.is_admin === true) {
+            home = `${SUPER_PREFIX}/dashboard`
+          }
+        } catch { /* default to master section */ }
+        navigate(home, { replace: true })
       }, 800)
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Ошибка входа')

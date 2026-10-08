@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { useSectionPrefix } from '../../utils/section'
 import './SharedComponents.css'
 
 interface BreadcrumbItem {
@@ -11,11 +12,12 @@ interface BreadcrumbProps {
 }
 
 export default function Breadcrumb({ items }: BreadcrumbProps) {
+  const section = useSectionPrefix()
   if (items.length === 0) return null
 
   return (
     <nav className="breadcrumb" aria-label="Навигационная цепочка">
-      <Link to="/admin/dashboard" className="breadcrumb-home">
+      <Link to={`${section}/dashboard`} className="breadcrumb-home">
         🏠
       </Link>
       {items.map((item, index) => (

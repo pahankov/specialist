@@ -1,4 +1,5 @@
 export { default as AdminLayout } from './AdminLayout'
+export { default as SuperAdminLayout } from './SuperAdminLayout'
 export { default as DashboardPage } from './DashboardPage'
 export { default as AppointmentsPage } from './AppointmentsPage'
 export { default as ServicesPage } from './ServicesPage'

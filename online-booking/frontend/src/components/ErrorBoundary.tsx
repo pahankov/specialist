@@ -40,7 +40,8 @@ class ErrorBoundary extends Component<Props, State> {
           <button
             onClick={() => {
               this.setState({ hasError: false, error: null })
-              window.location.href = '/admin/dashboard'
+              // Neutral recovery: role sections guard themselves from here
+              window.location.href = '/'
             }}
             style={{
               background: '#667eea',

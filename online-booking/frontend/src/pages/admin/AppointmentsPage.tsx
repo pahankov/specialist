@@ -78,7 +78,7 @@ function AppointmentsPage() {
     } finally { setLoading(false) }
   }
 
-  // Deep-link support: /admin/appointments?client_id=X&master_id=Y
+  // Deep-link support: <section>/appointments?client_id=X&master_id=Y
   // (e.g. "appointments of this client" from the Clients page)
   useEffect(() => {
     const qp = searchParams.get('client_id')

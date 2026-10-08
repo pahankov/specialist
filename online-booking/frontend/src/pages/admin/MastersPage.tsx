@@ -7,6 +7,7 @@ import { Skeleton, EmptyState, Tooltip, Modal, ConfirmDialog, CitySelect, PhoneI
 import type { CityOption } from '../../components/common/CitySelect'
 import { isCompletePhone } from '../../components/common/PhoneInput'
 import { PHONE_PLACEHOLDER, PASSWORD_PLACEHOLDER, PASSWORD_EDIT_PLACEHOLDER, TELEGRAM_PLACEHOLDER } from '../../constants'
+import { useSectionPrefix, ADMIN_PREFIX } from '../../utils/section'
 import { getApiErrorMessage } from '../../utils/apiError'
 import { getCookie } from '../../utils/cookies'
 import { startImpersonation } from '../../utils/impersonation'
@@ -14,6 +15,7 @@ import './MastersPage.css'
 
 function MastersPage() {
   const navigate = useNavigate()
+  const section = useSectionPrefix()
   const [masters, setMasters] = useState<Master[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -200,7 +202,8 @@ function MastersPage() {
       const adminToken = getCookie('access_token') ?? ''
       startImpersonation(adminToken, data.access_token, data.name)
       toast.success(`Вы вошли как ${data.name}`)
-      navigate('/admin/dashboard')
+      // Impersonation drops into the MASTER section with the master's token
+      navigate(`${ADMIN_PREFIX}/dashboard`)
       window.location.reload()
     } catch (err: unknown) {
       toast.error(handleError(err))
@@ -317,7 +320,7 @@ function MastersPage() {
                   <td>
                     <button
                       className="master-name-link"
-                      onClick={() => navigate(`/admin/masters/${master.id}`)}
+                      onClick={() => navigate(`${section}/masters/${master.id}`)}
                     >
                       <div className="master-name">{master.name}</div>
                       {master.telegram_username && (

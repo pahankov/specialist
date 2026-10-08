@@ -7,6 +7,7 @@ import { Skeleton, EmptyState, Modal } from '../../components/common'
 import { getApiErrorMessage } from '../../utils/apiError'
 import { getCookie } from '../../utils/cookies'
 import { startImpersonation } from '../../utils/impersonation'
+import { useSectionPrefix, ADMIN_PREFIX } from '../../utils/section'
 import './MasterDetailPage.css'
 
 type TabType = 'overview' | 'reviews' | 'audit' | 'sessions'
@@ -74,6 +75,7 @@ const statusLabels: Record<string, string> = {
 function MasterDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const section = useSectionPrefix()
 
   const [master, setMaster] = useState<MasterFull | null>(null)
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([])
@@ -147,7 +149,7 @@ function MasterDetailPage() {
       const adminToken = getCookie('access_token') ?? ''
       startImpersonation(adminToken, data.access_token, data.name)
       toast.success(`Вы вошли как ${data.name}`)
-      navigate('/admin/dashboard')
+      navigate(`${ADMIN_PREFIX}/dashboard`)
       window.location.reload()
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'Не удалось войти от имени мастера'))
@@ -190,7 +192,7 @@ function MasterDetailPage() {
     return (
       <div className="master-detail">
         <div className="detail-header">
-          <button className="btn btn-ghost back-btn" onClick={() => navigate('/admin/masters')}>← Назад к мастерам</button>
+          <button className="btn btn-ghost back-btn" onClick={() => navigate(`${section}/masters`)}>← Назад к мастерам</button>
           <Skeleton width="300px" height="32px" />
         </div>
         <div className="detail-content">
@@ -203,7 +205,7 @@ function MasterDetailPage() {
   if (!master) {
     return (
       <div className="master-detail">
-        <button className="btn btn-ghost back-btn" onClick={() => navigate('/admin/masters')}>← Назад</button>
+        <button className="btn btn-ghost back-btn" onClick={() => navigate(`${section}/masters`)}>← Назад</button>
         <EmptyState icon="👤" title="Мастер не найден" />
       </div>
     )
@@ -217,7 +219,7 @@ function MasterDetailPage() {
     <div className="master-detail">
       {/* Header */}
       <div className="detail-header">
-        <button className="btn btn-ghost back-btn" onClick={() => navigate('/admin/masters')}>← Назад к мастерам</button>
+          <button className="btn btn-ghost back-btn" onClick={() => navigate(`${section}/masters`)}>← Назад к мастерам</button>
         <div className="detail-title">
           <h1>{master.name}</h1>
           <div className="detail-meta">
@@ -258,7 +260,7 @@ function MasterDetailPage() {
           </button>
           <button
             className="btn btn-sm btn-primary"
-            onClick={() => navigate(`/admin/masters/${master.id}/edit`)}
+            onClick={() => navigate(`${section}/masters/${master.id}/edit`)}
           >
             ✏️ Редактировать
           </button>
