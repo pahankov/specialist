@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
+import { useState } from 'react'
 import { render, screen, fireEvent } from '@testing-library/react'
 import Modal from '../components/common/Modal'
 import ConfirmDialog from '../components/common/ConfirmDialog'
@@ -57,6 +58,25 @@ describe('Modal', () => {
       </Modal>
     )
     expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+
+  it('keeps input focus while typing (no focus steal on re-render)', () => {
+    function Harness() {
+      const [v, setV] = useState('')
+      // New onClose identity every render (like real parents) — must not refocus
+      return (
+        <Modal open={true} onClose={() => undefined} title="T">
+          <input aria-label="name" value={v} onChange={(e) => setV(e.target.value)} />
+        </Modal>
+      )
+    }
+    render(<Harness />)
+    const input = screen.getByLabelText('name') as HTMLInputElement
+    input.focus()
+    fireEvent.change(input, { target: { value: 'Д' } })
+    fireEvent.change(input, { target: { value: 'Да' } })
+    expect(document.activeElement).toBe(input)
+    expect(input.value).toBe('Да')
   })
 })
 

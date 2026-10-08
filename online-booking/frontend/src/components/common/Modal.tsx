@@ -16,21 +16,30 @@ interface ModalProps {
 /** Single modal implementation: portal, Esc, overlay click, scroll lock, aria. */
 export default function Modal({ open, onClose, title, children, className = '', wide = false }: ModalProps) {
   const boxRef = useRef<HTMLDivElement>(null)
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+  const wasOpen = useRef(false)
 
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      wasOpen.current = false
+      return
+    }
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') onCloseRef.current()
     }
     document.addEventListener('keydown', onKey)
     const prevOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-    boxRef.current?.focus()
+    // Focus the dialog ONCE when it opens (never on re-renders, or typing
+    // in form fields would lose focus after every keystroke).
+    if (!wasOpen.current) boxRef.current?.focus()
+    wasOpen.current = true
     return () => {
       document.removeEventListener('keydown', onKey)
       document.body.style.overflow = prevOverflow
     }
-  }, [open, onClose])
+  }, [open])
 
   if (!open) return null
 
