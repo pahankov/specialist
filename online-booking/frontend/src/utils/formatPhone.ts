@@ -19,7 +19,14 @@ export const PHONE_MAX_DIGITS = 15 // E.164 max length
 
 export function formatPhone(value: string, defaultCountry: CountryCode = 'RU'): string {
   if (!value) return ''
-  
+
+  // Cap digit runs (E.164 max): typing must never grow the field unbounded
+  const digitsOnly = value.replace(/\D/g, '')
+  if (digitsOnly.length > PHONE_MAX_DIGITS) {
+    const plus = value.trimStart().startsWith('+') ? '+' : ''
+    value = plus + digitsOnly.slice(0, PHONE_MAX_DIGITS)
+  }
+
   const phone = parsePhoneNumberFromString(value, defaultCountry)
   if (!phone || !phone.isValid()) {
     // If invalid, try to format what we can
@@ -28,7 +35,7 @@ export function formatPhone(value: string, defaultCountry: CountryCode = 'RU'): 
     // Fallback: try to format as-is
     return value
   }
-  
+
   return phone.formatNational()
 }
 

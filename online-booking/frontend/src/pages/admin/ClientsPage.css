@@ -5,18 +5,19 @@
 .clients-table td a { color: #667eea; text-decoration: none; }
 .clients-table td a:hover { text-decoration: underline; }
 
-/* Sticky action column: edit/delete stay visible while scrolling */
-.clients-table th:last-child,
-.clients-table td:last-child {
-  position: sticky;
-  right: 0;
-  background: #fff;
-  box-shadow: -8px 0 12px -8px rgba(0, 0, 0, 0.15);
-  white-space: nowrap;
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  text-align: left;
 }
 
-.clients-table thead th:last-child {
-  z-index: 2;
+.link-button:hover strong {
+  color: #667eea;
+  text-decoration: underline;
 }
 
 .client-count {

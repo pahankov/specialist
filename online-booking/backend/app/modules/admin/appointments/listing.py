@@ -107,10 +107,15 @@ async def get_admin_appointments(
         query = query.where(Appointment.master_id == master_id)
         count_query = count_query.where(Appointment.master_id == master_id)
 
-    # Apply client_id filter
+    # Apply client_id filter. Accepts BOTH id spaces: ClientProfile.id
+    # (used by appointments) and User.id (used by clients list responses),
+    # resolving the latter to its profile.
     if client_id is not None:
-        query = query.where(Appointment.client_id == client_id)
-        count_query = count_query.where(Appointment.client_id == client_id)
+        profile_ids = select(ClientProfile.id).where(
+            (ClientProfile.id == client_id) | (ClientProfile.user_id == client_id)
+        )
+        query = query.where(Appointment.client_id.in_(profile_ids))
+        count_query = count_query.where(Appointment.client_id.in_(profile_ids))
 
     # Apply service_id filter
     if service_id is not None:

@@ -15,7 +15,26 @@ import {
   formatPrice,
   buildMonthlyStats,
 } from '../components/schedule/helpers'
+import { formatPhone, PHONE_MAX_DIGITS } from '../utils/formatPhone'
 import type { Appointment, DaySchedule } from '../api/types'
+
+describe('formatPhone', () => {
+  it('formats a valid RU number deterministically', () => {
+    // libphonenumber national format (trunk 8); key point: stable, no runaway
+    expect(formatPhone('9991234567')).toBe('8 (999) 123-45-67')
+    expect(formatPhone('9991234567')).toBe(formatPhone('9991234567'))
+  })
+
+  it('caps runaway input at E.164 max digits', () => {
+    const long = '8' + '83232323232323232323232323232323232323'
+    const out = formatPhone(long)
+    expect(out.replace(/\D/g, '').length).toBeLessThanOrEqual(PHONE_MAX_DIGITS)
+  })
+
+  it('returns empty for empty input', () => {
+    expect(formatPhone('')).toBe('')
+  })
+})
 
 describe('helpers', () => {
   describe('formatDate', () => {

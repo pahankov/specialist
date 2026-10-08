@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { adminApi } from '../../api/client'
 import type { Appointment } from '../../api/types'
@@ -12,6 +13,7 @@ type SortDirection = 'asc' | 'desc'
 function AppointmentsPage() {
   
   const [appointments, setAppointments] = useState<(Appointment & { client_name?: string; client_phone?: string; service_name?: string; service_price?: number })[]>([])
+  const [searchParams, setSearchParams] = useSearchParams()
   const [statusFilter, setStatusFilter] = useState('')
   const [masterIdFilter, setMasterIdFilter] = useState<number | ''>('')
   const [clientIdFilter, setClientIdFilter] = useState<number | ''>('')
@@ -75,7 +77,29 @@ function AppointmentsPage() {
     } finally { setLoading(false) }
   }
 
-  useEffect(() => { setCurrentPage(0); fetch() }, [statusFilter, masterIdFilter, clientIdFilter, serviceIdFilter, dateFrom, dateTo, allTime])
+  // Deep-link support: /admin/appointments?client_id=X&master_id=Y
+  // (e.g. "appointments of this client" from the Clients page)
+  useEffect(() => {
+    const qp = searchParams.get('client_id')
+    if (qp !== null && qp !== '') {
+      const id = Number(qp)
+      if (Number.isFinite(id)) setClientIdFilter(id)
+    }
+    const mp = searchParams.get('master_id')
+    if (mp !== null && mp !== '') {
+      const id = Number(mp)
+      if (Number.isFinite(id)) setMasterIdFilter(id)
+    }
+    // consume once so back/forward stays clean
+    if (searchParams.has('client_id') || searchParams.has('master_id')) {
+      setSearchParams({}, { replace: true })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => { setCurrentPage(0) }, [statusFilter, masterIdFilter, clientIdFilter, serviceIdFilter, dateFrom, dateTo, allTime])
+
+  useEffect(() => { fetch() }, [currentPage, statusFilter, masterIdFilter, clientIdFilter, serviceIdFilter, dateFrom, dateTo, allTime])
 
   const showError = (err: unknown) => {
     setError(getApiErrorMessage(err, 'Ошибка сервера'))

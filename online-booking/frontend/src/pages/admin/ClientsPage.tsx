@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { adminApi } from '../../api/client'
 import type { Client } from '../../api/types'
@@ -11,6 +12,7 @@ import './ClientsPage.css'
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 function ClientsPage() {
+  const navigate = useNavigate()
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -23,6 +25,9 @@ function ClientsPage() {
   const [searchInput, setSearchInput] = useState('')
   const [masterIdFilter, setMasterIdFilter] = useState<number | ''>('')
   const [totalClients, setTotalClients] = useState(0)
+  const [currentPage, setCurrentPage] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
+  const pageSize = 50
   const [sortKey, setSortKey] = useState<'name' | 'no_show' | null>(null)
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
@@ -60,20 +65,23 @@ function ClientsPage() {
   const fetchData = async () => {
     setLoading(true)
     try {
-      const params: { page: number; page_size: number; search?: string; master_id?: number; sort_by?: string; sort_dir?: string } = { page: 1, page_size: 200 }
+      const params: { page: number; page_size: number; search?: string; master_id?: number; sort_by?: string; sort_dir?: string } = { page: currentPage + 1, page_size: pageSize }
       if (search?.trim()) params.search = search.trim()
       if (masterIdFilter !== '') params.master_id = masterIdFilter
       if (sortKey) { params.sort_by = sortKey; params.sort_dir = sortDir }
       const c = await adminApi.getClients(params)
       setClients(c.data.items)
       setTotalClients(c.data.total)
+      setTotalPages(c.data.total_pages || 1)
     } catch (err: unknown) {
       if (getApiErrorStatus(err) === 401) { window.location.href = '/admin/login' }
       else toast.error('Ошибка загрузки')
     } finally { setLoading(false) }
   }
 
-  useEffect(() => { fetchData() }, [search, masterIdFilter, sortKey, sortDir])
+  useEffect(() => { setCurrentPage(0) }, [search, masterIdFilter, sortKey, sortDir])
+
+  useEffect(() => { fetchData() }, [currentPage, search, masterIdFilter, sortKey, sortDir])
 
   const resetForm = () => { setName(''); setPhone(''); setEmail(''); setEditingId(null); setShowForm(false) }
 
@@ -189,7 +197,7 @@ function ClientsPage() {
       ) : (
         <div className="card">
           <div className="card-header">
-            <h3>Список клиентов <span className="client-count">({clients.length}{totalClients > 200 ? ` из ${totalClients}` : ''})</span></h3>
+            <h3>Список клиентов <span className="client-count">({clients.length}{totalClients > pageSize ? ` из ${totalClients}` : ''})</span></h3>
             <Tooltip content="Добавить нового клиента">
               <button className="btn btn-primary" onClick={() => setShowForm(true)}>+ Добавить клиента</button>
             </Tooltip>
@@ -220,7 +228,16 @@ function ClientsPage() {
               <tbody>
                 {clients.map(c => (
                   <tr key={c.id}>
-                    <td><strong>{c.name}</strong></td>
+                    <td>
+                      <Tooltip content="Показать записи клиента">
+                        <button
+                          className="link-button"
+                          onClick={() => navigate(`/admin/appointments?client_id=${c.id}`)}
+                        >
+                          <strong>{c.name}</strong>
+                        </button>
+                      </Tooltip>
+                    </td>
                     <td><a href={`tel:${c.phone}`}>{c.phone}</a></td>
                     <td>{c.email || '—'}</td>
                     <td>{(c.no_show_count ?? 0) > 0 ? `⚠️ ${c.no_show_count}` : '—'}</td>
@@ -260,6 +277,29 @@ function ClientsPage() {
         danger
         onConfirm={() => deletingId !== null && handleDelete(deletingId)}
       />
+
+      {/* Pagination */}
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16, marginTop: 20 }}>
+        <button
+          className="btn btn-ghost"
+          onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
+          disabled={currentPage === 0}
+          style={{ opacity: currentPage === 0 ? 0.5 : 1 }}
+        >
+          ← Назад
+        </button>
+        <span style={{ fontSize: 14, color: '#666' }}>
+          Страница {currentPage + 1} из {totalPages}
+        </span>
+        <button
+          className="btn btn-ghost"
+          onClick={() => setCurrentPage(p => p + 1)}
+          disabled={currentPage + 1 >= totalPages}
+          style={{ opacity: currentPage + 1 >= totalPages ? 0.5 : 1 }}
+        >
+          Вперёд →
+        </button>
+      </div>
     </div>
   )
 }

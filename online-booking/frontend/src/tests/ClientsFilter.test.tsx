@@ -1,6 +1,7 @@
 /** Integration: picking a master in ClientsPage must filter the list. */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 
 const { getClients, getAllMasters } = vi.hoisted(() => ({
   getClients: vi.fn(),
@@ -28,7 +29,11 @@ beforeEach(() => {
 
 describe('ClientsPage master filter', () => {
   it('sends master_id after picking a master', async () => {
-    render(<ClientsPage />)
+    render(
+      <MemoryRouter>
+        <ClientsPage />
+      </MemoryRouter>,
+    )
 
     await waitFor(() => expect(getAllMasters).toHaveBeenCalled())
 

@@ -85,7 +85,7 @@
 
 .masters-table {
   width: 100%;
-  min-width: 960px; /* scroll instead of squeezing action buttons off-screen */
+  min-width: 880px; /* scroll instead of squeezing action buttons off-screen */
   border-collapse: collapse;
 }
 
@@ -180,14 +180,14 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 6px 16px;
+  padding: 4px 12px;
   border-radius: 20px;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
-  min-width: 180px;
   text-align: center;
   line-height: 1.4;
   box-sizing: border-box;
+  white-space: nowrap;
 }
 
 .role-admin {
@@ -228,19 +228,6 @@
 
 .actions-cell button {
   flex-shrink: 0;
-}
-
-/* Sticky action column: delete/block buttons stay visible while scrolling */
-.masters-table th:last-child,
-.masters-table td:last-child {
-  position: sticky;
-  right: 0;
-  background: #fff;
-  box-shadow: -8px 0 12px -8px rgba(0, 0, 0, 0.15);
-}
-
-.masters-table thead th:last-child {
-  z-index: 2;
 }
 
 .btn-sm {

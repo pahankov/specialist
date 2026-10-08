@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { createPortal } from 'react-dom'
 import apiClient from '../../api/http'
 import './MasterSelect.css'
 
@@ -32,10 +33,16 @@ export default function CitySelect({
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const seq = useRef(0)
   const boxRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const dropRef = useRef<HTMLDivElement>(null)
+  const [dropPos, setDropPos] = useState({ top: 0, left: 0, width: 0 })
 
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
-      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false)
+      const t = e.target as Node
+      // Portal dropdown lives outside boxRef — don't close when clicking it
+      if (boxRef.current && !boxRef.current.contains(t) &&
+          !(dropRef.current && dropRef.current.contains(t))) setOpen(false)
     }
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false)
@@ -48,6 +55,20 @@ export default function CitySelect({
       if (timer.current) clearTimeout(timer.current)
     }
   }, [])
+
+  const openDropdown = () => {
+    // Position a body-level portal under the input (modal has overflow:auto
+    // which would clip an in-tree dropdown).
+    if (inputRef.current) {
+      const rect = inputRef.current.getBoundingClientRect()
+      setDropPos({
+        top: rect.bottom + window.scrollY + 4,
+        left: rect.left + window.scrollX,
+        width: rect.width,
+      })
+    }
+    setOpen(true)
+  }
 
   const search = (text: string) => {
     setQuery(text)
@@ -66,7 +87,7 @@ export default function CitySelect({
         if (cur !== seq.current) return
         const list = (Array.isArray(data) ? data : []) as { id: number; name_ru: string }[]
         setOptions(list.map(c => ({ id: c.id, name: c.name_ru })))
-        setOpen(true)
+        openDropdown()
       } catch {
         if (cur === seq.current) {
           setOptions([])
@@ -85,13 +106,14 @@ export default function CitySelect({
       </label>
       <div className="master-select-box">
         <input
+          ref={inputRef}
           type="text"
           value={open ? query : selectedName}
           onChange={(e) => {
             search(e.target.value)
             if (value != null) onChange(null)
           }}
-          onFocus={() => { if (query.trim().length >= 2) setOpen(true) }}
+          onFocus={() => { if (query.trim().length >= 2) openDropdown() }}
           placeholder="Начните вводить город..."
           className="master-select-input"
           aria-label={label}
@@ -108,8 +130,19 @@ export default function CitySelect({
           </button>
         )}
       </div>
-      {open && (
-        <div className="master-select-dropdown" role="listbox">
+      {open && createPortal(
+        <div
+          ref={dropRef}
+          className="master-select-dropdown"
+          role="listbox"
+          style={{
+            position: 'fixed',
+            top: dropPos.top,
+            left: dropPos.left,
+            width: dropPos.width,
+            zIndex: 99999,
+          }}
+        >
           {options.length === 0 ? (
             <div className="master-select-empty">Ничего не найдено</div>
           ) : (
@@ -125,7 +158,8 @@ export default function CitySelect({
               </div>
             ))
           )}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )
