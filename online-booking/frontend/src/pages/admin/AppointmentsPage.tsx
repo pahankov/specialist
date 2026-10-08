@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { adminApi } from '../../api/client'
 import type { Appointment } from '../../api/types'
-import { Skeleton, EmptyState, Tooltip, ConfirmDialog } from '../../components/common'
+import { Skeleton, EmptyState, Tooltip, ConfirmDialog, MasterSelect } from '../../components/common'
 import { getApiErrorMessage } from '../../utils/apiError'
 import './AppointmentsPage.css'
 
@@ -29,7 +29,6 @@ function AppointmentsPage() {
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
   const [showCompleted, setShowCompleted] = useState(false)
   const [totalPages, setTotalPages] = useState(1)
-  const [allMasters, setAllMasters] = useState<{ id: number; name: string }[]>([])
   const [allClients, setAllClients] = useState<{ id: number; name: string }[]>([])
   const [allServices, setAllServices] = useState<{ id: number; name: string }[]>([])
   const [showFilters, setShowFilters] = useState(false)
@@ -37,22 +36,16 @@ function AppointmentsPage() {
 
   const fetchOptions = async () => {
     try {
-      // Fetch masters (superadmin only)
-      try {
-        const mastersResp = await adminApi.get('/api/v1/admin/masters')
-        setAllMasters(mastersResp.data.map((m: any) => ({ id: m.id, name: m.name })))
-      } catch { /* not superadmin */ }
-      
       // Fetch clients for filter dropdown
       try {
         const clientsResp = await adminApi.getClients({ page: 1, page_size: 500 })
-        setAllClients(clientsResp.data.items.map((c: any) => ({ id: c.id, name: c.name })))
+        setAllClients(clientsResp.data.items.map((c: { id: number; name: string }) => ({ id: c.id, name: c.name })))
       } catch { /* ignore */ }
-      
+
       // Fetch services for filter dropdown
       try {
         const servicesResp = await adminApi.getServices({ page: 1, page_size: 500, active_only: false })
-        setAllServices(servicesResp.data.items.map((s: any) => ({ id: s.id, name: s.name })))
+        setAllServices(servicesResp.data.items.map((s: { id: number; name: string }) => ({ id: s.id, name: s.name })))
       } catch { /* ignore */ }
     } catch { /* ignore */ }
   }
@@ -233,18 +226,16 @@ function AppointmentsPage() {
         <div className="card" style={{ marginBottom: 16, padding: 16 }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
             {/* Master filter */}
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label style={{ fontSize: 12, color: '#666', marginBottom: 4, display: 'block' }}>Мастер</label>
-              <select value={masterIdFilter} onChange={(e) => setMasterIdFilter(e.target.value as any)} style={{ width: '100%', padding: 8, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }}>
-                <option value="">Все мастера</option>
-                {allMasters.map(m => (<option key={m.id} value={m.id}>{m.name}</option>))}
-              </select>
-            </div>
+            <MasterSelect
+              value={masterIdFilter}
+              onChange={setMasterIdFilter}
+              style={{ marginBottom: 0 }}
+            />
 
             {/* Client filter */}
             <div className="form-group" style={{ marginBottom: 0 }}>
               <label style={{ fontSize: 12, color: '#666', marginBottom: 4, display: 'block' }}>Клиент</label>
-              <select value={clientIdFilter} onChange={(e) => setClientIdFilter(e.target.value as any)} style={{ width: '100%', padding: 8, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }}>
+              <select value={clientIdFilter} onChange={(e) => setClientIdFilter(e.target.value === '' ? '' : Number(e.target.value))} style={{ width: '100%', padding: 8, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }}>
                 <option value="">Все клиенты</option>
                 {allClients.map(c => (<option key={c.id} value={c.id}>{c.name}</option>))}
               </select>
@@ -253,7 +244,7 @@ function AppointmentsPage() {
             {/* Service filter */}
             <div className="form-group" style={{ marginBottom: 0 }}>
               <label style={{ fontSize: 12, color: '#666', marginBottom: 4, display: 'block' }}>Услуга</label>
-              <select value={serviceIdFilter} onChange={(e) => setServiceIdFilter(e.target.value as any)} style={{ width: '100%', padding: 8, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }}>
+              <select value={serviceIdFilter} onChange={(e) => setServiceIdFilter(e.target.value === '' ? '' : Number(e.target.value))} style={{ width: '100%', padding: 8, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }}>
                 <option value="">Все услуги</option>
                 {allServices.map(s => (<option key={s.id} value={s.id}>{s.name}</option>))}
               </select>
@@ -300,6 +291,7 @@ function AppointmentsPage() {
         />
       ) : (
         <div className="card">
+          <div className="appointments-table-wrapper">
           <table className="appointments-table">
             <thead><tr>
               <th className={`sortable ${sortField === 'appointment_date' ? 'active' : ''}`} onClick={() => handleSort('appointment_date')}>Дата <span className="sort-arrow">{sortField === 'appointment_date' ? (sortDirection === 'asc' ? '↑' : '↓') : '⇅'}</span></th>
@@ -352,6 +344,7 @@ function AppointmentsPage() {
               </tr>))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

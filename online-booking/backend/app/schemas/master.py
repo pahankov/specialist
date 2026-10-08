@@ -67,6 +67,8 @@ class MasterResponse(BaseModel):
     status: str
     is_active: bool
     is_admin: bool
+    tariff: str = "trial"
+    trial_ends_at: Optional[datetime] = None
     created_at: Optional[datetime]
     updated_at: Optional[datetime]
     model_config = ConfigDict(from_attributes=True)

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { adminApi } from '../../api/client'
+import { adminApi, superAdminApi } from '../../api/client'
 import type { DashboardStats, AdminStats } from '../../api/types'
-import { Skeleton, EmptyState } from '../../components/common'
+import { Skeleton, EmptyState, MasterSelect } from '../../components/common'
 import { getApiErrorMessage } from '../../utils/apiError'
 import './RevenuePage.css'
 
@@ -16,11 +16,11 @@ function RevenuePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [isGlobal, setIsGlobal] = useState(false)
+  const [masterStats, setMasterStats] = useState<AdminStats | null>(null)
   const [groupBy, setGroupBy] = useState<'overall' | 'master' | 'service'>('overall')
   const [masterIdFilter, setMasterIdFilter] = useState<number | ''>('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
-  const [allMasters, setAllMasters] = useState<{ id: number; name: string }[]>([])
 
   useEffect(() => {
     setLoading(true)
@@ -34,15 +34,24 @@ function RevenuePage() {
   }, [])
 
   useEffect(() => {
-    adminApi.get('/api/v1/admin/masters')
-      .then(r => setAllMasters(r.data.map((m: any) => ({ id: m.id, name: m.name }))))
-      .catch(() => { /* ignore */ })
-  }, [])
+    if (!isGlobal) return
+    if (masterIdFilter === '') {
+      setMasterStats(null)
+      return
+    }
+    // Per-master mode: reload the WHOLE stat block for the master (with dates)
+    const params: { date_from?: string; date_to?: string } = {}
+    if (dateFrom) params.date_from = dateFrom
+    if (dateTo) params.date_to = dateTo
+    superAdminApi.getMasterStats(masterIdFilter, params)
+      .then(r => setMasterStats(r.data))
+      .catch(() => setMasterStats(null))
+  }, [masterIdFilter, dateFrom, dateTo, isGlobal])
 
   useEffect(() => {
     if (!isGlobal) return
     setLoading(true)
-    const params: Record<string, any> = { by_master: groupBy === 'master', by_service: groupBy === 'service' }
+    const params: Record<string, unknown> = { by_master: groupBy === 'master', by_service: groupBy === 'service' }
     if (masterIdFilter !== '') params.master_id = masterIdFilter
     if (dateFrom) params.date_from = dateFrom
     if (dateTo) params.date_to = dateTo
@@ -64,7 +73,8 @@ function RevenuePage() {
     )
   }
 
-  const g = stats as AdminStats
+  const g = (masterStats ?? stats) as AdminStats
+  const statsScope = masterIdFilter === '' ? 'по всей системе' : 'по выбранному мастеру'
   const statusCounts = g.status_counts || {}
   const completedCount = statusCounts['completed'] || 0
   const confirmedCount = statusCounts['confirmed'] || 0
@@ -76,25 +86,23 @@ function RevenuePage() {
 
   return (
     <div className="revenue-page">
-      <div className="page-header"><h1>Доход</h1><p>Финансовая аналитика</p></div>
+      <div className="page-header"><h1>Доход</h1><p>Финансовая аналитика · {statsScope}</p></div>
       <div className="card" style={{ marginBottom: 16, padding: 16 }}>
         <h3 style={{ margin: '0 0 12px', fontSize: 16 }}>Фильтры дохода</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label style={{ fontSize: 12, color: '#666', marginBottom: 4, display: 'block' }}>Группировка</label>
-            <select value={groupBy} onChange={(e) => setGroupBy(e.target.value as any)} style={{ width: '100%', padding: 8, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }}>
+            <select value={groupBy} onChange={(e) => setGroupBy(e.target.value as 'overall' | 'master' | 'service')} style={{ width: '100%', padding: 8, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }}>
               <option value="overall">Общий доход</option>
               <option value="master">По мастерам</option>
               <option value="service">По услугам</option>
             </select>
           </div>
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label style={{ fontSize: 12, color: '#666', marginBottom: 4, display: 'block' }}>Мастер</label>
-            <select value={masterIdFilter} onChange={(e) => setMasterIdFilter(e.target.value as any)} style={{ width: '100%', padding: 8, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }}>
-              <option value="">Все мастера</option>
-              {allMasters.map(m => (<option key={m.id} value={m.id}>{m.name}</option>))}
-            </select>
-          </div>
+          <MasterSelect
+            value={masterIdFilter}
+            onChange={setMasterIdFilter}
+            style={{ marginBottom: 0 }}
+          />
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label style={{ fontSize: 12, color: '#666', marginBottom: 4, display: 'block' }}>Дата от</label>
             <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} style={{ width: '100%', padding: 8, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }} />

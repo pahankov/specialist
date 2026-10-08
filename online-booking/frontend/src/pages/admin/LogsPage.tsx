@@ -1,31 +1,26 @@
 import { useEffect, useState } from 'react'
 import { adminApi } from '../../api/client'
-import { getApiErrorMessage } from '../../utils/apiError'
+import type { AuditLogEntry } from '../../api/types'
+import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError'
+import { getCookie, decodeJwtPayload } from '../../utils/cookies'
 import './LogsPage.css'
-
-function getCookie(name: string): string | null {
-  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'))
-  return match ? match[2] : null
-}
 
 function getIsAdmin(): boolean {
   const token = getCookie('access_token')
   if (!token) return false
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1]))
-    return payload.is_admin === true
-  } catch {
-    return false
-  }
+  return decodeJwtPayload(token)?.is_admin === true
 }
 
 function LogsPage() {
   const isAdmin = getIsAdmin()
-  const [logs, setLogs] = useState<any[]>([])
+  const [logs, setLogs] = useState<AuditLogEntry[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [entityFilter, setEntityFilter] = useState('')
+  const [levelFilter, setLevelFilter] = useState('')
+  const [actionFilter, setActionFilter] = useState('')
+  const [quickSearch, setQuickSearch] = useState('')
   const [masterFilter, setMasterFilter] = useState('')
   const [currentPage, setCurrentPage] = useState(0)
   const pageSize = 20
@@ -58,7 +53,7 @@ function LogsPage() {
 
   const fetchLogs = async () => {
     try {
-      const params: Record<string, any> = { limit: pageSize, offset: currentPage * pageSize }
+      const params: Record<string, string | number> = { limit: pageSize, offset: currentPage * pageSize }
       if (entityFilter) params.entity_type = entityFilter
       if (masterFilter) params.master_id = masterFilter
 
@@ -67,8 +62,8 @@ function LogsPage() {
       const resp = await adminApi.get(endpoint, { params })
       setLogs(resp.data.logs)
       setTotal(resp.data.total)
-    } catch (err: any) {
-      if (err.response?.status === 401) {
+    } catch (err: unknown) {
+      if (getApiErrorStatus(err) === 401) {
         window.location.href = '/admin/login'
       } else {
         const detail = getApiErrorMessage(err, 'Ошибка загрузки логов')
@@ -86,6 +81,20 @@ function LogsPage() {
 
   if (loading) return <div><div className="loading">Загрузка...</div></div>
   if (error) return <div><div className="error-message">{error}</div></div>
+
+  const visibleLogs = logs.filter(log => {
+    if (levelFilter && log.level !== levelFilter) return false
+    if (actionFilter && log.action !== actionFilter) return false
+    const q = quickSearch.trim().toLowerCase()
+    if (q) {
+      const haystack = [
+        log.action, log.entity_type, log.details ?? '',
+        log.master_name ?? '', String(log.entity_id ?? ''),
+      ].join(' ').toLowerCase()
+      if (!haystack.includes(q)) return false
+    }
+    return true
+  })
 
   const entityFilters = [
     { value: '', label: 'Все' },
@@ -126,9 +135,47 @@ function LogsPage() {
         </div>
       )}
 
+      {/* Level + action + quick search (over the loaded page) */}
+      <div className="filters-bar" style={{ marginTop: 8 }}>
+        <select
+          value={levelFilter}
+          onChange={(e) => setLevelFilter(e.target.value)}
+          className="filter-input"
+          style={{ width: 160 }}
+          title="Уровень"
+        >
+          <option value="">Все уровни</option>
+          <option value="info">ℹ️ INFO</option>
+          <option value="warning">⚠️ WARNING</option>
+          <option value="error">🚫 ERROR</option>
+        </select>
+        <select
+          value={actionFilter}
+          onChange={(e) => setActionFilter(e.target.value)}
+          className="filter-input"
+          style={{ width: 200 }}
+          title="Действие"
+        >
+          <option value="">Все действия</option>
+          {Object.entries(actionLabels).map(([value, label]) => (
+            <option key={value} value={value}>{label}</option>
+          ))}
+        </select>
+        <input
+          type="text"
+          placeholder="Быстрый поиск по странице..."
+          value={quickSearch}
+          onChange={(e) => setQuickSearch(e.target.value)}
+          className="filter-input"
+          style={{ width: 240 }}
+        />
+      </div>
+
       <div className="card">
-        {logs.length === 0 ? (
-          <p className="empty-state">Нет записей в журнале</p>
+        {visibleLogs.length === 0 ? (
+          <p className="empty-state">
+            {logs.length === 0 ? 'Нет записей в журнале' : 'Ничего не найдено — измените фильтры'}
+          </p>
         ) : (
           <table className="logs-table">
             <thead>
@@ -143,17 +190,17 @@ function LogsPage() {
               </tr>
             </thead>
             <tbody>
-              {logs.map(log => (
+              {visibleLogs.map(log => (
                 <tr key={log.id}>
-                  <td>
-                    {new Date(log.created_at).toLocaleString('ru-RU', {
-                      day: '2-digit',
-                      month: '2-digit',
-                      year: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </td>
+                    <td>
+                      {log.created_at ? new Date(log.created_at).toLocaleString('ru-RU', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      }) : '—'}
+                    </td>
                   <td>
                     <span className={`level-badge level-${log.level}`}>
                       {levelLabels[log.level] || log.level}

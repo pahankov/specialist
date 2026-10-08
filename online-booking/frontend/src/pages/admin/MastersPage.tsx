@@ -16,8 +16,11 @@ function MastersPage() {
   const [masters, setMasters] = useState<Master[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [searchInput, setSearchInput] = useState('')
   const [filterActive, setFilterActive] = useState<'all' | 'active' | 'inactive'>('all')
   const [filterAdmin, setFilterAdmin] = useState<'all' | 'admin' | 'user'>('all')
+  const [sortKey, setSortKey] = useState<'name' | 'email' | 'status' | null>(null)
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingMaster, setEditingMaster] = useState<Master | null>(null)
@@ -41,6 +44,7 @@ function MastersPage() {
       if (filterActive === 'inactive') params.is_active = 'false'
       if (filterAdmin === 'admin') params.is_admin = 'true'
       if (filterAdmin === 'user') params.is_admin = 'false'
+      if (sortKey) { params.sort_by = sortKey; params.sort_dir = sortDir }
 
       const { data } = await superAdminApi.getAllMasters(Object.keys(params).length ? params : undefined)
       setMasters(data)
@@ -51,7 +55,30 @@ function MastersPage() {
     }
   }
 
-  const handleSearch = () => loadMasters()
+  useEffect(() => { loadMasters() }, [search, filterActive, filterAdmin, sortKey, sortDir])
+
+  // Debounce search input (400ms) — no request per keystroke
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput), 400)
+    return () => clearTimeout(t)
+  }, [searchInput])
+
+  const toggleSort = (key: 'name' | 'email' | 'status') => {
+    if (sortKey !== key) {
+      setSortKey(key)
+      setSortDir('asc')
+    } else if (sortDir === 'asc') {
+      setSortDir('desc')
+    } else {
+      setSortKey(null)
+      setSortDir('asc')
+    }
+  }
+
+  const sortArrow = (key: 'name' | 'email' | 'status') =>
+    sortKey !== key ? '' : (sortDir === 'asc' ? ' ▲' : ' ▼')
+
+  const handleSearch = () => setSearch(searchInput)
 
   useEffect(() => { loadMasters() }, [])
 
@@ -199,8 +226,8 @@ function MastersPage() {
           <input
             type="text"
             placeholder="Поиск по имени или email..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
             className="filter-input"
           />
@@ -248,11 +275,18 @@ function MastersPage() {
                     }}
                   />
                 </th>
-                <th>Имя</th>
-                <th>Email</th>
+                <th onClick={() => toggleSort('name')} style={{ cursor: 'pointer', userSelect: 'none' }} title="Сортировать по имени">
+                  Имя{sortArrow('name')}
+                </th>
+                <th onClick={() => toggleSort('email')} style={{ cursor: 'pointer', userSelect: 'none' }} title="Сортировать по email">
+                  Email{sortArrow('email')}
+                </th>
                 <th>Телефон</th>
-                <th>Статус</th>
+                <th onClick={() => toggleSort('status')} style={{ cursor: 'pointer', userSelect: 'none' }} title="Сортировать по статусу">
+                  Статус{sortArrow('status')}
+                </th>
                 <th>Роль</th>
+                <th>Тариф</th>
                 <th>Действия</th>
               </tr>
             </thead>
@@ -292,6 +326,16 @@ function MastersPage() {
                         {master.is_admin ? '👑 Суперпользователь' : '👤 Мастер'}
                       </span>
                     </Tooltip>
+                  </td>
+                  <td>
+                    <Tooltip content={master.trial_ends_at ? `Триал до ${new Date(master.trial_ends_at).toLocaleDateString('ru-RU')}` : 'Тариф'} position="top">
+                      <span className="tariff-badge">
+                        {master.tariff === 'trial' ? '🆓 Триал' : (master.tariff || '—')}
+                      </span>
+                    </Tooltip>
+                    {master.trial_ends_at && (
+                      <div className="tariff-ends">{new Date(master.trial_ends_at).toLocaleDateString('ru-RU')}</div>
+                    )}
                   </td>
                   <td className="actions-cell">
                     <Tooltip content="Редактировать" position="top">

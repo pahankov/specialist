@@ -28,6 +28,8 @@ async def get_admin_clients(
     page_size: int = Query(20, ge=1, le=500, description="Items per page"),
     search: Optional[str] = Query(None, description="Search by name or phone"),
     master_id: Optional[int] = Query(None, description="Filter by master ID (clients who booked with this master)"),
+    sort_by: Optional[str] = Query(None, description="Sort column: name|no_show|created_at"),
+    sort_dir: str = Query("asc", description="Sort direction: asc|desc"),
     db: AsyncSession = Depends(get_db)
 ):
     """Get all clients (paginated with total count)."""
@@ -64,10 +66,20 @@ async def get_admin_clients(
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
 
-    # Data query
+    # Data query (whitelisted sort column — never raw user input in ORDER BY)
+    sort_map = {
+        "name": User.name,
+        "no_show": ClientProfile.no_show_count,
+        "created_at": User.created_at,
+    }
+    if sort_by:
+        sort_col = sort_map.get(sort_by, User.name)
+        order = sort_col.desc() if str(sort_dir).lower() == "desc" else sort_col.asc()
+    else:
+        order = User.name.asc()  # legacy default
     data_query = (
         base_query
-        .order_by(User.name)
+        .order_by(order)
         .offset(offset)
         .limit(page_size)
     )

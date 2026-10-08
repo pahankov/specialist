@@ -242,10 +242,11 @@
   font-weight: 500;
 }
 
-/* Responsive */
+/* Responsive: scroll the table instead of squeezing action buttons away */
 @media (max-width: 768px) {
   .appointments-table {
     font-size: 13px;
+    min-width: 720px;
   }
 
   .appointments-table th,
@@ -253,7 +254,12 @@
     padding: 8px 6px;
   }
 
+  .appointments-table-wrapper {
+    overflow-x: auto;
+  }
+
   .actions-cell {
-    flex-direction: column;
+    flex-direction: row;
+    white-space: nowrap;
   }
 }

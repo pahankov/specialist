@@ -31,6 +31,8 @@ def _to_response(user: User, master_profile: MasterProfile) -> dict:
         "status": master_profile.status if master_profile.status else "active",
         "is_active": master_profile.is_active,
         "is_admin": user.is_admin,
+        "tariff": master_profile.tariff or "trial",
+        "trial_ends_at": master_profile.trial_ends_at,
         "created_at": master_profile.created_at,
         "updated_at": master_profile.updated_at,
     }
@@ -42,6 +44,8 @@ async def get_all_masters(
     search: Optional[str] = Query(None, description="Search by name or email"),
     filter_active: Optional[str] = Query(None, alias="is_active", description="Filter by active status"),
     filter_admin: Optional[str] = Query(None, alias="is_admin", description="Filter by admin status"),
+    sort_by: Optional[str] = Query(None, description="Sort column: name|email|status|created_at"),
+    sort_dir: str = Query("asc", description="Sort direction: asc|desc"),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db)
@@ -75,11 +79,27 @@ async def get_all_masters(
         admin_val = filter_admin.lower() in ("true", "1", "yes")
         query = query.where(User.role == UserRole.ADMIN if admin_val else UserRole.MASTER)
 
-    query = query.order_by(MasterProfile.created_at.desc()).offset(offset).limit(limit)
+    if sort_by:
+        sort_col = _SORTABLE_MASTERS.get(sort_by, MasterProfile.created_at)
+        query = query.order_by(
+            sort_col.desc() if str(sort_dir).lower() == "desc" else sort_col.asc()
+        )
+    else:
+        # Preserve legacy default: newest first
+        query = query.order_by(MasterProfile.created_at.desc())
+    query = query.offset(offset).limit(limit)
     result = await db.execute(query)
     users = result.scalars().unique().all()
 
     return [_to_response(u, u.master_profile) for u in users]
+
+
+_SORTABLE_MASTERS = {
+    "name": User.name,
+    "email": User.email,
+    "status": MasterProfile.status,
+    "created_at": MasterProfile.created_at,
+}
 
 
 @router.get("/{master_id}", response_model=MasterResponse)

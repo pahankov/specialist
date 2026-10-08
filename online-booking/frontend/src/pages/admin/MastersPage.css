@@ -85,6 +85,7 @@
 
 .masters-table {
   width: 100%;
+  min-width: 960px; /* scroll instead of squeezing action buttons off-screen */
   border-collapse: collapse;
 }
 
@@ -203,6 +204,26 @@
   display: flex;
   gap: 6px;
   align-items: center;
+  white-space: nowrap;
+}
+
+.tariff-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #e8f5e9;
+  color: #2e7d32;
+  white-space: nowrap;
+}
+
+.tariff-ends {
+  font-size: 11px;
+  color: #999;
+  margin-top: 2px;
+  white-space: nowrap;
 }
 
 .actions-cell button {

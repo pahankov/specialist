@@ -1,8 +1,9 @@
 """Master statistics endpoints — get_stats, get_full."""
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
+from typing import Optional
 
 from app.database import get_db
 from app.models.user import User
@@ -20,7 +21,9 @@ router = APIRouter(prefix="/masters")
 async def get_master_stats(
     master_id: int,
     super_admin: User = Depends(require_super_admin),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    date_from: Optional[str] = Query(None, description="Filter from (YYYY-MM-DD)"),
+    date_to: Optional[str] = Query(None, description="Filter to (YYYY-MM-DD)"),
 ):
     """Get statistics for a specific master (superadmin only)."""
     result = await db.execute(
@@ -32,22 +35,43 @@ async def get_master_stats(
     if not master_profile:
         raise HTTPException(status_code=404, detail="Мастер не найден")
 
+    # Optional date range (YYYY-MM-DD); applies to appointment-scoped metrics
+    dt_from = dt_to = None
+    if date_from:
+        from datetime import datetime as _dt
+        dt_from = _dt.strptime(date_from, "%Y-%m-%d").replace(tzinfo=None)
+    if date_to:
+        from datetime import datetime as _dt
+        dt_to = _dt.strptime(date_to, "%Y-%m-%d").replace(
+            hour=23, minute=59, second=59, tzinfo=None)
+
+    def in_range(column):
+        conds = []
+        if dt_from is not None:
+            conds.append(column >= dt_from)
+        if dt_to is not None:
+            conds.append(column <= dt_to)
+        return conds
+
     status_result = await db.execute(
         select(Appointment.status, func.count(Appointment.id))
-        .where(Appointment.master_id == master_id)
+        .where(Appointment.master_id == master_id, *in_range(Appointment.appointment_date))
         .group_by(Appointment.status)
     )
     status_counts = {row[0]: row[1] for row in status_result.all()}
 
     total_appt = await db.execute(
-        select(func.count(Appointment.id)).where(Appointment.master_id == master_id)
+        select(func.count(Appointment.id)).where(
+            Appointment.master_id == master_id, *in_range(Appointment.appointment_date))
     )
     total_appointments = total_appt.scalar() or 0
 
     client_result = await db.execute(
         select(func.count(ClientProfile.id)).where(
             ClientProfile.id.in_(
-                select(Appointment.client_id).where(Appointment.master_id == master_id)
+                select(Appointment.client_id).where(
+                    Appointment.master_id == master_id,
+                    *in_range(Appointment.appointment_date))
             )
         )
     )
@@ -62,7 +86,8 @@ async def get_master_stats(
         select(func.sum(Service.price))
         .select_from(Appointment)
         .join(Service, Appointment.service_id == Service.id)
-        .where(Appointment.master_id == master_id, Appointment.status == "completed")
+        .where(Appointment.master_id == master_id, Appointment.status == "completed",
+               *in_range(Appointment.appointment_date))
     )
     total_revenue = float(revenue_result.scalar() or 0)
 
@@ -220,6 +245,8 @@ async def get_master_full(
         "status": master_profile.status if master_profile.status else "active",
         "is_active": master_profile.is_active,
         "is_admin": user.is_admin,
+        "tariff": master_profile.tariff or "trial",
+        "trial_ends_at": master_profile.trial_ends_at.isoformat() if master_profile.trial_ends_at else None,
         "created_at": master_profile.created_at.isoformat() if master_profile.created_at else None,
         "updated_at": master_profile.updated_at.isoformat() if master_profile.updated_at else None,
         "stats": {

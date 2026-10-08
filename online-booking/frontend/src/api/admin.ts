@@ -60,7 +60,7 @@ export const adminApi = {
   },
 
   // Clients
-  getClients(params?: { page?: number; page_size?: number; search?: string; master_id?: number }) {
+  getClients(params?: { page?: number; page_size?: number; search?: string; master_id?: number; sort_by?: string; sort_dir?: string }) {
     return apiClient.get<PaginatedResponse<Client>>('/api/v1/admin/clients', { params })
   },
   createClient(data: { name: string; phone: string; email?: string }) {
@@ -98,7 +98,7 @@ export const adminApi = {
   getWorkingHours(master_id?: number) {
     return apiClient.get('/api/v1/admin/working-hours', { params: master_id ? { master_id } : undefined })
   },
-  createWorkingHour(data: { schedule_date: string; start_time: string; end_time: string }) {
+  createWorkingHour(data: { schedule_date: string; start_time: string; end_time: string; master_id?: number }) {
     return apiClient.post('/api/v1/admin/working-hours', data)
   },
   updateWorkingHour(id: number, data: { schedule_date?: string; start_time?: string; end_time?: string }) {

@@ -40,6 +40,8 @@ interface MasterFull {
   status: string
   is_active: boolean
   is_admin: boolean
+  tariff?: string
+  trial_ends_at?: string | null
   created_at?: string
   updated_at?: string
   stats: MasterStats
@@ -368,6 +370,15 @@ function MasterDetailPage() {
                 <div className="info-row">
                   <span className="info-label">Telegram:</span>
                   <span className="info-value">{master.telegram_username ? `@${master.telegram_username}` : '—'}</span>
+                </div>
+                <div className="info-row">
+                  <span className="info-label">Тариф:</span>
+                  <span className="info-value">
+                    {master.tariff === 'trial' ? '🆓 Триал' : (master.tariff || '—')}
+                    {master.trial_ends_at && (
+                      <> до {new Date(master.trial_ends_at).toLocaleDateString('ru-RU')}</>
+                    )}
+                  </span>
                 </div>
                 <div className="info-row">
                   <span className="info-label">Описание:</span>

@@ -4,8 +4,9 @@ import type { Appointment, Client, Service, DaySchedule, MonthlyStats, BookingFo
 import { Calendar } from '../../components/schedule/Calendar'
 import { TimeSlots } from '../../components/schedule/TimeSlots'
 import { BookingModal } from '../../components/schedule/BookingModal'
-import { ConfirmDialog } from '../../components/common'
+import { ConfirmDialog, MasterSelect } from '../../components/common'
 import { getApiErrorMessage } from '../../utils/apiError'
+import { getCookie, decodeJwtPayload } from '../../utils/cookies'
 import { MonthlyStatsComponent } from '../../components/schedule/MonthlyStats'
 import {
   toggleDayWork,
@@ -34,25 +35,24 @@ function SchedulePage() {
   const [longPressTriggered] = useState(false)
   const [monthlyStats, setMonthlyStats] = useState<MonthlyStats | null>(null)
   const [selectedMasterId, setSelectedMasterId] = useState<number | ''>('')
-  const [allMasters, setAllMasters] = useState<{ id: number; name: string }[]>([])
-
-  // Fetch masters for filter
-  useEffect(() => {
-    adminApi.get('/api/v1/admin/masters')
-      .then(r => setAllMasters(r.data.map((m: any) => ({ id: m.id, name: m.name }))))
-      .catch(() => { /* ignore */ })
-  }, [])
+  // Regular masters see only their own schedule; superadmin must pick one
+  // (they have no profile of their own — empty view means "not chosen",
+  // not "everyone is off").
+  const [isSuperAdmin] = useState(
+    () => decodeJwtPayload(getCookie('access_token') ?? '')?.is_admin === true,
+  )
 
   useEffect(() => {
     let cancelled = false
     async function init() {
       try {
+        const masterParam = selectedMasterId !== '' ? selectedMasterId : undefined
         const [scheduleResp, apptsResp, statsResp] = await Promise.all([
-          adminApi.getWorkingHours(selectedMasterId !== '' ? selectedMasterId : undefined),
+          adminApi.getWorkingHours(masterParam),
           adminApi.getAppointmentsByDate(
             `${currentMonth.getFullYear()}-01-01`,
             `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-28`,
-            selectedMasterId !== '' ? selectedMasterId : undefined
+            masterParam
           ),
           adminApi.getMonthlyStats(currentMonth.getFullYear(), currentMonth.getMonth() + 1),
         ])
@@ -80,7 +80,7 @@ function SchedulePage() {
     }
     init()
     return () => { cancelled = true }
-  }, [currentMonth])
+  }, [currentMonth, selectedMasterId])
 
   useEffect(() => {
     if (!bookingForm.open) return
@@ -125,9 +125,16 @@ function SchedulePage() {
     const dateStr = date.toISOString().split('T')[0]
     // Check if already active
     if (schedule[dateStr]) return
+    // Superadmin has no schedule of their own: a master must be chosen
+    // (force-majeure adds go to the selected master).
+    if (isSuperAdmin && selectedMasterId === '') {
+      setError('Выберите мастера, чтобы добавить рабочий день')
+      return
+    }
 
     try {
       await adminApi.createWorkingHour({
+        master_id: selectedMasterId === '' ? undefined : selectedMasterId,
         schedule_date: dateStr,
         start_time: '09:00',
         end_time: '18:00',
@@ -144,7 +151,7 @@ function SchedulePage() {
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'Не удалось добавить рабочий день'))
     }
-  }, [schedule])
+  }, [schedule, selectedMasterId, isSuperAdmin])
 
   const handleToggleHour = useCallback((dateStr: string, hour: number) => {
     toggleHour(dateStr, hour, setActiveHours)
@@ -172,11 +179,12 @@ function SchedulePage() {
       const lastDay = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0).getDate()
       const to = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
       try {
-        const resp = await adminApi.getAppointmentsByDate(from, to)
+        const resp = await adminApi.getAppointmentsByDate(
+          from, to, selectedMasterId !== '' ? selectedMasterId : undefined)
         setAppointments(resp.data || [])
       } catch { /* ignore */ }
     }
-  }, [bookingForm, currentMonth, handleCloseBooking])
+  }, [bookingForm, currentMonth, handleCloseBooking, selectedMasterId])
 
   if (loading) return <div style={{ padding: 60, textAlign: 'center', color: '#666' }}>Загрузка...</div>
 
@@ -187,16 +195,22 @@ function SchedulePage() {
         <p style={{ margin: '4px 0 0', color: '#666', fontSize: 14 }}>Нажмите на день чтобы увидеть бронирования</p>
       </div>
 
-      {/* Master filter */}
-      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'center', gap: 12, alignItems: 'center' }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: '#333' }}>
-          <span>Мастер:</span>
-          <select value={selectedMasterId} onChange={(e) => setSelectedMasterId(e.target.value as any)} style={{ padding: '6px 12px', border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }}>
-            <option value="">Все мастера</option>
-            {allMasters.map(m => (<option key={m.id} value={m.id}>{m.name}</option>))}
-          </select>
-        </label>
-      </div>
+      {/* Master filter (superadmin only) */}
+      {isSuperAdmin && (
+        <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'center', gap: 12, alignItems: 'center' }}>
+          <MasterSelect
+            value={selectedMasterId}
+            onChange={setSelectedMasterId}
+            allowAll={false}
+            label="Мастер (обязательно для добавления дней)"
+          />
+        </div>
+      )}
+      {isSuperAdmin && selectedMasterId === '' && (
+        <div className="card" style={{ textAlign: 'center', marginBottom: 16 }}>
+          <p style={{ margin: 0, color: '#666' }}>👆 Выберите мастера, чтобы увидеть его расписание. Добавлять дни себе нельзя — только мастерам.</p>
+        </div>
+      )}
 
       {/* Legend */}
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 20, padding: 14, background: '#f9f9f9', borderRadius: 10, justifyContent: 'center' }}>

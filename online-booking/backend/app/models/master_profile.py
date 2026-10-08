@@ -1,7 +1,7 @@
 """Master profile — stores master-specific data separate from User."""
 from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, DateTime, Index
 from sqlalchemy.orm import relationship
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from app.database import Base
 
@@ -24,6 +24,13 @@ class MasterProfile(Base):
     experience_years = Column(Integer, nullable=True)
     status = Column(String(20), default="active", nullable=False)  # 'active', 'inactive', 'suspended'
     is_active = Column(Boolean, default=True)  # soft-delete flag
+    # Billing foundation (no charges yet): every master sits on a tariff.
+    # Default 'trial' with trial_ends_at assigned at creation (+180 days).
+    tariff = Column(String(20), default="trial", nullable=False)
+    trial_ends_at = Column(
+        DateTime(timezone=True), nullable=True,
+        default=lambda: datetime.now(timezone.utc) + timedelta(days=180),
+    )
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc))

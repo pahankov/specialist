@@ -86,10 +86,16 @@
 | experience_years | INTEGER | NULLABLE | Опыт работы (лет) |
 | status | VARCHAR(20) | NOT NULL, DEFAULT active | active, inactive, suspended |
 | is_active | BOOLEAN | DEFAULT TRUE | Мягкое удаление |
+| tariff | VARCHAR(20) | NOT NULL, DEFAULT trial | Тариф (фундамент биллинга, пока всем trial) |
+| trial_ends_at | TIMESTAMP WITH TIME ZONE | NULLABLE | Конец триала (новым: +180 дней) |
 | created_at | TIMESTAMP WITH TIME ZONE | | Дата создания |
 | updated_at | TIMESTAMP WITH TIME ZONE | | Дата обновления |
 
 **Важно:** Супер-админ (ADMIN) НЕ имеет MasterProfile! `master_profiles` = NULL для role=ADMIN.
+
+**Правило active:** `status=active` ⟺ есть ≥1 активного рабочего дня с `schedule_date >= сегодня`
+(прошлое не считается; `suspended` правилом не трогается). Пересчёт — в CRUD
+рабочих часов (create/update/delete/toggle), см. `services/master_status.py`.
 
 ### 4. appointments
 
@@ -308,8 +314,9 @@
 | 6 | b2e8f1a3c9d0 | sync_missing_columns | Add cities.name_en | 2026-09-29 |
 | 7 | 4fdb5e791ead | b2e8f1a3c9d0 | baseline_capture_current_schema (полный DDL) | 2026-09-29 |
 | 8 | 5c72771 | 4fdb5e791ead | fix_audit_logs_fk_to_users (FK на users.id вместо master_profiles) | 2026-09-30 |
+| 9 | e7a1c2d4b5f6 | 5c72771 | master_tariffs_trial (tariff + trial_ends_at, ретро-триал +180 дней) | 2026-10-08 |
 
-**Head:** `5c72771`
+**Head:** `e7a1c2d4b5f6`
 
 ### Применение миграций
 

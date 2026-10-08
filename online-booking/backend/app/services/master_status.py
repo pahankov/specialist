@@ -6,6 +6,7 @@ based on working hours.
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
+from datetime import date
 
 from app.models.master_profile import MasterProfile, MasterStatus
 from app.models.working_hour import WorkingHour
@@ -13,12 +14,14 @@ from app.services.audit import log_action
 
 
 async def _get_active_days_count(db: AsyncSession, master_id: int) -> int:
-    """Count active working days for a master."""
+    """Count FUTURE active working days for a master (past days ignored)."""
+    today = date.today()
     result = await db.execute(
         select(func.count(WorkingHour.id))
         .where(
             WorkingHour.master_id == master_id,
-            WorkingHour.is_active == True
+            WorkingHour.is_active == True,  # noqa: E712
+            WorkingHour.schedule_date >= today,
         )
     )
     return result.scalar() or 0

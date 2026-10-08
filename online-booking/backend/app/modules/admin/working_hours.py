@@ -1,5 +1,5 @@
 """Admin working hours CRUD endpoints."""
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List, Optional
@@ -7,11 +7,11 @@ from datetime import time
 
 from app.database import get_db
 from app.models.working_hour import WorkingHour
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.master_profile import MasterProfile
 from app.schemas.working_hour import WorkingHourCreate, WorkingHourUpdate, WorkingHourResponse
 from app.dependencies.auth import require_master
-from app.dependencies.crud import get_owned_or_404
+from app.dependencies.crud import get_owned_or_404, get_or_404
 from app.services.audit import log_action
 from app.services.master_status import update_master_status_from_working_hours
 from app.modules.admin.helpers import get_master_profile_id
@@ -48,8 +48,26 @@ async def create_working_hour(
     master: User = Depends(require_master),
     db: AsyncSession = Depends(get_db)
 ):
-    """Create working hours."""
-    mp_id = await get_master_profile_id(db, master)
+    """Create working hours.
+
+    Regular master: always for themselves. Superadmin: MUST pass
+    data.master_id (target MasterProfile.id) — superadmins have no
+    profile of their own, "adding to self" is rejected with 400.
+    """
+    if master.role == UserRole.ADMIN:
+        if data.master_id is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Укажите мастера (master_id): суперпользователь не может добавить часы себе",
+            )
+        target = await db.execute(
+            select(MasterProfile).where(MasterProfile.id == data.master_id)
+        )
+        if target.scalar_one_or_none() is None:
+            raise HTTPException(status_code=404, detail="Мастер не найден")
+        mp_id = data.master_id
+    else:
+        mp_id = await get_master_profile_id(db, master)
     hour = WorkingHour(
         master_id=mp_id, schedule_date=data.schedule_date,
         start_time=data.start_time,
@@ -78,9 +96,12 @@ async def update_working_hour(
     master: User = Depends(require_master),
     db: AsyncSession = Depends(get_db)
 ):
-    """Update working hours."""
-    mp_id = await get_master_profile_id(db, master)
-    hour = await get_owned_or_404(db, WorkingHour, hour_id, mp_id)
+    """Update working hours (superadmin: any hour; master: own only)."""
+    if master.role == UserRole.ADMIN:
+        hour = await get_or_404(db, WorkingHour, hour_id)
+    else:
+        mp_id = await get_master_profile_id(db, master)
+        hour = await get_owned_or_404(db, WorkingHour, hour_id, mp_id)
     changes = []
     if data.schedule_date is not None:
         hour.schedule_date = data.schedule_date
@@ -114,9 +135,12 @@ async def delete_working_hour(
     master: User = Depends(require_master),
     db: AsyncSession = Depends(get_db)
 ):
-    """Delete working hours."""
-    mp_id = await get_master_profile_id(db, master)
-    hour = await get_owned_or_404(db, WorkingHour, hour_id, mp_id)
+    """Delete working hours (superadmin: any hour; master: own only)."""
+    if master.role == UserRole.ADMIN:
+        hour = await get_or_404(db, WorkingHour, hour_id)
+    else:
+        mp_id = await get_master_profile_id(db, master)
+        hour = await get_owned_or_404(db, WorkingHour, hour_id, mp_id)
     await log_action(db, master.id, "delete", "working_hour", hour_id, f"{hour.schedule_date}: {hour.start_time}-{hour.end_time}", level="warning")
     await db.delete(hour)
     await db.commit()
@@ -137,9 +161,12 @@ async def toggle_working_hour_active(
     master: User = Depends(require_master),
     db: AsyncSession = Depends(get_db)
 ):
-    """Toggle working hour active/inactive status."""
-    mp_id = await get_master_profile_id(db, master)
-    hour = await get_owned_or_404(db, WorkingHour, hour_id, mp_id)
+    """Toggle working hour active/inactive status (superadmin: any hour)."""
+    if master.role == UserRole.ADMIN:
+        hour = await get_or_404(db, WorkingHour, hour_id)
+    else:
+        mp_id = await get_master_profile_id(db, master)
+        hour = await get_owned_or_404(db, WorkingHour, hour_id, mp_id)
     hour.is_active = not hour.is_active
     await db.commit()
     await db.refresh(hour)

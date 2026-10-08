@@ -1,6 +1,7 @@
 export { default as Breadcrumb } from './Breadcrumb'
 export { default as Modal } from './Modal'
 export { default as ConfirmDialog } from './ConfirmDialog'
+export { default as MasterSelect } from './MasterSelect'
 export { default as Skeleton } from './Skeleton'
 export { default as Tooltip } from './Tooltip'
 export { default as EmptyState } from './EmptyState'

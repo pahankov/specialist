@@ -48,6 +48,9 @@ export interface Master {
   avatar_url?: string
   is_active: boolean
   is_admin: boolean
+  status?: string
+  tariff?: string
+  trial_ends_at?: string | null
   city_id?: number
   created_at: string
   updated_at?: string

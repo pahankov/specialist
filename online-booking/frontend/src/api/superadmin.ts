@@ -27,7 +27,7 @@ export const superAdminApi = {
   },
 
   // Master management
-  getAllMasters(params?: { search?: string; is_active?: boolean; is_admin?: boolean }) {
+  getAllMasters(params?: { search?: string; is_active?: boolean | string; is_admin?: boolean | string; sort_by?: string; sort_dir?: string }) {
     return apiClient.get<Master[]>('/api/v1/admin/masters', { params })
   },
   getMasterById(id: number) {
@@ -48,8 +48,8 @@ export const superAdminApi = {
   toggleMasterAdmin(id: number) {
     return apiClient.post<Master>(`/api/v1/admin/masters/${id}/toggle-admin`)
   },
-  getMasterStats(id: number) {
-    return apiClient.get<AdminStats>(`/api/v1/admin/masters/${id}/stats`)
+  getMasterStats(id: number, params?: { date_from?: string; date_to?: string }) {
+    return apiClient.get<AdminStats>(`/api/v1/admin/masters/${id}/stats`, { params })
   },
 
   // Global stats

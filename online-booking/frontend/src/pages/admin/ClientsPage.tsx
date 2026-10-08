@@ -5,7 +5,7 @@ import type { Client } from '../../api/types'
 import { PHONE_PLACEHOLDER, EMAIL_PLACEHOLDER } from '../../constants'
 import { formatPhone } from '../../utils/formatPhone'
 import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError'
-import { Skeleton, EmptyState, Tooltip, ConfirmDialog } from '../../components/common'
+import { Skeleton, EmptyState, Tooltip, ConfirmDialog, MasterSelect } from '../../components/common'
 import './ClientsPage.css'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -20,25 +20,40 @@ function ClientsPage() {
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [search, setSearch] = useState('')
+  const [searchInput, setSearchInput] = useState('')
   const [masterIdFilter, setMasterIdFilter] = useState<number | ''>('')
-  const [allMasters, setAllMasters] = useState<{ id: number; name: string }[]>([])
   const [totalClients, setTotalClients] = useState(0)
+  const [sortKey, setSortKey] = useState<'name' | 'no_show' | null>(null)
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
-  const fetchOptions = async () => {
-    try {
-      const mastersResp = await adminApi.get('/api/v1/admin/masters')
-      setAllMasters(mastersResp.data.map((m: any) => ({ id: m.id, name: m.name })))
-    } catch { /* not superadmin */ }
+  // Debounce search input (400ms) — no request per keystroke
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput), 400)
+    return () => clearTimeout(t)
+  }, [searchInput])
+
+  const toggleSort = (key: 'name' | 'no_show') => {
+    if (sortKey !== key) {
+      setSortKey(key)
+      setSortDir('asc')
+    } else if (sortDir === 'asc') {
+      setSortDir('desc')
+    } else {
+      setSortKey(null)
+      setSortDir('asc')
+    }
   }
 
-  useEffect(() => { fetchOptions() }, [])
+  const sortArrow = (key: 'name' | 'no_show') =>
+    sortKey !== key ? '' : (sortDir === 'asc' ? ' ▲' : ' ▼')
 
   const fetchData = async () => {
     setLoading(true)
     try {
-      const params: { page: number; page_size: number; search?: string; master_id?: number } = { page: 1, page_size: 200 }
+      const params: { page: number; page_size: number; search?: string; master_id?: number; sort_by?: string; sort_dir?: string } = { page: 1, page_size: 200 }
       if (search?.trim()) params.search = search.trim()
       if (masterIdFilter !== '') params.master_id = masterIdFilter
+      if (sortKey) { params.sort_by = sortKey; params.sort_dir = sortDir }
       const c = await adminApi.getClients(params)
       setClients(c.data.items)
       setTotalClients(c.data.total)
@@ -48,7 +63,7 @@ function ClientsPage() {
     } finally { setLoading(false) }
   }
 
-  useEffect(() => { fetchData() }, [search, masterIdFilter])
+  useEffect(() => { fetchData() }, [search, masterIdFilter, sortKey, sortDir])
 
   const resetForm = () => { setName(''); setPhone(''); setEmail(''); setEditingId(null); setShowForm(false) }
 
@@ -115,18 +130,17 @@ function ClientsPage() {
             <input
               type="text"
               placeholder="Введите имя или телефон..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               style={{ width: '100%', padding: 8, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }}
             />
           </div>
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label style={{ fontSize: 12, color: '#666', marginBottom: 4, display: 'block' }}>👨‍💼 Мастер</label>
-            <select value={masterIdFilter} onChange={(e) => setMasterIdFilter(e.target.value === '' ? '' : Number(e.target.value))} style={{ width: '100%', padding: 8, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }}>
-              <option value="">Все клиенты</option>
-              {allMasters.map(m => (<option key={m.id} value={m.id}>{m.name}</option>))}
-            </select>
-          </div>
+          <MasterSelect
+            value={masterIdFilter}
+            onChange={setMasterIdFilter}
+            allLabel="Все клиенты"
+            style={{ marginBottom: 0 }}
+          />
           {(search || masterIdFilter !== '') && (
             <div className="form-group" style={{ marginBottom: 0, display: 'flex', alignItems: 'flex-end' }}>
               <button className="btn btn-ghost" onClick={() => { setSearch(''); setMasterIdFilter('') }} style={{ width: '100%', fontSize: 13 }}>
@@ -180,14 +194,26 @@ function ClientsPage() {
               onAction={() => setShowForm(true)}
             />
           ) : (
-            <table className="clients-table">
-              <thead><tr><th>Имя</th><th>Телефон</th><th>Email</th><th>Действия</th></tr></thead>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="clients-table" style={{ minWidth: 640 }}>
+              <thead><tr>
+                <th onClick={() => toggleSort('name')} style={{ cursor: 'pointer', userSelect: 'none' }} title="Сортировать по имени">
+                  Имя{sortArrow('name')}
+                </th>
+                <th>Телефон</th>
+                <th>Email</th>
+                <th onClick={() => toggleSort('no_show')} style={{ cursor: 'pointer', userSelect: 'none' }} title="Сортировать по неявкам">
+                  Неявки{sortArrow('no_show')}
+                </th>
+                <th>Действия</th>
+              </tr></thead>
               <tbody>
                 {clients.map(c => (
                   <tr key={c.id}>
                     <td><strong>{c.name}</strong></td>
                     <td><a href={`tel:${c.phone}`}>{c.phone}</a></td>
                     <td>{c.email || '—'}</td>
+                    <td>{(c.no_show_count ?? 0) > 0 ? `⚠️ ${c.no_show_count}` : '—'}</td>
                     <td className="actions-cell">
                       <Tooltip content="Редактировать">
                         <button className="btn btn-sm btn-edit" onClick={() => handleEdit(c)}>✏️</button>
@@ -200,6 +226,7 @@ function ClientsPage() {
                 ))}
               </tbody>
             </table>
+          </div>
           )}
         </div>
       )}
