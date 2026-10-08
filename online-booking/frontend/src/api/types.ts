@@ -72,6 +72,7 @@ export interface Client {
   phone: string
   email?: string
   no_show_count?: number
+  is_active?: boolean
 }
 
 export interface Appointment {

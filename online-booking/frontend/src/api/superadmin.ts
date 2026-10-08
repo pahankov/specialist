@@ -36,7 +36,7 @@ export const superAdminApi = {
   createMaster(data: { name: string; email: string; password: string; phone?: string; telegram_username?: string }) {
     return apiClient.post<Master>('/api/v1/admin/masters', data)
   },
-  updateMaster(id: number, data: { name?: string; phone?: string; telegram_username?: string; description?: string; password?: string }) {
+  updateMaster(id: number, data: { name?: string; phone?: string; telegram_username?: string; description?: string; password?: string; tariff?: string; trial_ends_at?: string }) {
     return apiClient.patch<Master>(`/api/v1/admin/masters/${id}`, data)
   },
   deleteMaster(id: number) {

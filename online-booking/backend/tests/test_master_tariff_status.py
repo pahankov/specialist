@@ -1,5 +1,47 @@
 """Tests for tariffs, future-only active rule, superadmin hours, sorting."""
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime, timezone
+
+
+class TestStatsWithData:
+    """Regression: /stats 500'd for masters WITH appointments (lazy .user load)."""
+
+    async def test_stats_with_appointment(self, client, session, super_admin_headers,
+                                          created_master_id):
+        from app.models.appointment import Appointment
+        from app.models.client_profile import ClientProfile
+        from app.models.service import Service
+        from app.models.user import User, UserRole
+        from app.utils.security import hash_password
+
+        service = Service(master_id=created_master_id, name="S",
+                          duration_minutes=60, price=1000)
+        session.add(service)
+        await session.flush()
+        client_user = User(
+            name="C", email="statsclient@example.com", phone="+79990007777",
+            hashed_password=hash_password("SecurePass123!"), role=UserRole.CLIENT,
+        )
+        session.add(client_user)
+        await session.flush()
+        cp = ClientProfile(user_id=client_user.id)
+        session.add(cp)
+        await session.flush()
+        session.add(Appointment(
+            master_id=created_master_id, service_id=service.id, client_id=cp.id,
+            appointment_date=datetime.now(timezone.utc), status="completed",
+        ))
+        await session.commit()
+
+        resp = await client.get(
+            f"/api/v1/admin/masters/{created_master_id}/stats",
+            headers=super_admin_headers,
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["total_appointments"] == 1
+        assert body["total_revenue"] == 1000.0
+        assert body["status_counts"].get("completed") == 1
+        assert body["recent_appointments"][0]["client_name"] == "C"
 
 
 class TestTariffs:
@@ -122,3 +164,59 @@ class TestSorting:
         assert resp.status_code == 200
         names = [c["name"] for c in resp.json()["items"]]
         assert names == sorted(names)
+
+
+class TestMonthlyStatsMaster:
+    async def test_monthly_stats_for_master(self, client, super_admin_headers,
+                                            created_master_id):
+        resp = await client.get(
+            f"/api/v1/admin/monthly-stats?year=2026&month=10&master_id={created_master_id}",
+            headers=super_admin_headers,
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["confirmed_appointments"] == 0
+
+    async def test_monthly_stats_unknown_master(self, client, super_admin_headers):
+        resp = await client.get(
+            "/api/v1/admin/monthly-stats?year=2026&month=10&master_id=999999",
+            headers=super_admin_headers,
+        )
+        assert resp.status_code == 404
+
+
+class TestTariffPatch:
+    async def test_patch_tariff_and_trial(self, client, super_admin_headers,
+                                          created_master_id):
+        resp = await client.patch(
+            f"/api/v1/admin/masters/{created_master_id}",
+            json={"tariff": "pro", "trial_ends_at": "2027-01-01T00:00:00"},
+            headers=super_admin_headers,
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["tariff"] == "pro"
+
+
+class TestClientToggle:
+    async def test_toggle_client_active(self, client, super_admin_headers, session):
+        from app.models.user import User, UserRole
+        from app.utils.security import hash_password
+        user = User(name="T", email="toggle@example.com", phone="+79990003333",
+                    hashed_password=hash_password("SecurePass123!"),
+                    role=UserRole.CLIENT)
+        session.add(user)
+        await session.commit()
+        await session.refresh(user)
+
+        resp = await client.post(
+            f"/api/v1/admin/clients/{user.id}/toggle-active",
+            headers=super_admin_headers,
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["is_active"] is False
+
+        resp = await client.post(
+            f"/api/v1/admin/clients/{user.id}/toggle-active",
+            headers=super_admin_headers,
+        )
+        assert resp.json()["is_active"] is True

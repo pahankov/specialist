@@ -14,8 +14,8 @@ export const adminApi = {
   getDashboard() {
     return apiClient.get<DashboardStats>('/api/v1/admin/dashboard')
   },
-  getMonthlyStats(year: number, month: number) {
-    return apiClient.get('/api/v1/admin/monthly-stats', { params: { year, month } })
+  getMonthlyStats(year: number, month: number, master_id?: number) {
+    return apiClient.get('/api/v1/admin/monthly-stats', { params: { year, month, master_id } })
   },
 
   // Appointments
@@ -71,6 +71,9 @@ export const adminApi = {
   },
   deleteClient(id: number) {
     return apiClient.delete(`/api/v1/admin/clients/${id}`)
+  },
+  toggleClientActive(id: number) {
+    return apiClient.post(`/api/v1/admin/clients/${id}/toggle-active`)
   },
 
   // Services

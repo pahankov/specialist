@@ -85,6 +85,8 @@ function MasterDetailPage() {
   const [showPasswordModal, setShowPasswordModal] = useState(false)
   const [newPassword, setNewPassword] = useState('')
   const [actionBusy, setActionBusy] = useState(false)
+  const [tariffDraft, setTariffDraft] = useState('')
+  const [trialDraft, setTrialDraft] = useState('')
   // Placeholder for bulk selection (used in MastersPage, kept for future use)
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_selectedMasters, _setSelectedMasters] = useState<Set<number>>(new Set())
@@ -374,9 +376,50 @@ function MasterDetailPage() {
                 <div className="info-row">
                   <span className="info-label">Тариф:</span>
                   <span className="info-value">
-                    {master.tariff === 'trial' ? '🆓 Триал' : (master.tariff || '—')}
-                    {master.trial_ends_at && (
-                      <> до {new Date(master.trial_ends_at).toLocaleDateString('ru-RU')}</>
+                    <select
+                      value={tariffDraft || master.tariff || 'trial'}
+                      onChange={(e) => setTariffDraft(e.target.value)}
+                      style={{ padding: '4px 8px', borderRadius: 6, border: '2px solid #e0e0e0', fontSize: 13 }}
+                      title="Сменить тариф"
+                    >
+                      <option value="trial">🆓 Триал</option>
+                      <option value="basic">Базовый</option>
+                      <option value="pro">Профи</option>
+                      <option value="business">Бизнес</option>
+                    </select>
+                    {' '}
+                    <input
+                      type="date"
+                      value={trialDraft || (master.trial_ends_at ? master.trial_ends_at.slice(0, 10) : '')}
+                      onChange={(e) => setTrialDraft(e.target.value)}
+                      style={{ padding: '4px 8px', borderRadius: 6, border: '2px solid #e0e0e0', fontSize: 13 }}
+                      title="Конец триала"
+                    />
+                    {(tariffDraft || trialDraft) && (
+                      <button
+                        className="btn btn-sm btn-primary"
+                        style={{ marginLeft: 8 }}
+                        disabled={actionBusy}
+                        onClick={async () => {
+                          setActionBusy(true)
+                          try {
+                            const patch: { tariff?: string; trial_ends_at?: string } = {}
+                            if (tariffDraft) patch.tariff = tariffDraft
+                            if (trialDraft) patch.trial_ends_at = trialDraft
+                            await superAdminApi.updateMaster(master.id, patch)
+                            toast.success('Тариф обновлён')
+                            setTariffDraft('')
+                            setTrialDraft('')
+                            loadMaster()
+                          } catch (err: unknown) {
+                            toast.error(getApiErrorMessage(err, 'Не удалось обновить тариф'))
+                          } finally {
+                            setActionBusy(false)
+                          }
+                        }}
+                      >
+                        OK
+                      </button>
                     )}
                   </span>
                 </div>

@@ -94,6 +94,7 @@ async def get_admin_clients(
             "phone": cp.user.phone,
             "email": cp.user.email,
             "no_show_count": cp.no_show_count or 0,
+            "is_active": cp.user.is_active,
             "created_at": cp.user.created_at.isoformat() if cp.user.created_at else None,
             "updated_at": cp.user.updated_at.isoformat() if cp.user.updated_at else None,
         }
@@ -142,6 +143,7 @@ async def create_admin_client(
         "phone": user.phone,
         "email": user.email,
         "no_show_count": 0,
+        "is_active": user.is_active,
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "updated_at": user.updated_at.isoformat() if user.updated_at else None,
     }
@@ -182,6 +184,43 @@ async def update_admin_client(
         "phone": user.phone,
         "email": user.email,
         "no_show_count": 0,
+        "is_active": user.is_active,
+        "created_at": user.created_at.isoformat() if user.created_at else None,
+        "updated_at": user.updated_at.isoformat() if user.updated_at else None,
+    }
+
+
+@router.post("/clients/{client_id}/toggle-active", response_model=ClientResponse)
+async def toggle_client_active(
+    client_id: int,
+    master: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db)
+):
+    """Block/unblock a client (flips User.is_active)."""
+    result = await db.execute(select(User).where(User.id == client_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    user.is_active = not user.is_active
+    await log_action(
+        db, master.id, "toggle_active", "client", client_id,
+        "Разблокирован" if user.is_active else "Заблокирован", level="warning",
+    )
+    await db.commit()
+    await db.refresh(user)
+
+    profile_result = await db.execute(
+        select(ClientProfile).where(ClientProfile.user_id == user.id)
+    )
+    profile = profile_result.scalar_one_or_none()
+    return {
+        "id": user.id,
+        "name": user.name,
+        "phone": user.phone,
+        "email": user.email,
+        "no_show_count": profile.no_show_count if profile else 0,
+        "is_active": user.is_active,
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "updated_at": user.updated_at.isoformat() if user.updated_at else None,
     }

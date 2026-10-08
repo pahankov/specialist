@@ -93,7 +93,10 @@ async def get_master_stats(
 
     recent_result = await db.execute(
         select(Appointment)
-        .options(selectinload(Appointment.client_profile), selectinload(Appointment.service))
+        .options(
+            selectinload(Appointment.client_profile).joinedload(ClientProfile.user),
+            selectinload(Appointment.service),
+        )
         .where(Appointment.master_id == master_id)
         .order_by(Appointment.appointment_date.desc())
         .limit(5)
@@ -215,7 +218,10 @@ async def get_master_full(
     # --- Recent appointments ---
     recent_appt_result = await db.execute(
         select(Appointment)
-        .options(selectinload(Appointment.client_profile), selectinload(Appointment.service))
+        .options(
+            selectinload(Appointment.client_profile).joinedload(ClientProfile.user),
+            selectinload(Appointment.service),
+        )
         .where(Appointment.master_id == master_id)
         .order_by(Appointment.appointment_date.desc())
         .limit(5)

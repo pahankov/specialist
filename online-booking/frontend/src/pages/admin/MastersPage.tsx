@@ -76,7 +76,7 @@ function MastersPage() {
   }
 
   const sortArrow = (key: 'name' | 'email' | 'status') =>
-    sortKey !== key ? '' : (sortDir === 'asc' ? ' ▲' : ' ▼')
+    sortKey !== key ? ' ⇅' : (sortDir === 'asc' ? ' ▲' : ' ▼')
 
   const handleSearch = () => setSearch(searchInput)
 

@@ -9,7 +9,7 @@ from typing import Optional
 from app.database import get_db
 from app.models.appointment import Appointment
 from app.models.service import Service
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.master_profile import MasterProfile
 from app.dependencies.auth import require_master
 from app.modules.admin.helpers import get_master_profile_id
@@ -29,11 +29,24 @@ async def get_monthly_stats(
     year: int = Query(..., description="Year"),
     month: int = Query(..., description="Month (1-12)"),
     master: User = Depends(require_master),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    master_id: Optional[int] = Query(None, description="Master profile ID (superadmin only)"),
 ):
     """Get statistics for a specific month."""
-    logger.info("Get monthly stats: master=%s, year=%d, month=%d", master.id, year, month)
-    mp_id = await get_master_profile_id(db, master)
+    logger.info("Get monthly stats: master=%s, year=%d, month=%d, master_id=%s",
+                master.id, year, month, master_id)
+    if master.role == UserRole.ADMIN:
+        if master_id is None:
+            return {"confirmed_appointments": 0, "total_minutes": 0.0,
+                    "total_hours": 0.0, "revenue": 0.0}
+        target = await db.execute(
+            select(MasterProfile).where(MasterProfile.id == master_id)
+        )
+        if target.scalar_one_or_none() is None:
+            raise HTTPException(status_code=404, detail="Мастер не найден")
+        mp_id = master_id
+    else:
+        mp_id = await get_master_profile_id(db, master)
     start_dt = datetime(year, month, 1)
     end_dt = datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1)
 

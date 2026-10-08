@@ -45,7 +45,17 @@ function ClientsPage() {
   }
 
   const sortArrow = (key: 'name' | 'no_show') =>
-    sortKey !== key ? '' : (sortDir === 'asc' ? ' ▲' : ' ▼')
+    sortKey !== key ? ' ⇅' : (sortDir === 'asc' ? ' ▲' : ' ▼')
+
+  const handleToggleActive = async (id: number) => {
+    try {
+      await adminApi.toggleClientActive(id)
+      toast.success('Статус клиента изменён')
+      fetchData()
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Не удалось изменить статус'))
+    }
+  }
 
   const fetchData = async () => {
     setLoading(true)
@@ -214,6 +224,16 @@ function ClientsPage() {
                     <td><a href={`tel:${c.phone}`}>{c.phone}</a></td>
                     <td>{c.email || '—'}</td>
                     <td>{(c.no_show_count ?? 0) > 0 ? `⚠️ ${c.no_show_count}` : '—'}</td>
+                    <td>
+                      <Tooltip content={c.is_active === false ? 'Разблокировать' : 'Заблокировать'} position="top">
+                        <button
+                          className={`btn btn-sm ${c.is_active === false ? 'btn-success' : 'btn-warn'}`}
+                          onClick={() => handleToggleActive(c.id)}
+                        >
+                          {c.is_active === false ? '🔓' : '🔒'}
+                        </button>
+                      </Tooltip>
+                    </td>
                     <td className="actions-cell">
                       <Tooltip content="Редактировать">
                         <button className="btn btn-sm btn-edit" onClick={() => handleEdit(c)}>✏️</button>

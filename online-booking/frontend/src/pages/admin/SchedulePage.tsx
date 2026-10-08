@@ -54,7 +54,10 @@ function SchedulePage() {
             `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-28`,
             masterParam
           ),
-          adminApi.getMonthlyStats(currentMonth.getFullYear(), currentMonth.getMonth() + 1),
+          adminApi.getMonthlyStats(
+            currentMonth.getFullYear(), currentMonth.getMonth() + 1,
+            masterParam,
+          ),
         ])
         if (cancelled) return
 

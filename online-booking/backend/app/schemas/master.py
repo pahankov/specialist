@@ -47,6 +47,8 @@ class MasterUpdate(BaseModel):
     telegram_username: Optional[str] = None
     description: Optional[str] = None
     password: Optional[str] = None
+    tariff: Optional[str] = None
+    trial_ends_at: Optional[datetime] = None
 
     @field_validator('password')
     @classmethod

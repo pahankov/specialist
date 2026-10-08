@@ -85,7 +85,10 @@ async def _get_master_stats(master: User, db: AsyncSession):
 
     recent_result = await db.execute(
         select(Appointment)
-        .options(selectinload(Appointment.client_profile), selectinload(Appointment.service))
+        .options(
+            selectinload(Appointment.client_profile).joinedload(ClientProfile.user),
+            selectinload(Appointment.service),
+        )
         .where(Appointment.master_id == mp_id)
         .order_by(Appointment.appointment_date.desc())
         .limit(10)
@@ -95,7 +98,10 @@ async def _get_master_stats(master: User, db: AsyncSession):
     week_from_now = utcnow() + timedelta(days=7)
     upcoming_result = await db.execute(
         select(Appointment)
-        .options(selectinload(Appointment.client_profile), selectinload(Appointment.service))
+        .options(
+            selectinload(Appointment.client_profile).joinedload(ClientProfile.user),
+            selectinload(Appointment.service),
+        )
         .where(
             Appointment.master_id == mp_id,
             Appointment.appointment_date >= utcnow(),
