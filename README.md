@@ -134,15 +134,15 @@ online-booking/
 │   │       └── admin/        # Админ-панель (17 эндпоинт-модулей)
 │   ├── alembic/              # Alembic миграции для PostgreSQL
 │   ├── alembic.ini           # Конфиг Alembic
-│   ├── tests/                # pytest тесты (135 тестов: auth, masters, services, appointments, clients, reviews, admin CRUD, rate limiting, refresh tokens, password security, no-show)
+│   ├── tests/                # pytest тесты (~270: auth, masters, services, appointments, clients, reviews, admin CRUD, rate limiting, refresh tokens, password security, no-show, dadata, superuser)
 │   ├── requirements.txt      # Зависимости Python
 │   └── pyproject.toml        # Конфиг pytest
 ├── frontend/
 │   ├── src/
-│   │   ├── api/              # API клиент (axios с auth-interceptor, refresh queue, httpOnly cookies)
-│   │   ├── components/       # Общие компоненты (Modal, Pagination, FilterBar, MessageBar, Toast, ReviewsSection)
+│   │   ├── api/              # http (axios + refresh), public/auth/admin/superadmin, dadata (прокси + фолбэк)
+│   │   ├── components/       # Общие компоненты (Modal, ConfirmDialog, Skeleton, EmptyState, Tooltip, ReviewsSection)
 │   │   ├── pages/            # Публичные + админ-панель (12 страниц)
-│   │   ├── tests/            # Vitest автотесты (44 теста)
+│   │   ├── tests/            # Vitest автотесты (41 тест)
 │   │   ├── utils/            # Утилиты (formatPhone — единый форматировщик телефонов)
 │   │   ├── App.tsx           # Роутинг
 │   │   └── main.tsx          # Точка входа
@@ -313,8 +313,8 @@ utils/
 - ESLint + Prettier для форматирования кода
 
 ### ✅ Тесты
-- **Backend:** 135 pytest-тестов (auth, masters, services, appointments, clients, reviews, admin CRUD, rate limiting, refresh tokens, password security, no-show)
-- **Frontend:** 44 Vitest-теста (helpers, hooks, Modal, MessageBar, Pagination, FilterBar)
+- **Backend:** ~270 pytest-тестов (auth, masters, services, appointments, clients, reviews, admin CRUD, rate limiting, refresh tokens, password security, no-show, dadata proxy, superuser, log level)
+- **Frontend:** 41 Vitest-тест (helpers, hooks, Modal/ConfirmDialog, auth refresh, dadata fallback)
 - 100% покрытие всех эндпоинтов
 - In-memory SQLite для изоляции тестов
 - pytest-asyncio для асинхронных тестов
@@ -442,7 +442,7 @@ pytest tests/ -v --cov=app                # С покрытием
 
 # Frontend
 cd frontend
-npx vitest run                            # Все тесты (44)
+npx vitest run                            # Все тесты (41)
 npx vitest run src/tests/helpers.test.ts  # Только helpers
 npx vitest                              # Watch mode
 ```
@@ -456,6 +456,22 @@ npx vitest                              # Watch mode
 
 
 ## 📚 История версий
+
+### [1.6.0] — 2026-10-08
+- **DaData через прокси:** фронт ходит на same-origin `/api/dadata` (секрета в бандле нет), бэк форвардит тело и зеркалит статус
+- **Фолбэк городов:** при отказе DaData — локальная БД (`/api/v1/cities/search/`), сид расширен до 457 городов
+- **Дебаунс автокомплита:** 400 мс + отсечение протухших ответов (квота DaData больше не сжигается)
+- **Скрипты деплоя без хардкода:** `create_superuser.py` / `fix_production_db.py` читают `SUPERUSER_*` из env, без env — keep, в CI-логи — маски
+- **Deploy:** `seed_cities.py` в пайплайне (идемпотентно), integrity-чеки под прокси-архитектуру, superuser-шаг не роняет ран
+- **Инцидент:** чистка истории затёрла захардкоженный пароль в скриптах → прод-пароль сбрасывался каждый деплой; вылечено env-подходом (подробности — в истории коммитов)
+
+### [1.5.0] — 2026-10-07
+- **Безопасность:** все секреты убраны из трекаемых файлов (канон — `backend/.env` + `LOCAL.md`, зеркало — GitHub Secrets); история переписана (`filter-repo`, 12 замен)
+- **P1-баги:** 422-хендлер по классу `RequestValidationError`, refresh через bare axios instance (deadlock), DaData-прокси форвардит body, `LOG_LEVEL` из env
+- **P2-бэкенд:** удалён мёртвый `modules/auth/dependencies.py` и `soft_delete`, `hash_password/verify_password` → `utils/security.py`, сплиты `admin/appointments → {actions,listing,booking}` и `admin/dashboard → {overview,reports}`, DaData в `Settings`
+- **P3-фронт:** единый `Modal` + `ConfirmDialog` (8 точек, `ui/dialog.tsx` удалён — Tailwind в проекте отсутствует), сплит `client.ts → http/public/auth/admin/superadmin`, удалены дубли и мёртвые компоненты
+- **P4-доки:** чеклист только в `DEPLOYMENT_RULES.md`, `otp_codes` на месте, `API.md` вынесен из README (1039→~700 строк)
+- **Тесты:** ~270 pytest + 41 vitest (было 135 + 44)
 
 ### [1.4.0] — 2026-09-24
 - **Фикс суперпользователя:** эндпоинты подтверждения/отмены/завершения записей теперь работают для ADMIN
