@@ -29,6 +29,12 @@ table.resizable-table {
   overflow: visible;
 }
 
+/* Badges have fixed min-widths that fight manual shrinking — let them clip */
+.resizable-table .status-badge,
+.resizable-table .role-badge {
+  min-width: 0;
+}
+
 .col-resizer {
   position: absolute;
   top: 6px;

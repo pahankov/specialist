@@ -105,7 +105,7 @@ function SchedulePage() {
     let cancelled = false
     Promise.all([
       adminApi.getClients(),
-      adminApi.getAllServices(),
+      adminApi.getAllServices(selectedMasterId !== '' ? { master_id: selectedMasterId } : undefined),
     ]).then(([clientsResp, servicesResp]) => {
       if (cancelled) return
       setBookingClients(clientsResp.data?.items || [])
@@ -117,7 +117,7 @@ function SchedulePage() {
       }
     })
     return () => { cancelled = true }
-  }, [bookingForm.open])
+  }, [bookingForm.open, selectedMasterId])
 
   const handlePrevMonth = useCallback(() => {
     setCurrentMonth(d => new Date(d.getFullYear(), d.getMonth() - 1, 1))
@@ -434,6 +434,7 @@ function SchedulePage() {
         onClose={handleCloseBooking}
         onUpdate={handleBookingUpdate}
         onBook={handleBook}
+        servicesMasterId={selectedMasterId}
       />
     </div>
   )

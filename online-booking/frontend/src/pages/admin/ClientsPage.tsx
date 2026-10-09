@@ -7,7 +7,7 @@ import { PHONE_PLACEHOLDER, EMAIL_PLACEHOLDER } from '../../constants'
 import { isCompletePhone } from '../../components/common/PhoneInput'
 import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError'
 import { downloadCsv } from '../../api/export'
-import { Skeleton, EmptyState, Tooltip, ConfirmDialog, MasterSelect, PhoneInput, ResizableTh, useColumnWidths, Pager, CitySelect } from '../../components/common'
+import { Skeleton, EmptyState, Tooltip, ConfirmDialog, Modal, MasterSelect, PhoneInput, ResizableTh, useColumnWidths, Pager, CitySelect } from '../../components/common'
 import type { CityOption } from '../../components/common/CitySelect'
 import { useSectionPrefix } from '../../utils/section'
 import '../../styles/filters.css'
@@ -17,9 +17,13 @@ import './ClientsPage.css'
 function ClientsPage() {
   const navigate = useNavigate()
   const section = useSectionPrefix()
-  const { widths: colW, setWidth: setColW } = useColumnWidths('clients', {
-    name: 200, phone: 150, email: 200, noshow: 90, actions: 170,
+  const { widths: colW, setWidth: setColW } = useColumnWidths('clients2', {
+    name: 180, phone: 140, email: 180, city: 150, noshow: 90, actions: 170,
   })
+  const [editingCityId, setEditingCityId] = useState<number | null>(null)
+  const [showBulkCity, setShowBulkCity] = useState(false)
+  const [bulkCity, setBulkCity] = useState<CityOption | null>(null)
+  const [bulkSaving, setBulkSaving] = useState(false)
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -183,6 +187,13 @@ function ClientsPage() {
             </div>
           )}
         </div>
+        {totalClients > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
+            <button className="btn filter-reset" onClick={() => { setBulkCity(null); setShowBulkCity(true) }}>
+              🏙️ Назначить город всем ({totalClients})
+            </button>
+          </div>
+        )}
       </div>
 
       {showForm && (
@@ -237,6 +248,7 @@ function ClientsPage() {
                 </ResizableTh>
                 <ResizableTh width={colW.phone} onResize={(w) => setColW('phone', w)}>Телефон</ResizableTh>
                 <ResizableTh width={colW.email} onResize={(w) => setColW('email', w)}>Email</ResizableTh>
+                <ResizableTh width={colW.city} onResize={(w) => setColW('city', w)}>Город</ResizableTh>
                 <ResizableTh width={colW.noshow} onResize={(w) => setColW('noshow', w)} onClick={() => toggleSort('no_show')} style={{ cursor: 'pointer', userSelect: 'none' }} title="Сортировать по неявкам">
                   Неявки{sortArrow('no_show')}
                 </ResizableTh>
@@ -257,6 +269,31 @@ function ClientsPage() {
                     </td>
                     <td><a href={`tel:${c.phone}`}>{c.phone}</a></td>
                     <td>{c.email || '—'}</td>
+                    <td>
+                      {editingCityId === c.id ? (
+                        <CitySelect
+                          value={c.city_id ?? null}
+                          valueName={c.city_name || ''}
+                          label=""
+                          onChange={async (opt) => {
+                            try {
+                              await adminApi.updateClient(c.id, { city_id: opt?.id ?? null })
+                              toast.success('Город обновлён')
+                              setEditingCityId(null)
+                              fetchData()
+                            } catch (err: unknown) {
+                              toast.error(getApiErrorMessage(err, 'Не удалось обновить город'))
+                            }
+                          }}
+                        />
+                      ) : (
+                        <Tooltip content="Нажмите, чтобы назначить город">
+                          <button className="link-button" onClick={() => setEditingCityId(c.id)}>
+                            {c.city_name || '—'}
+                          </button>
+                        </Tooltip>
+                      )}
+                    </td>
                     <td>{(c.no_show_count ?? 0) > 0 ? `⚠️ ${c.no_show_count}` : '—'}</td>
                     <td className="actions-cell">
                       <Tooltip content={c.is_active === false ? 'Разблокировать' : 'Заблокировать'} position="top">
@@ -292,6 +329,42 @@ function ClientsPage() {
         danger
         onConfirm={() => deletingId !== null && handleDelete(deletingId)}
       />
+
+      <Modal open={showBulkCity} onClose={() => setShowBulkCity(false)} title="🏙️ Назначить город всем">
+        <p style={{ fontSize: 14, color: '#666', margin: '0 0 12px' }}>
+          Город будет назначен <strong>{totalClients}</strong> клиентам
+          {search || masterIdFilter !== '' ? ' по текущему фильтру' : ''}.
+          Действует сразу и для всех — отменить можно только вручную.
+        </p>
+        <CitySelect value={bulkCity?.id ?? null} valueName={bulkCity?.name ?? ''} onChange={setBulkCity} />
+        <div className="modal-actions" style={{ marginTop: 16 }}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={bulkCity?.id == null || bulkSaving}
+            onClick={async () => {
+              if (bulkCity?.id == null) return
+              setBulkSaving(true)
+              try {
+                const { data } = await adminApi.bulkSetClientCity({
+                  city_id: bulkCity.id,
+                  ...(search?.trim() ? { search: search.trim() } : {}),
+                  ...(masterIdFilter !== '' ? { master_id: masterIdFilter } : {}),
+                })
+                toast.success(`Город ${data.city_name} назначен: ${data.updated}`)
+                setShowBulkCity(false)
+                fetchData()
+              } catch (err: unknown) {
+                toast.error(getApiErrorMessage(err, 'Не удалось назначить город'))
+              } finally {
+                setBulkSaving(false)
+              }
+            }}
+          >
+            {bulkSaving ? 'Назначаем…' : 'Назначить'}
+          </button>
+        </div>
+      </Modal>
 
       {/* Pagination */}
       <Pager page={currentPage} totalPages={totalPages} onChange={setCurrentPage} />

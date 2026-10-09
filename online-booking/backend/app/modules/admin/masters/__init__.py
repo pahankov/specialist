@@ -15,5 +15,5 @@ router.include_router(import_router)  # /import must come before /{master_id}
 router.include_router(audit_router)  # /audit must come before /{master_id}
 router.include_router(security_router)  # /{master_id}/{impersonate,password,sessions}
 router.include_router(stats_router)  # /{master_id}/stats must come before /{master_id}
-router.include_router(status_router)  # /{master_id}/toggle-active must come before /{master_id}
+router.include_router(status_router, prefix="/masters")  # /masters/{id}/toggle-active etc. (was mounted at admin root → 404)
 router.include_router(crud_router)  # /{master_id} must be LAST

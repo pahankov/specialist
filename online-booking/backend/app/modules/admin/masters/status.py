@@ -9,6 +9,7 @@ from app.models.user import User, UserRole
 from app.models.master_profile import MasterProfile
 from app.schemas.master import MasterResponse
 from app.dependencies.auth import require_super_admin
+from app.services.audit import log_action
 from app.services.master_status import update_master_status_from_working_hours
 from app.logging_config import get_logger
 
@@ -66,13 +67,20 @@ async def toggle_master_active(
         raise HTTPException(status_code=400, detail="Нельзя заблокировать себя")
 
     old_status = mp.status
-    if mp.status == "active":
-        mp.status = "inactive"
-        status_str = "отключён"
-    else:
+    # Block = both flags: the UI badge/icon read is_active, schedule logic
+    # reads status — flipping only one made the button look dead.
+    mp.is_active = not mp.is_active
+    if mp.is_active:
         mp.status = "active"
         status_str = "включён"
+    else:
+        mp.status = "inactive"
+        status_str = "отключён"
 
+    await log_action(
+        db, super_admin.id, "toggle_active", "master", mp.user_id,
+        f"Мастер {mp.user.name} {status_str}", level="warning",
+    )
     await db.commit()
     await db.refresh(mp)
     logger.info(

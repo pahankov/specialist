@@ -70,6 +70,9 @@ export const adminApi = {
   updateClient(id: number, data: { name?: string; phone?: string; email?: string; city_id?: number | null }) {
     return apiClient.patch<Client>(`/api/v1/admin/clients/${id}`, data)
   },
+  bulkSetClientCity(data: { city_id: number; search?: string; master_id?: number }) {
+    return apiClient.post<{ updated: number; city_id: number; city_name: string }>('/api/v1/admin/clients/bulk-city', data)
+  },
   deleteClient(id: number) {
     return apiClient.delete(`/api/v1/admin/clients/${id}`)
   },
@@ -85,7 +88,7 @@ export const adminApi = {
     }
     return apiClient.get<PaginatedResponse<Service>>('/api/v1/admin/services', { params: processedParams })
   },
-  getAllServices(params?: { page?: number; page_size?: number }) {
+  getAllServices(params?: { page?: number; page_size?: number; master_id?: number }) {
     return apiClient.get<PaginatedResponse<Service>>('/api/v1/admin/services/all', { params })
   },
   createService(data: { name: string; description?: string; duration_minutes: number; price: number }) {

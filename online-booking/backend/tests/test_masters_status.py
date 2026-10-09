@@ -1,11 +1,11 @@
 """Tests for admin master status management endpoints.
 
-Routes (status_router has no prefix, included under /api/v1/admin):
-- POST /api/v1/admin/{id}/toggle-active
-- POST /api/v1/admin/{id}/suspend
-- POST /api/v1/admin/{id}/unsuspend
-- POST /api/v1/admin/{id}/toggle-admin
-- POST /api/v1/admin/{id}/refresh-status
+Routes (status_router mounted under /api/v1/admin/masters):
+- POST /api/v1/admin/masters/{id}/toggle-active
+- POST /api/v1/admin/masters/{id}/suspend
+- POST /api/v1/admin/masters/{id}/unsuspend
+- POST /api/v1/admin/masters/{id}/toggle-admin
+- POST /api/v1/admin/masters/{id}/refresh-status
 """
 import pytest
 
@@ -17,7 +17,7 @@ class TestToggleMasterActive:
         """Master can be toggled (active→inactive→active)."""
         # First toggle: active → inactive
         resp = await client.post(
-            f"/api/v1/admin/{created_master_id}/toggle-active",
+            f"/api/v1/admin/masters/{created_master_id}/toggle-active",
             headers=super_admin_headers
         )
         assert resp.status_code == 200
@@ -25,7 +25,7 @@ class TestToggleMasterActive:
         
         # Second toggle: inactive → active
         resp = await client.post(
-            f"/api/v1/admin/{created_master_id}/toggle-active",
+            f"/api/v1/admin/masters/{created_master_id}/toggle-active",
             headers=super_admin_headers
         )
         assert resp.status_code == 200
@@ -34,11 +34,11 @@ class TestToggleMasterActive:
     async def test_toggle_active_off(self, client, super_admin_headers, created_master_id):
         """Master can be toggled to inactive."""
         await client.post(
-            f"/api/v1/admin/{created_master_id}/toggle-active",
+            f"/api/v1/admin/masters/{created_master_id}/toggle-active",
             headers=super_admin_headers
         )
         resp = await client.post(
-            f"/api/v1/admin/{created_master_id}/toggle-active",
+            f"/api/v1/admin/masters/{created_master_id}/toggle-active",
             headers=super_admin_headers
         )
         assert resp.status_code == 200
@@ -50,7 +50,7 @@ class TestToggleMasterActive:
         mp = super_admin_user_with_profile["master_profile"]
 
         resp = await client.post(
-            f"/api/v1/admin/{mp.id}/toggle-active",
+            f"/api/v1/admin/masters/{mp.id}/toggle-active",
             headers=super_admin_headers_2
         )
         assert resp.status_code == 400
@@ -63,7 +63,7 @@ class TestSuspendMaster:
     async def test_suspend_master(self, client, super_admin_headers, created_master_id):
         """Master can be suspended."""
         resp = await client.post(
-            f"/api/v1/admin/{created_master_id}/suspend",
+            f"/api/v1/admin/masters/{created_master_id}/suspend",
             headers=super_admin_headers
         )
         assert resp.status_code == 200
@@ -75,7 +75,7 @@ class TestSuspendMaster:
         mp = super_admin_user_with_profile["master_profile"]
 
         resp = await client.post(
-            f"/api/v1/admin/{mp.id}/suspend",
+            f"/api/v1/admin/masters/{mp.id}/suspend",
             headers=super_admin_headers_2
         )
         assert resp.status_code == 400
@@ -84,7 +84,7 @@ class TestSuspendMaster:
     async def test_suspend_not_found(self, client, super_admin_headers):
         """Returns 404 when suspending non-existent master."""
         resp = await client.post(
-            "/api/v1/admin/99999/suspend",
+            "/api/v1/admin/masters/99999/suspend",
             headers=super_admin_headers
         )
         assert resp.status_code == 404
@@ -96,11 +96,11 @@ class TestUnsuspendMaster:
     async def test_unsuspend_master(self, client, super_admin_headers, created_master_id):
         """Master can be unsuspended."""
         await client.post(
-            f"/api/v1/admin/{created_master_id}/suspend",
+            f"/api/v1/admin/masters/{created_master_id}/suspend",
             headers=super_admin_headers
         )
         resp = await client.post(
-            f"/api/v1/admin/{created_master_id}/unsuspend",
+            f"/api/v1/admin/masters/{created_master_id}/unsuspend",
             headers=super_admin_headers
         )
         assert resp.status_code == 200
@@ -110,7 +110,7 @@ class TestUnsuspendMaster:
     async def test_unsuspend_not_found(self, client, super_admin_headers):
         """Returns 404 when unsuspending non-existent master."""
         resp = await client.post(
-            "/api/v1/admin/99999/unsuspend",
+            "/api/v1/admin/masters/99999/unsuspend",
             headers=super_admin_headers
         )
         assert resp.status_code == 404
@@ -122,7 +122,7 @@ class TestToggleAdmin:
     async def test_toggle_admin_on(self, client, super_admin_headers, created_master_id):
         """Master can be granted admin rights."""
         resp = await client.post(
-            f"/api/v1/admin/{created_master_id}/toggle-admin",
+            f"/api/v1/admin/masters/{created_master_id}/toggle-admin",
             headers=super_admin_headers
         )
         assert resp.status_code == 200
@@ -132,11 +132,11 @@ class TestToggleAdmin:
     async def test_toggle_admin_off(self, client, super_admin_headers, created_master_id):
         """Admin can be demoted to master."""
         await client.post(
-            f"/api/v1/admin/{created_master_id}/toggle-admin",
+            f"/api/v1/admin/masters/{created_master_id}/toggle-admin",
             headers=super_admin_headers
         )
         resp = await client.post(
-            f"/api/v1/admin/{created_master_id}/toggle-admin",
+            f"/api/v1/admin/masters/{created_master_id}/toggle-admin",
             headers=super_admin_headers
         )
         assert resp.status_code == 200
@@ -148,7 +148,7 @@ class TestToggleAdmin:
         mp = super_admin_user_with_profile["master_profile"]
 
         resp = await client.post(
-            f"/api/v1/admin/{mp.id}/toggle-admin",
+            f"/api/v1/admin/masters/{mp.id}/toggle-admin",
             headers=super_admin_headers_2
         )
         assert resp.status_code == 400
@@ -161,7 +161,7 @@ class TestRefreshStatus:
     async def test_refresh_status(self, client, super_admin_headers, created_master_id):
         """Refresh status returns current status."""
         resp = await client.post(
-            f"/api/v1/admin/{created_master_id}/refresh-status",
+            f"/api/v1/admin/masters/{created_master_id}/refresh-status",
             headers=super_admin_headers
         )
         assert resp.status_code == 200

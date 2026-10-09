@@ -94,13 +94,17 @@ async def get_all_admin_services(
     master: User = Depends(require_master),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=200, description="Items per page"),
+    master_id: Optional[int] = Query(None, description="MasterProfile.id (superadmin only)"),
     db: AsyncSession = Depends(get_db)
 ):
     """Get all services including inactive (paginated with total count)."""
     offset = (page - 1) * page_size
 
     # Extract master_profile.id BEFORE building query
-    mp_id = await get_master_profile_id(db, master)
+    if master.role == "ADMIN" and master_id is not None:
+        mp_id = master_id
+    else:
+        mp_id = await get_master_profile_id(db, master)
 
     if mp_id is None:
         # Admin has no services — return empty

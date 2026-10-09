@@ -15,7 +15,7 @@ export function useColumnWidths(table: string, defaults: Record<string, number>)
 
   const setWidth = (col: string, w: number) => {
     setWidths(prev => {
-      const next = { ...prev, [col]: Math.max(48, Math.round(w)) }
+      const next = { ...prev, [col]: Math.max(28, Math.round(w)) }
       try {
         localStorage.setItem(`colwidths:${table}`, JSON.stringify(next))
       } catch { /* ignore */ }

@@ -167,7 +167,7 @@ class TestAdminWithoutMasterProfile:
     async def test_admin_without_profile_can_toggle_master(self, client, super_admin_headers, created_master_id):
         """Super admin without MasterProfile can toggle other masters."""
         resp = await client.post(
-            f"/api/v1/admin/{created_master_id}/toggle-active",
+            f"/api/v1/admin/masters/{created_master_id}/toggle-active",
             headers=super_admin_headers
         )
         assert resp.status_code == 200

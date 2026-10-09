@@ -17,8 +17,8 @@ type SortDirection = 'asc' | 'desc'
 function AppointmentsPage() {
   const section = useSectionPrefix()
   const isSuperSection = section === SUPER_PREFIX
-  const { widths: colW, setWidth: setColW } = useColumnWidths('appointments', {
-    date: 150, client: 160, phone: 130, service: 180, price: 90, status: 140, master: 150, actions: 110, del: 56,
+  const { widths: colW, setWidth: setColW } = useColumnWidths('appointments2', {
+    date: 150, client: 160, phone: 130, service: 180, price: 90, status: 140, master: 150, actions: 150,
   })
 
   const [appointments, setAppointments] = useState<(Appointment & { client_name?: string; client_phone?: string; service_name?: string; service_price?: number })[]>([])
@@ -102,12 +102,12 @@ function AppointmentsPage() {
     const sp = searchParams.get('status')
     if (sp !== null && sp !== '' && ['pending', 'confirmed', 'cancelled', 'completed'].includes(sp)) {
       setStatusFilter(sp)
-      // Completed rows are hidden by the "show completed" toggle — a
-      // deep-link into them must reveal them, or the list looks empty
-      if (sp === 'completed') setShowCompleted(true)
     }
     // consume once so back/forward stays clean
     if (searchParams.has('client_id') || searchParams.has('master_id') || searchParams.has('status')) {
+      // A drill-down promises "everything matching": reveal completed rows
+      // (hidden by default) so counts match the card that was clicked
+      setShowCompleted(true)
       // Deep-linked filters live in the collapsible panel — open it so the
       // user sees what is applied instead of a "wrong" list
       setShowFilters(true)
@@ -355,7 +355,6 @@ function AppointmentsPage() {
                 <ResizableTh width={colW.master} onResize={(w) => setColW('master', w)}>Мастер</ResizableTh>
               )}
               <ResizableTh width={colW.actions} onResize={(w) => setColW('actions', w)}>Действия</ResizableTh>
-              <ResizableTh width={colW.del} onResize={(w) => setColW('del', w)}></ResizableTh>
             </tr></thead>
             <tbody>
               {filteredAppointments.map(a => (<tr key={a.id}>
@@ -390,8 +389,6 @@ function AppointmentsPage() {
                   {a.status === 'confirmed' && isAppointmentTimePassed(a.appointment_date) && (
                     <Tooltip content="Отметить неявку"><button className="btn btn-sm btn-no-show" onClick={() => setNoShowingId(a.id)}>👤</button></Tooltip>
                   )}
-                </td>
-                <td>
                   <Tooltip content="Удалить запись">
                     <button className="btn btn-sm btn-delete" onClick={() => setDeletingId(a.id)}>🗑️</button>
                   </Tooltip>

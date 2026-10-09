@@ -196,9 +196,11 @@ export default function CitySelect({
 
   return (
     <div className="master-select" ref={boxRef} style={style}>
-      <label className="master-select-label">
-        {label} {required && '*'}
-      </label>
+      {label ? (
+        <label className="master-select-label">
+          {label} {required && '*'}
+        </label>
+      ) : null}
       <div className="master-select-box">
         <input
           ref={inputRef}

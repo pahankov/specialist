@@ -15,6 +15,7 @@ from app.dependencies.auth import require_master
 from app.dependencies.crud import get_or_404
 from app.services.audit import log_action
 from app.logging_config import get_logger
+from pydantic import BaseModel
 
 logger = get_logger(__name__)
 
@@ -254,6 +255,60 @@ async def toggle_client_active(
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "updated_at": user.updated_at.isoformat() if user.updated_at else None,
     }
+
+
+class BulkCityUpdate(BaseModel):
+    city_id: int
+    search: Optional[str] = None
+    master_id: Optional[int] = None
+
+
+@router.post("/clients/bulk-city", response_model=dict)
+async def bulk_set_client_city(
+    data: BulkCityUpdate,
+    master: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db)
+):
+    """Assign a city to all clients matching the filter (same semantics as list).
+
+    Used to backfill cities for thousands of seed rows at once.
+    """
+    from app.models.city import City
+    city_row = await db.execute(select(City).where(City.id == data.city_id))
+    city_obj = city_row.scalar_one_or_none()
+    if city_obj is None:
+        raise HTTPException(status_code=400, detail="Город не найден")
+
+    sub = (
+        select(ClientProfile.user_id)
+        .join(ClientProfile.user)
+    )
+    if data.master_id is not None:
+        sub = sub.where(
+            ClientProfile.id.in_(
+                select(Appointment.client_id).where(Appointment.master_id == data.master_id)
+            )
+        )
+    if data.search:
+        search_term = f"%{data.search}%"
+        sub = sub.where(
+            (User.name.ilike(search_term)) | (User.phone.ilike(search_term))
+        )
+    ids_result = await db.execute(sub)
+    user_ids = list({row[0] for row in ids_result.all()})
+    if not user_ids:
+        return {"updated": 0, "city_id": data.city_id, "city_name": city_obj.name_ru}
+
+    from sqlalchemy import update as sa_update
+    await db.execute(
+        sa_update(User).where(User.id.in_(user_ids)).values(city_id=data.city_id)
+    )
+    await log_action(
+        db, master.id, "bulk_city", "client", None,
+        f"Город {city_obj.name_ru} назначен {len(user_ids)} клиентам", level="warning",
+    )
+    await db.commit()
+    return {"updated": len(user_ids), "city_id": data.city_id, "city_name": city_obj.name_ru}
 
 
 @router.delete("/clients/{client_id}", status_code=204)
