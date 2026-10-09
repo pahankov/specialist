@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { Client, Service } from '../../api/types'
 import { getFilteredClients, getFilteredServices, formatPrice, formatHour } from './helpers'
 import Modal from '../common/Modal'
@@ -43,6 +43,17 @@ export function BookingModal({
   const [showClientDropdown, setShowClientDropdown] = useState(false)
   const [showServiceDropdown, setShowServiceDropdown] = useState(false)
 
+  // Fresh state on every open: stale search text/selection must never leak
+  // into the next booking (e.g. second client on the same day).
+  useEffect(() => {
+    if (open) {
+      setClientSearch('')
+      setServiceSearch('')
+      setShowClientDropdown(false)
+      setShowServiceDropdown(false)
+    }
+  }, [open ])
+
   // Scope services to the booking target master (superadmin sees all otherwise)
   const scopedServices = servicesMasterId !== '' && servicesMasterId != null
     ? services.filter(s => s.master_id === servicesMasterId)
@@ -63,37 +74,35 @@ export function BookingModal({
 
         <div className="form-group">
           <label>Клиент</label>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <div style={{ position: 'relative', flex: 1 }}>
-              <input
-                type="text"
-                value={selectedClient?.name || clientSearch}
-                onChange={(e) => { setClientSearch(e.target.value); setShowClientDropdown(true) }}
-                onFocus={() => { if (!selectedClient) setShowClientDropdown(true) }}
-                placeholder="Начните вводить имя или телефон..."
-                className="form-input"
-                style={{ width: '100%', boxSizing: 'border-box' }}
-              />
-              {showClientDropdown && (
-                <div className="dropdown-list">
-                  {filteredClients.length === 0 ? (
-                    <div className="dropdown-empty">Ничего не найдено</div>
-                  ) : (
-                    filteredClients.map(c => (
-                      <div
-                        key={c.id}
-                        className={`dropdown-item ${clientId === c.id ? 'selected' : ''}`}
-                        onClick={() => { onUpdate('clientId', c.id); setShowClientDropdown(false); setClientSearch('') }}
-                      >
-                        <strong>{c.name}</strong> — {c.phone}
-                      </div>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
+          <div style={{ position: 'relative' }}>
+            <input
+              type="text"
+              value={selectedClient?.name || clientSearch}
+              onChange={(e) => { setClientSearch(e.target.value); setShowClientDropdown(true) }}
+              onFocus={() => { if (!selectedClient) setShowClientDropdown(true) }}
+              placeholder="Начните вводить имя или телефон..."
+              className="form-input"
+              style={{ paddingRight: 34 }}
+            />
             {(selectedClient || clientSearch) && (
-              <button type="button" className="btn btn-ghost btn-sm" onClick={clearClient} title="Очистить выбор" aria-label="Очистить клиента">✕</button>
+              <button type="button" className="input-clear" onClick={clearClient} title="Очистить выбор" aria-label="Очистить клиента">✕</button>
+            )}
+            {showClientDropdown && (
+              <div className="dropdown-list">
+                {filteredClients.length === 0 ? (
+                  <div className="dropdown-empty">Ничего не найдено</div>
+                ) : (
+                  filteredClients.map(c => (
+                    <div
+                      key={c.id}
+                      className={`dropdown-item ${clientId === c.id ? 'selected' : ''}`}
+                      onClick={() => { onUpdate('clientId', c.id); setShowClientDropdown(false); setClientSearch('') }}
+                    >
+                      <strong>{c.name}</strong> — {c.phone}
+                    </div>
+                  ))
+                )}
+              </div>
             )}
           </div>
           {!selectedClient && (
@@ -103,37 +112,35 @@ export function BookingModal({
 
         <div className="form-group">
           <label>Услуга</label>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <div style={{ position: 'relative', flex: 1 }}>
-              <input
-                type="text"
-                value={selectedService?.name || serviceSearch}
-                onChange={(e) => { setServiceSearch(e.target.value); setShowServiceDropdown(true) }}
-                onFocus={() => { if (!selectedService) setShowServiceDropdown(true) }}
-                placeholder="Начните вводить название..."
-                className="form-input"
-                style={{ width: '100%', boxSizing: 'border-box' }}
-              />
-              {showServiceDropdown && (
-                <div className="dropdown-list">
-                  {filteredServices.length === 0 ? (
-                    <div className="dropdown-empty">Ничего не найдено</div>
-                  ) : (
-                    filteredServices.map(s => (
-                      <div
-                        key={s.id}
-                        className={`dropdown-item ${serviceId === s.id ? 'selected' : ''}`}
-                        onClick={() => { onUpdate('serviceId', s.id); setShowServiceDropdown(false); setServiceSearch('') }}
-                      >
-                        <strong>{s.name}</strong> — {s.duration_minutes} мин, {formatPrice(s.price)} ₽
-                      </div>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
+          <div style={{ position: 'relative' }}>
+            <input
+              type="text"
+              value={selectedService?.name || serviceSearch}
+              onChange={(e) => { setServiceSearch(e.target.value); setShowServiceDropdown(true) }}
+              onFocus={() => { if (!selectedService) setShowServiceDropdown(true) }}
+              placeholder="Начните вводить название..."
+              className="form-input"
+              style={{ paddingRight: 34 }}
+            />
             {(selectedService || serviceSearch) && (
-              <button type="button" className="btn btn-ghost btn-sm" onClick={clearService} title="Очистить выбор" aria-label="Очистить услугу">✕</button>
+              <button type="button" className="input-clear" onClick={clearService} title="Очистить выбор" aria-label="Очистить услугу">✕</button>
+            )}
+            {showServiceDropdown && (
+              <div className="dropdown-list">
+                {filteredServices.length === 0 ? (
+                  <div className="dropdown-empty">Ничего не найдено</div>
+                ) : (
+                  filteredServices.map(s => (
+                    <div
+                      key={s.id}
+                      className={`dropdown-item ${serviceId === s.id ? 'selected' : ''}`}
+                      onClick={() => { onUpdate('serviceId', s.id); setShowServiceDropdown(false); setServiceSearch('') }}
+                    >
+                      <strong>{s.name}</strong> — {s.duration_minutes} мин, {formatPrice(s.price)} ₽
+                    </div>
+                  ))
+                )}
+              </div>
             )}
           </div>
           {!selectedService && (

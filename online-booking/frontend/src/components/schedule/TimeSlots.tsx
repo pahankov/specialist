@@ -8,6 +8,7 @@ interface TimeSlotsProps {
   activeHours: Record<string, boolean>
   onToggleHour: (dateStr: string, hour: number) => void
   onOpenBooking: (date: Date, hour: number) => void
+  onCancelAppointment: (id: number) => Promise<void>
   /** Daily work window: granules render for [windowStart, windowEnd) regardless
    * of the stored day range (the range is derived from active granules). */
   windowStart?: number
@@ -20,6 +21,7 @@ export function TimeSlots({
   activeHours,
   onToggleHour,
   onOpenBooking,
+  onCancelAppointment,
   windowStart = 8,
   windowEnd = 22,
 }: TimeSlotsProps) {
@@ -51,7 +53,7 @@ export function TimeSlots({
       </div>
 
       <div className="time-slots-list">
-        {generateHourSlots(selectedDate, daySchedule, appointments, activeHours, isDayPast, onToggleHour, onOpenBooking)}
+        {generateHourSlots(selectedDate, daySchedule, appointments, activeHours, isDayPast, onToggleHour, onOpenBooking, onCancelAppointment)}
       </div>
     </div>
   )
@@ -85,7 +87,8 @@ function generateHourSlots(
   activeHours: Record<string, boolean>,
   _dayPast: boolean,
   onToggle: (dateStr: string, hour: number) => void,
-  onOpenBooking: (date: Date, hour: number) => void
+  onOpenBooking: (date: Date, hour: number) => void,
+  onCancelAppointment: (id: number) => Promise<void>
 ): React.ReactNode[] {
   const slots: React.ReactNode[] = []
   const dateStr = formatDate(date)
@@ -95,6 +98,9 @@ function generateHourSlots(
     const status = getSlotStatus(slotsForHour)
     const past = isSlotPast(date, h)
     const hourActive = !!activeHours[`${dateStr}-${h}`]
+    // Live booking in this hour (cancelled ones don't count)
+    const live = slotsForHour.filter(s => s.status !== 'cancelled')
+    const latestLive = live.length > 0 ? live.reduce((a, b) => (a.id > b.id ? a : b)) : null
 
     slots.push(
       <div
@@ -130,9 +136,26 @@ function generateHourSlots(
           </span>
         )}
 
-        {!past && hourActive && (
+        {!past && hourActive && latestLive === null && (
           <button className="btn btn-sm btn-book" onClick={() => onOpenBooking(date, h)}>
             + Записать
+          </button>
+        )}
+        {!past && latestLive !== null && (
+          <button
+            className="btn btn-sm btn-cancel"
+            title={`Отменить запись: ${latestLive.client_name || 'клиент'}`}
+            onClick={async (e) => {
+              const btn = e.currentTarget
+              btn.disabled = true
+              try {
+                await onCancelAppointment(latestLive.id)
+              } finally {
+                btn.disabled = false
+              }
+            }}
+          >
+            ✕ Отменить
           </button>
         )}
       </div>

@@ -289,7 +289,7 @@ function ClientsPage() {
                     <td className="actions-cell">
                       <Tooltip content={c.is_active === false ? 'Разблокировать (сейчас заблокирован)' : 'Заблокировать (сейчас активен)'} position="top">
                         <button
-                          className={`btn btn-sm ${c.is_active === false ? 'btn-success' : 'btn-warn'}`}
+                          className={`btn btn-sm ${c.is_active === false ? 'btn-danger' : 'btn-ghost'}`}
                           onClick={() => handleToggleActive(c.id)}
                         >
                           {c.is_active === false ? '🔒' : '🔓'}

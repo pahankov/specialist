@@ -240,6 +240,7 @@ function AppointmentsPage() {
               if (serviceIdFilter !== '') params.set('service_id', String(serviceIdFilter))
               if (dateFrom) params.set('date_from', dateFrom)
               if (dateTo) params.set('date_to', dateTo)
+              if (isSuperSection) params.set('include_master', 'true')
               try {
                 await downloadCsv(`/api/v1/admin/export/appointments?${params.toString()}`, 'appointments.csv')
                 toast.success('CSV выгружен')
@@ -308,8 +309,8 @@ function AppointmentsPage() {
               <input type="date" className="filter-control" value={dateTo} disabled={allTime} onChange={(e) => setDateTo(e.target.value)} />
             </div>
 
-            {/* All time — tied to the date fields, right edge */}
-            <div className="filter-cell-bottom" style={{ justifySelf: 'end' }}>
+            {/* All time — same row, right after the dates */}
+            <div className="filter-cell-bottom">
               <label className="filter-check">
                 <input type="checkbox" checked={allTime} onChange={() => setAllTime(v => !v)} />
                 За всё время

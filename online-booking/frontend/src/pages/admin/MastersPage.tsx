@@ -11,6 +11,7 @@ import { useSectionPrefix, ADMIN_PREFIX } from '../../utils/section'
 import { usePersistentState } from '../../utils/persistentState'
 import '../../styles/tables.css'
 import { getApiErrorMessage } from '../../utils/apiError'
+import { downloadCsv } from '../../api/export'
 import { getCookie } from '../../utils/cookies'
 import { startImpersonation } from '../../utils/impersonation'
 import './MastersPage.css'
@@ -235,13 +236,26 @@ function MastersPage() {
         <h1>👨‍💼 Управление мастерами</h1>
         <div className="page-header-actions">
           {selectedMasters.size > 0 && (
-            <div className="bulk-actions">
+            <div className="bulk-actions" title="Массовые действия с отмеченными мастерами">
               <span className="bulk-count">Выбрано: {selectedMasters.size}</span>
-              <button className="btn btn-sm btn-secondary" onClick={handleBulkToggle}>Toggle Active</button>
-              <button className="btn btn-sm btn-warn" onClick={handleBulkSuspend}>Suspend</button>
-              <button className="btn btn-sm btn-ghost" onClick={() => setSelectedMasters(new Set())}>Отменить</button>
+              <button className="btn btn-sm btn-secondary" onClick={handleBulkToggle} title="Включить/выключить всех отмеченных">🔀 Вкл/Выкл</button>
+              <button className="btn btn-sm btn-warn" onClick={handleBulkSuspend} title="Приостановить всех отмеченных">⏸ Приостановить</button>
+              <button className="btn btn-sm btn-ghost" onClick={() => setSelectedMasters(new Set())}>✕ Снять выбор</button>
             </div>
           )}
+          <button
+            className="btn btn-ghost"
+            onClick={async () => {
+              try {
+                await downloadCsv('/api/v1/admin/export/masters', 'masters.csv')
+                toast.success('CSV выгружен')
+              } catch (err: unknown) {
+                toast.error(handleError(err))
+              }
+            }}
+          >
+            📥 Экспорт CSV
+          </button>
           <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>+ Добавить мастера</button>
         </div>
       </div>
@@ -376,7 +390,7 @@ function MastersPage() {
                     </Tooltip>
                     <Tooltip content={master.is_active ? 'Заблокировать (сейчас активен)' : 'Разблокировать (сейчас заблокирован)'} position="top">
                       <button
-                        className={`btn btn-sm ${master.is_active ? 'btn-warn' : 'btn-success'}`}
+                        className={`btn btn-sm ${master.is_active ? 'btn-ghost' : 'btn-danger'}`}
                         onClick={() => handleToggleActive(master.id)}
                       >
                         {master.is_active ? '🔓' : '🔒'}

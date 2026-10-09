@@ -11,7 +11,7 @@ from app.models.client_profile import ClientProfile
 from app.models.user import User
 from app.models.service import Service
 from app.models.master_profile import MasterProfile
-from app.dependencies.auth import require_master
+from app.dependencies.auth import require_master, require_super_admin
 from app.services.background_tasks import bg_task_service
 from app.services.export_tasks import export_appointments_csv_task, export_clients_csv_task
 from app.modules.admin.helpers import get_master_profile_id
@@ -124,13 +124,59 @@ async def export_clients_csv(
         .order_by(User.name)
     )
     rows = result.all()
-    lines = ["ID,Имя,Телефон,Email"]
+    from app.models.city import City
+    city_ids = {u.city_id for u, _ in rows if u.city_id is not None}
+    city_names: dict = {}
+    if city_ids:
+        city_rows = await db.execute(
+            select(City.id, City.name_ru).where(City.id.in_(city_ids))
+        )
+        city_names = dict(city_rows.all())
+    lines = ["ID,Имя,Телефон,Email,Город"]
     for user, cp in rows:
-        lines.append(f"{user.id},{user.name},{user.phone},{user.email or ''}")
+        lines.append(
+            f"{user.id},{user.name},{user.phone},{user.email or ''}"
+            f",{city_names.get(user.city_id, '')}"
+        )
     return Response(
         content="\n".join(lines) + "\n",
         media_type='text/csv; charset=utf-8',
         headers={'Content-Disposition': 'attachment; filename=clients.csv'}
+    )
+
+
+@router.get("/export/masters")
+async def export_masters_csv(
+    admin: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Export all masters to CSV (superadmin only)."""
+    from app.models.city import City
+    result = await db.execute(
+        select(User, MasterProfile)
+        .join(MasterProfile, User.id == MasterProfile.user_id)
+        .order_by(User.name)
+    )
+    rows = result.all()
+    city_ids = {u.city_id for u, _ in rows if u.city_id is not None}
+    city_names: dict = {}
+    if city_ids:
+        city_rows = await db.execute(
+            select(City.id, City.name_ru).where(City.id.in_(city_ids))
+        )
+        city_names = dict(city_rows.all())
+    lines = ["ID,Имя,Email,Телефон,Telegram,Статус,Активен,Тариф,Триал до,Город"]
+    for user, mp in rows:
+        trial = mp.trial_ends_at.strftime('%Y-%m-%d') if mp.trial_ends_at else ''
+        lines.append(
+            f"{user.id},{user.name},{user.email or ''},{user.phone or ''}"
+            f",{mp.telegram_username or ''},{mp.status},{user.is_active}"
+            f",{mp.tariff or ''},{trial},{city_names.get(user.city_id, '')}"
+        )
+    return Response(
+        content="\n".join(lines) + "\n",
+        media_type='text/csv; charset=utf-8',
+        headers={'Content-Disposition': 'attachment; filename=masters.csv'}
     )
 
 

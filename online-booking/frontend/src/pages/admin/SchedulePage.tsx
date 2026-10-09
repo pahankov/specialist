@@ -298,6 +298,27 @@ function SchedulePage() {
     }
   }, [bookingForm, currentMonth, handleCloseBooking, selectedMasterId])
 
+  const refreshMonthAppointments = useCallback(async () => {
+    const from = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth()).padStart(2, '0')}-01`
+    const lastDay = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0).getDate()
+    const to = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+    try {
+      const resp = await adminApi.getAppointmentsByDate(
+        from, to, selectedMasterId !== '' ? selectedMasterId : undefined)
+      setAppointments(resp.data || [])
+    } catch { /* ignore */ }
+  }, [currentMonth, selectedMasterId])
+
+  const handleCancelSlotAppointment = useCallback(async (id: number) => {
+    try {
+      await adminApi.cancelAppointment(id, 'Отмена из расписания')
+      toast.success('Запись отменена')
+      await refreshMonthAppointments()
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, 'Не удалось отменить запись'))
+    }
+  }, [refreshMonthAppointments])
+
   if (loading) return <div style={{ padding: 60, textAlign: 'center', color: '#666' }}>Загрузка...</div>
 
   return (
@@ -363,6 +384,15 @@ function SchedulePage() {
                   ...(selectedMasterId !== '' ? { master_id: selectedMasterId } : {}),
                   start_hour: start, end_hour: end,
                 })
+                // Re-read from the server: if it disagrees, the save did not
+                // stick and the user must see an error, not a silent revert
+                const check = await adminApi.getWorkWindow(
+                  selectedMasterId !== '' ? selectedMasterId : undefined,
+                ).then(r => r.data).catch(() => null)
+                if (!check || check.start_hour !== start || check.end_hour !== end) {
+                  setError(`Не сохранилось: сервер вернул ${check ? `${check.start_hour}:00–${check.end_hour}:00` : 'ошибку'}`)
+                  return
+                }
                 setWindowStart(data.start_hour)
                 setWindowEnd(data.end_hour)
                 toast.success(`Рабочее время: ${data.start_hour}:00–${data.end_hour}:00`)
@@ -412,6 +442,7 @@ function SchedulePage() {
           activeHours={activeHours}
           onToggleHour={handleToggleHour}
           onOpenBooking={handleOpenBooking}
+          onCancelAppointment={handleCancelSlotAppointment}
           windowStart={windowStart}
           windowEnd={windowEnd}
         />

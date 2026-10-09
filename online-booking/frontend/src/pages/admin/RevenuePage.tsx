@@ -108,7 +108,7 @@ function RevenuePage() {
       <div className="page-header"><h1>Доход</h1><p>Финансовая аналитика · {statsScope}</p></div>
       <div className="card" style={{ marginBottom: 16, padding: 16 }}>
         <h3 style={{ margin: '0 0 12px', fontSize: 16 }}>Фильтры дохода</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 1.2fr) minmax(200px, 1.4fr) minmax(150px, 1fr) minmax(150px, 1fr) auto', gap: 12 }}>
           <div className="filter-cell">
             <label className="filter-label">Группировка</label>
             <select className="filter-control" value={groupBy} onChange={(e) => setGroupBy(e.target.value as 'overall' | 'master' | 'service')}>
@@ -130,8 +130,8 @@ function RevenuePage() {
             <label className="filter-label">Дата до</label>
             <input type="date" className="filter-control" value={dateTo} disabled={allTime} onChange={(e) => setDateTo(e.target.value)} />
           </div>
-          {/* Tied to the date fields: same row, right edge */}
-          <div className="filter-cell-bottom" style={{ justifySelf: 'end' }}>
+          {/* Tied to the date fields: same row, right after them */}
+          <div className="filter-cell-bottom">
             <label className="filter-check">
               <input type="checkbox" checked={allTime} onChange={() => setAllTime(v => !v)} />
               За всё время

@@ -330,6 +330,25 @@
   margin-top: 6px;
 }
 
+/* Clear button inside search inputs (proven pattern from CitySelect) */
+.input-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #999;
+  font-size: 14px;
+  padding: 2px 6px;
+  line-height: 1;
+}
+
+.input-clear:hover {
+  color: #333;
+}
+
 /* Booking modal */
 .booking-modal-date {
   color: #666;
