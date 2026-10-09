@@ -19,8 +19,9 @@ function AppointmentsPage() {
   const section = useSectionPrefix()
   const isSuperSection = section === SUPER_PREFIX
   const { widths: colW, setWidth: setColW } = useColumnWidths('appointments2', {
-    date: 150, client: 160, phone: 130, service: 180, price: 90, status: 140, master: 150, actions: 150,
+    check: 44, date: 150, client: 160, phone: 130, service: 180, price: 90, status: 140, master: 150, actions: 150,
   })
+  const [selectedAppointments, setSelectedAppointments] = useState<Set<number>>(new Set())
 
   const [appointments, setAppointments] = useState<(Appointment & { client_name?: string; client_phone?: string; service_name?: string; service_price?: number })[]>([])
   const [searchParams, setSearchParams] = useSearchParams()
@@ -234,22 +235,27 @@ function AppointmentsPage() {
             className="btn btn-ghost"
             onClick={async () => {
               const params = new URLSearchParams()
-              if (statusFilter) params.set('status', statusFilter)
-              if (masterIdFilter !== '') params.set('master_id', String(masterIdFilter))
-              if (clientIdFilter !== '') params.set('client_id', String(clientIdFilter))
-              if (serviceIdFilter !== '') params.set('service_id', String(serviceIdFilter))
-              if (dateFrom) params.set('date_from', dateFrom)
-              if (dateTo) params.set('date_to', dateTo)
+              if (selectedAppointments.size > 0) {
+                params.set('ids', [...selectedAppointments].join(','))
+              } else {
+                if (statusFilter) params.set('status', statusFilter)
+                if (masterIdFilter !== '') params.set('master_id', String(masterIdFilter))
+                if (clientIdFilter !== '') params.set('client_id', String(clientIdFilter))
+                if (serviceIdFilter !== '') params.set('service_id', String(serviceIdFilter))
+                if (dateFrom) params.set('date_from', dateFrom)
+                if (dateTo) params.set('date_to', dateTo)
+              }
               if (isSuperSection) params.set('include_master', 'true')
               try {
                 await downloadCsv(`/api/v1/admin/export/appointments?${params.toString()}`, 'appointments.csv')
-                toast.success('CSV выгружен')
+                toast.success(selectedAppointments.size > 0 ? `Выгружено: ${selectedAppointments.size}` : 'CSV выгружен')
               } catch (err: unknown) {
                 toast.error(getApiErrorMessage(err, 'Не удалось выгрузить CSV'))
               }
             }}
+            title={selectedAppointments.size > 0 ? 'Выгрузить отмеченные' : 'Выгрузить все по фильтру'}
           >
-            📥 Экспорт CSV
+            📥 Экспорт CSV{selectedAppointments.size > 0 ? ` (${selectedAppointments.size})` : ''}
           </button>
       </div>
 
@@ -348,6 +354,17 @@ function AppointmentsPage() {
           <div className="appointments-table-wrapper">
           <table className="appointments-table resizable-table">
             <thead><tr>
+              <ResizableTh width={colW.check} onResize={(w) => setColW('check', w)} className="col-checkbox">
+                <input
+                  type="checkbox"
+                  checked={filteredAppointments.length > 0 && selectedAppointments.size === filteredAppointments.length}
+                  onChange={() => {
+                    if (selectedAppointments.size === filteredAppointments.length) setSelectedAppointments(new Set())
+                    else setSelectedAppointments(new Set(filteredAppointments.map(a => a.id)))
+                  }}
+                  title="Выбрать все на странице"
+                />
+              </ResizableTh>
               <ResizableTh width={colW.date} onResize={(w) => setColW('date', w)} className={`sortable ${sortField === 'appointment_date' ? 'active' : ''}`} onClick={() => handleSort('appointment_date')}>Дата <span className="sort-arrow">{sortField === 'appointment_date' ? (sortDirection === 'asc' ? '↑' : '↓') : '⇅'}</span></ResizableTh>
               <ResizableTh width={colW.client} onResize={(w) => setColW('client', w)} className={`sortable ${sortField === 'client_name' ? 'active' : ''}`} onClick={() => handleSort('client_name')}>Клиент <span className="sort-arrow">{sortField === 'client_name' ? (sortDirection === 'asc' ? '↑' : '↓') : '⇅'}</span></ResizableTh>
               <ResizableTh width={colW.phone} onResize={(w) => setColW('phone', w)}>Телефон</ResizableTh>
@@ -361,6 +378,19 @@ function AppointmentsPage() {
             </tr></thead>
             <tbody>
               {filteredAppointments.map(a => (<tr key={a.id}>
+                <td className="col-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={selectedAppointments.has(a.id)}
+                    onChange={() => setSelectedAppointments(prev => {
+                      const next = new Set(prev)
+                      if (next.has(a.id)) next.delete(a.id)
+                      else next.add(a.id)
+                      return next
+                    })}
+                    title="Выбрать для экспорта"
+                  />
+                </td>
                 <td>{new Date(a.appointment_date).toLocaleString('ru-RU')}</td>
                 <td><strong>{a.client_name || '—'}</strong></td>
                 <td><a href={`tel:${a.client_phone || ''}`}>{a.client_phone || '—'}</a></td>

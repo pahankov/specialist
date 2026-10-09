@@ -136,8 +136,8 @@ function generateHourSlots(
           </span>
         )}
 
-        {!past && hourActive && latestLive === null && (
-          <button className="btn btn-sm btn-book" onClick={() => onOpenBooking(date, h)}>
+        {!past && hourActive && (
+          <button className="btn btn-sm btn-book" onClick={() => onOpenBooking(date, h)} title="Записать ещё">
             + Записать
           </button>
         )}

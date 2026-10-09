@@ -19,8 +19,9 @@ function ClientsPage() {
   const navigate = useNavigate()
   const section = useSectionPrefix()
   const { widths: colW, setWidth: setColW } = useColumnWidths('clients2', {
-    name: 180, phone: 140, email: 180, city: 150, noshow: 90, actions: 170,
+    check: 44, name: 180, phone: 140, email: 180, city: 150, noshow: 90, actions: 170,
   })
+  const [selectedClients, setSelectedClients] = useState<Set<number>>(new Set())
   const [editingCityId, setEditingCityId] = useState<number | null>(null)
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
@@ -147,14 +148,23 @@ function ClientsPage() {
           className="btn btn-ghost"
           onClick={async () => {
             try {
-              await downloadCsv('/api/v1/admin/export/clients', 'clients.csv')
-              toast.success('CSV выгружен')
+              const params = new URLSearchParams()
+              if (selectedClients.size > 0) {
+                params.set('ids', [...selectedClients].join(','))
+              } else {
+                if (search?.trim()) params.set('search', search.trim())
+                if (masterIdFilter !== '') params.set('master_id', String(masterIdFilter))
+              }
+              const qs = params.toString()
+              await downloadCsv(`/api/v1/admin/export/clients${qs ? `?${qs}` : ''}`, 'clients.csv')
+              toast.success(selectedClients.size > 0 ? `Выгружено: ${selectedClients.size}` : 'CSV выгружен')
             } catch (err: unknown) {
               toast.error(getApiErrorMessage(err, 'Не удалось выгрузить CSV'))
             }
           }}
+          title={selectedClients.size > 0 ? 'Выгрузить отмеченных' : 'Выгрузить всех по фильтру'}
         >
-          📥 Экспорт CSV
+          📥 Экспорт CSV{selectedClients.size > 0 ? ` (${selectedClients.size})` : ''}
         </button>
       </div>
 
@@ -234,6 +244,17 @@ function ClientsPage() {
           <div style={{ overflowX: 'auto' }}>
             <table className="clients-table resizable-table" style={{ minWidth: 640 }}>
               <thead><tr>
+                <ResizableTh width={colW.check} onResize={(w) => setColW('check', w)} className="col-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={clients.length > 0 && selectedClients.size === clients.length}
+                    onChange={() => {
+                      if (selectedClients.size === clients.length) setSelectedClients(new Set())
+                      else setSelectedClients(new Set(clients.map(c => c.id)))
+                    }}
+                    title="Выбрать всех на странице"
+                  />
+                </ResizableTh>
                 <ResizableTh width={colW.name} onResize={(w) => setColW('name', w)} onClick={() => toggleSort('name')} style={{ cursor: 'pointer', userSelect: 'none' }} title="Сортировать по имени">
                   Имя{sortArrow('name')}
                 </ResizableTh>
@@ -248,6 +269,19 @@ function ClientsPage() {
               <tbody>
                 {clients.map(c => (
                   <tr key={c.id}>
+                    <td className="col-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={selectedClients.has(c.id)}
+                        onChange={() => setSelectedClients(prev => {
+                          const next = new Set(prev)
+                          if (next.has(c.id)) next.delete(c.id)
+                          else next.add(c.id)
+                          return next
+                        })}
+                        title="Выбрать для экспорта"
+                      />
+                    </td>
                     <td>
                       <Tooltip content="Показать записи клиента">
                         <button

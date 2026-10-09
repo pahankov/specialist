@@ -189,7 +189,23 @@ async def update_master(
     if not master_profile:
         raise HTTPException(status_code=404, detail="Мастер не найден")
 
-    for field, value in data.model_dump(exclude_unset=True).items():
+    fields = data.model_dump(exclude_unset=True)
+    # Unique phone/email must not collide with OTHER users: without this
+    # check prod seed duplicates turn the save into a 500 (IntegrityError).
+    if "phone" in fields and fields["phone"]:
+        dup = await db.execute(
+            select(User.id).where(User.phone == fields["phone"], User.id != master_profile.user_id)
+        )
+        if dup.scalar_one_or_none() is not None:
+            raise HTTPException(status_code=400, detail="Мастер с таким телефоном уже существует")
+    if "email" in fields and fields["email"]:
+        dup = await db.execute(
+            select(User.id).where(User.email == fields["email"], User.id != master_profile.user_id)
+        )
+        if dup.scalar_one_or_none() is not None:
+            raise HTTPException(status_code=400, detail="Мастер с таким email уже существует")
+
+    for field, value in fields.items():
         if field == "password" and value:
             master_profile.user.hashed_password = hash_password(value)
         elif field == "name":
@@ -203,7 +219,13 @@ async def update_master(
         else:
             setattr(master_profile, field, value)
 
-    await db.commit()
+    from sqlalchemy.exc import IntegrityError
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        logger.warning("Обновление мастера %s отклонено: конфликт уникальности", master_id)
+        raise HTTPException(status_code=400, detail="Такие телефон или email уже заняты другим пользователем")
     await db.refresh(master_profile)
     logger.info("Суперпользователь %s обновил мастера %s", super_admin.email, master_profile.user.email)
     await log_action(db, super_admin.id, "update", "master", master_profile.user_id,

@@ -247,14 +247,23 @@ function MastersPage() {
             className="btn btn-ghost"
             onClick={async () => {
               try {
-                await downloadCsv('/api/v1/admin/export/masters', 'masters.csv')
-                toast.success('CSV выгружен')
+                const params = new URLSearchParams()
+                if (selectedMasters.size > 0) {
+                  const userIds = masters
+                    .filter(m => selectedMasters.has(m.id))
+                    .map(m => m.user_id)
+                  params.set('ids', userIds.join(','))
+                }
+                const qs = params.toString()
+                await downloadCsv(`/api/v1/admin/export/masters${qs ? `?${qs}` : ''}`, 'masters.csv')
+                toast.success(selectedMasters.size > 0 ? `Выгружено: ${selectedMasters.size}` : 'CSV выгружен')
               } catch (err: unknown) {
                 toast.error(handleError(err))
               }
             }}
+            title={selectedMasters.size > 0 ? 'Выгрузить отмеченных' : 'Выгрузить всех по фильтру'}
           >
-            📥 Экспорт CSV
+            📥 Экспорт CSV{selectedMasters.size > 0 ? ` (${selectedMasters.size})` : ''}
           </button>
           <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>+ Добавить мастера</button>
         </div>

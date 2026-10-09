@@ -113,3 +113,22 @@ class TestMasterMutations:
             select(Appointment).where(Appointment.master_id == mp_id)
         )
         assert remaining.scalars().all() == []
+
+    async def test_patch_duplicate_phone_is_400_not_500(
+        self, client, session, super_admin_headers
+    ):
+        """Prod seed rows share phones: saving a duplicate must be a 400."""
+        mp_id = await _seed_master(session, "repro_dup1@example.com")
+        other = User(name="Other", email="repro_dup2@example.com",
+                     hashed_password=hash_password("SecurePass123!"),
+                     phone="+70000000001", role=UserRole.CLIENT)
+        session.add(other)
+        await session.commit()
+
+        r = await client.patch(
+            f"/api/v1/admin/masters/{mp_id}",
+            json={"phone": "+70000000001"},
+            headers=super_admin_headers,
+        )
+        assert r.status_code == 400, r.text
+        assert "телефон" in r.json()["detail"]

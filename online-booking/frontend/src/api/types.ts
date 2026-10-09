@@ -40,6 +40,7 @@ export interface ClientProfile {
 
 export interface Master {
   id: number
+  user_id: number
   name: string
   email: string
   phone?: string
