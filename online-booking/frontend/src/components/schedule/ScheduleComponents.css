@@ -291,6 +291,23 @@
   font-size: 12px;
 }
 
+/* Disabled primary button must LOOK disabled (was indistinguishable) */
+.modal-actions .btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: grayscale(0.4);
+}
+
+/* Hint under unpicked search fields */
+.field-hint {
+  font-size: 12px;
+  color: #b45309;
+  background: #fef3c7;
+  border-radius: 6px;
+  padding: 4px 8px;
+  margin-top: 6px;
+}
+
 /* Booking modal */
 .booking-modal-date {
   color: #666;

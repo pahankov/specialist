@@ -85,7 +85,8 @@ export async function handleBookAppointment(
   setBookingLoading: (loading: boolean) => void,
   setError: (msg: string) => void,
   api: typeof adminApi,
-  onClose: () => void
+  onClose: () => void,
+  masterId?: number | ''
 ): Promise<boolean> {
   if (!bookingForm.date || bookingForm.hour === null || !bookingForm.clientId || !bookingForm.serviceId) return false
 
@@ -95,6 +96,7 @@ export async function handleBookAppointment(
     const hourStr = String(bookingForm.hour).padStart(2, '0')
     const appointmentDate = `${dateStr}T${hourStr}:00:00`
     await api.bookAppointment({
+      master_id: masterId !== '' && masterId != null ? masterId : undefined,
       client_id: bookingForm.clientId,
       service_id: bookingForm.serviceId,
       appointment_date: appointmentDate,

@@ -80,6 +80,9 @@ export function BookingModal({
               </div>
             )}
           </div>
+          {!selectedClient && (
+            <div className="field-hint">Выберите клиента из списка — кнопка записи активна только после выбора</div>
+          )}
         </div>
 
         <div className="form-group">
@@ -111,6 +114,9 @@ export function BookingModal({
               </div>
             )}
           </div>
+          {!selectedService && (
+            <div className="field-hint">Выберите услугу из списка — кнопка записи активна только после выбора</div>
+          )}
         </div>
 
         <div className="form-group">

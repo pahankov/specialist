@@ -31,7 +31,8 @@ function LogsPage() {
     service: '💇 Услуга',
     client: '👤 Клиент',
     working_hour: '🕐 Расписание',
-    master: '👨‍💼 Мастер'
+    master: '👨‍💼 Мастер',
+    auth: '🔑 Вход/выход'
   }
 
   const actionLabels: Record<string, string> = {
@@ -102,7 +103,8 @@ function LogsPage() {
     { value: 'appointment', label: '📅 Записи' },
     { value: 'service', label: '💇 Услуги' },
     { value: 'client', label: '👤 Клиенты' },
-    { value: 'master', label: '👨‍💼 Мастера' }
+    { value: 'master', label: '👨‍💼 Мастера' },
+    { value: 'auth', label: '🔑 Входы/выходы' }
   ]
 
   return (

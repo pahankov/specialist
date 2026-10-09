@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { adminApi } from '../../api/client'
 import type { Appointment } from '../../api/types'
 import { Skeleton, EmptyState, Tooltip, ConfirmDialog, MasterSelect, ResizableTh, useColumnWidths, Pager } from '../../components/common'
+import { downloadCsv } from '../../api/export'
 import { useSectionPrefix, SUPER_PREFIX } from '../../utils/section'
 import { getApiErrorMessage } from '../../utils/apiError'
 import '../../styles/filters.css'
@@ -101,9 +102,15 @@ function AppointmentsPage() {
     const sp = searchParams.get('status')
     if (sp !== null && sp !== '' && ['pending', 'confirmed', 'cancelled', 'completed'].includes(sp)) {
       setStatusFilter(sp)
+      // Completed rows are hidden by the "show completed" toggle — a
+      // deep-link into them must reveal them, or the list looks empty
+      if (sp === 'completed') setShowCompleted(true)
     }
     // consume once so back/forward stays clean
     if (searchParams.has('client_id') || searchParams.has('master_id') || searchParams.has('status')) {
+      // Deep-linked filters live in the collapsible panel — open it so the
+      // user sees what is applied instead of a "wrong" list
+      setShowFilters(true)
       setSearchParams({}, { replace: true })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -223,8 +230,7 @@ function AppointmentsPage() {
         </div>
           <button
             className="btn btn-ghost"
-            onClick={() => {
-              const { VITE_API_URL = 'http://localhost:8000' } = import.meta.env
+            onClick={async () => {
               const params = new URLSearchParams()
               if (statusFilter) params.set('status', statusFilter)
               if (masterIdFilter !== '') params.set('master_id', String(masterIdFilter))
@@ -232,7 +238,12 @@ function AppointmentsPage() {
               if (serviceIdFilter !== '') params.set('service_id', String(serviceIdFilter))
               if (dateFrom) params.set('date_from', dateFrom)
               if (dateTo) params.set('date_to', dateTo)
-              window.open(`${VITE_API_URL}/api/v1/admin/export/appointments?${params.toString()}`, '_blank')
+              try {
+                await downloadCsv(`/api/v1/admin/export/appointments?${params.toString()}`, 'appointments.csv')
+                toast.success('CSV выгружен')
+              } catch (err: unknown) {
+                toast.error(getApiErrorMessage(err, 'Не удалось выгрузить CSV'))
+              }
             }}
           >
             📥 Экспорт CSV

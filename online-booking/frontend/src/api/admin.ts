@@ -52,6 +52,7 @@ export const adminApi = {
     appointment_date: string
     status: string
     notes?: string
+    master_id?: number
   }) {
     return apiClient.post('/api/v1/admin/appointments/book', data)
   },

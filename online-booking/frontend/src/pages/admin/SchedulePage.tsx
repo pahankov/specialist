@@ -272,7 +272,7 @@ function SchedulePage() {
   const handleBook = useCallback(async () => {
     const success = await handleBookAppointment(
       bookingForm, setBookingLoading, setError,
-      adminApi, handleCloseBooking
+      adminApi, handleCloseBooking, selectedMasterId
     )
     if (success) {
       const from = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth()).padStart(2, '0')}-01`

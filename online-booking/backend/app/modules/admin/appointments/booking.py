@@ -73,12 +73,23 @@ async def book_appointment(
     """Book an appointment from admin panel (select client from DB)."""
     logger.info("Admin booking appointment: master=%s, client=%s, service=%s, date=%s",
                 master.id, data.client_id, data.service_id, data.appointment_date)
-    result = await db.execute(
-        select(MasterProfile).where(MasterProfile.user_id == master.id)
-    )
-    mp = result.scalar_one_or_none()
-    if not mp:
-        raise HTTPException(status_code=403, detail="Not a master")
+    if master.role == UserRole.ADMIN:
+        # Superadmins have no profile of their own: book for the selected master
+        if data.master_id is None:
+            raise HTTPException(status_code=400, detail="Укажите мастера (master_id)")
+        result = await db.execute(
+            select(MasterProfile).where(MasterProfile.id == data.master_id)
+        )
+        mp = result.scalar_one_or_none()
+        if not mp:
+            raise HTTPException(status_code=404, detail="Мастер не найден")
+    else:
+        result = await db.execute(
+            select(MasterProfile).where(MasterProfile.user_id == master.id)
+        )
+        mp = result.scalar_one_or_none()
+        if not mp:
+            raise HTTPException(status_code=403, detail="Not a master")
 
     service_result = await db.execute(
         select(Service).where(Service.id == data.service_id, Service.master_id == mp.id)

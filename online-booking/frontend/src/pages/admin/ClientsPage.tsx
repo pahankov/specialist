@@ -6,6 +6,7 @@ import type { Client } from '../../api/types'
 import { PHONE_PLACEHOLDER, EMAIL_PLACEHOLDER } from '../../constants'
 import { isCompletePhone } from '../../components/common/PhoneInput'
 import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError'
+import { downloadCsv } from '../../api/export'
 import { Skeleton, EmptyState, Tooltip, ConfirmDialog, MasterSelect, PhoneInput, ResizableTh, useColumnWidths, Pager, CitySelect } from '../../components/common'
 import type { CityOption } from '../../components/common/CitySelect'
 import { useSectionPrefix } from '../../utils/section'
@@ -13,13 +14,11 @@ import '../../styles/filters.css'
 import '../../styles/tables.css'
 import './ClientsPage.css'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-
 function ClientsPage() {
   const navigate = useNavigate()
   const section = useSectionPrefix()
   const { widths: colW, setWidth: setColW } = useColumnWidths('clients', {
-    name: 200, phone: 150, email: 200, noshow: 90, lock: 64, actions: 110,
+    name: 200, phone: 150, email: 200, noshow: 90, actions: 170,
   })
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
@@ -144,7 +143,14 @@ function ClientsPage() {
         </div>
         <button
           className="btn btn-ghost"
-          onClick={() => { window.open(`${API_URL}/api/v1/admin/export/clients`, '_blank') }}
+          onClick={async () => {
+            try {
+              await downloadCsv('/api/v1/admin/export/clients', 'clients.csv')
+              toast.success('CSV выгружен')
+            } catch (err: unknown) {
+              toast.error(getApiErrorMessage(err, 'Не удалось выгрузить CSV'))
+            }
+          }}
         >
           📥 Экспорт CSV
         </button>
@@ -234,7 +240,6 @@ function ClientsPage() {
                 <ResizableTh width={colW.noshow} onResize={(w) => setColW('noshow', w)} onClick={() => toggleSort('no_show')} style={{ cursor: 'pointer', userSelect: 'none' }} title="Сортировать по неявкам">
                   Неявки{sortArrow('no_show')}
                 </ResizableTh>
-                <ResizableTh width={colW.lock} onResize={(w) => setColW('lock', w)} title="Блокировка"></ResizableTh>
                 <ResizableTh width={colW.actions} onResize={(w) => setColW('actions', w)}>Действия</ResizableTh>
               </tr></thead>
               <tbody>
@@ -253,7 +258,7 @@ function ClientsPage() {
                     <td><a href={`tel:${c.phone}`}>{c.phone}</a></td>
                     <td>{c.email || '—'}</td>
                     <td>{(c.no_show_count ?? 0) > 0 ? `⚠️ ${c.no_show_count}` : '—'}</td>
-                    <td>
+                    <td className="actions-cell">
                       <Tooltip content={c.is_active === false ? 'Разблокировать' : 'Заблокировать'} position="top">
                         <button
                           className={`btn btn-sm ${c.is_active === false ? 'btn-success' : 'btn-warn'}`}
@@ -262,8 +267,6 @@ function ClientsPage() {
                           {c.is_active === false ? '🔓' : '🔒'}
                         </button>
                       </Tooltip>
-                    </td>
-                    <td className="actions-cell">
                       <Tooltip content="Редактировать">
                         <button className="btn btn-sm btn-edit" onClick={() => handleEdit(c)}>✏️</button>
                       </Tooltip>

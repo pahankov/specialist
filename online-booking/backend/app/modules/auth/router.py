@@ -17,6 +17,7 @@ from app.schemas.otp import SendOtpRequest, VerifyOtpRequest, OtpResponse
 from app.schemas.auth import TokenResponse, TokenRefreshResponse, TokenRefreshRequest, UnifiedLoginRequest, UnifiedRegisterRequest
 from app.config import settings
 from app.logging_config import get_logger
+from app.services.audit import log_action
 from app.modules.auth import service
 from app.modules.auth.token import create_access_token, create_refresh_token_payload
 
@@ -112,6 +113,11 @@ async def login(response: Response, req: UserLoginByEmail, db: AsyncSession = De
         cookie_token = stored.token if stored else None
 
         _set_auth_cookies(response, access_token, cookie_token)
+        await log_action(
+            db, user.id, "login", "auth", user.id,
+            f"Вход: {user.email} ({user.role.value})", level="info",
+        )
+        await db.commit()
         return {"access_token": access_token, "token_type": "bearer"}
     except HTTPException:
         logger.warning("Login failed (HTTP): email=%s", req.email)
@@ -254,6 +260,9 @@ async def logout(request: Request, db: AsyncSession = Depends(get_db)):
                 .where(RefreshToken.user_id == user_id, RefreshToken.is_revoked == False)
                 .values(is_revoked=True, revoked_at=datetime.now(dt_timezone.utc))
             )
+            await log_action(
+                db, user_id, "logout", "auth", user_id, "Выход", level="info",
+            )
             await db.commit()
         except JWTError:
             logger.debug("Logout: invalid JWT in cookie, skipping token revocation")
@@ -293,6 +302,11 @@ async def login_unified(
         cookie_token = stored.token if stored else None
 
         _set_auth_cookies(response, access_token, cookie_token)
+        await log_action(
+            db, user.id, "login", "auth", user.id,
+            f"Вход: {user.email or user.phone} ({user.role.value})", level="info",
+        )
+        await db.commit()
         return {"access_token": access_token, "token_type": "bearer"}
     except HTTPException:
         logger.warning("Unified login failed: identifier=%s", req.identifier)

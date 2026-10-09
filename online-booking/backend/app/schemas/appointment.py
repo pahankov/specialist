@@ -59,3 +59,6 @@ class AdminBookingCreate(BaseModel):
     appointment_date: datetime
     status: str = "pending"
     notes: Optional[str] = None
+    # MasterProfile.id — superadmin booking for a selected master.
+    # Regular masters always book for themselves (ignored).
+    master_id: Optional[int] = None
