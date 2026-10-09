@@ -10,9 +10,10 @@ from app.utils.security import hash_password
 from sqlalchemy import select
 
 
-async def _seed_master(session, email="repro_master@example.com"):
+async def _seed_master(session, email="repro_master@example.com", phone=None):
     u = User(name="Repro", email=email,
              hashed_password=hash_password("SecurePass123!"),
+             phone=phone,
              role=UserRole.MASTER)
     session.add(u)
     await session.flush()
@@ -132,3 +133,20 @@ class TestMasterMutations:
         )
         assert r.status_code == 400, r.text
         assert "телефон" in r.json()["detail"]
+
+    async def test_patch_unchanged_phone_passes(
+        self, client, session, super_admin_headers
+    ):
+        """Name-only edit must not trip the duplicate check: an unchanged
+        phone cannot create a new violation (prod seed rows share phones,
+        and the DB there may lack the unique index)."""
+        mp_id = await _seed_master(
+            session, "repro_same@example.com", phone="+70000000002")
+
+        r = await client.patch(
+            f"/api/v1/admin/masters/{mp_id}",
+            json={"name": "Renamed Only", "phone": "+70000000002"},
+            headers=super_admin_headers,
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["name"] == "Renamed Only"

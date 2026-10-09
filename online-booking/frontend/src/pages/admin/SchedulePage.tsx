@@ -9,6 +9,7 @@ import { ConfirmDialog, MasterSelect } from '../../components/common'
 import { getApiErrorMessage } from '../../utils/apiError'
 import { getCookie, decodeJwtPayload } from '../../utils/cookies'
 import { MonthlyStatsComponent } from '../../components/schedule/MonthlyStats'
+import { getAppointmentsForSlot } from '../../components/schedule/helpers'
 import { usePersistentState } from '../../utils/persistentState'
 import {
   toggleDayWork,
@@ -229,6 +230,17 @@ function SchedulePage() {
     }
 
     // Turning OFF
+    // A granule with a live booking cannot be unchecked: cancel the
+    // booking first (mirrors the day toggle, which refuses days with rows).
+    const [y, m, d] = dateStr.split('-').map(Number)
+    const liveHere = getAppointmentsForSlot(
+      appointments, new Date(y, m - 1, d), hour,
+    ).filter(a => a.status !== 'cancelled')
+    if (liveHere.length > 0) {
+      const who = liveHere.map(a => a.client_name || 'клиент').join(', ')
+      setError(`Нельзя снять час — в нём бронь (${who}). Сначала отмените запись.`)
+      return
+    }
     const remaining = Object.keys(activeHours)
       .filter(k => k.startsWith(`${dateStr}-`) && k !== key && activeHours[k])
       .map(k => Number(k.split('-').pop()))
@@ -267,7 +279,7 @@ function SchedulePage() {
       setActiveHours(prev => ({ ...prev, [key]: true }))
       setError(getApiErrorMessage(err, 'Не удалось выключить час'))
     }
-  }, [activeHours, selectedMasterId, isSuperAdmin])
+  }, [activeHours, appointments, selectedMasterId, isSuperAdmin])
 
   const handleOpenBooking = useCallback((date: Date, hour: number) => {
     openBookingForm(date, hour, setBookingForm)

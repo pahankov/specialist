@@ -95,11 +95,13 @@ function generateHourSlots(
 
   for (let h = hours.start; h < hours.end; h++) {
     const slotsForHour = getAppointmentsForSlot(appointments, date, h)
-    const status = getSlotStatus(slotsForHour)
+    // One granule = one live booking. Cancelled history stays visible
+    // below, but the granule color and buttons follow live bookings only:
+    // after a cancel the granule is green and bookable again.
+    const live = slotsForHour.filter(s => s.status !== 'cancelled')
+    const status = getSlotStatus(live)
     const past = isSlotPast(date, h)
     const hourActive = !!activeHours[`${dateStr}-${h}`]
-    // Live booking in this hour (cancelled ones don't count)
-    const live = slotsForHour.filter(s => s.status !== 'cancelled')
     const latestLive = live.length > 0 ? live.reduce((a, b) => (a.id > b.id ? a : b)) : null
 
     slots.push(
@@ -136,8 +138,8 @@ function generateHourSlots(
           </span>
         )}
 
-        {!past && hourActive && (
-          <button className="btn btn-sm btn-book" onClick={() => onOpenBooking(date, h)} title="Записать ещё">
+        {!past && hourActive && latestLive === null && (
+          <button className="btn btn-sm btn-book" onClick={() => onOpenBooking(date, h)} title="Записать клиента">
             + Записать
           </button>
         )}

@@ -190,15 +190,17 @@ async def update_master(
         raise HTTPException(status_code=404, detail="Мастер не найден")
 
     fields = data.model_dump(exclude_unset=True)
-    # Unique phone/email must not collide with OTHER users: without this
-    # check prod seed duplicates turn the save into a 500 (IntegrityError).
-    if "phone" in fields and fields["phone"]:
+    # Unique phone/email must not collide with OTHER users. Prod seed rows
+    # share phones, so check ONLY when the value actually changes: an
+    # unchanged value cannot create a new violation, but blocking a
+    # name-only edit would be wrong.
+    if "phone" in fields and fields["phone"] and fields["phone"] != master_profile.user.phone:
         dup = await db.execute(
             select(User.id).where(User.phone == fields["phone"], User.id != master_profile.user_id)
         )
         if dup.scalar_one_or_none() is not None:
             raise HTTPException(status_code=400, detail="Мастер с таким телефоном уже существует")
-    if "email" in fields and fields["email"]:
+    if "email" in fields and fields["email"] and fields["email"] != master_profile.user.email:
         dup = await db.execute(
             select(User.id).where(User.email == fields["email"], User.id != master_profile.user_id)
         )
