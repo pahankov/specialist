@@ -174,17 +174,11 @@ export interface DashboardStats {
   }[]
 }
 
-export interface AppointmentWithClient extends Appointment {
-  client_name?: string
-  client_phone?: string
-  service_name?: string
-  service_price?: number
-}
+// NOTE: AppointmentWithClient removed — Appointment already carries optional
+// client_name/client_phone/service_name/service_price (lines above).
 
-export interface AdminLoginResponse {
-  access_token: string
-  token_type: string
-}
+/** Identical to LoginResponse — kept as alias so superadmin imports don't churn. */
+export type AdminLoginResponse = LoginResponse
 
 export interface AdminStats {
   total_masters: number
@@ -213,39 +207,16 @@ export interface AdminStats {
   }[]
 }
 
-export interface MonthlyStats {
-  confirmed_appointments: number
-  total_minutes: number
-  total_hours: number
-  revenue: number
-}
-
-export interface CalendarDay {
-  date: Date
-  isCurrentMonth: boolean
-}
-
-export interface TimeSlot {
-  hour: number
-  status: 'free' | 'pending' | 'confirmed' | 'completed' | 'cancelled'
-  appointments: Appointment[]
-  isActive: boolean
-}
-
-export interface DaySchedule {
-  start: number
-  end: number
-}
-
-export interface BookingFormState {
-  open: boolean
-  date: Date | null
-  hour: number | null
-  clientId: number | null
-  serviceId: number | null
-  status: 'pending' | 'confirmed'
-  notes: string
-}
+// ─── Schedule UI types live in components/schedule/types.ts ───
+// (moved out of api/types: they describe view state, not API contracts).
+// Re-exported here for backward compatibility of existing imports.
+export type {
+  MonthlyStats,
+  CalendarDay,
+  TimeSlot,
+  DaySchedule,
+  BookingFormState,
+} from '../components/schedule/types'
 
 // ─── Geography ───────────────────────────────────────────────────────
 
@@ -281,15 +252,8 @@ export interface UnifiedLoginRequest {
   password: string
 }
 
-export interface UnifiedRegisterRequest {
-  name: string
-  email: string
-  phone: string
-  password: string
-  city_id?: number | null
-  telegram_username?: string | null
-  is_master: boolean
-}
+// NOTE: UnifiedRegisterRequest removed — the live contract is
+// UnifiedRegisterData in api/auth.ts (city_data, used by LoginModal).
 
 export interface UnifiedRegisterResponse {
   id: number
@@ -409,6 +373,11 @@ export interface AuditLogEntry {
   details?: string
   ip_address?: string
   created_at?: string
+}
+
+export interface AuditLogList {
+  total: number
+  logs: AuditLogEntry[]
 }
 
 export interface ImportResult {

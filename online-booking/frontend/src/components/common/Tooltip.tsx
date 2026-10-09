@@ -44,7 +44,7 @@ export default function Tooltip({ content, position = 'top', children, delay = 2
     >
       {children}
       {visible && (
-        <div className={`tooltip tooltip-${positionClass}`}>
+        <div className={`tooltip ${positionClass}`}>
           {content}
         </div>
       )}

@@ -73,20 +73,42 @@ class Settings(BaseSettings):
         return "INFO" if self.APP_ENV == "production" else "DEBUG"
 
     def validate_secrets(self) -> None:
-        """Validate that required secrets are set in production."""
-        if self.APP_ENV == "production":
-            bad_keys = [
-                "dev-secret-key",
-                "dev-refresh-secret-key",
-            ]
-            for key in bad_keys:
-                if key in self.SECRET_KEY or key in self.REFRESH_SECRET_KEY:
-                    print(
-                        f"ERROR: {key} detected in production. "
-                        "Set SECRET_KEY and REFRESH_SECRET_KEY via environment variables.",
-                        file=sys.stderr,
-                    )
-                    sys.exit(1)
+        """Fail-closed проверка секретов.
+
+        Production: пустой/короткий/дефолтный SECRET_KEY или REFRESH_SECRET_KEY —
+        немедленный выход (лучше упасть на старте, чем подписать JWT пустым ключом).
+        Development: разрешены dev-значения, но пустые ключи тоже запрещены
+        (иначе dev и prod ведут себя по-разному и баги переезжают молча).
+        """
+        dev_markers = (
+            "dev-secret-key",
+            "dev-refresh-secret-key",
+            "change-in-production",
+        )
+        for field in ("SECRET_KEY", "REFRESH_SECRET_KEY"):
+            value = getattr(self, field, "") or ""
+            if not value:
+                print(
+                    f"ERROR: {field} is empty. "
+                    "Set it in online-booking/backend/.env (single runtime canon, see docs/SECRETS.md). "
+                    'Generate: python -c "import secrets; print(secrets.token_urlsafe(32))"',
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            if len(value) < 32:
+                print(
+                    f"ERROR: {field} is too short ({len(value)} chars, need >= 32). "
+                    "Generate a strong value, see docs/SECRETS.md.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            if self.APP_ENV == "production" and any(m in value for m in dev_markers):
+                print(
+                    f"ERROR: dev default detected in {field} while APP_ENV=production. "
+                    "Set SECRET_KEY and REFRESH_SECRET_KEY via environment variables.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
 
 
 settings = Settings()

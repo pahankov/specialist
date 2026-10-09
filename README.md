@@ -131,17 +131,17 @@ beauty-specialist/              # корень репозитория
     │   │   └── modules/          # self-contained пакеты: auth, city, user, booking,
     │   │                         # service, schedule, review, admin/*, dadata
     │   ├── alembic/              # миграции PostgreSQL
-    │   ├── tests/                # pytest (~310)
+    │   ├── tests/                # pytest (~321)
     │   └── requirements.txt
     └── frontend/
         ├── src/
         │   ├── api/              # http (axios + refresh), public/auth/admin/superadmin, dadata
-        │   ├── components/common/# Modal, ConfirmDialog, PhoneInput, CitySelect, MasterSelect, ...
+        │   ├── components/common/# Modal, PhoneInput, CitySelect, MasterSelect, ResizableTh, Pager, ...
         │   ├── pages/admin/      # AdminLayout (/admin) + SuperAdminLayout (/super) + страницы
         │   ├── pages/public/     # HomePage, BookingPage
         │   ├── styles/           # общие стили (filters.css — сетка фильтров)
-        │   ├── tests/            # Vitest (~70)
-        │   ├── utils/            # section (префикс /admin|/super), formatPhone, apiError, ...
+        │   ├── tests/            # Vitest (~75)
+        │   ├── utils/            # section (/admin|/super), persistentState, formatPhone, apiError, ...
         │   └── App.tsx           # роутинг: / → /booking → /admin/* → /super/*
         └── package.json
 ```
@@ -185,7 +185,7 @@ utils/
 | Компонент | Технология |
 |-----------|-----------|
 | Backend | FastAPI 0.115, SQLAlchemy 2.0 (async), aiosqlite / asyncpg |
-| Auth | JWT (python-jose), bcrypt==4.3.0 (passlib), refresh token rotation, httpOnly cookies |
+| Auth | JWT (PyJWT, HS256), прямой bcrypt (без passlib), refresh token rotation, httpOnly cookies |
 | Migrations | Alembic 1.14 |
 | Cache | Redis 7 (optional, graceful degradation) |
 | Background tasks | RQ (Redis Queue, optional, graceful degradation) |
@@ -405,7 +405,7 @@ OtpCode (id, phone, code_hash, expires_at, is_used, created_at)
 ## 🔒 Безопасность
 
  1. **Пароли:** Bcrypt hashing напрямую (без passlib), валидация: min 8 символов, 1 заглавная, 1 строчная, 1 цифра, 1 спецсимвол (!@#$%^&* и т.д.), 4 уникальных символа
- 2. **Аутентификация:** JWT токены (python-jose, HS256) + refresh token rotation
+  2. **Аутентификация:** JWT токены (PyJWT, HS256) + refresh token rotation
  3. **SMS OTP:** 6-значный код на телефон (TTL 5 мин), hash-хранение кода, поддержка Twilio/SMS.ru
  4. **Cookies (split-token):** refresh_token — `httponly=True` (7 суток), access_token — `httponly=False`, TTL 30 мин, читается JS для `Authorization: Bearer` (бэк проверяет только header; полный httpOnly — future work)
  5. **Rate limiting:** 60 req/min default, 10 req/min для auth-эндпоинтов
@@ -419,13 +419,13 @@ OtpCode (id, phone, code_hash, expires_at, is_used, created_at)
 # Backend
 cd online-booking\backend
 $env:PYTHONPATH='.'
-pytest tests/ -v                          # Все тесты (~310)
+pytest tests/ -v                          # Все тесты (~321)
 pytest tests/test_reviews.py -v           # Только reviews
 pytest tests/ -v --cov=app                # С покрытием
 
 # Frontend
 cd online-booking\frontend
-npx vitest run                            # Все тесты (~70)
+npx vitest run                            # Все тесты (~75)
 npx vitest run src/tests/helpers.test.ts  # Только helpers
 npx vitest                              # Watch mode
 ```
@@ -439,6 +439,23 @@ npx vitest                              # Watch mode
 
 
 ## 📚 История версий
+
+### [1.11.0] — 2026-10-09
+- **Секреты в одном месте:** корневой `.env`-дубль удалён; рантайм-канон — только `online-booking/backend/.env` (gitignored), шаблон — `.env.example`; `docs/SECRETS.md` обновлён
+- **Безопасность P0:** `SECRET_KEY` fail-closed (пустой/короткий ключ роняет старт), slowapi реально подключён (60/min глобально + 10/min на auth, `/health` exempt), CORS-методы явно, `Review` добавлен в `alembic/env.py`
+- **Баги:** OTP — 6 цифр (`randbelow`, HEX не проходил валидацию), `digits == 11` → `len(digits) == 11`, экспорт — aliased join + `_run()` без блокировки loop, двойной `GET /audit-logs` схлопнут в один role-aware handler
+- **Бэкенд-чистота:** `python-jose` → `PyJWT`, `passlib` удалён (прямой bcrypt), `normalize_phone` один (`utils/phone.py`), мёртвый `modules/auth/schemas.py` удалён, токены переехали в `utils/tokens.py` (без module→module), кэш на `redis.asyncio` + `SCAN` + `v1:`, RQ берёт хост из `settings.REDIS_URL`
+- **Фронт-чистота:** удалены `@radix-ui/react-dialog`, `date-fns`, мёртвый background-экспорт; `dadata.ts` импортирует `./http` (без цикла); UI-типы расписания → `components/schedule/types.ts`; `AdminLoginResponse` — алиас; Tooltip-классы починены; общий `SelectDropdown.css`; куки только через `utils/cookies`
+- **Тесты:** `pytest_asyncio.fixture` в conftest, `RATE_LIMIT_DISABLED` по умолчанию в тестах, кэш-тесты переписаны под async; фронт: 75/75 vitest, `tsc` чисто
+
+### [1.10.0] — 2026-10-09
+- **Города везде:** `POST /cities/resolve` (DaData→local id), город у клиента (схемы, CRUD, форма, колонка, bulk-назначение), бэкфилл Москва/Питер/Краснодар миграцией
+- **Расписание:** окно рабочего времени (`work_start_hour/end_hour` + миграция, `GET/PATCH /work-window`), гранулы из окна, включение часа активирует день, 1 гранула = 1 живая запись, запрет снятия часа с бронью, бронь суперадмина за выбранного мастера
+- **Таблицы:** `ResizableTh` + `useColumnWidths` (память ширин), общий `Pager` (в начало/конец), колонка МАСТЕР и сортировка по ней, общий `filters.css`
+- **Drill-down:** баннеры дохода ведут в записи/клиентов со скоупом; фильтры переживают переходы (sessionStorage)
+- **Аудит и безопасность:** создание/обновление/удаление мастера в логах, входы/выходы (`auth`), блокировка = оба флага + 403 при входе
+- **Экспорты через API-клиент** (blob, с тостами): записи (мастер/ids), клиенты (город, ids/фильтр), мастера; чекбоксы выбора в таблицах
+- **Индексы горячих путей** миграцией; дубли телефона/email при update → 400 вместо 500 (проверка только изменённых)
 
 ### [1.9.0] — 2026-10-08
 - **Разделение секций:** суперадмин переехал на `/super/*` (свой layout, меню, guards), мастер остался на `/admin/*`; общий `PhoneInput`, переписанный `CitySelect`, общий `styles/filters.css`, детерминированная пагинация (tiebreak по id)

@@ -13,7 +13,7 @@ import { ADMIN_PREFIX, SUPER_PREFIX } from './utils/section'
 import './App.css'
 
 function getIsAuthenticated() {
-  return !!document.cookie.includes('access_token=')
+  return getCookie('access_token') !== null
 }
 
 function getIsAdmin() {

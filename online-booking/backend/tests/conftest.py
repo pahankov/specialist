@@ -1,14 +1,18 @@
 """
 Pytest configuration for Online Booking backend tests.
 """
+import os
+
+# Rate limiting must be disabled BEFORE app import (rate_limit reads env at import).
+# CI sets RATE_LIMIT_DISABLED=true explicitly; setdefault keeps local runs safe too.
+os.environ.setdefault("RATE_LIMIT_DISABLED", "true")
+
 import pytest
 import tempfile
-import os
 import uuid
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-from sqlalchemy.orm import sessionmaker
 
 from app.main import app
 from app.database import Base, get_db
@@ -36,7 +40,7 @@ async def engine():
         os.remove(db_file)
 
 
-@pytest.fixture(scope="function")
+@pytest_asyncio.fixture(scope="function")
 async def session(engine) -> AsyncSession:
     """Create a new session — commits changes for test visibility."""
     async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
@@ -47,7 +51,7 @@ async def session(engine) -> AsyncSession:
 
 # ─── HTTP Client Fixture ─────────────────────────────────────────────
 
-@pytest.fixture(scope="function")
+@pytest_asyncio.fixture(scope="function")
 async def client(session):
     """Override DB dependency and create test HTTP client."""
     async def override_get_db():

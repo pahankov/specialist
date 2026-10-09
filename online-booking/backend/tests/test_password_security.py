@@ -1,6 +1,5 @@
-"""Tests for password hashing and security."""
+"""Tests for password hashing and security (direct bcrypt via app.utils.security)."""
 import pytest
-from passlib.context import CryptContext
 
 
 class TestPasswordHashing:

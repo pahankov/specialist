@@ -153,23 +153,6 @@ export const adminApi = {
     return apiClient.get<Changelog>('/api/v1/admin/changelog')
   },
 
-  // Export with background task support
-  exportAppointmentsBackground(status?: string) {
-    return apiClient.post('/api/v1/admin/export/appointments', null, { params: { background: true, status } })
-  },
-  getExportStatus(jobId: string) {
-    return apiClient.get(`/api/v1/admin/export/appointments/status/${jobId}`)
-  },
-  exportClientsBackground() {
-    return apiClient.post('/api/v1/admin/export/clients', null, { params: { background: true } })
-  },
-  getClientsExportStatus(jobId: string) {
-    return apiClient.get(`/api/v1/admin/export/clients/status/${jobId}`)
-  },
-  getExportStats() {
-    return apiClient.get('/api/v1/admin/export/stats')
-  },
-
   // Revenue breakdown
   getRevenueBreakdown(params?: {
     by_master?: boolean

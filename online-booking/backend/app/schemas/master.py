@@ -4,21 +4,7 @@ from datetime import datetime
 import re
 
 from app.utils.security import validate_password_strength
-
-
-def normalize_phone(phone: str) -> str:
-    digits = re.sub(r'\D', '', phone)
-    if not digits:
-        raise ValueError('Введите номер телефона')
-    if len(digits) > 11:
-        digits = digits[-11:]
-    if digits.startswith('8') and len(digits) == 11:
-        digits = '7' + digits[1:]
-    if not digits.startswith('7'):
-        digits = '7' + digits
-    if len(digits) != 11:
-        raise ValueError('Номер телефона должен содержать 10 цифр')
-    return f'+7 ({digits[1:4]}) {digits[4:7]}-{digits[7:9]}-{digits[9:11]}'
+from app.utils.phone import normalize_phone
 
 
 class MasterCreate(BaseModel):

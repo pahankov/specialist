@@ -26,6 +26,7 @@ from app.models.country import Country  # noqa: F401
 from app.models.city import City  # noqa: F401
 from app.models.refresh_token import RefreshToken  # noqa: F401
 from app.models.otp_code import OtpCode  # noqa: F401
+from app.models.review import Review  # noqa: F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

@@ -88,6 +88,8 @@
 | is_active | BOOLEAN | DEFAULT TRUE | Мягкое удаление |
 | tariff | VARCHAR(20) | NOT NULL, DEFAULT trial | Тариф (фундамент биллинга, пока всем trial) |
 | trial_ends_at | TIMESTAMP WITH TIME ZONE | NULLABLE | Конец триала (новым: +180 дней) |
+| work_start_hour | INTEGER | NOT NULL, DEFAULT 8 | Начало дневного окна (границы гранул расписания) |
+| work_end_hour | INTEGER | NOT NULL, DEFAULT 22 | Конец дневного окна (границы гранул расписания) |
 | created_at | TIMESTAMP WITH TIME ZONE | | Дата создания |
 | updated_at | TIMESTAMP WITH TIME ZONE | | Дата обновления |
 
@@ -315,8 +317,11 @@
 | 7 | 4fdb5e791ead | b2e8f1a3c9d0 | baseline_capture_current_schema (полный DDL) | 2026-09-29 |
 | 8 | 5c72771 | 4fdb5e791ead | fix_audit_logs_fk_to_users (FK на users.id вместо master_profiles) | 2026-09-30 |
 | 9 | e7a1c2d4b5f6 | 5c72771 | master_tariffs_trial (tariff + trial_ends_at, ретро-триал +180 дней) | 2026-10-08 |
+| 10 | f9b3c1d4e5a6 | e7a1c2d4b5f6 | master_work_window (work_start_hour/work_end_hour, дефолт 8–22) | 2026-10-09 |
+| 11 | a1b2c3d4e5f6 | f9b3c1d4e5a6 | backfill_user_cities (Москва/Питер/Краснодар по кругу, только NULL) | 2026-10-09 |
+| 12 | b2c3d4e5f6a7 | a1b2c3d4e5f6 | hot_path_indexes (appointments/users/services/working_hours) | 2026-10-09 |
 
-**Head:** `e7a1c2d4b5f6`
+**Head:** `b2c3d4e5f6a7`
 
 ### Применение миграций
 

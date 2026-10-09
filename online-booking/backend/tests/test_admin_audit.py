@@ -11,8 +11,8 @@ class TestAdminAuditLogs:
         assert resp.status_code == 200
         data = resp.json()
         assert "total" in data
-        assert "items" in data
-        assert isinstance(data["items"], list)
+        assert "logs" in data
+        assert isinstance(data["logs"], list)
 
     async def test_audit_logs_populated(self, client, super_admin_headers, test_service_data):
         """Audit logs are created during admin operations."""
@@ -53,7 +53,7 @@ class TestAdminAuditLogs:
         assert resp.status_code == 200
         data = resp.json()
         assert data["total"] >= 1
-        assert all(log["entity_type"] == "service" for log in data["items"])
+        assert all(log["entity_type"] == "service" for log in data["logs"])
 
     async def test_audit_logs_pagination(self, client, super_admin_headers):
         """Audit logs respect limit and offset."""
@@ -64,4 +64,4 @@ class TestAdminAuditLogs:
         )
         assert resp.status_code == 200
         data = resp.json()
-        assert len(data["items"]) <= 10
+        assert len(data["logs"]) <= 10

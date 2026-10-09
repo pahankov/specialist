@@ -1,4 +1,4 @@
-"""Admin audit logs endpoint."""
+"""Admin audit logs endpoint — single canonical reader (writer is services/audit.log_action)."""
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select
@@ -7,7 +7,7 @@ from typing import Optional
 
 from app.database import get_db
 from app.models.audit_log import AuditLog
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.audit_log import AuditLogListResponse, AuditLogResponse
 from app.dependencies.auth import require_master, require_super_admin
 from app.modules.admin.helpers import get_master_profile_id
@@ -35,14 +35,27 @@ def _build_log_response(log: AuditLog) -> AuditLogResponse:
 async def get_audit_logs(
     master: User = Depends(require_master),
     entity_type: Optional[str] = Query(None),
+    master_id: Optional[int] = Query(None, description="Filter by master ID (admin only)"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get audit logs for the authenticated master."""
-    mp_id = await get_master_profile_id(db, master)
-    query = select(AuditLog).where(AuditLog.master_id == mp_id)
-    count_query = select(func.count(AuditLog.id)).where(AuditLog.master_id == mp_id)
+    """Get audit logs.
+
+    - Regular master: only own logs (master_id param ignored).
+    - Admin: all logs, optional master_id/entity_type filter.
+    Single owner of GET /audit-logs (masters/audit.py duplicate removed).
+    """
+    query = select(AuditLog)
+    count_query = select(func.count(AuditLog.id))
+    if master.role == UserRole.ADMIN:
+        if master_id is not None:
+            query = query.where(AuditLog.master_id == master_id)
+            count_query = count_query.where(AuditLog.master_id == master_id)
+    else:
+        mp_id = await get_master_profile_id(db, master)
+        query = query.where(AuditLog.master_id == mp_id)
+        count_query = count_query.where(AuditLog.master_id == mp_id)
     if entity_type:
         query = query.where(AuditLog.entity_type == entity_type)
         count_query = count_query.where(AuditLog.entity_type == entity_type)

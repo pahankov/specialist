@@ -6,7 +6,7 @@ import type {
   AdminStats,
   MasterDetail,
   BulkResult,
-  AuditLogEntry,
+  AuditLogList,
   ImportResult,
   PaginatedResponse,
 } from './types'
@@ -107,10 +107,12 @@ export const superAdminApi = {
     return apiClient.get(`/api/v1/admin/reviews/average/${masterId}`)
   },
 
-  // Master audit logs
+  // Master audit logs (canonical /audit-logs/all; page/pageSize mapped to limit/offset)
   getMastersAudit(masterId: number, page?: number, pageSize?: number) {
-    return apiClient.get<PaginatedResponse<AuditLogEntry>>('/api/v1/admin/audit-logs', {
-      params: { master_id: masterId, page, page_size: pageSize },
+    const limit = pageSize ?? 50
+    const offset = page && pageSize ? (page - 1) * pageSize : 0
+    return apiClient.get<AuditLogList>('/api/v1/admin/audit-logs/all', {
+      params: { master_id: masterId, limit, offset },
     })
   },
 

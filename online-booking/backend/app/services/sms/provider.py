@@ -1,16 +1,9 @@
-"""SMS provider abstraction."""
+"""SMS provider abstraction (single ABC — no parallel Protocol)."""
+import asyncio
 import logging
 from abc import ABC, abstractmethod
-from typing import Protocol
 
 logger = logging.getLogger(__name__)
-
-
-class SmsProvider(Protocol):
-    """Protocol for SMS providers."""
-    async def send(self, phone: str, code: str) -> bool:
-        """Send SMS with code to phone. Returns True on success."""
-        ...
 
 
 class BaseSmsProvider(ABC):
@@ -42,19 +35,25 @@ class TwilioSmsProvider(BaseSmsProvider):
         self.from_number = from_number
 
     async def send(self, phone: str, code: str) -> bool:
-        from twilio.rest import Client
-        client = Client(self.account_sid, self.auth_token)
-        try:
-            client.messages.create(
-                body=f"Ваш код подтверждения: {code}. Не сообщайте его никому.",
-                to=phone,
-                from_=self.from_number,
-            )
+        # twilio.rest.Client is sync — run in a thread so the event loop is not blocked.
+        def _send_sync() -> bool:
+            from twilio.rest import Client
+            client = Client(self.account_sid, self.auth_token)
+            try:
+                client.messages.create(
+                    body=f"Ваш код подтверждения: {code}. Не сообщайте его никому.",
+                    to=phone,
+                    from_=self.from_number,
+                )
+                return True
+            except Exception as e:
+                logger.error("Failed to send SMS via Twilio to %s: %s", phone, e, exc_info=True)
+                return False
+
+        ok = await asyncio.to_thread(_send_sync)
+        if ok:
             logger.info("SMS sent via Twilio to %s", phone)
-            return True
-        except Exception as e:
-            logger.error("Failed to send SMS via Twilio to %s: %s", phone, e, exc_info=True)
-            return False
+        return ok
 
 
 class SmscRuSmsProvider(BaseSmsProvider):

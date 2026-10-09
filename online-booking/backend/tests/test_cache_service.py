@@ -1,196 +1,182 @@
-"""Tests for cache service (Redis + fallback).
+"""Tests for async cache service (redis.asyncio + fail-open fallback).
 
 Covers:
-- CacheService.get / set / delete
+- CacheService.get / set / delete (async)
 - Fallback behavior when Redis is unavailable
 - Health check
-- TTL support
+- TTL support + v1: key namespace + SCAN invalidation
 """
-import pytest
-from unittest.mock import MagicMock, patch
 import json as json_module
+import pytest
+from unittest.mock import AsyncMock
 
 
-# ─── CacheService with disabled Redis (fallback) ─────────────────────
+def _make_disabled_service():
+    """Create a CacheService whose lazy connect always fails (probed + disabled)."""
+    from app.services.cache import CacheService
+
+    service = CacheService()
+
+    async def _no_client():
+        service._enabled = False
+        return None
+    service._client = _no_client  # type: ignore[method-assign]
+    return service
+
+
+def _make_mocked_service():
+    """Create a CacheService with an AsyncMock Redis client (already connected)."""
+    from app.services.cache import CacheService, KEY_PREFIX
+
+    service = CacheService()
+    client = AsyncMock()
+    service._redis = client
+    service._enabled = True
+
+    async def _client():
+        return client
+    service._client = _client  # type: ignore[method-assign]
+    return service, client, KEY_PREFIX
 
 
 class TestCacheServiceFallback:
     """Tests for CacheService when Redis is unavailable."""
 
-    def _make_disabled_service(self):
-        """Create a CacheService with mocked Redis that fails."""
-        import sys
-        from unittest.mock import MagicMock
-
-        # Remove cached modules to force reimport
-        for key in list(sys.modules.keys()):
-            if key.startswith("app.services.cache"):
-                del sys.modules[key]
-
-        # Mock redis module to raise on connection
-        mock_redis_mod = MagicMock()
-        mock_redis_mod.from_url.side_effect = Exception("Connection refused")
-        sys.modules["redis"] = mock_redis_mod
-
-        from app.services.cache import CacheService
-        service = CacheService()
-        return service, mock_redis_mod
-
-    def test_cache_disabled_when_redis_unavailable(self):
-        """Cache is disabled when Redis connection fails."""
-        service, _ = self._make_disabled_service()
+    async def test_cache_disabled_when_redis_unavailable(self):
+        service = _make_disabled_service()
+        assert await service._client() is None
         assert service.enabled is False
 
-    def test_get_returns_none_when_disabled(self):
-        """get() returns None when cache is disabled."""
-        service, _ = self._make_disabled_service()
-        assert service.get("any_key") is None
+    async def test_get_returns_none_when_disabled(self):
+        service = _make_disabled_service()
+        assert await service.get("any_key") is None
 
-    def test_set_does_nothing_when_disabled(self):
-        """set() does nothing when cache is disabled."""
-        service, _ = self._make_disabled_service()
-        # Should not raise
-        service.set("any_key", {"data": "value"})
+    async def test_set_does_nothing_when_disabled(self):
+        service = _make_disabled_service()
+        await service.set("any_key", {"data": "value"})  # should not raise
 
-    def test_delete_does_nothing_when_disabled(self):
-        """delete() does nothing when cache is disabled."""
-        service, _ = self._make_disabled_service()
-        # Should not raise
-        service.delete("any_key")
+    async def test_delete_does_nothing_when_disabled(self):
+        service = _make_disabled_service()
+        await service.delete("any_key")  # should not raise
 
-    def test_health_check_returns_disabled(self):
-        """health_check() returns disabled status when Redis is unavailable."""
-        service, _ = self._make_disabled_service()
-        result = service.health_check()
+    async def test_health_check_returns_disabled(self):
+        service = _make_disabled_service()
+        result = await service.health_check()
         assert result["cache"] == "disabled"
         assert "Redis not available" in result["detail"]
 
-
-# ─── CacheService with mocked Redis ──────────────────────────────────
+    async def test_invalidate_does_nothing_when_disabled(self):
+        service = _make_disabled_service()
+        await service.invalidate_pattern("test:*")  # should not raise
 
 
 class TestCacheService:
-    """Tests for CacheService with mocked Redis."""
+    """Tests for CacheService with mocked async Redis."""
 
-    @pytest.fixture
-    def mock_cache_service(self):
-        """Create a CacheService with mocked Redis."""
-        from app.services.cache import CacheService
-
-        service = CacheService.__new__(CacheService)
-        service._redis = MagicMock()
-        service._enabled = True
-        return service
-
-    async def test_cache_set_get(self, mock_cache_service):
-        """set() and get() work correctly."""
+    async def test_cache_set_get(self):
         import json
 
-        mock_cache_service._redis.get.return_value = json.dumps({"key": "value"})
+        service, client, _ = _make_mocked_service()
+        client.get.return_value = json.dumps({"key": "value"})
 
-        result = mock_cache_service.get("test_key")
+        result = await service.get("test_key")
         assert result == {"key": "value"}
+        client.get.assert_awaited_once_with("v1:test_key")
 
-        mock_cache_service._redis.get.assert_called_once_with("test_key")
+    async def test_cache_delete(self):
+        service, client, _ = _make_mocked_service()
+        await service.delete("test_key")
+        client.delete.assert_awaited_once_with("v1:test_key")
 
-    async def test_cache_delete(self, mock_cache_service):
-        """delete() calls Redis delete."""
-        mock_cache_service.delete("test_key")
-        mock_cache_service._redis.delete.assert_called_once_with("test_key")
+    async def test_cache_get_missing(self):
+        service, client, _ = _make_mocked_service()
+        client.get.return_value = None
 
-    async def test_cache_get_missing(self, mock_cache_service):
-        """get() returns None for missing key."""
-        mock_cache_service._redis.get.return_value = None
-
-        result = mock_cache_service.get("missing_key")
+        result = await service.get("missing_key")
         assert result is None
 
-    async def test_cache_set_with_ttl(self, mock_cache_service):
-        """set() uses setex with TTL."""
-        import json
+    async def test_cache_set_with_ttl(self):
+        service, client, _ = _make_mocked_service()
+        await service.set("test_key", {"data": "value"}, ttl=600)
 
-        mock_cache_service.set("test_key", {"data": "value"}, ttl=600)
-
-        # setex(key, ttl, value) should be called
-        mock_cache_service._redis.setex.assert_called_once()
-        call_args = mock_cache_service._redis.setex.call_args
-        assert call_args[0][0] == "test_key"
+        client.setex.assert_awaited_once()
+        call_args = client.setex.call_args
+        assert call_args[0][0] == "v1:test_key"
         assert call_args[0][1] == 600  # TTL
 
-    async def test_cache_health_check_connected(self, mock_cache_service):
-        """health_check() returns connected status when Redis is available."""
-        mock_cache_service._redis.ping.return_value = True
-        mock_cache_service._redis.info.return_value = {"used_memory_human": "1.5MB"}
+    async def test_cache_health_check_connected(self):
+        service, client, _ = _make_mocked_service()
+        client.ping.return_value = True
+        client.info.return_value = {"used_memory_human": "1.5MB"}
 
-        result = mock_cache_service.health_check()
+        result = await service.health_check()
         assert result["cache"] == "connected"
         assert result["used_memory_human"] == "1.5MB"
 
-    async def test_cache_invalidate_pattern(self, mock_cache_service):
-        """invalidate_pattern() deletes all matching keys."""
-        mock_cache_service._redis.keys.return_value = ["key1", "key2", "key3"]
+    async def test_cache_invalidate_pattern(self):
+        """invalidate_pattern() SCANs and deletes all matching keys."""
+        service, client, _ = _make_mocked_service()
 
-        mock_cache_service.invalidate_pattern("test:*")
+        async def _scan_iter(match=None, count=None):
+            for k in ("v1:key1", "v1:key2", "v1:key3"):
+                yield k
 
-        mock_cache_service._redis.keys.assert_called_once_with("test:*")
-        mock_cache_service._redis.delete.assert_called_once_with("key1", "key2", "key3")
+        client.scan_iter = _scan_iter
+        await service.invalidate_pattern("test:*")
 
-    async def test_cache_invalidate_pattern_no_keys(self, mock_cache_service):
-        """invalidate_pattern() does nothing when no keys match."""
-        mock_cache_service._redis.keys.return_value = []
+        client.delete.assert_awaited_once_with("v1:key1", "v1:key2", "v1:key3")
 
-        mock_cache_service.invalidate_pattern("test:*")
+    async def test_cache_invalidate_pattern_no_keys(self):
+        service, client, _ = _make_mocked_service()
 
-        mock_cache_service._redis.keys.assert_called_once_with("test:*")
-        mock_cache_service._redis.delete.assert_not_called()
+        async def _scan_iter(match=None, count=None):
+            return
+            yield  # make it an async generator
 
-    async def test_cache_get_decodes_json(self, mock_cache_service):
-        """get() correctly decodes JSON values."""
+        client.scan_iter = _scan_iter
+        await service.invalidate_pattern("test:*")
+
+        client.delete.assert_not_awaited()
+
+    async def test_cache_get_decodes_json(self):
         import json
 
-        mock_cache_service._redis.get.return_value = json.dumps([1, 2, 3])
+        service, client, _ = _make_mocked_service()
+        client.get.return_value = json.dumps([1, 2, 3])
 
-        result = mock_cache_service.get("list_key")
+        result = await service.get("list_key")
         assert result == [1, 2, 3]
 
-    async def test_cache_set_encodes_json(self, mock_cache_service):
-        """set() correctly encodes values to JSON."""
-        mock_cache_service.set("list_key", [1, 2, 3])
+    async def test_cache_set_encodes_json(self):
+        service, client, _ = _make_mocked_service()
+        await service.set("list_key", [1, 2, 3])
 
-        call_args = mock_cache_service._redis.setex.call_args
+        call_args = client.setex.call_args
         value = call_args[0][2]
         assert json_module.loads(value) == [1, 2, 3]
 
-    async def test_cache_get_handles_decode_error(self, mock_cache_service):
-        """get() returns None on JSON decode error."""
-        import json
+    async def test_cache_get_handles_decode_error(self):
+        service, client, _ = _make_mocked_service()
+        client.get.return_value = "not valid json {{{"
 
-        mock_cache_service._redis.get.return_value = "not valid json {{{"
-
-        result = mock_cache_service.get("bad_key")
+        result = await service.get("bad_key")
         assert result is None
 
-    async def test_cache_set_handles_error(self, mock_cache_service):
-        """set() doesn't raise on Redis error."""
-        mock_cache_service._redis.setex.side_effect = Exception("Redis error")
+    async def test_cache_set_handles_error(self):
+        service, client, _ = _make_mocked_service()
+        client.setex.side_effect = Exception("Redis error")
 
-        # Should not raise
-        mock_cache_service.set("test_key", {"data": "value"})
-
-
-# ─── Singleton instance ──────────────────────────────────────────────
+        await service.set("test_key", {"data": "value"})  # should not raise
 
 
 class TestCacheServiceSingleton:
     """Tests for the cache_service singleton."""
 
     def test_singleton_exists(self):
-        """cache_service singleton is accessible."""
         from app.services.cache import cache_service
         assert cache_service is not None
 
     def test_singleton_has_enabled_property(self):
-        """cache_service has enabled property."""
         from app.services.cache import cache_service
         assert hasattr(cache_service, "enabled")
         assert isinstance(cache_service.enabled, bool)

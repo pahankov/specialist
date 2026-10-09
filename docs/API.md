@@ -10,6 +10,8 @@
 |-------|----------|----------|
 | `POST` | `/api/v1/auth/register` | Регистрация мастера (с выбором города) |
 | `POST` | `/api/v1/auth/login` | Вход мастера (JWT + refresh token в cookies) |
+| `POST` | `/api/v1/auth/login-unified` | Вход по email ИЛИ телефону (мастера и клиенты; пишет login в аудит) |
+| `POST` | `/api/v1/auth/register-unified` | Регистрация с выбором роли |
 | `POST` | `/api/v1/auth/send-otp` | Отправка SMS-кода клиенту |
 | `POST` | `/api/v1/auth/verify-otp` | Проверка кода, вход/регистрация клиента |
 | `POST` | `/api/v1/auth/refresh` | Обновление access token (refresh token rotation) |
@@ -23,6 +25,7 @@
 | `GET` | `/api/v1/cities/` | Список городов (пагинация, поиск, фильтр по стране) |
 | `GET` | `/api/v1/cities/search/?q=&limit=` | Поиск городов для автокомплита (фолбэк DaData) |
 | `GET` | `/api/v1/cities/{id}` | Город по ID |
+| `POST` | `/api/v1/cities/resolve` | Get-or-create города по точному имени (выбор из DaData; master+) |
 
 ### DaData (backend proxy, секрет не покидает сервер)
 | Метод | Endpoint | Описание |
@@ -78,28 +81,32 @@
 | `GET` | `/admin/monthly-stats` | Статистика за месяц |
 | `GET` | `/admin/appointments` | Список записей (пагинация, фильтрация) |
 | `POST` | `/admin/appointments` | Создать запись |
-| `POST` | `/admin/appointments/book` | Админская запись (выбор клиента из БД) |
+| `POST` | `/admin/appointments/book` | Админская запись (выбор клиента из БД; суперадмин шлёт `master_id`) |
 | `GET` | `/admin/appointments/by-date` | Записи по дате |
 | `PATCH` | `/admin/appointments/{id}/confirm` | Подтвердить запись |
 | `PATCH` | `/admin/appointments/{id}/cancel` | Отменить запись |
 | `PATCH` | `/admin/appointments/{id}/complete` | Завершить запись |
 | `DELETE` | `/admin/appointments/{id}` | Удалить запись |
 | `GET` | `/admin/services` | Список активных услуг |
-| `GET` | `/admin/services/all` | Список всех услуг (включая неактивные) |
+| `GET` | `/admin/services/all` | Все услуги (включая неактивные; суперадмин: `?master_id=`) |
 | `POST` | `/admin/services` | Создать услугу |
 | `PATCH` | `/admin/services/{id}` | Обновить услугу |
 | `DELETE` | `/admin/services/{id}` | Soft-delete услуги |
-| `GET` | `/admin/clients` | Список клиентов |
-| `POST` | `/admin/clients` | Создать клиента |
-| `PATCH` | `/admin/clients/{id}` | Обновить клиента |
+| `GET` | `/admin/clients` | Список клиентов (пагинация; есть `city_id`/`city_name`) |
+| `POST` | `/admin/clients` | Создать клиента (можно с `city_id`) |
+| `PATCH` | `/admin/clients/{id}` | Обновить клиента (можно `city_id`) |
 | `DELETE` | `/admin/clients/{id}` | Удалить клиента |
+| `POST` | `/admin/clients/bulk-city` | Назначить город всем по фильтру (`city_id` + `search`/`master_id`) |
 | `GET` | `/admin/working-hours` | Расписание |
 | `POST` | `/admin/working-hours` | Добавить рабочий день |
 | `PATCH` | `/admin/working-hours/{id}` | Обновить рабочий день |
 | `DELETE` | `/admin/working-hours/{id}` | Удалить рабочий день |
-| `GET` | `/admin/audit-logs` | Журнал действий (пагинация, фильтрация) |
-| `GET` | `/admin/export/appointments` | Экспорт записей в CSV |
-| `GET` | `/admin/export/clients` | Экспорт клиентов в CSV |
+| `GET` | `/admin/work-window` | Окно рабочего времени мастера (`?master_id=` для суперадмина) |
+| `PATCH` | `/admin/work-window` | Задать окно (`start_hour`/`end_hour`, 0–24) |
+| `GET` | `/admin/audit-logs` | Журнал действий (пагинация, фильтрация; есть сущность `auth` — входы/выходы) |
+| `GET` | `/admin/export/appointments` | Экспорт записей в CSV (`status`, `master_id`, `ids`, `include_master`) |
+| `GET` | `/admin/export/clients` | Экспорт клиентов в CSV (`ids`, `search`, `master_id`; есть колонка Город) |
+| `GET` | `/admin/export/masters` | Экспорт мастеров в CSV (суперадмин; `ids`) |
 | `GET` | `/admin/blocked-slots` | Заблокированные слоты |
 | `POST` | `/admin/blocked-slots` | Заблокировать слот |
 | `DELETE` | `/admin/blocked-slots/{id}` | Убрать блокировку |
@@ -112,10 +119,12 @@
 | `POST` | `/admin/masters` | Создать мастера |
 | `PATCH` | `/admin/masters/{id}` | Обновить мастера |
 | `DELETE` | `/admin/masters/{id}` | Удалить мастера |
-| `POST` | `/admin/masters/{id}/toggle-active` | Блокировка/разблокировка мастера |
+| `POST` | `/admin/masters/{id}/toggle-active` | Блокировка/разблокировка мастера (оба флага + аудит) |
+| `POST` | `/admin/masters/{id}/toggle-admin` | Выдать/снять права суперадмина |
 | `GET` | `/admin/masters/{id}/full` | Полная карточка (статистика, рейтинг, отзывы, записи) |
 | `POST` | `/admin/masters/{id}/suspend` | Заблокировать навсегда |
 | `POST` | `/admin/masters/{id}/unsuspend` | Разблокировать |
+| `POST` | `/admin/masters/{id}/refresh-status` | Пересчитать статус по рабочим часам |
 | `GET` | `/admin/masters/{id}/stats` | Статистика по мастеру |
 | `POST` | `/admin/masters/bulk/toggle-active` | Массовая смена статуса |
 | `POST` | `/admin/masters/bulk/suspend` | Массовая блокировка |

@@ -4,6 +4,7 @@ from typing import Optional
 from enum import Enum
 
 from app.utils.security import validate_password_strength
+from app.utils.phone import normalize_phone
 
 
 class UserRoleEnum(str, Enum):
@@ -37,19 +38,7 @@ class UnifiedRegisterRequest(BaseModel):
     @field_validator('phone')
     @classmethod
     def validate_phone(cls, v: str) -> str:
-        import re
-        digits = re.sub(r'\D', '', v)
-        if not digits:
-            raise ValueError('Введите номер телефона')
-        if len(digits) > 11:
-            digits = digits[-11:]
-        if digits.startswith('8') and digits == 11:
-            digits = '7' + digits[1:]
-        if not digits.startswith('7'):
-            digits = '7' + digits
-        if len(digits) != 11:
-            raise ValueError('Номер телефона должен содержать 10 цифр')
-        return f'+7 ({digits[1:4]}) {digits[4:7]}-{digits[7:9]}-{digits[9:11]}'
+        return normalize_phone(v)
 
     @field_validator('password')
     @classmethod
@@ -61,10 +50,6 @@ class UnifiedRegisterRequest(BaseModel):
     def validate_telegram(cls, v: Optional[str]) -> Optional[str]:
         if v is None:
             return v
-        v = v.strip()
-        if v and not v.startswith('@'):
-            v = '@' + v
-        return v
         v = v.strip()
         if v and not v.startswith('@'):
             v = '@' + v

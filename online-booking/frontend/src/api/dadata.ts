@@ -1,5 +1,5 @@
 import axios from 'axios'
-import apiClient from './client'
+import apiClient from './http'
 
 // Same-origin proxy path (NO direct DaData calls — the secret must never
 // reach the browser bundle):

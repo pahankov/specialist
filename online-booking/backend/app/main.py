@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 from app.config import settings
 from app.database import engine, Base
 from app.logging_config import setup_logging, get_logger
-from app.middleware.rate_limit import limiter
+from app.middleware.rate_limit import limiter, wire_rate_limit
 from app.middleware.request_logging import RequestLoggingMiddleware
 import asyncio
 import traceback
@@ -56,7 +56,7 @@ app = FastAPI(
         "Все API-эндпоинты версионированы: `/api/v1/`. "
         "Список изменений: `GET /api/v1/admin/changelog`."
     ),
-    version="1.5.0",
+    version="1.11.0",
     contact={
         "name": "Support",
         "email": "support@beauty-specialist.ru",
@@ -103,7 +103,7 @@ async def global_exception_handler(request: Request, exc: Exception):
         request_id,
         type(exc).__name__,
         exc,
-        "".join(traceback.format_exception(exc)),
+        "".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
         exc_info=False,  # traceback already formatted above
     )
     return JSONResponse(
@@ -120,9 +120,12 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins_list,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
+
+# slowapi rate limiting (state + 429 handler + middleware; no-op in tests)
+wire_rate_limit(app)
 
 # Request logging — LAST middleware so it wraps everything
 app.add_middleware(RequestLoggingMiddleware)
@@ -130,6 +133,7 @@ app.add_middleware(RequestLoggingMiddleware)
 # ─── Health check ──────────────────────────────────────────────
 
 @app.get("/health", tags=["system"])
+@limiter.exempt
 async def health_check():
     """System health check.
     

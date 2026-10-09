@@ -17,6 +17,7 @@ from app.schemas.otp import SendOtpRequest
 from app.logging_config import get_logger
 from app.config import settings
 from app.utils.security import hash_password, verify_password
+from app.utils.tokens import create_access_token, create_refresh_token_payload
 from datetime import datetime, timezone as dt_timezone, timedelta
 import hashlib
 import secrets
@@ -107,9 +108,6 @@ async def login_master(email: str, password: str, db: AsyncSession) -> tuple[str
             detail="Аккаунт заблокирован. Обратитесь к администратору."
         )
 
-    from app.modules.auth.token import create_access_token
-    from app.modules.auth.token import create_refresh_token_payload
-
     access_token = create_access_token({
         "sub": str(user.id),
         "role": user.role.value,
@@ -132,8 +130,8 @@ async def send_otp(phone: str, db: AsyncSession) -> None:
     """Send OTP code to phone. Creates OtpCode record."""
     logger.info("Запрос OTP на номер: %s", phone)
 
-    # Generate 6-digit code
-    code = secrets.token_hex(3).upper()  # 6 chars
+    # Generate 6-digit numeric code (VerifyOtpRequest.validate_code requires isdigit)
+    code = f"{secrets.randbelow(1_000_000):06d}"
 
     # Hash and store
     code_hash = hash_otp_code(code)
@@ -205,9 +203,6 @@ async def verify_otp(phone: str, code: str, db: AsyncSession) -> tuple[str, User
         await db.refresh(user)
         logger.info("New client created via OTP: user_id=%s, phone=%s", user.id, phone)
 
-    from app.modules.auth.token import create_access_token
-    from app.modules.auth.token import create_refresh_token_payload
-
     access_token = create_access_token({
         "sub": str(user.id),
         "role": user.role.value,
@@ -243,7 +238,6 @@ async def login_client_legacy(phone: str, db: AsyncSession) -> tuple[str, User]:
             detail="Аккаунт заблокирован. Обратитесь к администратору."
         )
 
-    from app.modules.auth.token import create_access_token
     access_token = create_access_token({
         "sub": str(user.id),
         "role": user.role.value,
@@ -288,9 +282,6 @@ async def login_unified(identifier: str, password: str, db: AsyncSession) -> tup
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Аккаунт заблокирован. Обратитесь к администратору."
         )
-
-    from app.modules.auth.token import create_access_token
-    from app.modules.auth.token import create_refresh_token_payload
 
     access_token = create_access_token({
         "sub": str(user.id),
@@ -380,3 +371,4 @@ async def register_unified(
 
     logger.info("User successfully registered: %s (role=%s)", email, role.value)
     return new_user
+

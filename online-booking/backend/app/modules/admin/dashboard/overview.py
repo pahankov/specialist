@@ -41,13 +41,13 @@ async def get_dashboard(
         cache_key = f"admin:dashboard:global"
 
         # Try cache first
-        cached = cache_service.get(cache_key)
+        cached = await cache_service.get(cache_key)
         if cached is not None:
             return cached
 
         # Compute and cache
         stats = await _get_global_stats(db)
-        cache_service.set(cache_key, stats, ttl=300)  # 5 minutes
+        await cache_service.set(cache_key, stats, ttl=300)  # 5 minutes
         return stats
 
     return await _get_master_stats(master, db)

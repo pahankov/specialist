@@ -1,5 +1,5 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig } from 'axios'
-import { getCookie } from '../utils/cookies'
+import { getCookie, clearAuthCookies } from '../utils/cookies'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -80,8 +80,7 @@ apiClient.interceptors.response.use(
       } catch (refreshError) {
         processQueue(refreshError, null)
         // Not refreshed — logout
-        document.cookie = 'access_token=; path=/; max-age=0'
-        document.cookie = 'refresh_token=; path=/; max-age=0'
+        clearAuthCookies()
         window.location.href = '/admin/login'
         return Promise.reject(refreshError)
       } finally {

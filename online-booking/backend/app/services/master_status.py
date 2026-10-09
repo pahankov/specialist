@@ -10,7 +10,6 @@ from datetime import date
 
 from app.models.master_profile import MasterProfile, MasterStatus
 from app.models.working_hour import WorkingHour
-from app.services.audit import log_action
 
 
 async def _get_active_days_count(db: AsyncSession, master_id: int) -> int:
@@ -28,36 +27,18 @@ async def _get_active_days_count(db: AsyncSession, master_id: int) -> int:
 
 
 async def get_master_status(db: AsyncSession, master_profile: MasterProfile) -> MasterStatus:
-    """Get current master status.
-    
-    If master is suspended → SUSPENDED
-    If master has at least one active working day → ACTIVE
-    Otherwise → INACTIVE (auto-detected)
+    """Get current master status (read-only, no side effects).
+
+    If master is suspended → SUSPENDED.
+    If master has at least one FUTURE active working day → ACTIVE.
+    Otherwise → INACTIVE.
     """
     if master_profile.status == MasterStatus.SUSPENDED:
         return MasterStatus.SUSPENDED
-    
+
     active_days_count = await _get_active_days_count(db, master_profile.id)
-    
+
     return MasterStatus.ACTIVE if active_days_count > 0 else MasterStatus.INACTIVE
-
-
-async def set_master_status(
-    db: AsyncSession,
-    master_profile: MasterProfile,
-    new_status: MasterStatus,
-    admin_master_id: int
-) -> MasterStatus:
-    """Set master status and log the action."""
-    old_status = master_profile.status
-    master_profile.status = new_status
-    await db.flush()
-    await log_action(
-        db, admin_master_id, "update", "master_status",
-        master_profile.id,
-        f"Статус: {old_status.value} → {new_status.value}"
-    )
-    return new_status
 
 
 async def update_master_status_from_working_hours(

@@ -1,4 +1,13 @@
-"""Background export tasks for CSV generation."""
+"""Background export tasks for CSV generation.
+
+These functions stay SYNC on purpose: RQ workers execute them in a sync
+context (``bg_task_service.enqueue``). The inner ``_generate`` coroutine is
+driven via :func:`_run` which uses ``asyncio.run`` when there is no running
+loop and a dedicated thread otherwise (calling ``asyncio.run`` inside a
+running loop raises ``RuntimeError`` and would block the server loop).
+"""
+import asyncio
+import concurrent.futures
 import csv
 import io
 import logging
@@ -6,6 +15,16 @@ from datetime import datetime
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+
+def _run(coro):
+    """Drive a coroutine from sync code without breaking a running loop."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, coro).result()
 
 
 def export_appointments_csv_task(
@@ -17,7 +36,7 @@ def export_appointments_csv_task(
     Returns file content and metadata.
     """
     from sqlalchemy import select, func
-    from sqlalchemy.orm import selectinload
+    from sqlalchemy.orm import selectinload, aliased
     from app.database import AsyncSessionLocal
     from app.models.appointment import Appointment
     from app.models.client_profile import ClientProfile
@@ -25,18 +44,21 @@ def export_appointments_csv_task(
     from app.models.service import Service
     from app.models.master_profile import MasterProfile
 
+    ClientUser = aliased(User)
+    MasterUser = aliased(User)
+
     async def _generate():
         logger.info("Export appointments CSV: status=%r include_master=%s", status, include_master)
         async with AsyncSessionLocal() as db:
             query = (
-                select(Appointment, User.name.label("client_name"), User.phone.label("client_phone"),
+                select(Appointment, ClientUser.name.label("client_name"), ClientUser.phone.label("client_phone"),
                        Service.name.label("service_name"), Service.price.label("service_price"),
-                       User.name.label("master_name"))
+                       MasterUser.name.label("master_name"))
                 .join(ClientProfile, Appointment.client_id == ClientProfile.id, isouter=True)
-                .join(User, ClientProfile.user_id == User.id, isouter=True)
+                .join(ClientUser, ClientProfile.user_id == ClientUser.id, isouter=True)
                 .join(Service, Appointment.service_id == Service.id, isouter=True)
                 .join(MasterProfile, Appointment.master_id == MasterProfile.id, isouter=True)
-                .join(User, MasterProfile.user_id == User.id, isouter=True)
+                .join(MasterUser, MasterProfile.user_id == MasterUser.id, isouter=True)
                 .order_by(Appointment.appointment_date.desc())
             )
 
@@ -75,8 +97,7 @@ def export_appointments_csv_task(
                 "media_type": "text/csv; charset=utf-8",
             }
 
-    import asyncio
-    return asyncio.run(_generate())
+    return _run(_generate())
 
 
 def export_clients_csv_task() -> dict:
@@ -112,5 +133,4 @@ def export_clients_csv_task() -> dict:
                 "media_type": "text/csv; charset=utf-8",
             }
 
-    import asyncio
-    return asyncio.run(_generate())
+    return _run(_generate())

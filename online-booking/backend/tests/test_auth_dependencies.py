@@ -33,7 +33,7 @@ class TestGetCurrentUser:
 
     async def test_expired_token_rejected(self, client):
         """Expired JWT token is rejected with 401."""
-        from jose import jwt
+        import jwt
         from app.config import settings
         from datetime import datetime, timedelta, timezone as dt_timezone
 
@@ -172,3 +172,4 @@ class TestAdminWithoutMasterProfile:
         )
         assert resp.status_code == 200
         assert resp.status_code == 200
+

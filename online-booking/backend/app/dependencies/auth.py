@@ -10,7 +10,7 @@ Shared dependencies used across all modules:
 """
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import jwt, JWTError
+import jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import joinedload
@@ -48,7 +48,7 @@ async def get_current_user(
             )
         token_role = payload.get("role")
         logger.debug("JWT decoded: user_id=%s, role=%s", user_id, token_role)
-    except JWTError as e:
+    except jwt.PyJWTError as e:
         logger.warning("JWT validation failed: %s", e)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -152,7 +152,7 @@ async def get_current_client(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid token payload"
             )
-    except JWTError as e:
+    except jwt.PyJWTError as e:
         logger.warning("JWT validation failed for client: %s", e)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

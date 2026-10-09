@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import apiClient from '../../api/http'
 import { dadataApi } from '../../api/dadata'
-import './MasterSelect.css'
+import './SelectDropdown.css'
 
 export interface CityOption {
   id: number | null

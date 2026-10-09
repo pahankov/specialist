@@ -15,18 +15,27 @@ class BackgroundTaskService:
         self._try_connect()
 
     def _try_connect(self):
-        """Try to connect to Redis Queue."""
+        """Try to connect to Redis Queue (DB index derived from settings.REDIS_URL)."""
         try:
             from redis import Redis
             from rq import Queue
             import redis as redis_lib
+            from urllib.parse import urlparse
 
-            redis_url = "redis://localhost:6379/1"  # Separate DB for RQ
+            from app.config import settings
+
+            # RQ gets its own DB index (base + 1, wraps at 16) so task payloads
+            # never collide with cache keys — but the HOST/port still come
+            # from the single canon: settings.REDIS_URL (see docs/SECRETS.md).
+            parsed = urlparse(settings.REDIS_URL)
+            base_db = int((parsed.path or "/0").lstrip("/") or 0)
+            rq_db = (base_db + 1) % 16
+            redis_url = f"{parsed.scheme}://{parsed.netloc}/{rq_db}"
             redis_client = redis_lib.from_url(redis_url, decode_responses=True)
             redis_client.ping()
             self._queue = Queue("default", connection=redis_client)
             self._enabled = True
-            logger.info("RQ background task queue connected")
+            logger.info("RQ background task queue connected: %s", redis_url)
         except Exception as e:
             logger.warning("RQ not available, background tasks disabled: %s", e)
             self._enabled = False

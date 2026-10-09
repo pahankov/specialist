@@ -72,10 +72,15 @@ frontend/
 *.bak-*
 *.bak
 
-# Env
+# Env — ЕДИНСТВЕННЫЙ рантайм-файл: online-booking/backend/.env (gitignored).
+# Корневого .env быть не должно (удалён — дублировал backend/.env).
+# Шаблон .env.example — трекается, реальных значений в нём нет.
 .env
 .env.local
 .env.production
+online-booking/backend/.env
+online-booking/backend/.env.local
+online-booking/backend/.env.production
 
 # Local secrets (contains real credentials - NEVER push to git)
 LOCAL.md

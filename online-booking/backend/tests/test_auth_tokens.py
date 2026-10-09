@@ -15,7 +15,7 @@ class TestCreateAccessToken:
     def test_token_contains_user_id(self):
         """Access token payload contains user ID."""
         from app.modules.auth.token import create_access_token
-        from jose import jwt
+        import jwt
         from app.config import settings
 
         token = create_access_token({"sub": "42", "role": "MASTER"})
@@ -25,7 +25,7 @@ class TestCreateAccessToken:
     def test_token_contains_role(self):
         """Access token payload contains role."""
         from app.modules.auth.token import create_access_token
-        from jose import jwt
+        import jwt
         from app.config import settings
 
         token = create_access_token({"sub": "1", "role": "ADMIN"})
@@ -35,7 +35,7 @@ class TestCreateAccessToken:
     def test_token_expiry_is_correct(self):
         """Access token has expiry within expected range."""
         from app.modules.auth.token import create_access_token
-        from jose import jwt
+        import jwt
         from app.config import settings
         from datetime import datetime, timezone as dt_timezone
 
@@ -53,7 +53,7 @@ class TestCreateAccessToken:
     def test_token_contains_extra_fields(self):
         """Access token preserves extra fields from payload."""
         from app.modules.auth.token import create_access_token
-        from jose import jwt
+        import jwt
         from app.config import settings
 
         token = create_access_token({
@@ -69,7 +69,7 @@ class TestCreateAccessToken:
     def test_token_is_valid_jwt(self):
         """Generated token is a valid JWT that can be decoded."""
         from app.modules.auth.token import create_access_token
-        from jose import jwt
+        import jwt
         from app.config import settings
 
         token = create_access_token({"sub": "1", "role": "MASTER"})
@@ -85,7 +85,7 @@ class TestCreateRefreshTokenPayload:
     def test_payload_has_user_id(self):
         """Refresh token payload contains user ID."""
         from app.modules.auth.token import create_refresh_token_payload
-        from jose import jwt
+        import jwt
         from app.config import settings
 
         token, _ = create_refresh_token_payload(42, "test@example.com")
@@ -95,7 +95,7 @@ class TestCreateRefreshTokenPayload:
     def test_payload_has_email(self):
         """Refresh token payload contains email."""
         from app.modules.auth.token import create_refresh_token_payload
-        from jose import jwt
+        import jwt
         from app.config import settings
 
         token, _ = create_refresh_token_payload(1, "user@example.com")
@@ -105,7 +105,7 @@ class TestCreateRefreshTokenPayload:
     def test_payload_has_expires_at(self):
         """Refresh token payload has expiry."""
         from app.modules.auth.token import create_refresh_token_payload
-        from jose import jwt
+        import jwt
         from app.config import settings
 
         token, expires_at = create_refresh_token_payload(1, "test@example.com")
@@ -117,7 +117,7 @@ class TestCreateRefreshTokenPayload:
     def test_payload_has_type(self):
         """Refresh token payload has type='refresh'."""
         from app.modules.auth.token import create_refresh_token_payload
-        from jose import jwt
+        import jwt
         from app.config import settings
 
         token, _ = create_refresh_token_payload(1, "test@example.com")
@@ -139,7 +139,7 @@ class TestTokenSecurity:
     def test_different_secrets_for_access_and_refresh(self):
         """Access and refresh tokens use different secrets."""
         from app.modules.auth.token import create_access_token, create_refresh_token_payload
-        from jose import jwt
+        import jwt
         from app.config import settings
 
         # If both secrets are empty (default config), skip this test
@@ -165,7 +165,7 @@ class TestTokenSecurity:
     def test_token_expires_with_custom_delta(self):
         """Access token respects custom expires_delta."""
         from app.modules.auth.token import create_access_token
-        from jose import jwt
+        import jwt
         from app.config import settings
         from datetime import datetime, timezone as dt_timezone
 
@@ -178,3 +178,4 @@ class TestTokenSecurity:
         now = datetime.now(dt_timezone.utc).timestamp()
         diff_minutes = (exp - now) / 60
         assert abs(diff_minutes - 5) < 1
+

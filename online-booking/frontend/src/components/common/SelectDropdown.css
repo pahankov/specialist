@@ -1,3 +1,6 @@
+/* Shared dropdown contract for MasterSelect + CitySelect.
+ * (Renamed from MasterSelect.css — both components use .master-select*
+ * classes deliberately. Do not rename classes without updating both.) */
 .master-select {
   position: relative;
   min-width: 200px;

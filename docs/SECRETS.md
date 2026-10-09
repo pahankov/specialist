@@ -2,13 +2,18 @@
 
 > В этом файле — только правила. Никаких значений.
 
-## Канон (единственные места, где живут секреты)
+## Канон (единственное место, где живут секреты)
+
+> Рантайм-канон — `online-booking/backend/.env` (gitignored).
+> Человеческий реестр — `LOCAL.md` (gitignored, зеркалит значения из `backend/.env`).
+> Больше `.env` нигде нет: корневой `.env` удалён осознанно (дублировал `backend/.env`
+> и вводил в заблуждение). Фронт секретов не хранит — только same-origin `/api/...`.
 
 | Где | Что | В git? |
 |---|---|---|
-| `LOCAL.md` (корень) | Все реальные значения для локальной работы | НЕТ (gitignored) |
-| `online-booking/backend/.env` | Рантайм-канон бэкенда (локально и на сервере) | НЕТ (gitignored) |
-| GitHub Secrets (`pahankov/specialist` → Settings → Secrets) | `SERVER_HOST`, `SERVER_SSH_KEY`, `DATABASE_URL` — только для деплоя | НЕТ (показывает `***`) |
+| `online-booking/backend/.env` | ЕДИНСТВЕННЫЙ рантайм-файл: БД, JWT, Redis, SMS, DaData, OAuth, `SUPERUSER_*`, `PROD_*` | НЕТ (gitignored) |
+| `LOCAL.md` (корень) | Человекочитаемое зеркало значений + SSH/серверные пароли (не для рантайма) | НЕТ (gitignored) |
+| GitHub Secrets | `SERVER_HOST`, `SERVER_SSH_KEY`, `DATABASE_URL` — только для деплоя | НЕТ (показывает `***`) |
 | `/var/www/beauty-specialist/online-booking/backend/.env` | Прод-канон (читает deploy workflow) | НЕТ (только на сервере) |
 | `.env.example` (корень) | Шаблон с пустыми/фейковыми значениями | ДА |
 

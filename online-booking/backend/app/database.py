@@ -31,7 +31,23 @@ if "sqlite" in db_url:
     db_url = f"sqlite+aiosqlite:///{db_path}"
     logger.info("SQLite database path: %s", db_path)
 
-logger.info("Database URL: %s", db_url.replace("://", "://***@***" if "://" in db_url and "@" not in db_url.split("://")[1] else "://"))
+def _safe_db_url(url: str) -> str:
+    """Mask credentials for logs: postgresql+asyncpg://***:***@host/db."""
+    try:
+        from urllib.parse import urlsplit, urlunsplit
+        parts = urlsplit(url)
+        if parts.username or parts.password:
+            netloc = parts.hostname or ""
+            if parts.port:
+                netloc += f":{parts.port}"
+            parts = parts._replace(netloc=f"***:***@{netloc}")
+            return urlunsplit(parts)
+        return url
+    except Exception:
+        return "<unparseable-db-url>"
+
+
+logger.info("Database URL: %s", _safe_db_url(db_url))
 
 engine = create_async_engine(
     db_url,

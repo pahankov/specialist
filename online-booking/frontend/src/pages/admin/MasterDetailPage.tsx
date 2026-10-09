@@ -112,7 +112,7 @@ function MasterDetailPage() {
     setAuditLoading(true)
     try {
       const auditResp = await superAdminApi.getMastersAudit(parseInt(id), 1, 50)
-      setAuditLogs(auditResp.data.items || [])
+      setAuditLogs(auditResp.data.logs || [])
     } catch {
       // Ignore audit errors
     } finally {

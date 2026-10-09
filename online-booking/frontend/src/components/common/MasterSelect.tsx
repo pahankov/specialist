@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { superAdminApi } from '../../api/client'
-import './MasterSelect.css'
+import './SelectDropdown.css'
 
 export interface MasterOption {
   id: number

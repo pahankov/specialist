@@ -1,5 +1,5 @@
 """Tests for superadmin security actions: impersonate / password / sessions."""
-from jose import jwt
+import jwt
 
 from app.config import settings
 

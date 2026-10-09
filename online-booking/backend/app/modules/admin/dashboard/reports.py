@@ -89,7 +89,7 @@ async def clear_dashboard_cache(
     if not master.is_admin:
         raise HTTPException(status_code=403, detail="Only superadmin can clear cache")
 
-    cache_service.invalidate_pattern("admin:dashboard:*")
+    await cache_service.invalidate_pattern("admin:dashboard:*")
     return {"detail": "Dashboard cache cleared"}
 
 

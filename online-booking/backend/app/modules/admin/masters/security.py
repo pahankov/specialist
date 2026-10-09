@@ -10,7 +10,7 @@ from app.dependencies.auth import require_super_admin
 from app.models.master_profile import MasterProfile
 from app.models.refresh_token import RefreshToken
 from app.models.user import User, UserRole
-from app.modules.auth.token import create_access_token
+from app.utils.tokens import create_access_token  # utils, not modules.auth (no module→module import)
 from app.services.audit import log_action
 from app.utils.security import hash_password, validate_password_strength
 from app.logging_config import get_logger

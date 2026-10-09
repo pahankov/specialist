@@ -52,7 +52,7 @@ async def health_check(
         result["status"] = "degraded"
 
     # Check cache
-    cache_status = cache_service.health_check()
+    cache_status = await cache_service.health_check()
     result["cache"] = cache_status
 
     if cache_status.get("cache") == "error":
@@ -84,7 +84,7 @@ async def health_check_verbose(
     result = {
         "status": "healthy",
         "database": "connected",
-        "cache": cache_service.health_check(),
+        "cache": await cache_service.health_check(),
         "tasks": bg_task_service.health_check(),
     }
 

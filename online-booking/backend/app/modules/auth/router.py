@@ -1,7 +1,7 @@
 """Authentication API endpoints — register, login, OTP, refresh, logout."""
 from fastapi import APIRouter, HTTPException, Depends, status, Response, Request
 from fastapi.security import HTTPBearer
-from jose import jwt, JWTError
+import jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import update
@@ -20,6 +20,7 @@ from app.logging_config import get_logger
 from app.services.audit import log_action
 from app.modules.auth import service
 from app.modules.auth.token import create_access_token, create_refresh_token_payload
+from app.middleware.rate_limit import limiter
 
 logger = get_logger(__name__)
 
@@ -53,7 +54,9 @@ def _set_auth_cookies(
 # ─── Registration ─────────────────────────────────────────────────────
 
 @router.post("/register", response_model=dict, status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/minute")
 async def register_master(
+    request: Request,
     user_data: UserCreate,
     db: AsyncSession = Depends(get_db)
 ):
@@ -92,7 +95,8 @@ async def register_master(
 # ─── Login ────────────────────────────────────────────────────────────
 
 @router.post("/login", response_model=TokenResponse)
-async def login(response: Response, req: UserLoginByEmail, db: AsyncSession = Depends(get_db)):
+@limiter.limit("10/minute")
+async def login(request: Request, response: Response, req: UserLoginByEmail, db: AsyncSession = Depends(get_db)):
     """Login master by email+password — returns access token in response body, refresh token in httpOnly cookie."""
     logger.info("Login attempt by email: %s", req.email)
     try:
@@ -128,7 +132,8 @@ async def login(response: Response, req: UserLoginByEmail, db: AsyncSession = De
 
 
 @router.post("/client/login", response_model=TokenResponse)
-async def client_login(req: UserLoginByPhone, db: AsyncSession = Depends(get_db)):
+@limiter.limit("10/minute")
+async def client_login(request: Request, req: UserLoginByPhone, db: AsyncSession = Depends(get_db)):
     """Legacy client login by phone (no password)."""
     logger.info("Client login attempt by phone: %s", req.phone)
     try:
@@ -146,7 +151,8 @@ async def client_login(req: UserLoginByPhone, db: AsyncSession = Depends(get_db)
 # ─── OTP Authentication ──────────────────────────────────────────────
 
 @router.post("/send-otp", response_model=OtpResponse)
-async def send_otp(req: SendOtpRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit("10/minute")
+async def send_otp(request: Request, req: SendOtpRequest, db: AsyncSession = Depends(get_db)):
     """Send OTP code to phone number."""
     logger.info("Send OTP request: phone=%s", req.phone)
     try:
@@ -159,7 +165,8 @@ async def send_otp(req: SendOtpRequest, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/verify-otp", response_model=TokenResponse)
-async def verify_otp(req: VerifyOtpRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit("10/minute")
+async def verify_otp(request: Request, req: VerifyOtpRequest, db: AsyncSession = Depends(get_db)):
     """Verify OTP code and login/create user."""
     logger.info("Verify OTP request: phone=%s", req.phone)
     try:
@@ -191,7 +198,7 @@ async def refresh_token(request: Request, db: AsyncSession = Depends(get_db)):
             raise HTTPException(status_code=401, detail="Invalid token type")
         user_id = int(payload["sub"])
         logger.debug("Token refresh: decoded JWT for user_id=%s", user_id)
-    except JWTError as e:
+    except jwt.PyJWTError as e:
         logger.warning("Token refresh: JWT decode failed: %s", e)
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 
@@ -264,7 +271,7 @@ async def logout(request: Request, db: AsyncSession = Depends(get_db)):
                 db, user_id, "logout", "auth", user_id, "Выход", level="info",
             )
             await db.commit()
-        except JWTError:
+        except jwt.PyJWTError:
             logger.debug("Logout: invalid JWT in cookie, skipping token revocation")
             pass
 
@@ -277,7 +284,9 @@ async def logout(request: Request, db: AsyncSession = Depends(get_db)):
 # ─── Unified Login ───────────────────────────────────────────────────
 
 @router.post("/login-unified", response_model=TokenResponse)
+@limiter.limit("10/minute")
 async def login_unified(
+    request: Request,
     response: Response,
     req: UnifiedLoginRequest,
     db: AsyncSession = Depends(get_db)
@@ -319,7 +328,9 @@ async def login_unified(
 # ─── Unified Registration ────────────────────────────────────────────
 
 @router.post("/register-unified", response_model=dict, status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/minute")
 async def register_unified(
+    request: Request,
     req: UnifiedRegisterRequest,
     db: AsyncSession = Depends(get_db)
 ):

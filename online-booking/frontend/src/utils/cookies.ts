@@ -22,5 +22,8 @@ export function decodeJwtPayload(token: string): JwtPayload | null {
 }
 
 export function clearAuthCookies(): void {
+  // Both tokens: access_token is JS-readable, refresh_token is httpOnly
+  // (JS delete is a best-effort — server revokes the session on logout).
   document.cookie = 'access_token=; path=/; max-age=0'
+  document.cookie = 'refresh_token=; path=/; max-age=0'
 }
