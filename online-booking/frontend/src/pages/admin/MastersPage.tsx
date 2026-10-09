@@ -8,6 +8,7 @@ import type { CityOption } from '../../components/common/CitySelect'
 import { isCompletePhone } from '../../components/common/PhoneInput'
 import { PHONE_PLACEHOLDER, PASSWORD_PLACEHOLDER, PASSWORD_EDIT_PLACEHOLDER, TELEGRAM_PLACEHOLDER } from '../../constants'
 import { useSectionPrefix, ADMIN_PREFIX } from '../../utils/section'
+import { usePersistentState } from '../../utils/persistentState'
 import '../../styles/tables.css'
 import { getApiErrorMessage } from '../../utils/apiError'
 import { getCookie } from '../../utils/cookies'
@@ -25,12 +26,12 @@ function MastersPage() {
   const [trialDraft, setTrialDraft] = useState('')
   const [masters, setMasters] = useState<Master[]>([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
-  const [searchInput, setSearchInput] = useState('')
-  const [filterActive, setFilterActive] = useState<'all' | 'active' | 'inactive'>('all')
-  const [filterAdmin, setFilterAdmin] = useState<'all' | 'admin' | 'user'>('all')
-  const [sortKey, setSortKey] = useState<'name' | 'email' | 'status' | null>(null)
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [search, setSearch] = usePersistentState('masters.search', '')
+  const [searchInput, setSearchInput] = usePersistentState('masters.searchInput', '')
+  const [filterActive, setFilterActive] = usePersistentState<'all' | 'active' | 'inactive'>('masters.active', 'all')
+  const [filterAdmin, setFilterAdmin] = usePersistentState<'all' | 'admin' | 'user'>('masters.role', 'all')
+  const [sortKey, setSortKey] = usePersistentState<'name' | 'email' | 'status' | null>('masters.sort', null)
+  const [sortDir, setSortDir] = usePersistentState<'asc' | 'desc'>('masters.dir', 'asc')
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingMaster, setEditingMaster] = useState<Master | null>(null)
@@ -311,7 +312,7 @@ function MastersPage() {
                 </ResizableTh>
                 <ResizableTh width={colW.role} onResize={(w) => setColW('role', w)}>Роль</ResizableTh>
                 <ResizableTh width={colW.tariff} onResize={(w) => setColW('tariff', w)}>Тариф</ResizableTh>
-                <ResizableTh width={colW.actions} onResize={(w) => setColW('actions', w)}>Действия</ResizableTh>
+                <ResizableTh width={colW.actions} minWidth={160} defaultWidth={176} onResize={(w) => setColW('actions', w)}>Действия</ResizableTh>
               </tr>
             </thead>
             <tbody>
@@ -373,12 +374,12 @@ function MastersPage() {
                     <Tooltip content="Редактировать" position="top">
                       <button className="btn btn-sm btn-secondary" onClick={() => openEditModal(master)}>✏️</button>
                     </Tooltip>
-                    <Tooltip content={master.is_active ? 'Заблокировать' : 'Разблокировать'} position="top">
+                    <Tooltip content={master.is_active ? 'Заблокировать (сейчас активен)' : 'Разблокировать (сейчас заблокирован)'} position="top">
                       <button
                         className={`btn btn-sm ${master.is_active ? 'btn-warn' : 'btn-success'}`}
                         onClick={() => handleToggleActive(master.id)}
                       >
-                        {master.is_active ? '🔒' : '🔓'}
+                        {master.is_active ? '🔓' : '🔒'}
                       </button>
                     </Tooltip>
                     <Tooltip content="Войти как мастер (поддержка)" position="top">

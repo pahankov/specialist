@@ -36,11 +36,15 @@ export function useColumnWidths(table: string, defaults: Record<string, number>)
 interface ResizableThProps extends ThHTMLAttributes<HTMLTableCellElement> {
   width: number
   onResize: (w: number) => void
+  /** Floor so action columns can't be dragged into invisibility */
+  minWidth?: number
+  /** Default width (double-click the handle resets to it) */
+  defaultWidth?: number
   children?: ReactNode
 }
 
 /** Table header cell with a right-edge drag handle for manual resizing. */
-export default function ResizableTh({ width, onResize, children, style, onClick, ...rest }: ResizableThProps) {
+export default function ResizableTh({ width, onResize, minWidth = 28, defaultWidth, children, style, onClick, ...rest }: ResizableThProps) {
   const moved = useRef(false)
 
   const startDrag = (e: React.MouseEvent) => {
@@ -51,7 +55,7 @@ export default function ResizableTh({ width, onResize, children, style, onClick,
     const w0 = width
     const onMove = (ev: MouseEvent) => {
       if (Math.abs(ev.clientX - x0) > 3) moved.current = true
-      onResize(w0 + ev.clientX - x0)
+      onResize(Math.max(minWidth, w0 + ev.clientX - x0))
     }
     const onUp = () => {
       window.removeEventListener('mousemove', onMove)
@@ -76,7 +80,8 @@ export default function ResizableTh({ width, onResize, children, style, onClick,
       <span
         className="col-resizer"
         onMouseDown={startDrag}
-        title="Потяните, чтобы изменить ширину"
+        onDoubleClick={(e) => { e.stopPropagation(); if (defaultWidth != null) onResize(defaultWidth) }}
+        title="Потяните, чтобы изменить ширину (двойной клик — сброс)"
         aria-hidden
       />
     </th>

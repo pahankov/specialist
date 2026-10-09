@@ -9,6 +9,7 @@ import { ConfirmDialog, MasterSelect } from '../../components/common'
 import { getApiErrorMessage } from '../../utils/apiError'
 import { getCookie, decodeJwtPayload } from '../../utils/cookies'
 import { MonthlyStatsComponent } from '../../components/schedule/MonthlyStats'
+import { usePersistentState } from '../../utils/persistentState'
 import {
   toggleDayWork,
   openBookingForm,
@@ -18,7 +19,15 @@ import {
 
 function SchedulePage() {
   const [schedule, setSchedule] = useState<Record<string, DaySchedule>>({})
-  const [currentMonth, setCurrentMonth] = useState(() => new Date())
+  const [currentMonthISO, setCurrentMonthISO] = usePersistentState(
+    'schedule.month', new Date().toISOString().slice(0, 7),
+  )
+  const currentMonth = new Date(`${currentMonthISO}-01T00:00:00`)
+  const setCurrentMonth = (d: Date | ((p: Date) => Date)) => {
+    setCurrentMonthISO(typeof d === 'function'
+      ? d(currentMonth).toISOString().slice(0, 7)
+      : d.toISOString().slice(0, 7))
+  }
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [loading, setLoading] = useState(true)
@@ -34,7 +43,7 @@ function SchedulePage() {
   const [activeHours, setActiveHours] = useState<Record<string, boolean>>({})
   const [longPressTriggered] = useState(false)
   const [monthlyStats, setMonthlyStats] = useState<MonthlyStats | null>(null)
-  const [selectedMasterId, setSelectedMasterId] = useState<number | ''>('')
+  const [selectedMasterId, setSelectedMasterId] = usePersistentState<number | ''>('schedule.master', '')
   // Daily work window (whole hours): drives how many granules render.
   // Master sees own window; superadmin sees the selected master's.
   const [windowStart, setWindowStart] = useState(8)
@@ -144,7 +153,10 @@ function SchedulePage() {
   }, [schedule, activeHours, appointments, selectedMasterId, isSuperAdmin])
 
   const handleAddSlot = useCallback(async (date: Date) => {
-    const dateStr = date.toISOString().split('T')[0]
+    const y = date.getFullYear()
+    const m = String(date.getMonth() + 1).padStart(2, '0')
+    const d = String(date.getDate()).padStart(2, '0')
+    const dateStr = `${y}-${m}-${d}`
     // Check if already active
     if (schedule[dateStr]) return
     // Superadmin has no schedule of their own: a master must be chosen

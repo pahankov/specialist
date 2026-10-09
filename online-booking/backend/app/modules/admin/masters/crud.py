@@ -219,7 +219,20 @@ async def delete_master(
     super_admin: User = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    """Delete a master (superadmin only)."""
+    """Delete a master with ALL their data (superadmin only).
+
+    Children are removed explicitly in FK order instead of relying on
+    DB-level ON DELETE CASCADE: prod constraints predating the models
+    may lack it, which turned deletes into 500s.
+    """
+    from app.models.appointment import Appointment
+    from app.models.blocked_slot import BlockedSlot
+    from app.models.refresh_token import RefreshToken
+    from app.models.review import Review
+    from app.models.service import Service
+    from app.models.working_hour import WorkingHour
+    from sqlalchemy import delete as sa_delete
+
     result = await db.execute(select(MasterProfile).where(MasterProfile.id == master_id))
     master_profile = result.scalar_one_or_none()
     if not master_profile:
@@ -228,10 +241,22 @@ async def delete_master(
     if master_profile.user_id == super_admin.id:
         raise HTTPException(status_code=400, detail="Нельзя удалить себя")
 
+    user_result = await db.execute(select(User).where(User.id == master_profile.user_id))
+    user = user_result.scalar_one_or_none()
+    user_name = user.name if user else f"user_id={master_profile.user_id}"
+    user_id = master_profile.user_id
+
+    await db.execute(sa_delete(Appointment).where(Appointment.master_id == master_id))
+    await db.execute(sa_delete(Service).where(Service.master_id == master_id))
+    await db.execute(sa_delete(WorkingHour).where(WorkingHour.master_id == master_id))
+    await db.execute(sa_delete(BlockedSlot).where(BlockedSlot.master_id == master_id))
+    await db.execute(sa_delete(Review).where(Review.master_id == master_id))
+    await db.execute(sa_delete(RefreshToken).where(RefreshToken.user_id == user_id))
     await db.delete(master_profile)
+    if user is not None:
+        await db.delete(user)
+    await log_action(db, super_admin.id, "delete", "master", user_id,
+                     f"Удалён мастер {user_name} вместе со всеми данными", level="warning")
     await db.commit()
-    logger.info("Суперпользователь %s удалил мастера (user_id=%s)", super_admin.email, master_profile.user_id)
-    await log_action(db, super_admin.id, "delete", "master", master_profile.user_id,
-                     f"Удалён мастер (user_id={master_profile.user_id})", level="warning")
-    await db.commit()
+    logger.info("Суперпользователь %s удалил мастера %s", super_admin.email, user_name)
     return {"detail": "Мастер удалён"}

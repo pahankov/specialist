@@ -92,9 +92,11 @@ export async function handleBookAppointment(
 
   setBookingLoading(true)
   try {
-    const dateStr = bookingForm.date.toISOString().split('T')[0]
+    const y = bookingForm.date.getFullYear()
+    const m = String(bookingForm.date.getMonth() + 1).padStart(2, '0')
+    const d = String(bookingForm.date.getDate()).padStart(2, '0')
     const hourStr = String(bookingForm.hour).padStart(2, '0')
-    const appointmentDate = `${dateStr}T${hourStr}:00:00`
+    const appointmentDate = `${y}-${m}-${d}T${hourStr}:00:00`
     await api.bookAppointment({
       master_id: masterId !== '' && masterId != null ? masterId : undefined,
       client_id: bookingForm.clientId,

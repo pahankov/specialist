@@ -220,6 +220,28 @@
   opacity: 0.5;
 }
 
+/* Booked granules: status-tinted background + bold border so a fresh
+ * booking is unmistakable (name + service render inside already). */
+.time-slot.slot-pending {
+  border: 2px solid #f9a825;
+  background: #fff8e1;
+}
+
+.time-slot.slot-confirmed {
+  border: 2px solid #1565c0;
+  background: #e3f2fd;
+}
+
+.time-slot.slot-completed {
+  border: 2px solid #2e7d32;
+  background: #e8f5e9;
+}
+
+.time-slot.slot-cancelled {
+  border: 2px dashed #bdbdbd;
+  background: #fafafa;
+}
+
 .time-slot-checkbox input {
   width: 18px;
   height: 18px;

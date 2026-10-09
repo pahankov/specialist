@@ -9,8 +9,12 @@ export const STATUS_CONFIG: Record<string, { label: string; bg: string; text: st
   'no-show': { label: 'Неявка', bg: '#fff3e0', text: '#e65100' },
 }
 
+/** Local YYYY-MM-DD (never toISOString: UTC shifts the day for +03:00). */
 export function formatDate(date: Date): string {
-  return date.toISOString().split('T')[0]
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
 }
 
 export function formatHour(h: number): string {
@@ -44,12 +48,17 @@ export function getAppointmentsForSlot(
   date: Date,
   hour: number
 ): Appointment[] {
-  const dateStr = formatDate(date)
-  const hourStr = String(hour).padStart(2, '0')
+  // Compare via Date parts: backend strings may be naive or carry +03:00/Z,
+  // string-splitting breaks across those shapes.
   return appointments.filter(a => {
-    const aDate = a.appointment_date.split('T')[0]
-    const aHour = a.appointment_date.split('T')[1]?.slice(0, 2)
-    return aDate === dateStr && aHour === hourStr
+    const d = new Date(a.appointment_date)
+    if (Number.isNaN(d.getTime())) return false
+    return (
+      d.getFullYear() === date.getFullYear() &&
+      d.getMonth() === date.getMonth() &&
+      d.getDate() === date.getDate() &&
+      d.getHours() === hour
+    )
   })
 }
 

@@ -4,6 +4,7 @@ import type { AuditLogEntry } from '../../api/types'
 import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError'
 import { getCookie, decodeJwtPayload } from '../../utils/cookies'
 import { Pager } from '../../components/common'
+import { usePersistentState } from '../../utils/persistentState'
 import './LogsPage.css'
 
 function getIsAdmin(): boolean {
@@ -18,12 +19,12 @@ function LogsPage() {
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [entityFilter, setEntityFilter] = useState('')
-  const [levelFilter, setLevelFilter] = useState('')
-  const [actionFilter, setActionFilter] = useState('')
-  const [quickSearch, setQuickSearch] = useState('')
-  const [masterFilter, setMasterFilter] = useState('')
-  const [currentPage, setCurrentPage] = useState(0)
+  const [entityFilter, setEntityFilter] = usePersistentState('logs.entity', '')
+  const [levelFilter, setLevelFilter] = usePersistentState('logs.level', '')
+  const [actionFilter, setActionFilter] = usePersistentState('logs.action', '')
+  const [quickSearch, setQuickSearch] = usePersistentState('logs.search', '')
+  const [masterFilter, setMasterFilter] = usePersistentState('logs.master', '')
+  const [currentPage, setCurrentPage] = usePersistentState('logs.page', 0)
   const pageSize = 20
 
   const entityLabels: Record<string, string> = {

@@ -7,7 +7,8 @@ import { PHONE_PLACEHOLDER, EMAIL_PLACEHOLDER } from '../../constants'
 import { isCompletePhone } from '../../components/common/PhoneInput'
 import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError'
 import { downloadCsv } from '../../api/export'
-import { Skeleton, EmptyState, Tooltip, ConfirmDialog, Modal, MasterSelect, PhoneInput, ResizableTh, useColumnWidths, Pager, CitySelect } from '../../components/common'
+import { usePersistentState } from '../../utils/persistentState'
+import { Skeleton, EmptyState, Tooltip, ConfirmDialog, MasterSelect, PhoneInput, ResizableTh, useColumnWidths, Pager, CitySelect } from '../../components/common'
 import type { CityOption } from '../../components/common/CitySelect'
 import { useSectionPrefix } from '../../utils/section'
 import '../../styles/filters.css'
@@ -21,9 +22,6 @@ function ClientsPage() {
     name: 180, phone: 140, email: 180, city: 150, noshow: 90, actions: 170,
   })
   const [editingCityId, setEditingCityId] = useState<number | null>(null)
-  const [showBulkCity, setShowBulkCity] = useState(false)
-  const [bulkCity, setBulkCity] = useState<CityOption | null>(null)
-  const [bulkSaving, setBulkSaving] = useState(false)
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -33,15 +31,15 @@ function ClientsPage() {
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [city, setCity] = useState<CityOption | null>(null)
-  const [search, setSearch] = useState('')
-  const [searchInput, setSearchInput] = useState('')
-  const [masterIdFilter, setMasterIdFilter] = useState<number | ''>('')
+  const [search, setSearch] = usePersistentState('clients.search', '')
+  const [searchInput, setSearchInput] = usePersistentState('clients.searchInput', '')
+  const [masterIdFilter, setMasterIdFilter] = usePersistentState<number | ''>('clients.master', '')
   const [totalClients, setTotalClients] = useState(0)
-  const [currentPage, setCurrentPage] = useState(0)
+  const [currentPage, setCurrentPage] = usePersistentState('clients.page', 0)
   const [totalPages, setTotalPages] = useState(1)
   const pageSize = 50
-  const [sortKey, setSortKey] = useState<'name' | 'no_show' | null>(null)
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [sortKey, setSortKey] = usePersistentState<'name' | 'no_show' | null>('clients.sort', null)
+  const [sortDir, setSortDir] = usePersistentState<'asc' | 'desc'>('clients.dir', 'asc')
 
   // Debounce search input (400ms) — no request per keystroke
   useEffect(() => {
@@ -187,13 +185,6 @@ function ClientsPage() {
             </div>
           )}
         </div>
-        {totalClients > 0 && (
-          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
-            <button className="btn filter-reset" onClick={() => { setBulkCity(null); setShowBulkCity(true) }}>
-              🏙️ Назначить город всем ({totalClients})
-            </button>
-          </div>
-        )}
       </div>
 
       {showForm && (
@@ -252,7 +243,7 @@ function ClientsPage() {
                 <ResizableTh width={colW.noshow} onResize={(w) => setColW('noshow', w)} onClick={() => toggleSort('no_show')} style={{ cursor: 'pointer', userSelect: 'none' }} title="Сортировать по неявкам">
                   Неявки{sortArrow('no_show')}
                 </ResizableTh>
-                <ResizableTh width={colW.actions} onResize={(w) => setColW('actions', w)}>Действия</ResizableTh>
+                <ResizableTh width={colW.actions} minWidth={150} defaultWidth={170} onResize={(w) => setColW('actions', w)}>Действия</ResizableTh>
               </tr></thead>
               <tbody>
                 {clients.map(c => (
@@ -296,12 +287,12 @@ function ClientsPage() {
                     </td>
                     <td>{(c.no_show_count ?? 0) > 0 ? `⚠️ ${c.no_show_count}` : '—'}</td>
                     <td className="actions-cell">
-                      <Tooltip content={c.is_active === false ? 'Разблокировать' : 'Заблокировать'} position="top">
+                      <Tooltip content={c.is_active === false ? 'Разблокировать (сейчас заблокирован)' : 'Заблокировать (сейчас активен)'} position="top">
                         <button
                           className={`btn btn-sm ${c.is_active === false ? 'btn-success' : 'btn-warn'}`}
                           onClick={() => handleToggleActive(c.id)}
                         >
-                          {c.is_active === false ? '🔓' : '🔒'}
+                          {c.is_active === false ? '🔒' : '🔓'}
                         </button>
                       </Tooltip>
                       <Tooltip content="Редактировать">
@@ -329,42 +320,6 @@ function ClientsPage() {
         danger
         onConfirm={() => deletingId !== null && handleDelete(deletingId)}
       />
-
-      <Modal open={showBulkCity} onClose={() => setShowBulkCity(false)} title="🏙️ Назначить город всем">
-        <p style={{ fontSize: 14, color: '#666', margin: '0 0 12px' }}>
-          Город будет назначен <strong>{totalClients}</strong> клиентам
-          {search || masterIdFilter !== '' ? ' по текущему фильтру' : ''}.
-          Действует сразу и для всех — отменить можно только вручную.
-        </p>
-        <CitySelect value={bulkCity?.id ?? null} valueName={bulkCity?.name ?? ''} onChange={setBulkCity} />
-        <div className="modal-actions" style={{ marginTop: 16 }}>
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={bulkCity?.id == null || bulkSaving}
-            onClick={async () => {
-              if (bulkCity?.id == null) return
-              setBulkSaving(true)
-              try {
-                const { data } = await adminApi.bulkSetClientCity({
-                  city_id: bulkCity.id,
-                  ...(search?.trim() ? { search: search.trim() } : {}),
-                  ...(masterIdFilter !== '' ? { master_id: masterIdFilter } : {}),
-                })
-                toast.success(`Город ${data.city_name} назначен: ${data.updated}`)
-                setShowBulkCity(false)
-                fetchData()
-              } catch (err: unknown) {
-                toast.error(getApiErrorMessage(err, 'Не удалось назначить город'))
-              } finally {
-                setBulkSaving(false)
-              }
-            }}
-          >
-            {bulkSaving ? 'Назначаем…' : 'Назначить'}
-          </button>
-        </div>
-      </Modal>
 
       {/* Pagination */}
       <Pager page={currentPage} totalPages={totalPages} onChange={setCurrentPage} />

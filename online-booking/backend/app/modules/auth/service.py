@@ -100,6 +100,13 @@ async def login_master(email: str, password: str, db: AsyncSession) -> tuple[str
             detail="Неверный email или пароль"
         )
 
+    if user.is_active is False:
+        logger.warning("Вход заблокированного мастера: %s", email)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Аккаунт заблокирован. Обратитесь к администратору."
+        )
+
     from app.modules.auth.token import create_access_token
     from app.modules.auth.token import create_refresh_token_payload
 
@@ -229,6 +236,13 @@ async def login_client_legacy(phone: str, db: AsyncSession) -> tuple[str, User]:
         logger.warning("Клиент не найден: %s", phone)
         raise HTTPException(status_code=404, detail="Клиент не найден")
 
+    if user.is_active is False:
+        logger.warning("Вход заблокированного клиента: %s", phone)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Аккаунт заблокирован. Обратитесь к администратору."
+        )
+
     from app.modules.auth.token import create_access_token
     access_token = create_access_token({
         "sub": str(user.id),
@@ -266,6 +280,13 @@ async def login_unified(identifier: str, password: str, db: AsyncSession) -> tup
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Неверный email/телефон или пароль"
+        )
+
+    if user.is_active is False:
+        logger.warning("Вход заблокированного пользователя: %s", identifier)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Аккаунт заблокирован. Обратитесь к администратору."
         )
 
     from app.modules.auth.token import create_access_token

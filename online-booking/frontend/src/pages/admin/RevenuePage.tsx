@@ -5,6 +5,7 @@ import type { DashboardStats, AdminStats } from '../../api/types'
 import { Skeleton, EmptyState, MasterSelect } from '../../components/common'
 import { getApiErrorMessage } from '../../utils/apiError'
 import { useSectionPrefix } from '../../utils/section'
+import { usePersistentState } from '../../utils/persistentState'
 import '../../styles/filters.css'
 import './RevenuePage.css'
 
@@ -22,11 +23,11 @@ function RevenuePage() {
   const [error, setError] = useState('')
   const [isGlobal, setIsGlobal] = useState(false)
   const [masterStats, setMasterStats] = useState<AdminStats | null>(null)
-  const [groupBy, setGroupBy] = useState<'overall' | 'master' | 'service'>('overall')
-  const [masterIdFilter, setMasterIdFilter] = useState<number | ''>('')
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
-  const [allTime, setAllTime] = useState(true)
+  const [groupBy, setGroupBy] = usePersistentState<'overall' | 'master' | 'service'>('revenue.group', 'overall')
+  const [masterIdFilter, setMasterIdFilter] = usePersistentState<number | ''>('revenue.master', '')
+  const [dateFrom, setDateFrom] = usePersistentState('revenue.from', '')
+  const [dateTo, setDateTo] = usePersistentState('revenue.to', '')
+  const [allTime, setAllTime] = usePersistentState('revenue.allTime', true)
 
   useEffect(() => {
     setLoading(true)

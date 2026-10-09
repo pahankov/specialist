@@ -5,13 +5,14 @@ import { adminApi } from '../../api/client'
 import type { Appointment } from '../../api/types'
 import { Skeleton, EmptyState, Tooltip, ConfirmDialog, MasterSelect, ResizableTh, useColumnWidths, Pager } from '../../components/common'
 import { downloadCsv } from '../../api/export'
+import { usePersistentState } from '../../utils/persistentState'
 import { useSectionPrefix, SUPER_PREFIX } from '../../utils/section'
 import { getApiErrorMessage } from '../../utils/apiError'
 import '../../styles/filters.css'
 import '../../styles/tables.css'
 import './AppointmentsPage.css'
 
-type SortField = 'appointment_date' | 'client_name' | 'service_name' | 'service_price' | 'status'
+type SortField = 'appointment_date' | 'client_name' | 'service_name' | 'service_price' | 'status' | 'master_name'
 type SortDirection = 'asc' | 'desc'
 
 function AppointmentsPage() {
@@ -23,27 +24,28 @@ function AppointmentsPage() {
 
   const [appointments, setAppointments] = useState<(Appointment & { client_name?: string; client_phone?: string; service_name?: string; service_price?: number })[]>([])
   const [searchParams, setSearchParams] = useSearchParams()
-  const [statusFilter, setStatusFilter] = useState('')
-  const [masterIdFilter, setMasterIdFilter] = useState<number | ''>('')
-  const [clientIdFilter, setClientIdFilter] = useState<number | ''>('')
-  const [serviceIdFilter, setServiceIdFilter] = useState<number | ''>('')
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
+  // Filters persist across tab switches (sessionStorage), deep-links win on mount
+  const [statusFilter, setStatusFilter] = usePersistentState('appointments.status', '')
+  const [masterIdFilter, setMasterIdFilter] = usePersistentState<number | ''>('appointments.master', '')
+  const [clientIdFilter, setClientIdFilter] = usePersistentState<number | ''>('appointments.client', '')
+  const [serviceIdFilter, setServiceIdFilter] = usePersistentState<number | ''>('appointments.service', '')
+  const [dateFrom, setDateFrom] = usePersistentState('appointments.from', '')
+  const [dateTo, setDateTo] = usePersistentState('appointments.to', '')
+  const [showCompleted, setShowCompleted] = usePersistentState('appointments.showCompleted', false)
+  const [allTime, setAllTime] = usePersistentState('appointments.allTime', true)
+  const [showFilters, setShowFilters] = usePersistentState('appointments.showFilters', false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [cancelingId, setCancelingId] = useState<number | null>(null)
   const [noShowingId, setNoShowingId] = useState<number | null>(null)
   const [cancelReason, setCancelReason] = useState('')
-  const [currentPage, setCurrentPage] = useState(0)
-  const [sortField, setSortField] = useState<SortField>('appointment_date')
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
-  const [showCompleted, setShowCompleted] = useState(false)
-  const [allTime, setAllTime] = useState(true)
+  const [currentPage, setCurrentPage] = usePersistentState('appointments.page', 0)
+  const [sortField, setSortField] = usePersistentState<SortField>('appointments.sort', 'appointment_date')
+  const [sortDirection, setSortDirection] = usePersistentState<SortDirection>('appointments.dir', 'asc')
   const [totalPages, setTotalPages] = useState(1)
   const [allClients, setAllClients] = useState<{ id: number; name: string }[]>([])
   const [allServices, setAllServices] = useState<{ id: number; name: string }[]>([])
-  const [showFilters, setShowFilters] = useState(false)
   const pageSize = 20
 
   const fetchOptions = async () => {
@@ -352,9 +354,9 @@ function AppointmentsPage() {
               <ResizableTh width={colW.price} onResize={(w) => setColW('price', w)} className={`sortable ${sortField === 'service_price' ? 'active' : ''}`} onClick={() => handleSort('service_price')}>Сумма <span className="sort-arrow">{sortField === 'service_price' ? (sortDirection === 'asc' ? '↑' : '↓') : '⇅'}</span></ResizableTh>
               <ResizableTh width={colW.status} onResize={(w) => setColW('status', w)} className={`sortable ${sortField === 'status' ? 'active' : ''}`} onClick={() => handleSort('status')}>Статус <span className="sort-arrow">{sortField === 'status' ? (sortDirection === 'asc' ? '↑' : '↓') : '⇅'}</span></ResizableTh>
               {isSuperSection && (
-                <ResizableTh width={colW.master} onResize={(w) => setColW('master', w)}>Мастер</ResizableTh>
+                <ResizableTh width={colW.master} onResize={(w) => setColW('master', w)} className={`sortable ${sortField === 'master_name' ? 'active' : ''}`} onClick={() => handleSort('master_name')}>Мастер <span className="sort-arrow">{sortField === 'master_name' ? (sortDirection === 'asc' ? '↑' : '↓') : '⇅'}</span></ResizableTh>
               )}
-              <ResizableTh width={colW.actions} onResize={(w) => setColW('actions', w)}>Действия</ResizableTh>
+              <ResizableTh width={colW.actions} minWidth={150} defaultWidth={150} onResize={(w) => setColW('actions', w)}>Действия</ResizableTh>
             </tr></thead>
             <tbody>
               {filteredAppointments.map(a => (<tr key={a.id}>
