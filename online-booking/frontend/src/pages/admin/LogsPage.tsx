@@ -3,9 +3,10 @@ import { adminApi } from '../../api/client'
 import type { AuditLogEntry } from '../../api/types'
 import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError'
 import { getCookie, decodeJwtPayload } from '../../utils/cookies'
-import { Pager } from '../../components/common'
+import { Pager, Skeleton, EmptyState } from '../../components/common'
 import { usePersistentState } from '../../utils/persistentState'
 import './LogsPage.css'
+import { entityLabels, actionLabels, levelLabels } from '../../constants/statusLabels'
 
 function getIsAdmin(): boolean {
   const token = getCookie('access_token')
@@ -27,32 +28,6 @@ function LogsPage() {
   const [currentPage, setCurrentPage] = usePersistentState('logs.page', 0)
   const pageSize = 20
 
-  const entityLabels: Record<string, string> = {
-    appointment: '📅 Запись',
-    service: '💇 Услуга',
-    client: '👤 Клиент',
-    working_hour: '🕐 Расписание',
-    master: '👨‍💼 Мастер',
-    auth: '🔑 Вход/выход'
-  }
-
-  const actionLabels: Record<string, string> = {
-    confirm: '✅ Подтверждение',
-    cancel: '❌ Отмена',
-    complete: '🏁 Завершение',
-    delete: '🗑️ Удаление',
-    create: '➕ Создание',
-    update: '✏️ Обновление',
-    toggle_active: '🔒 Блокировка',
-    toggle_admin: '👑 Смена прав',
-    'no-show': '⚠️ Неявка'
-  }
-
-  const levelLabels: Record<string, string> = {
-    info: 'ℹ️ INFO',
-    warning: '⚠️ WARNING',
-    error: '🚫 ERROR'
-  }
 
   const fetchLogs = async () => {
     try {
@@ -60,9 +35,10 @@ function LogsPage() {
       if (entityFilter) params.entity_type = entityFilter
       if (masterFilter) params.master_id = masterFilter
 
-      // Superadmin uses /audit-logs/all, regular master uses /audit-logs (filtered by master_id)
-      const endpoint = isAdmin ? '/api/v1/admin/audit-logs/all' : '/api/v1/admin/audit-logs'
-      const resp = await adminApi.get(endpoint, { params })
+      // Superadmin uses /audit-logs/all, regular master uses /audit-logs (own logs)
+      const resp = isAdmin
+        ? await adminApi.getAuditLogsAll(params)
+        : await adminApi.getAuditLogs(params)
       setLogs(resp.data.logs)
       setTotal(resp.data.total)
     } catch (err: unknown) {
@@ -82,7 +58,7 @@ function LogsPage() {
     fetchLogs()
   }, [entityFilter, masterFilter, currentPage])
 
-  if (loading) return <div><div className="loading">Загрузка...</div></div>
+  if (loading) return <div><Skeleton rows={8} /></div>
   if (error) return <div><div className="error-message">{error}</div></div>
 
   const visibleLogs = logs.filter(log => {
@@ -177,9 +153,10 @@ function LogsPage() {
 
       <div className="card">
         {visibleLogs.length === 0 ? (
-          <p className="empty-state">
-            {logs.length === 0 ? 'Нет записей в журнале' : 'Ничего не найдено — измените фильтры'}
-          </p>
+          <EmptyState
+            title={logs.length === 0 ? 'Нет записей в журнале' : 'Ничего не найдено'}
+            description={logs.length === 0 ? undefined : 'Измените фильтры'}
+          />
         ) : (
           <table className="logs-table">
             <thead>

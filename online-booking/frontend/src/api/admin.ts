@@ -1,4 +1,3 @@
-import type { AxiosRequestConfig } from 'axios'
 import apiClient from './http'
 import type {
   Service,
@@ -166,19 +165,5 @@ export const adminApi = {
   // Dashboard cache management
   clearDashboardCache() {
     return apiClient.post('/api/v1/admin/dashboard/cache/clear')
-  },
-
-  // Generic HTTP methods (for endpoints without named methods)
-  get(url: string, config?: AxiosRequestConfig) {
-    return apiClient.get(url, config)
-  },
-  post(url: string, data?: unknown) {
-    return apiClient.post(url, data)
-  },
-  patch(url: string, data?: unknown, config?: AxiosRequestConfig) {
-    return apiClient.patch(url, data, config)
-  },
-  delete(url: string) {
-    return apiClient.delete(url)
   },
 }

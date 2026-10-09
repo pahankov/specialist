@@ -440,6 +440,13 @@ npx vitest                              # Watch mode
 
 ## 📚 История версий
 
+### [1.12.0] — 2026-10-09
+- **Логгер:** тихие `/health/docs/openapi` (без INFO-шума), `perf_counter`, без IP/UA в логах, `X-Request-ID` и на 500
+- **Лэйауты:** общий `BaseLayout` (`/admin` + `/super` — только nav/заголовок/тема различаются, DOM идентичен)
+- **Фронт-дубли:** `constants/statusLabels.ts` (статусы/сущности/действия/уровни), `StatusBadge`, `useAdminSort` (Clients+Masters), фильтры записей через `statusLabels`
+- **Страницы:** Logs — именованные API-методы (generic-хак из `adminApi` удалён), `Skeleton`/`EmptyState`; Services — `getApiErrorStatus`, тосты вместо инлайн-бокса, `EmptyState` с CTA
+- **Тесты:** +3 (`StatusBadge`, `useAdminSort` цикл asc→desc→none); фронт 78/78, бэкенд 322/322
+
 ### [1.11.0] — 2026-10-09
 - **Секреты в одном месте:** корневой `.env`-дубль удалён; рантайм-канон — только `online-booking/backend/.env` (gitignored), шаблон — `.env.example`; `docs/SECRETS.md` обновлён
 - **Безопасность P0:** `SECRET_KEY` fail-closed (пустой/короткий ключ роняет старт), slowapi реально подключён (60/min глобально + 10/min на auth, `/health` exempt), CORS-методы явно, `Review` добавлен в `alembic/env.py`

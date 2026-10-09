@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { adminApi } from '../../api/client'
-import { ConfirmDialog, ResizableTh, useColumnWidths } from '../../components/common'
+import { ConfirmDialog, ResizableTh, useColumnWidths, Skeleton, EmptyState } from '../../components/common'
 import type { Service } from '../../api/types'
 import { formatPrice } from '../../components/schedule/helpers'
-import { getApiErrorMessage } from '../../utils/apiError'
+import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError'
 import '../../styles/tables.css'
 import './ServicesPage.css'
 
@@ -14,7 +15,6 @@ function ServicesPage() {
   const [services, setServices] = useState<Service[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [successMsg, setSuccessMsg] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
@@ -27,8 +27,8 @@ function ServicesPage() {
     try {
       const s = await adminApi.getServices()
       setServices(s.data.items)
-    } catch (err: any) {
-      if (err.response?.status === 401) { window.location.href = '/admin/login' }
+    } catch (err: unknown) {
+      if (getApiErrorStatus(err) === 401) { window.location.href = '/admin/login' }
       else setError('Ошибка загрузки')
     } finally { setLoading(false) }
   }
@@ -36,7 +36,6 @@ function ServicesPage() {
   useEffect(() => { fetchData() }, [])
 
   const resetForm = () => { setName(''); setDescription(''); setDuration(30); setPrice(1000); setEditingId(null); setShowForm(false) }
-  const clearSuccess = () => { setSuccessMsg(''); setError('') }
 
   const showError = (err: unknown) => {
     setError(getApiErrorMessage(err, 'Ошибка сервера'))
@@ -44,17 +43,17 @@ function ServicesPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    clearSuccess()
+    setError('')
     try {
       if (editingId) {
         await adminApi.updateService(editingId, { name, description, duration_minutes: duration, price })
-        setSuccessMsg('Услуга обновлена')
+        toast.success('Услуга обновлена')
       } else {
         await adminApi.createService({ name, description, duration_minutes: duration, price })
-        setSuccessMsg('Услуга создана')
+        toast.success('Услуга создана')
       }
       resetForm(); fetchData()
-    } catch (err: any) { showError(err) }
+    } catch (err: unknown) { showError(err) }
   }
 
   const handleEdit = (s: Service) => {
@@ -64,25 +63,24 @@ function ServicesPage() {
     setPrice(Number(s.price))
     setEditingId(s.id)
     setShowForm(true)
-    clearSuccess()
+    setError('')
   }
 
   const handleDelete = async (id: number) => {
     try {
       await adminApi.deleteService(id)
-      setSuccessMsg('Услуга удалена')
+      toast.success('Услуга удалена')
       fetchData()
-    } catch (err: any) { showError(err) }
+    } catch (err: unknown) { showError(err) }
     finally { setDeletingId(null) }
   }
 
-  if (loading) return <div><div className="loading">Загрузка...</div></div>
+  if (loading) return <div><Skeleton rows={6} /></div>
   if (error) return <div><div className="error-message">{error}</div></div>
 
   return (
     <div>
       <div className="page-header"><h1>Управление услугами</h1><p>Добавление, редактирование и удаление услуг</p></div>
-      {successMsg && <div className="success-message" style={{ background: '#e8f5e9', color: '#2e7d32', padding: '12px 16px', borderRadius: 8, marginBottom: 20 }}>{successMsg}</div>}
       {error && <div className="error-message">{error}</div>}
 
       {showForm && (
@@ -105,7 +103,7 @@ function ServicesPage() {
 
       <div className="card">
         <div className="card-header"><h3>Список услуг ({services.length})</h3><button className="btn btn-primary" onClick={() => setShowForm(true)}>+ Добавить услугу</button></div>
-        {services.length === 0 ? <p className="empty-state">Нет услуг</p> : (
+        {services.length === 0 ? <EmptyState title="Нет услуг" actionLabel="Добавить услугу" onAction={() => setShowForm(true)} /> : (
           <table className="services-table resizable-table">
             <thead><tr><ResizableTh width={colW.name} onResize={(w) => setColW('name', w)}>Название</ResizableTh><ResizableTh width={colW.desc} onResize={(w) => setColW('desc', w)}>Описание</ResizableTh><ResizableTh width={colW.duration} onResize={(w) => setColW('duration', w)}>Длительность</ResizableTh><ResizableTh width={colW.price} onResize={(w) => setColW('price', w)}>Цена</ResizableTh><ResizableTh width={colW.actions} onResize={(w) => setColW('actions', w)}>Действия</ResizableTh></tr></thead>
             <tbody>

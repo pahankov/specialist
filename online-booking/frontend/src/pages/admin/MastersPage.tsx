@@ -9,6 +9,7 @@ import { isCompletePhone } from '../../components/common/PhoneInput'
 import { PHONE_PLACEHOLDER, PASSWORD_PLACEHOLDER, PASSWORD_EDIT_PLACEHOLDER, TELEGRAM_PLACEHOLDER } from '../../constants'
 import { useSectionPrefix, ADMIN_PREFIX } from '../../utils/section'
 import { usePersistentState } from '../../utils/persistentState'
+import { useAdminSort } from '../../utils/useAdminSort'
 import '../../styles/tables.css'
 import { getApiErrorMessage } from '../../utils/apiError'
 import { downloadCsv } from '../../api/export'
@@ -31,8 +32,7 @@ function MastersPage() {
   const [searchInput, setSearchInput] = usePersistentState('masters.searchInput', '')
   const [filterActive, setFilterActive] = usePersistentState<'all' | 'active' | 'inactive'>('masters.active', 'all')
   const [filterAdmin, setFilterAdmin] = usePersistentState<'all' | 'admin' | 'user'>('masters.role', 'all')
-  const [sortKey, setSortKey] = usePersistentState<'name' | 'email' | 'status' | null>('masters.sort', null)
-  const [sortDir, setSortDir] = usePersistentState<'asc' | 'desc'>('masters.dir', 'asc')
+  const { sortKey, sortDir, toggleSort, sortArrow } = useAdminSort<'name' | 'email' | 'status'>('masters')
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingMaster, setEditingMaster] = useState<Master | null>(null)
@@ -76,20 +76,6 @@ function MastersPage() {
     return () => clearTimeout(t)
   }, [searchInput])
 
-  const toggleSort = (key: 'name' | 'email' | 'status') => {
-    if (sortKey !== key) {
-      setSortKey(key)
-      setSortDir('asc')
-    } else if (sortDir === 'asc') {
-      setSortDir('desc')
-    } else {
-      setSortKey(null)
-      setSortDir('asc')
-    }
-  }
-
-  const sortArrow = (key: 'name' | 'email' | 'status') =>
-    sortKey !== key ? ' ⇅' : (sortDir === 'asc' ? ' ▲' : ' ▼')
 
   const handleSearch = () => setSearch(searchInput)
 

@@ -9,6 +9,7 @@ import { getCookie } from '../../utils/cookies'
 import { startImpersonation } from '../../utils/impersonation'
 import { useSectionPrefix, ADMIN_PREFIX } from '../../utils/section'
 import './MasterDetailPage.css'
+import { statusLabels } from '../../constants/statusLabels'
 
 type TabType = 'overview' | 'reviews' | 'audit' | 'sessions'
 
@@ -65,12 +66,6 @@ interface MasterFull {
   }[]
 }
 
-const statusLabels: Record<string, string> = {
-  pending: '⏳ Ожидает',
-  confirmed: '✅ Подтверждена',
-  cancelled: '❌ Отменена',
-  completed: '🏁 Завершена',
-}
 
 function MasterDetailPage() {
   const { id } = useParams<{ id: string }>()

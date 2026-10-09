@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { adminApi } from '../../api/client'
 import type { Appointment } from '../../api/types'
-import { Skeleton, EmptyState, Tooltip, ConfirmDialog, MasterSelect, ResizableTh, useColumnWidths, Pager } from '../../components/common'
+import { Skeleton, EmptyState, Tooltip, ConfirmDialog, MasterSelect, ResizableTh, useColumnWidths, Pager, StatusBadge } from '../../components/common'
 import { downloadCsv } from '../../api/export'
 import { usePersistentState } from '../../utils/persistentState'
 import { useSectionPrefix, SUPER_PREFIX } from '../../utils/section'
@@ -11,6 +11,7 @@ import { getApiErrorMessage } from '../../utils/apiError'
 import '../../styles/filters.css'
 import '../../styles/tables.css'
 import './AppointmentsPage.css'
+import { statusLabels } from '../../constants/statusLabels'
 
 type SortField = 'appointment_date' | 'client_name' | 'service_name' | 'service_price' | 'status' | 'master_name'
 type SortDirection = 'asc' | 'desc'
@@ -192,8 +193,7 @@ function AppointmentsPage() {
 
   const isAppointmentTimePassed = (dateStr: string) => new Date(dateStr) <= new Date()
 
-  const statusLabels: Record<string, string> = { pending: '⏳ Ожидает', confirmed: '✅ Подтверждена', cancelled: '❌ Отменена', completed: '🏁 Завершена' }
-  const filters = [{ value: '', label: 'Все' }, { value: 'pending', label: '⏳ Ожидает' }, { value: 'confirmed', label: '✅ Подтверждена' }, { value: 'cancelled', label: '❌ Отменена' }, { value: 'completed', label: '🏁 Завершена' }]
+  const filters = [{ value: '', label: 'Все' }, { value: 'pending', label: statusLabels['pending'] }, { value: 'confirmed', label: statusLabels['confirmed'] }, { value: 'cancelled', label: statusLabels['cancelled'] }, { value: 'completed', label: statusLabels['completed'] }]
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -398,7 +398,7 @@ function AppointmentsPage() {
                 <td>{a.service_price ? `${Number(a.service_price).toLocaleString('ru-RU')} ₽` : '—'}</td>
                 <td>
                   <Tooltip content={statusLabels[a.status] || a.status} position="top">
-                    <span className={`status-badge status-${a.status}`}>{statusLabels[a.status] || a.status}</span>
+                    <StatusBadge status={a.status} />
                   </Tooltip>
                 </td>
                 {isSuperSection && (

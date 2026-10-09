@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { adminApi } from '../../api/client'
 import type { DashboardStats, AdminStats } from '../../api/types'
-import { Skeleton, EmptyState } from '../../components/common'
+import { Skeleton, EmptyState, StatusBadge } from '../../components/common'
 import { getApiErrorMessage } from '../../utils/apiError'
 import { useSectionPrefix, SUPER_PREFIX } from '../../utils/section'
 import './DashboardPage.css'
+import { statusLabels } from '../../constants/statusLabels'
 
 function DashboardPage() {
   const navigate = useNavigate()
@@ -36,7 +37,6 @@ function DashboardPage() {
   if (error) return <div><div className="error-message">{error}</div></div>
   if (!stats) return null
 
-  const statusLabels: Record<string, string> = { pending: '⏳ Ожидает', confirmed: '✅ Подтверждена', cancelled: '❌ Отменена', completed: '🏁 Завершена' }
 
   // Check if this is global stats (superadmin)
   const isGlobal = 'total_masters' in stats
@@ -237,7 +237,7 @@ function DashboardPage() {
                       <span className="appt-service">{a.service_name || '—'}</span>
                     </div>
                     <span className="appt-date">{new Date(a.appointment_date).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
-                    <span className={`appt-status status-${a.status}`}>{statusLabels[a.status] || a.status}</span>
+                    <StatusBadge status={a.status} className="appt-status" />
                   </div>
                 ))}
                 {(!g.recent_appointments || g.recent_appointments.length === 0) && <EmptyState icon="📭" title="Нет записей" description="Ближайшие записи появятся здесь" />}

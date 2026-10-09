@@ -8,6 +8,7 @@ import { isCompletePhone } from '../../components/common/PhoneInput'
 import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError'
 import { downloadCsv } from '../../api/export'
 import { usePersistentState } from '../../utils/persistentState'
+import { useAdminSort } from '../../utils/useAdminSort'
 import { Skeleton, EmptyState, Tooltip, ConfirmDialog, MasterSelect, PhoneInput, ResizableTh, useColumnWidths, Pager, CitySelect } from '../../components/common'
 import type { CityOption } from '../../components/common/CitySelect'
 import { useSectionPrefix } from '../../utils/section'
@@ -39,8 +40,7 @@ function ClientsPage() {
   const [currentPage, setCurrentPage] = usePersistentState('clients.page', 0)
   const [totalPages, setTotalPages] = useState(1)
   const pageSize = 50
-  const [sortKey, setSortKey] = usePersistentState<'name' | 'no_show' | null>('clients.sort', null)
-  const [sortDir, setSortDir] = usePersistentState<'asc' | 'desc'>('clients.dir', 'asc')
+  const { sortKey, sortDir, toggleSort, sortArrow } = useAdminSort<'name' | 'no_show'>('clients')
 
   // Debounce search input (400ms) — no request per keystroke
   useEffect(() => {
@@ -48,20 +48,6 @@ function ClientsPage() {
     return () => clearTimeout(t)
   }, [searchInput])
 
-  const toggleSort = (key: 'name' | 'no_show') => {
-    if (sortKey !== key) {
-      setSortKey(key)
-      setSortDir('asc')
-    } else if (sortDir === 'asc') {
-      setSortDir('desc')
-    } else {
-      setSortKey(null)
-      setSortDir('asc')
-    }
-  }
-
-  const sortArrow = (key: 'name' | 'no_show') =>
-    sortKey !== key ? ' ⇅' : (sortDir === 'asc' ? ' ▲' : ' ▼')
 
   const handleToggleActive = async (id: number) => {
     try {
