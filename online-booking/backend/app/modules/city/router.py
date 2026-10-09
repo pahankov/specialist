@@ -11,7 +11,7 @@ from app.models.country import Country
 from app.models.city import City
 from app.schemas.country import CountryResponse, CountryCreate, CountryUpdate
 from app.schemas.city import CityResponse, CityCreate, CityUpdate
-from app.dependencies.auth import require_super_admin
+from app.dependencies.auth import require_master
 from app.models.user import User
 from app.logging_config import get_logger
 
@@ -118,7 +118,7 @@ class CityResolveRequest(BaseModel):
 @router.post("/cities/resolve", response_model=CityResponse, status_code=200)
 async def resolve_city(
     body: CityResolveRequest,
-    admin: User = Depends(require_super_admin),
+    master: User = Depends(require_master),
     db: AsyncSession = Depends(get_db),
 ):
     """Get-or-create a city by exact Russian name.
@@ -164,5 +164,5 @@ async def resolve_city(
     db.add(city)
     await db.commit()
     await db.refresh(city)
-    logger.info("Суперпользователь %s добавил город %s (id=%s)", admin.email, name, city.id)
+    logger.info("Пользователь %s добавил город %s (id=%s)", master.email, name, city.id)
     return city

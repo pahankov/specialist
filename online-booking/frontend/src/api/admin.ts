@@ -63,10 +63,10 @@ export const adminApi = {
   getClients(params?: { page?: number; page_size?: number; search?: string; master_id?: number; sort_by?: string; sort_dir?: string }) {
     return apiClient.get<PaginatedResponse<Client>>('/api/v1/admin/clients', { params })
   },
-  createClient(data: { name: string; phone: string; email?: string }) {
+  createClient(data: { name: string; phone: string; email?: string; city_id?: number | null }) {
     return apiClient.post<Client>('/api/v1/admin/clients', data)
   },
-  updateClient(id: number, data: { name?: string; phone?: string; email?: string }) {
+  updateClient(id: number, data: { name?: string; phone?: string; email?: string; city_id?: number | null }) {
     return apiClient.patch<Client>(`/api/v1/admin/clients/${id}`, data)
   },
   deleteClient(id: number) {
@@ -109,6 +109,12 @@ export const adminApi = {
   },
   deleteWorkingHour(id: number) {
     return apiClient.delete(`/api/v1/admin/working-hours/${id}`)
+  },
+  getWorkWindow(master_id?: number) {
+    return apiClient.get<{ master_id: number; start_hour: number; end_hour: number }>('/api/v1/admin/work-window', { params: master_id ? { master_id } : undefined })
+  },
+  updateWorkWindow(data: { master_id?: number; start_hour: number; end_hour: number }) {
+    return apiClient.patch<{ master_id: number; start_hour: number; end_hour: number }>('/api/v1/admin/work-window', data)
   },
 
   // Audit Logs

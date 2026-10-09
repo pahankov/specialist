@@ -88,6 +88,16 @@ async def get_admin_clients(
     result = await db.execute(data_query)
     profiles = result.scalars().unique().all()
 
+    # Bulk city names (one query, no N+1)
+    from app.models.city import City
+    city_ids = {cp.user.city_id for cp in profiles if cp.user.city_id is not None}
+    city_names: dict = {}
+    if city_ids:
+        city_rows = await db.execute(
+            select(City.id, City.name_ru).where(City.id.in_(city_ids))
+        )
+        city_names = dict(city_rows.all())
+
     # Build response
     items = [
         {
@@ -97,6 +107,8 @@ async def get_admin_clients(
             "email": cp.user.email,
             "no_show_count": cp.no_show_count or 0,
             "is_active": cp.user.is_active,
+            "city_id": cp.user.city_id,
+            "city_name": city_names.get(cp.user.city_id),
             "created_at": cp.user.created_at.isoformat() if cp.user.created_at else None,
             "updated_at": cp.user.updated_at.isoformat() if cp.user.updated_at else None,
         }
@@ -126,8 +138,17 @@ async def create_admin_client(
         result = await db.execute(select(User).where(User.email == data.email))
         if result.scalar_one_or_none():
             raise HTTPException(status_code=400, detail="Клиент с таким email уже существует")
-    
-    user = User(name=data.name, phone=data.phone, email=data.email, role=UserRole.CLIENT)
+    if data.city_id is not None:
+        from app.models.city import City
+        city_row = await db.execute(select(City).where(City.id == data.city_id))
+        city_obj = city_row.scalar_one_or_none()
+        if city_obj is None:
+            raise HTTPException(status_code=400, detail="Город не найден")
+        city_name = city_obj.name_ru
+    else:
+        city_name = None
+
+    user = User(name=data.name, phone=data.phone, email=data.email, role=UserRole.CLIENT, city_id=data.city_id)
     db.add(user)
     await db.flush()
     
@@ -146,6 +167,8 @@ async def create_admin_client(
         "email": user.email,
         "no_show_count": 0,
         "is_active": user.is_active,
+        "city_id": data.city_id,
+        "city_name": city_name,
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "updated_at": user.updated_at.isoformat() if user.updated_at else None,
     }
@@ -172,7 +195,12 @@ async def update_admin_client(
         result = await db.execute(select(User).where(User.email == data.email))
         if result.scalar_one_or_none():
             raise HTTPException(status_code=400, detail="Клиент с таким email уже существует")
-    
+    if data.city_id is not None:
+        from app.models.city import City
+        city = await db.execute(select(City).where(City.id == data.city_id))
+        if city.scalar_one_or_none() is None:
+            raise HTTPException(status_code=400, detail="Город не найден")
+
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(user, field, value)
     

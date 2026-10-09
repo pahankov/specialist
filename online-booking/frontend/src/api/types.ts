@@ -73,6 +73,8 @@ export interface Client {
   email?: string
   no_show_count?: number
   is_active?: boolean
+  city_id?: number | null
+  city_name?: string | null
 }
 
 export interface Appointment {

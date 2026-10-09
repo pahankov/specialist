@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { adminApi, superAdminApi } from '../../api/client'
 import type { DashboardStats, AdminStats } from '../../api/types'
 import { Skeleton, EmptyState, MasterSelect } from '../../components/common'
 import { getApiErrorMessage } from '../../utils/apiError'
+import { useSectionPrefix } from '../../utils/section'
 import '../../styles/filters.css'
 import './RevenuePage.css'
 
@@ -12,6 +14,8 @@ interface RevenueBreakdown {
 }
 
 function RevenuePage() {
+  const navigate = useNavigate()
+  const section = useSectionPrefix()
   const [stats, setStats] = useState<DashboardStats | AdminStats | null>(null)
   const [revenueBreakdown, setRevenueBreakdown] = useState<RevenueBreakdown | null>(null)
   const [loading, setLoading] = useState(true)
@@ -90,6 +94,14 @@ function RevenuePage() {
   const revPerClient = g.total_clients > 0 ? (g.total_revenue || 0) / g.total_clients : 0
   const fmt = (v: number) => v.toLocaleString('ru-RU', { maximumFractionDigits: 0 })
 
+  // Stat banners drill down: appointments (optionally by status) or clients,
+  // scoped to the selected master when one is picked.
+  const masterScope = masterIdFilter !== '' ? `&master_id=${masterIdFilter}` : ''
+  const goAppointments = (status?: string) =>
+    navigate(`${section}/appointments?${status ? `status=${status}&` : ''}${masterScope.replace(/^&/, '')}`)
+  const goClients = () =>
+    navigate(`${section}/clients${masterScope ? `?${masterScope.replace(/^&/, '')}` : ''}`)
+
   return (
     <div className="revenue-page">
       <div className="page-header"><h1>Доход</h1><p>Финансовая аналитика · {statsScope}</p></div>
@@ -117,18 +129,19 @@ function RevenuePage() {
             <label className="filter-label">Дата до</label>
             <input type="date" className="filter-control" value={dateTo} disabled={allTime} onChange={(e) => setDateTo(e.target.value)} />
           </div>
-          <div className="filter-cell-bottom">
+          {/* Tied to the date fields: same row, right edge */}
+          <div className="filter-cell-bottom" style={{ justifySelf: 'end' }}>
             <label className="filter-check">
               <input type="checkbox" checked={allTime} onChange={() => setAllTime(v => !v)} />
               За всё время
             </label>
           </div>
-          {(groupBy !== 'overall' || masterIdFilter !== '' || dateFrom || dateTo) && (
-            <div className="filter-cell-bottom">
-              <button className="btn btn-ghost" onClick={() => { setGroupBy('overall'); setMasterIdFilter(''); setDateFrom(''); setDateTo('') }} style={{ width: '100%', fontSize: 13, height: 38 }}>Сбросить</button>
-            </div>
-          )}
         </div>
+        {(groupBy !== 'overall' || masterIdFilter !== '' || dateFrom || dateTo) && (
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
+            <button className="btn filter-reset" onClick={() => { setGroupBy('overall'); setMasterIdFilter(''); setDateFrom(''); setDateTo('') }}>✕ Сбросить фильтры</button>
+          </div>
+        )}
       </div>
       {loading && !stats ? (
         <div className="revenue-stats-grid">
@@ -138,9 +151,9 @@ function RevenuePage() {
         <>
           <div className="revenue-stats-grid">
             <div className="revenue-card main"><div className="revenue-card-icon">💰</div><div className="revenue-card-value">{revenueBreakdown ? fmt(revenueBreakdown.total_revenue) + ' ₽' : fmt(g.total_revenue) + ' ₽'}</div><div className="revenue-card-label">Общий доход</div><div className="revenue-card-sub">Завершённые записи</div></div>
-            <div className="revenue-card"><div className="revenue-card-icon">🏁</div><div className="revenue-card-value">{completedCount}</div><div className="revenue-card-label">Завершённых</div><div className="revenue-card-sub">Ср. чек: {avgRev > 0 ? fmt(avgRev) : '—'} ₽</div></div>
-            <div className="revenue-card"><div className="revenue-card-icon">👥</div><div className="revenue-card-value">{revPerClient > 0 ? fmt(revPerClient) : '—'} ₽</div><div className="revenue-card-label">Доход на клиента</div><div className="revenue-card-sub">{g.total_clients || 0} клиентов</div></div>
-            <div className="revenue-card"><div className="revenue-card-icon">📅</div><div className="revenue-card-value">{g.total_appointments}</div><div className="revenue-card-label">Всего записей</div><div className="revenue-card-sub">Конверсия: {g.total_appointments > 0 ? Math.round((completedCount / g.total_appointments) * 100) : 0}%</div></div>
+            <div className="revenue-card clickable" onClick={() => goAppointments('completed')} title="Открыть завершённые записи"><div className="revenue-card-icon">🏁</div><div className="revenue-card-value">{completedCount}</div><div className="revenue-card-label">Завершённых</div><div className="revenue-card-sub">Ср. чек: {avgRev > 0 ? fmt(avgRev) : '—'} ₽</div></div>
+            <div className="revenue-card clickable" onClick={goClients} title="Открыть клиентов"><div className="revenue-card-icon">👥</div><div className="revenue-card-value">{revPerClient > 0 ? fmt(revPerClient) : '—'} ₽</div><div className="revenue-card-label">Доход на клиента</div><div className="revenue-card-sub">{g.total_clients || 0} клиентов</div></div>
+            <div className="revenue-card clickable" onClick={() => goAppointments()} title="Открыть все записи"><div className="revenue-card-icon">📅</div><div className="revenue-card-value">{g.total_appointments}</div><div className="revenue-card-label">Всего записей</div><div className="revenue-card-sub">Конверсия: {g.total_appointments > 0 ? Math.round((completedCount / g.total_appointments) * 100) : 0}%</div></div>
           </div>
           {groupBy !== 'overall' && revenueBreakdown && revenueBreakdown.breakdown.length > 0 && (
             <div className="card full-width" style={{ marginBottom: 16 }}>
@@ -157,10 +170,10 @@ function RevenuePage() {
             </div>
           )}
           <div className="revenue-section"><h2>Статусы записей</h2><div className="status-cards">
-            <div className="status-card status-pending"><div className="status-card-icon">⏳</div><div className="status-card-value">{pendingCount}</div><div className="status-card-label">Ожидают</div></div>
-            <div className="status-card status-confirmed"><div className="status-card-icon">✅</div><div className="status-card-value">{confirmedCount}</div><div className="status-card-label">Подтверждены</div></div>
-            <div className="status-card status-completed"><div className="status-card-icon">🏁</div><div className="status-card-value">{completedCount}</div><div className="status-card-label">Завершены</div></div>
-            <div className="status-card status-cancelled"><div className="status-card-icon">❌</div><div className="status-card-value">{cancelledCount}</div><div className="status-card-label">Отменены</div></div>
+            <div className="status-card status-pending clickable" onClick={() => goAppointments('pending')} title="Открыть ожидающие"><div className="status-card-icon">⏳</div><div className="status-card-value">{pendingCount}</div><div className="status-card-label">Ожидают</div></div>
+            <div className="status-card status-confirmed clickable" onClick={() => goAppointments('confirmed')} title="Открыть подтверждённые"><div className="status-card-icon">✅</div><div className="status-card-value">{confirmedCount}</div><div className="status-card-label">Подтверждены</div></div>
+            <div className="status-card status-completed clickable" onClick={() => goAppointments('completed')} title="Открыть завершённые"><div className="status-card-icon">🏁</div><div className="status-card-value">{completedCount}</div><div className="status-card-label">Завершены</div></div>
+            <div className="status-card status-cancelled clickable" onClick={() => goAppointments('cancelled')} title="Открыть отменённые"><div className="status-card-icon">❌</div><div className="status-card-value">{cancelledCount}</div><div className="status-card-label">Отменены</div></div>
           </div></div>
           <div className="card full-width"><h3>Воронка конверсии</h3><div className="funnel-container">
             {g.total_appointments > 0 ? <>

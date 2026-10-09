@@ -6,7 +6,8 @@ import type { Client } from '../../api/types'
 import { PHONE_PLACEHOLDER, EMAIL_PLACEHOLDER } from '../../constants'
 import { isCompletePhone } from '../../components/common/PhoneInput'
 import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError'
-import { Skeleton, EmptyState, Tooltip, ConfirmDialog, MasterSelect, PhoneInput, ResizableTh, useColumnWidths } from '../../components/common'
+import { Skeleton, EmptyState, Tooltip, ConfirmDialog, MasterSelect, PhoneInput, ResizableTh, useColumnWidths, Pager, CitySelect } from '../../components/common'
+import type { CityOption } from '../../components/common/CitySelect'
 import { useSectionPrefix } from '../../utils/section'
 import '../../styles/filters.css'
 import '../../styles/tables.css'
@@ -28,6 +29,7 @@ function ClientsPage() {
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
+  const [city, setCity] = useState<CityOption | null>(null)
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [masterIdFilter, setMasterIdFilter] = useState<number | ''>('')
@@ -90,7 +92,7 @@ function ClientsPage() {
 
   useEffect(() => { fetchData() }, [currentPage, search, masterIdFilter, sortKey, sortDir])
 
-  const resetForm = () => { setName(''); setPhone(''); setEmail(''); setEditingId(null); setShowForm(false) }
+  const resetForm = () => { setName(''); setPhone(''); setEmail(''); setCity(null); setEditingId(null); setShowForm(false) }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -100,10 +102,10 @@ function ClientsPage() {
     }
     try {
       if (editingId) {
-        await adminApi.updateClient(editingId, { name, phone, email: email || undefined })
+        await adminApi.updateClient(editingId, { name, phone, email: email || undefined, city_id: city?.id ?? null })
         toast.success('Клиент обновлён')
       } else {
-        await adminApi.createClient({ name, phone, email: email || undefined })
+        await adminApi.createClient({ name, phone, email: email || undefined, city_id: city?.id ?? null })
         toast.success('Клиент создан')
       }
       resetForm()
@@ -117,6 +119,7 @@ function ClientsPage() {
     setName(c.name)
     setPhone(c.phone)
     setEmail(c.email || '')
+    setCity(c.city_id != null ? { id: c.city_id, name: c.city_name || '', source: 'local' } : null)
     setEditingId(c.id)
     setShowForm(true)
   }
@@ -184,6 +187,7 @@ function ClientsPage() {
               <div className="form-group"><label>Имя</label><input value={name} onChange={(e) => setName(e.target.value)} required placeholder="Иван Иванов" /></div>
               <div className="form-group"><label>Телефон</label><PhoneInput value={phone} onChange={setPhone} required placeholder={PHONE_PLACEHOLDER} /></div>
               <div className="form-group"><label>Email</label><input value={email} onChange={(e) => setEmail(e.target.value)} placeholder={EMAIL_PLACEHOLDER} /></div>
+              <CitySelect value={city?.id ?? null} valueName={city?.name ?? ''} onChange={setCity} style={{ marginBottom: 0 }} />
             </div>
             <div className="form-actions">
               <button type="submit" className="btn btn-primary">{editingId ? 'Сохранить' : 'Создать'}</button>
@@ -287,27 +291,7 @@ function ClientsPage() {
       />
 
       {/* Pagination */}
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16, marginTop: 20 }}>
-        <button
-          className="btn btn-ghost"
-          onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
-          disabled={currentPage === 0}
-          style={{ opacity: currentPage === 0 ? 0.5 : 1 }}
-        >
-          ← Назад
-        </button>
-        <span style={{ fontSize: 14, color: '#666' }}>
-          Страница {currentPage + 1} из {totalPages}
-        </span>
-        <button
-          className="btn btn-ghost"
-          onClick={() => setCurrentPage(p => p + 1)}
-          disabled={currentPage + 1 >= totalPages}
-          style={{ opacity: currentPage + 1 >= totalPages ? 0.5 : 1 }}
-        >
-          Вперёд →
-        </button>
-      </div>
+      <Pager page={currentPage} totalPages={totalPages} onChange={setCurrentPage} />
     </div>
   )
 }

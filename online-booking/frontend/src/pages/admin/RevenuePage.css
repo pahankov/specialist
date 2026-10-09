@@ -34,6 +34,21 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
+.revenue-card.clickable,
+.status-card.clickable {
+  cursor: pointer;
+}
+
+.revenue-card.clickable:hover {
+  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.25);
+  outline: 2px solid #c7d2fe;
+}
+
+.status-card.clickable:hover {
+  filter: brightness(0.96);
+  outline: 2px solid #c7d2fe;
+}
+
 .revenue-card.main {
   background: linear-gradient(135deg, #4caf50 0%, #388e3c 100%);
   color: white;

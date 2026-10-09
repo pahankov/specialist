@@ -13,6 +13,11 @@ table.resizable-table {
   white-space: nowrap;
 }
 
+/* Visible column separators so resize handles are discoverable */
+.resizable-table thead th + th {
+  border-left: 1px solid #e3e8f0;
+}
+
 .resizable-table td {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -26,12 +31,14 @@ table.resizable-table {
 
 .col-resizer {
   position: absolute;
-  top: 0;
+  top: 6px;
   right: -4px;
   width: 8px;
-  height: 100%;
+  height: calc(100% - 12px);
   cursor: col-resize;
   z-index: 5;
+  border-radius: 4px;
+  background: rgba(102, 126, 234, 0.25);
 }
 
 .col-resizer:hover,

@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react'
 import { adminApi } from '../../api/client'
-import { ConfirmDialog } from '../../components/common'
+import { ConfirmDialog, ResizableTh, useColumnWidths } from '../../components/common'
 import type { Service } from '../../api/types'
 import { formatPrice } from '../../components/schedule/helpers'
 import { getApiErrorMessage } from '../../utils/apiError'
+import '../../styles/tables.css'
 import './ServicesPage.css'
 
 function ServicesPage() {
+  const { widths: colW, setWidth: setColW } = useColumnWidths('services', {
+    name: 220, desc: 300, duration: 120, price: 110, actions: 120,
+  })
   const [services, setServices] = useState<Service[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -102,8 +106,8 @@ function ServicesPage() {
       <div className="card">
         <div className="card-header"><h3>Список услуг ({services.length})</h3><button className="btn btn-primary" onClick={() => setShowForm(true)}>+ Добавить услугу</button></div>
         {services.length === 0 ? <p className="empty-state">Нет услуг</p> : (
-          <table className="services-table">
-            <thead><tr><th>Название</th><th>Описание</th><th>Длительность</th><th>Цена</th><th>Действия</th></tr></thead>
+          <table className="services-table resizable-table">
+            <thead><tr><ResizableTh width={colW.name} onResize={(w) => setColW('name', w)}>Название</ResizableTh><ResizableTh width={colW.desc} onResize={(w) => setColW('desc', w)}>Описание</ResizableTh><ResizableTh width={colW.duration} onResize={(w) => setColW('duration', w)}>Длительность</ResizableTh><ResizableTh width={colW.price} onResize={(w) => setColW('price', w)}>Цена</ResizableTh><ResizableTh width={colW.actions} onResize={(w) => setColW('actions', w)}>Действия</ResizableTh></tr></thead>
             <tbody>
               {services.map(s => (
                 <tr key={s.id}>

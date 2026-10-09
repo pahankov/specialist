@@ -3,6 +3,7 @@ import { adminApi } from '../../api/client'
 import type { AuditLogEntry } from '../../api/types'
 import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError'
 import { getCookie, decodeJwtPayload } from '../../utils/cookies'
+import { Pager } from '../../components/common'
 import './LogsPage.css'
 
 function getIsAdmin(): boolean {
@@ -232,27 +233,12 @@ function LogsPage() {
       </div>
 
       {/* Pagination */}
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16, marginTop: 20 }}>
-        <button
-          className="btn btn-ghost"
-          onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
-          disabled={currentPage === 0}
-          style={{ opacity: currentPage === 0 ? 0.5 : 1 }}
-        >
-          ← Назад
-        </button>
-        <span style={{ fontSize: 14, color: '#666' }}>
-          Страница {currentPage + 1} из {Math.ceil(total / pageSize) || 1} ({total} записей)
-        </span>
-        <button
-          className="btn btn-ghost"
-          onClick={() => setCurrentPage(p => p + 1)}
-          disabled={logs.length < pageSize}
-          style={{ opacity: logs.length < pageSize ? 0.5 : 1 }}
-        >
-          Вперёд →
-        </button>
-      </div>
+      <Pager
+        page={currentPage}
+        totalPages={Math.ceil(total / pageSize) || 1}
+        onChange={setCurrentPage}
+        label={`Страница ${currentPage + 1} из ${Math.ceil(total / pageSize) || 1} (${total} записей)`}
+      />
     </div>
   )
 }

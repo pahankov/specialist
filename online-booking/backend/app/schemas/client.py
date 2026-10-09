@@ -34,6 +34,7 @@ class ClientCreate(BaseModel):
     name: str
     phone: str
     email: Optional[str] = None
+    city_id: Optional[int] = None
 
     @field_validator('phone')
     @classmethod
@@ -52,6 +53,7 @@ class ClientUpdate(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[str] = None
+    city_id: Optional[int] = None
 
     @field_validator('phone')
     @classmethod
@@ -75,4 +77,6 @@ class ClientResponse(BaseModel):
     email: Optional[str] = None
     no_show_count: int = 0
     is_active: bool = True
+    city_id: Optional[int] = None
+    city_name: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)

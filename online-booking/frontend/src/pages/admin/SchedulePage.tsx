@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
+import { toast } from 'sonner'
 import { adminApi } from '../../api/client'
 import type { Appointment, Client, Service, DaySchedule, MonthlyStats, BookingFormState } from '../../api/types'
 import { Calendar } from '../../components/schedule/Calendar'
@@ -34,6 +35,12 @@ function SchedulePage() {
   const [longPressTriggered] = useState(false)
   const [monthlyStats, setMonthlyStats] = useState<MonthlyStats | null>(null)
   const [selectedMasterId, setSelectedMasterId] = useState<number | ''>('')
+  // Daily work window (whole hours): drives how many granules render.
+  // Master sees own window; superadmin sees the selected master's.
+  const [windowStart, setWindowStart] = useState(8)
+  const [windowEnd, setWindowEnd] = useState(22)
+  const [windowDraft, setWindowDraft] = useState({ start: '8', end: '22' })
+  const [windowSaving, setWindowSaving] = useState(false)
   // Regular masters see only their own schedule; superadmin must pick one
   // (they have no profile of their own — empty view means "not chosen",
   // not "everyone is off").
@@ -46,7 +53,7 @@ function SchedulePage() {
     async function init() {
       try {
         const masterParam = selectedMasterId !== '' ? selectedMasterId : undefined
-        const [scheduleResp, apptsResp, statsResp] = await Promise.all([
+        const [scheduleResp, apptsResp, statsResp, windowResp] = await Promise.all([
           adminApi.getWorkingHours(masterParam),
           adminApi.getAppointmentsByDate(
             `${currentMonth.getFullYear()}-01-01`,
@@ -57,6 +64,10 @@ function SchedulePage() {
             currentMonth.getFullYear(), currentMonth.getMonth() + 1,
             masterParam,
           ),
+          // No window without a master (superadmin must pick one first)
+          (isSuperAdmin && selectedMasterId === '')
+            ? Promise.resolve(null)
+            : adminApi.getWorkWindow(masterParam).then(r => r.data).catch(() => null),
         ])
         if (cancelled) return
 
@@ -74,6 +85,11 @@ function SchedulePage() {
         setActiveHours(newActiveHours)
         setAppointments(apptsResp.data || [])
         setMonthlyStats(statsResp.data || null)
+        if (windowResp) {
+          setWindowStart(windowResp.start_hour)
+          setWindowEnd(windowResp.end_hour)
+          setWindowDraft({ start: String(windowResp.start_hour), end: String(windowResp.end_hour) })
+        }
       } catch (err: any) {
         console.error('[SchedulePage] Init error:', err)
       } finally {
@@ -299,6 +315,56 @@ function SchedulePage() {
       {/* No calendar without a master: nothing to display yet */}
       {!(isSuperAdmin && selectedMasterId === '') && (
       <>
+      {/* Daily work window: how many hourly granules working days offer */}
+      <div className="card" style={{ marginBottom: 16, padding: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 14, fontWeight: 600 }}>🕐 Рабочее время:</span>
+          <span style={{ fontSize: 13, color: '#666' }}>с</span>
+          <input
+            type="number" min={0} max={23}
+            value={windowDraft.start}
+            onChange={(e) => setWindowDraft(d => ({ ...d, start: e.target.value }))}
+            style={{ width: 64, padding: 6, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }}
+            aria-label="Начало рабочего времени"
+          />
+          <span style={{ fontSize: 13, color: '#666' }}>до</span>
+          <input
+            type="number" min={1} max={24}
+            value={windowDraft.end}
+            onChange={(e) => setWindowDraft(d => ({ ...d, end: e.target.value }))}
+            style={{ width: 64, padding: 6, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 14 }}
+            aria-label="Конец рабочего времени"
+          />
+          <button
+            className="btn btn-sm btn-primary"
+            disabled={windowSaving}
+            onClick={async () => {
+              const start = Number(windowDraft.start)
+              const end = Number(windowDraft.end)
+              if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end > 24 || start >= end) {
+                setError('Укажите часы 0–24, начало раньше конца')
+                return
+              }
+              setWindowSaving(true)
+              try {
+                const { data } = await adminApi.updateWorkWindow({
+                  ...(selectedMasterId !== '' ? { master_id: selectedMasterId } : {}),
+                  start_hour: start, end_hour: end,
+                })
+                setWindowStart(data.start_hour)
+                setWindowEnd(data.end_hour)
+                toast.success(`Рабочее время: ${data.start_hour}:00–${data.end_hour}:00`)
+              } catch (err: unknown) {
+                setError(getApiErrorMessage(err, 'Не удалось сохранить рабочее время'))
+              } finally {
+                setWindowSaving(false)
+              }
+            }}
+          >
+            Сохранить
+          </button>
+        </div>
+      </div>
       {/* Legend */}
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 20, padding: 14, background: '#f9f9f9', borderRadius: 10, justifyContent: 'center' }}>
         {[
@@ -330,11 +396,12 @@ function SchedulePage() {
       {selectedDate && (
         <TimeSlots
           selectedDate={selectedDate}
-          schedule={schedule}
           appointments={appointments}
           activeHours={activeHours}
           onToggleHour={handleToggleHour}
           onOpenBooking={handleOpenBooking}
+          windowStart={windowStart}
+          windowEnd={windowEnd}
         />
       )}
 

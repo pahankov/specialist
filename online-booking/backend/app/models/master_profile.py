@@ -31,6 +31,10 @@ class MasterProfile(Base):
         DateTime(timezone=True), nullable=True,
         default=lambda: datetime.now(timezone.utc) + timedelta(days=180),
     )
+    # Daily work window (whole hours): schedule granules render for
+    # [work_start_hour, work_end_hour). Defaults 08:00-22:00.
+    work_start_hour = Column(Integer, default=8, nullable=False)
+    work_end_hour = Column(Integer, default=22, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc))

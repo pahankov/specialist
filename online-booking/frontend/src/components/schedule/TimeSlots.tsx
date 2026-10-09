@@ -1,28 +1,34 @@
-import type { Appointment, DaySchedule } from '../../api/types'
+import type { Appointment } from '../../api/types'
 import { getAppointmentsForSlot, getSlotStatus, formatHour, isSlotPast, STATUS_CONFIG, formatDate, isPast } from './helpers'
 import './ScheduleComponents.css'
 
 interface TimeSlotsProps {
   selectedDate: Date | null
-  schedule: Record<string, DaySchedule>
   appointments: Appointment[]
   activeHours: Record<string, boolean>
   onToggleHour: (dateStr: string, hour: number) => void
   onOpenBooking: (date: Date, hour: number) => void
+  /** Daily work window: granules render for [windowStart, windowEnd) regardless
+   * of the stored day range (the range is derived from active granules). */
+  windowStart?: number
+  windowEnd?: number
 }
 
 export function TimeSlots({
   selectedDate,
-  schedule,
   appointments,
   activeHours,
   onToggleHour,
   onOpenBooking,
+  windowStart = 8,
+  windowEnd = 22,
 }: TimeSlotsProps) {
   if (!selectedDate) return null
 
   const dateStr = formatDate(selectedDate)
-  const daySchedule = schedule[dateStr] || { start: 8, end: 22 }
+  // Granules come from the work window, not the stored range: activating one
+  // hour must never hide the others.
+  const daySchedule = { start: windowStart, end: windowEnd }
   const isDayPast = isPast(selectedDate)
   const allActive = checkAllActive(dateStr, daySchedule, activeHours)
 

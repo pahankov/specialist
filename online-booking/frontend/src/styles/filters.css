@@ -70,3 +70,21 @@ select.filter-control {
   height: 16px;
   margin: 0;
 }
+
+/* Visible centered reset button (ghost buttons get lost in filter bars) */
+.btn.filter-reset {
+  background: #eef2ff;
+  border: 2px solid #c7d2fe;
+  color: #4338ca;
+  font-weight: 600;
+  font-size: 13px;
+  height: 38px;
+  padding: 0 28px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.btn.filter-reset:hover {
+  background: #e0e7ff;
+  border-color: #a5b4fc;
+}

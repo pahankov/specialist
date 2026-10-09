@@ -1,5 +1,6 @@
 """Admin working hours CRUD endpoints."""
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List, Optional
@@ -170,12 +171,90 @@ async def toggle_working_hour_active(
     hour.is_active = not hour.is_active
     await db.commit()
     await db.refresh(hour)
-    
+
     # Auto-update master status based on working hours
     mp = await db.execute(select(MasterProfile).where(MasterProfile.id == hour.master_id))
     mp_profile = mp.scalar_one_or_none()
     if mp_profile:
         await update_master_status_from_working_hours(db, mp_profile)
     await db.commit()
-    
+
     return hour
+
+
+class WorkWindowResponse(BaseModel):
+    master_id: int
+    start_hour: int
+    end_hour: int
+
+
+class WorkWindowUpdate(BaseModel):
+    master_id: Optional[int] = None  # MasterProfile.id, superadmin only
+    start_hour: int
+    end_hour: int
+
+
+async def _resolve_window_profile(
+    db: AsyncSession, master: User, master_id: Optional[int]
+) -> MasterProfile:
+    """Target profile for work-window reads/writes.
+
+    master_id is a MasterProfile.id (same convention as /working-hours).
+    """
+    if master.role == UserRole.ADMIN:
+        if master_id is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Укажите мастера (master_id): у суперпользователя нет своего расписания",
+            )
+        result = await db.execute(select(MasterProfile).where(MasterProfile.id == master_id))
+        profile = result.scalar_one_or_none()
+        if profile is None:
+            raise HTTPException(status_code=404, detail="Мастер не найден")
+        return profile
+    mp_id = await get_master_profile_id(db, master)
+    result = await db.execute(select(MasterProfile).where(MasterProfile.id == mp_id))
+    profile = result.scalar_one_or_none()
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Профиль мастера не найден")
+    return profile
+
+
+@router.get("/work-window", response_model=WorkWindowResponse)
+async def get_work_window(
+    master: User = Depends(require_master),
+    master_id: Optional[int] = Query(None, description="MasterProfile.id (superadmin only)"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Daily work window that drives schedule granules (whole hours)."""
+    profile = await _resolve_window_profile(db, master, master_id)
+    return WorkWindowResponse(
+        master_id=profile.id,
+        start_hour=profile.work_start_hour if profile.work_start_hour is not None else 8,
+        end_hour=profile.work_end_hour if profile.work_end_hour is not None else 22,
+    )
+
+
+@router.patch("/work-window", response_model=WorkWindowResponse)
+async def update_work_window(
+    data: WorkWindowUpdate,
+    master: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db),
+):
+    """Set daily work window, e.g. 3-23 renders granules 03:00-23:00."""
+    if not (0 <= data.start_hour <= 23 and 1 <= data.end_hour <= 24):
+        raise HTTPException(status_code=400, detail="Часы должны быть в диапазоне 0-24")
+    if data.start_hour >= data.end_hour:
+        raise HTTPException(status_code=400, detail="Начало должно быть раньше конца")
+    profile = await _resolve_window_profile(db, master, data.master_id)
+    profile.work_start_hour = data.start_hour
+    profile.work_end_hour = data.end_hour
+    await log_action(
+        db, master.id, "update", "work_window", profile.id,
+        f"Рабочее время {data.start_hour}:00-{data.end_hour}:00", level="info",
+    )
+    await db.commit()
+    await db.refresh(profile)
+    return WorkWindowResponse(
+        master_id=profile.id, start_hour=profile.work_start_hour, end_hour=profile.work_end_hour
+    )

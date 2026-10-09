@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { adminApi } from '../../api/client'
 import type { Appointment } from '../../api/types'
-import { Skeleton, EmptyState, Tooltip, ConfirmDialog, MasterSelect, ResizableTh, useColumnWidths } from '../../components/common'
+import { Skeleton, EmptyState, Tooltip, ConfirmDialog, MasterSelect, ResizableTh, useColumnWidths, Pager } from '../../components/common'
 import { useSectionPrefix, SUPER_PREFIX } from '../../utils/section'
 import { getApiErrorMessage } from '../../utils/apiError'
 import '../../styles/filters.css'
@@ -85,8 +85,8 @@ function AppointmentsPage() {
     } finally { setLoading(false) }
   }
 
-  // Deep-link support: <section>/appointments?client_id=X&master_id=Y
-  // (e.g. "appointments of this client" from the Clients page)
+  // Deep-link support: <section>/appointments?status=X&client_id=Y&master_id=Z
+  // (e.g. "appointments of this client" from Clients, stat cards from Revenue)
   useEffect(() => {
     const qp = searchParams.get('client_id')
     if (qp !== null && qp !== '') {
@@ -98,8 +98,12 @@ function AppointmentsPage() {
       const id = Number(mp)
       if (Number.isFinite(id)) setMasterIdFilter(id)
     }
+    const sp = searchParams.get('status')
+    if (sp !== null && sp !== '' && ['pending', 'confirmed', 'cancelled', 'completed'].includes(sp)) {
+      setStatusFilter(sp)
+    }
     // consume once so back/forward stays clean
-    if (searchParams.has('client_id') || searchParams.has('master_id')) {
+    if (searchParams.has('client_id') || searchParams.has('master_id') || searchParams.has('status')) {
       setSearchParams({}, { replace: true })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -291,20 +295,19 @@ function AppointmentsPage() {
               <input type="date" className="filter-control" value={dateTo} disabled={allTime} onChange={(e) => setDateTo(e.target.value)} />
             </div>
 
-            {/* All time */}
-            <div className="filter-cell-bottom">
+            {/* All time — tied to the date fields, right edge */}
+            <div className="filter-cell-bottom" style={{ justifySelf: 'end' }}>
               <label className="filter-check">
                 <input type="checkbox" checked={allTime} onChange={() => setAllTime(v => !v)} />
                 За всё время
               </label>
             </div>
-
-            {/* Reset filters button */}
-            <div className="filter-cell-bottom">
-              <button className="btn btn-ghost" onClick={() => { setStatusFilter(''); setMasterIdFilter(''); setClientIdFilter(''); setServiceIdFilter(''); setDateFrom(''); setDateTo('') }} style={{ width: '100%', fontSize: 13, height: 38 }}>
-                ✕ Сбросить
-              </button>
-            </div>
+          </div>
+          {/* Reset filters button — centered, visible */}
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
+            <button className="btn filter-reset" onClick={() => { setStatusFilter(''); setMasterIdFilter(''); setClientIdFilter(''); setServiceIdFilter(''); setDateFrom(''); setDateTo('') }}>
+              ✕ Сбросить фильтры
+            </button>
           </div>
         </div>
       )}
@@ -434,27 +437,7 @@ function AppointmentsPage() {
       />
 
       {/* Pagination */}
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16, marginTop: 20 }}>
-        <button
-          className="btn btn-ghost"
-          onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
-          disabled={currentPage === 0}
-          style={{ opacity: currentPage === 0 ? 0.5 : 1 }}
-        >
-          ← Назад
-        </button>
-        <span style={{ fontSize: 14, color: '#666' }}>
-          Страница {currentPage + 1}
-        </span>
-        <button
-          className="btn btn-ghost"
-          onClick={() => setCurrentPage(p => p + 1)}
-          disabled={currentPage + 1 >= totalPages}
-          style={{ opacity: currentPage + 1 >= totalPages ? 0.5 : 1 }}
-        >
-          Вперёд →
-        </button>
-      </div>
+      <Pager page={currentPage} totalPages={totalPages} onChange={setCurrentPage} />
     </div>
   )
 }
