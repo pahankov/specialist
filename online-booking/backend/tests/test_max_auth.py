@@ -89,6 +89,7 @@ class TestMaxStart:
         assert resp.status_code == 200
         data = resp.json()
         assert "code" not in data  # code goes to the MAX dialog, never the site
+        assert data["delivered"] is False  # unknown dialog: share-number flow
         assert data["expires_in"] > 0
         assert data["bot_username"] == "test_bot"
         assert data["bot_url"]
@@ -289,6 +290,53 @@ class TestMaxVerify:
             body["access_token"], settings.SECRET_KEY,
             algorithms=[settings.ALGORITHM])
         assert payload["role"] == "MASTER"
+
+    async def test_push_to_bound_dialog(
+        self, client, max_enabled, stub_sender, session
+    ):
+        """Known dialog: start pushes the code straight into MAX."""
+        from app.models.user import User, UserRole
+
+        session.add(User(
+            name="Bound", email="bound@example.com", phone=PHONE_NORM,
+            hashed_password=None, role=UserRole.CLIENT,
+            is_active=True, is_verified=True, max_user_id=555,
+        ))
+        await session.commit()
+
+        resp = await client.post("/api/v1/auth/max/start", json={"phone": PHONE})
+        assert resp.json()["delivered"] is True
+        assert stub_sender
+        assert stub_sender[0]["user_id"] == 555
+        code = re.search(r"\d{6}", stub_sender[0]["text"]).group(0)
+
+        done = await client.post(
+            "/api/v1/auth/max/verify", json={"phone": PHONE, "code": code})
+        assert done.status_code == 200
+        assert done.json()["is_new_user"] is False
+
+    async def test_verify_links_max_account(
+        self, client, max_enabled, stub_sender, session
+    ):
+        """First MAX login binds the sender id to a pre-existing account."""
+        from sqlalchemy import select
+        from app.models.user import User, UserRole
+        from app.utils.security import hash_password
+
+        session.add(User(
+            name="Plain", email="plain@example.com", phone=PHONE_NORM,
+            hashed_password=hash_password("Password1!"),
+            role=UserRole.CLIENT, is_active=True, is_verified=False,
+        ))
+        await session.commit()
+
+        code = await self._delivered_code(client, stub_sender)
+        done = await client.post(
+            "/api/v1/auth/max/verify", json={"phone": PHONE, "code": code})
+        assert done.status_code == 200
+        user = (await session.execute(
+            select(User).where(User.phone == PHONE_NORM))).scalar_one()
+        assert user.max_user_id == 777  # webhook sender from _msg_update
 
 
 class TestParseHelpers:

@@ -56,8 +56,9 @@ def _is_expired(otp: OtpCode) -> bool:
 async def start_max_auth(phone: str, db: AsyncSession) -> int:
     """Store a pending MAX code for the phone. Returns ttl seconds.
 
-    The code itself is NEVER returned to the site — the bot delivers it
-    into the MAX dialog after the user shares their number there.
+    The code itself is NEVER returned to the site. Bound users (known
+    User.max_user_id) get it pushed into their dialog by the caller via
+    prepare_push_code(); everyone else goes through the share-number flow.
     """
     if not settings.max_enabled:
         raise HTTPException(status_code=503, detail="Вход через MAX не настроен")
@@ -73,6 +74,49 @@ async def start_max_auth(phone: str, db: AsyncSession) -> int:
     await db.commit()
     logger.info("MAX auth requested for %s (ttl=%ss)", phone, ttl)
     return ttl
+
+
+def build_code_message(code: str) -> tuple[str, list]:
+    """Bot text + clipboard button for a login code (shared by push/webhook)."""
+    text = (f"Ваш код для входа: {code}\n"
+            "Введите его на сайте. Никому не сообщайте.")
+    attachments = [{
+        "type": "inline_keyboard",
+        "payload": {"buttons": [[
+            {"type": "clipboard", "text": "Скопировать код",
+             "payload": code},
+        ]]},
+    }]
+    return text, attachments
+
+
+async def prepare_push_code(phone: str, db: AsyncSession) -> Optional[tuple[int, str]]:
+    """Mint a dialog code for a BOUND user. Returns (max_user_id, code).
+
+    None when the phone has no bound MAX account (or no pending request) —
+    the caller falls back to the share-number flow. The hash on the pending
+    row is swapped (TTL preserved); plain code exists only in the reply.
+    """
+    result = await db.execute(
+        select(User).where(
+            User.phone == phone,
+            User.max_user_id.is_not(None),
+        )
+    )
+    user = result.scalar_one_or_none()
+    if user is None:
+        return None
+    otp = await _latest_pending_code(phone, db)
+    if otp is None:
+        return None
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    otp.code_hash = hash_otp_code(code)
+    otp.max_user_id = user.max_user_id
+    otp.max_user_name = user.name[:200] if user.name else None
+    otp.max_verified_phone = bool(user.is_verified)
+    await db.commit()
+    logger.info("MAX code prepared for push: otp_id=%s phone=%s", otp.id, phone)
+    return user.max_user_id, code
 
 
 async def _latest_pending_code(phone: str, db: AsyncSession) -> Optional[OtpCode]:
@@ -216,6 +260,7 @@ async def verify_max_code(
             # Verified only when the number came from a contact share
             # whose HMAC matched (proven MAX-bound number).
             is_verified=bool(otp.max_verified_phone),
+            max_user_id=otp.max_user_id,  # bind account for push-code login
         )
         db.add(user)
         await db.flush()
@@ -223,6 +268,12 @@ async def verify_max_code(
         await db.commit()
         await db.refresh(user)
         logger.info("New client created via MAX: user_id=%s", user.id)
+    elif user.max_user_id is None and otp.max_user_id is not None:
+        # Link a pre-existing account (e.g. password-registered master)
+        # to the MAX account that just proved the number.
+        user.max_user_id = otp.max_user_id
+        await db.commit()
+        logger.info("Linked MAX account to user_id=%s", user.id)
 
     access_token = create_access_token({
         "sub": str(user.id),

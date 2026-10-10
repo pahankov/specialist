@@ -36,11 +36,23 @@ async def max_start(
     req: schemas.MaxStartRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    """Register a pending MAX request. The code goes to the MAX dialog, not here."""
+    """Register a pending MAX request; push the code if the dialog is known."""
     if not settings.max_enabled:
         raise HTTPException(status_code=503, detail="Вход через MAX не настроен")
     ttl = await service.start_max_auth(req.phone, db)
-    return {"expires_in": ttl, **_bot_card()}
+    delivered = False
+    prepared = await service.prepare_push_code(req.phone, db)
+    if prepared is not None:
+        target, code = prepared
+        try:
+            text, attachments = service.build_code_message(code)
+            await get_max_api().send_message(target, text, attachments)
+            delivered = True
+            logger.info("MAX code pushed to known dialog for %s", req.phone)
+        except MaxApiError as e:
+            # Push failed (blocked bot, network) — share-number flow still works.
+            logger.warning("MAX push failed, fallback to share flow: %s", e)
+    return {"delivered": delivered, "expires_in": ttl, **_bot_card()}
 
 
 @router.post("/max/verify", response_model=schemas.MaxVerifyResponse)
@@ -187,17 +199,7 @@ async def _reply_code(update: dict, code: str) -> None:
         target = sender.get("user_id") or (update or {}).get("chat_id")
         if not target:
             return
-        await get_max_api().send_message(
-            int(target),
-            f"Ваш код для входа: {code}\n"
-            "Введите его на сайте. Никому не сообщайте.",
-            attachments=[{
-                "type": "inline_keyboard",
-                "payload": {"buttons": [[
-                    {"type": "clipboard", "text": "Скопировать код",
-                     "payload": code},
-                ]]},
-            }],
-        )
+        text, attachments = service.build_code_message(code)
+        await get_max_api().send_message(int(target), text, attachments)
     except (MaxApiError, ValueError, TypeError) as e:
         logger.warning("MAX code reply failed (best-effort): %s", e)

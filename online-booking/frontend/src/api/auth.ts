@@ -14,6 +14,7 @@ export interface UnifiedRegisterData {
 }
 
 export interface MaxStartResponse {
+  delivered: boolean;
   expires_in: number;
   bot_username: string;
   bot_url: string;

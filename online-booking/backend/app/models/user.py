@@ -6,7 +6,7 @@ and role-specific profile tables (MasterProfile, ClientProfile).
 from enum import Enum as PyEnum
 from typing import Optional
 
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Enum, Text, Index, func
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Enum, Text, Index, func, BigInteger
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from app.database import Base
@@ -25,6 +25,7 @@ class User(Base):
         Index('ix_users_email', 'email', unique=True),
         Index('ix_users_phone', 'phone', unique=True),
         Index('ix_users_role', 'role'),
+        Index('ix_users_max_user_id', 'max_user_id', unique=True),
     )
 
     id = Column(Integer, primary_key=True)
@@ -36,6 +37,11 @@ class User(Base):
     city_id = Column(Integer, ForeignKey("cities.id", ondelete="SET NULL"), nullable=True)
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)  # email verified
+    # Bound MAX messenger account: after the first MAX login the sender id is
+    # stored here, so subsequent /max/start pushes the code straight into the
+    # dialog (no contact share needed anymore). NULLs are distinct in PG/SQLite
+    # unique indexes, so unbound users never collide.
+    max_user_id = Column(BigInteger, nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc))

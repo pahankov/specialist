@@ -309,7 +309,11 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
     <form onSubmit={handleMaxVerify}>
       <div className="max-code-box">
         <p>
-          Бот пришлёт код в MAX
+          {maxOffer.delivered ? (
+            <>Код уже отправлен в MAX — откройте бота</>
+          ) : (
+            <>Откройте бота — поделитесь номером, код придёт туда</>
+          )}
           {maxOffer.bot_url ? (
             <>
               {' '}
@@ -322,7 +326,7 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
           ) : (
             <> — найдите {maxOffer.bot_username} вручную</>
           )}
-          . Введите его ниже:
+          . Введите код ниже:
         </p>
         <input
           className="max-code-input"

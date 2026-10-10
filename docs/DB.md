@@ -49,10 +49,11 @@
 | city_id | INTEGER | FK -> cities.id, NULLABLE | Город пользователя |
 | is_active | BOOLEAN | DEFAULT TRUE | Мягкое удаление |
 | is_verified | BOOLEAN | DEFAULT FALSE | Верификация (email/phone) |
+| max_user_id | BIGINT | UNIQUE, NULLABLE | Привязанный MAX-аккаунт (push-вход без share; ставится при первом MAX-входе) |
 | created_at | TIMESTAMP WITH TIME ZONE | | Дата создания |
 | updated_at | TIMESTAMP WITH TIME ZONE | | Дата обновления |
 
-**Индексы:** `ix_users_email` (UNIQUE), `ix_users_phone` (UNIQUE), `ix_users_role`
+**Индексы:** `ix_users_email` (UNIQUE), `ix_users_phone` (UNIQUE), `ix_users_role`, `ix_users_max_user_id` (UNIQUE, NULL не конфликтуют)
 
 **Enums (UserRole):**
 - `CLIENT` — обычный пользователь

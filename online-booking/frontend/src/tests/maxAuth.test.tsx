@@ -47,24 +47,40 @@ describe('MAX chat-bot login (SMS-style)', () => {
     fillPhone();
     vi.mocked(mocked.maxStart).mockResolvedValue({
       data: {
+        delivered: false,
         expires_in: 300,
         bot_username: 'test_bot',
         bot_url: 'https://max.ru/test_bot',
       },
     } as never);
     fireEvent.click(screen.getByText('Получить код в MAX'));
-    expect(await screen.findByText(/Бот пришлёт код в MAX/)).toBeInTheDocument();
+    expect(await screen.findByText(/поделитесь номером/)).toBeInTheDocument();
     expect(vi.mocked(mocked.maxStart)).toHaveBeenCalledWith(MASKED);
+  });
+
+  it('tells bound users the code is already in MAX', async () => {
+    openMaxTab();
+    fillPhone();
+    vi.mocked(mocked.maxStart).mockResolvedValue({
+      data: {
+        delivered: true,
+        expires_in: 300,
+        bot_username: 'test_bot',
+        bot_url: 'https://max.ru/test_bot',
+      },
+    } as never);
+    fireEvent.click(screen.getByText('Получить код в MAX'));
+    expect(await screen.findByText(/Код уже отправлен в MAX/)).toBeInTheDocument();
   });
 
   it('verifies the dialog code and logs in', async () => {
     openMaxTab();
     fillPhone();
     vi.mocked(mocked.maxStart).mockResolvedValue({
-      data: { expires_in: 300, bot_username: 'b', bot_url: '' },
+      data: { delivered: false, expires_in: 300, bot_username: 'b', bot_url: '' },
     } as never);
     fireEvent.click(screen.getByText('Получить код в MAX'));
-    await screen.findByText(/Бот пришлёт код в MAX/);
+    await screen.findByText(/поделитесь номером/);
 
     vi.mocked(mocked.maxVerify).mockResolvedValue({
       data: { access_token: 'tok', token_type: 'bearer', is_new_user: true },
@@ -83,10 +99,10 @@ describe('MAX chat-bot login (SMS-style)', () => {
     openMaxTab();
     fillPhone();
     vi.mocked(mocked.maxStart).mockResolvedValue({
-      data: { expires_in: 300, bot_username: 'b', bot_url: '' },
+      data: { delivered: false, expires_in: 300, bot_username: 'b', bot_url: '' },
     } as never);
     fireEvent.click(screen.getByText('Получить код в MAX'));
-    await screen.findByText(/Бот пришлёт код в MAX/);
+    await screen.findByText(/поделитесь номером/);
 
     vi.mocked(mocked.maxVerify).mockRejectedValue({
       response: { data: { detail: 'Неверный код' } },
