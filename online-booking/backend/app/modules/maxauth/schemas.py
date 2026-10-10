@@ -15,9 +15,10 @@ class MaxStartRequest(BaseModel):
 
 
 class MaxStartResponse(BaseModel):
-    # NOTE: no code here — bound users get it pushed into their dialog,
-    # everyone else receives it after sharing the number with the bot.
+    # NOTE: no code here — bound users get it pushed, deeplink openers get it
+    # on auto-meet, everyone else after sharing the number with the bot.
     delivered: bool  # True = code already pushed to the known MAX dialog
+    deeplink: str  # one-click bot URL with request payload ("" if unconfigured)
     expires_in: int  # seconds
     bot_username: str
     bot_url: str

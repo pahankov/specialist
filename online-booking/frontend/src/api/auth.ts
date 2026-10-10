@@ -15,6 +15,7 @@ export interface UnifiedRegisterData {
 
 export interface MaxStartResponse {
   delivered: boolean;
+  deeplink: string;
   expires_in: number;
   bot_username: string;
   bot_url: string;

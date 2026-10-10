@@ -53,27 +53,65 @@ def _is_expired(otp: OtpCode) -> bool:
     return datetime.now(dt_timezone.utc) > expires_at
 
 
-async def start_max_auth(phone: str, db: AsyncSession) -> int:
-    """Store a pending MAX code for the phone. Returns ttl seconds.
+async def start_max_auth(phone: str, db: AsyncSession) -> tuple[int, int]:
+    """Store a pending MAX code for the phone. Returns (otp_id, ttl).
 
-    The code itself is NEVER returned to the site. Bound users (known
-    User.max_user_id) get it pushed into their dialog by the caller via
-    prepare_push_code(); everyone else goes through the share-number flow.
+    The code itself is NEVER returned to the site. Delivery paths:
+    bound dialog (push), deeplink open with payload (auto-meet), or
+    share-number flow — all converge on deliver_code_to_dialog().
     """
     if not settings.max_enabled:
         raise HTTPException(status_code=503, detail="Вход через MAX не настроен")
     code = f"{secrets.randbelow(1_000_000):06d}"
     ttl = _code_ttl_seconds()
-    db.add(OtpCode(
+    otp = OtpCode(
         phone=phone,
         code_hash=hash_otp_code(code),
         expires_at=datetime.now(dt_timezone.utc) + timedelta(seconds=ttl),
         is_used=False,
         channel=MAX_CHANNEL,
-    ))
+    )
+    db.add(otp)
+    await db.flush()
+    otp_id = otp.id
     await db.commit()
     logger.info("MAX auth requested for %s (ttl=%ss)", phone, ttl)
-    return ttl
+    return otp_id, ttl
+
+
+def _payload_key() -> bytes:
+    """Server-side HMAC key for deeplink payloads (never leaves backend)."""
+    return (settings.MAX_WEBHOOK_SECRET or settings.MAX_BOT_TOKEN).encode()
+
+
+def make_start_payload(otp_id: int) -> str:
+    """Tamper-proof deeplink payload binding a dialog open to a request.
+
+    Format `<otp_id>_<hmac32>` — fits the bot payload charset [a-z0-9_-].
+    """
+    mac = hmac.new(_payload_key(), str(otp_id).encode(), hashlib.sha256)
+    return f"{otp_id}_{mac.hexdigest()[:32]}"
+
+
+def parse_start_payload(payload: str) -> Optional[int]:
+    """Validate a deeplink payload. Returns otp_id or None."""
+    try:
+        raw_id, mac = (payload or "").split("_", 1)
+        otp_id = int(raw_id)
+    except (ValueError, AttributeError):
+        return None
+    expect = hmac.new(_payload_key(), str(otp_id).encode(), hashlib.sha256)
+    if not hmac.compare_digest(expect.hexdigest()[:32], mac):
+        return None
+    return otp_id
+
+
+def make_start_deeplink(otp_id: int) -> str:
+    """Full one-click bot URL carrying the request payload ("" if unconfigured)."""
+    username = settings.MAX_BOT_USERNAME
+    if not username:
+        return ""
+    return f"https://max.ru/{username}?start={make_start_payload(otp_id)}"
 
 
 def build_code_message(code: str) -> tuple[str, list]:
@@ -129,6 +167,21 @@ async def _latest_pending_code(phone: str, db: AsyncSession) -> Optional[OtpCode
         )
         .order_by(OtpCode.created_at.desc())
         .limit(1)
+    )
+    otp = result.scalar_one_or_none()
+    if otp is not None and _is_expired(otp):
+        return None
+    return otp
+
+
+async def get_pending_otp(otp_id: int, db: AsyncSession) -> Optional[OtpCode]:
+    """Load a MAX request by id if still pending (unused, unexpired)."""
+    result = await db.execute(
+        select(OtpCode).where(
+            OtpCode.id == otp_id,
+            OtpCode.channel == MAX_CHANNEL,
+            OtpCode.is_used == False,  # noqa: E712
+        )
     )
     otp = result.scalar_one_or_none()
     if otp is not None and _is_expired(otp):

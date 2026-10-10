@@ -21,7 +21,7 @@
 ### MAX chat-bot auth (SMS-style; бот @se14458556_bot)
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
-| `POST` | `/api/v1/auth/max/start` | Заявка на код (`delivered: true` — код уже pushed в известный диалог; иначе — share-number flow; 10/min) |
+| `POST` | `/api/v1/auth/max/start` | Заявка на код: `deeplink` (один клик, автовстреча), `delivered` (push в известный диалог), иначе — share-number flow; 10/min |
 | `POST` | `/api/v1/auth/max/verify` | Проверка кода с сайта, JWT-сессия + cookies (10/min) |
 | `POST` | `/api/max/webhook` | Приём MAX Bot API updates (`message_created`, `bot_started`; секрет `X-Max-Bot-Api-Secret`) |
 

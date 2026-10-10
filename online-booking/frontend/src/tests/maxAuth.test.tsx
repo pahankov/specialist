@@ -48,13 +48,18 @@ describe('MAX chat-bot login (SMS-style)', () => {
     vi.mocked(mocked.maxStart).mockResolvedValue({
       data: {
         delivered: false,
+        deeplink: 'https://max.ru/test_bot?start=1_abcd',
         expires_in: 300,
         bot_username: 'test_bot',
         bot_url: 'https://max.ru/test_bot',
       },
     } as never);
     fireEvent.click(screen.getByText('Получить код в MAX'));
-    expect(await screen.findByText(/поделитесь номером/)).toBeInTheDocument();
+    expect(await screen.findByText(/бот сам встретит вас/)).toBeInTheDocument();
+    expect(screen.getByText(/открыть test_bot/)).toHaveAttribute(
+      'href',
+      'https://max.ru/test_bot?start=1_abcd',
+    );
     expect(vi.mocked(mocked.maxStart)).toHaveBeenCalledWith(MASKED);
   });
 
@@ -64,6 +69,7 @@ describe('MAX chat-bot login (SMS-style)', () => {
     vi.mocked(mocked.maxStart).mockResolvedValue({
       data: {
         delivered: true,
+        deeplink: 'https://max.ru/test_bot?start=2_efgh',
         expires_in: 300,
         bot_username: 'test_bot',
         bot_url: 'https://max.ru/test_bot',
@@ -77,10 +83,16 @@ describe('MAX chat-bot login (SMS-style)', () => {
     openMaxTab();
     fillPhone();
     vi.mocked(mocked.maxStart).mockResolvedValue({
-      data: { delivered: false, expires_in: 300, bot_username: 'b', bot_url: '' },
+      data: {
+        delivered: false,
+        deeplink: '',
+        expires_in: 300,
+        bot_username: 'b',
+        bot_url: '',
+      },
     } as never);
     fireEvent.click(screen.getByText('Получить код в MAX'));
-    await screen.findByText(/поделитесь номером/);
+    await screen.findByText(/бот сам встретит вас/);
 
     vi.mocked(mocked.maxVerify).mockResolvedValue({
       data: { access_token: 'tok', token_type: 'bearer', is_new_user: true },
@@ -99,10 +111,16 @@ describe('MAX chat-bot login (SMS-style)', () => {
     openMaxTab();
     fillPhone();
     vi.mocked(mocked.maxStart).mockResolvedValue({
-      data: { delivered: false, expires_in: 300, bot_username: 'b', bot_url: '' },
+      data: {
+        delivered: false,
+        deeplink: '',
+        expires_in: 300,
+        bot_username: 'b',
+        bot_url: '',
+      },
     } as never);
     fireEvent.click(screen.getByText('Получить код в MAX'));
-    await screen.findByText(/поделитесь номером/);
+    await screen.findByText(/бот сам встретит вас/);
 
     vi.mocked(mocked.maxVerify).mockRejectedValue({
       response: { data: { detail: 'Неверный код' } },

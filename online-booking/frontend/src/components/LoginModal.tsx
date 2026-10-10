@@ -312,21 +312,22 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
           {maxOffer.delivered ? (
             <>Код уже отправлен в MAX — откройте бота</>
           ) : (
-            <>Откройте бота — поделитесь номером, код придёт туда</>
+            <>Нажмите кнопку — бот сам встретит вас и пришлёт код</>
           )}
-          {maxOffer.bot_url ? (
+          {(maxOffer.deeplink || maxOffer.bot_url) && (
             <>
               {' '}
               (
-              <a href={maxOffer.bot_url} target="_blank" rel="noreferrer">
+              <a href={maxOffer.deeplink || maxOffer.bot_url} target="_blank" rel="noreferrer">
                 открыть {maxOffer.bot_username}
               </a>
               )
             </>
-          ) : (
+          )}
+          {!maxOffer.deeplink && !maxOffer.bot_url && (
             <> — найдите {maxOffer.bot_username} вручную</>
           )}
-          . Введите код ниже:
+          . Не нашли бота? Поделитесь номером внутри диалога — код придёт туда. Введите код ниже:
         </p>
         <input
           className="max-code-input"

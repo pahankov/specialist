@@ -39,7 +39,7 @@ async def max_start(
     """Register a pending MAX request; push the code if the dialog is known."""
     if not settings.max_enabled:
         raise HTTPException(status_code=503, detail="Вход через MAX не настроен")
-    ttl = await service.start_max_auth(req.phone, db)
+    otp_id, ttl = await service.start_max_auth(req.phone, db)
     delivered = False
     prepared = await service.prepare_push_code(req.phone, db)
     if prepared is not None:
@@ -52,7 +52,12 @@ async def max_start(
         except MaxApiError as e:
             # Push failed (blocked bot, network) — share-number flow still works.
             logger.warning("MAX push failed, fallback to share flow: %s", e)
-    return {"delivered": delivered, "expires_in": ttl, **_bot_card()}
+    return {
+        "delivered": delivered,
+        "deeplink": service.make_start_deeplink(otp_id),
+        "expires_in": ttl,
+        **_bot_card(),
+    }
 
 
 @router.post("/max/verify", response_model=schemas.MaxVerifyResponse)
@@ -109,6 +114,23 @@ async def max_webhook(request: Request, db: AsyncSession = Depends(get_db)):
     logger.info("MAX webhook: update_type=%s", update_type)
 
     if update_type == "bot_started":
+        # Deeplink open (?start=<otp_id>_<hmac>): the bot meets the user
+        # itself — bind the dialog and deliver the code, no typing needed.
+        payload = (update or {}).get("payload") or ""
+        sender = ((update or {}).get("message") or {}).get("sender") or {}
+        if not sender:
+            sender = (update or {}).get("user") or {}
+        sender_id = sender.get("user_id")
+        otp_id = service.parse_start_payload(payload) if payload else None
+        if otp_id is not None and sender_id is not None:
+            otp = await service.get_pending_otp(otp_id, db)
+            if otp is not None:
+                name = service.sender_display_name(sender)
+                fresh = await service.deliver_code_to_dialog(
+                    db, otp.phone, int(sender_id), name, False)
+                if fresh is not None:
+                    await _reply_code(update, fresh)
+                    return {"ok": True, "outcome": "auto_met"}
         await _reply_with_keyboard(
             update,
             "Здравствуйте! Это бот электронной записи.\n"

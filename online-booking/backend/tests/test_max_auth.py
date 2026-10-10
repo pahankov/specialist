@@ -90,6 +90,7 @@ class TestMaxStart:
         data = resp.json()
         assert "code" not in data  # code goes to the MAX dialog, never the site
         assert data["delivered"] is False  # unknown dialog: share-number flow
+        assert data["deeplink"].startswith("https://max.ru/test_bot?start=")
         assert data["expires_in"] > 0
         assert data["bot_username"] == "test_bot"
         assert data["bot_url"]
@@ -118,6 +119,46 @@ class TestMaxWebhook:
         )
         assert resp.status_code == 200
         assert stub_sender
+        buttons = stub_sender[0]["attachments"][0]["payload"]["buttons"]
+        assert buttons[0][0]["type"] == "request_contact"
+
+    async def test_deeplink_open_auto_meets_user(
+        self, client, max_enabled, stub_sender
+    ):
+        """One click on the deeplink: bot meets the user and sends the code."""
+        start = await client.post("/api/v1/auth/max/start", json={"phone": PHONE})
+        payload = start.json()["deeplink"].split("?start=")[1]
+
+        hook = await client.post(
+            "/api/max/webhook",
+            json={"update_type": "bot_started", "timestamp": 1, "chat_id": 1001,
+                  "user": {"user_id": 4242, "first_name": "Deep"},
+                  "payload": payload},
+            headers={"X-Max-Bot-Api-Secret": "test-secret"},
+        )
+        assert hook.json()["outcome"] == "auto_met"
+        assert stub_sender
+        code = re.search(r"\d{6}", stub_sender[0]["text"]).group(0)
+
+        done = await client.post(
+            "/api/v1/auth/max/verify", json={"phone": PHONE, "code": code})
+        assert done.status_code == 200
+        assert done.json()["is_new_user"] is True
+
+    async def test_deeplink_tampered_falls_back_to_keyboard(
+        self, client, max_enabled, stub_sender
+    ):
+        start = await client.post("/api/v1/auth/max/start", json={"phone": PHONE})
+        payload = start.json()["deeplink"].split("?start=")[1]
+        bad = payload[:-1] + ("0" if payload[-1] != "0" else "1")
+
+        hook = await client.post(
+            "/api/max/webhook",
+            json={"update_type": "bot_started", "timestamp": 1, "chat_id": 1001,
+                  "user": {"user_id": 4242}, "payload": bad},
+            headers={"X-Max-Bot-Api-Secret": "test-secret"},
+        )
+        assert hook.json() == {"ok": True}  # no outcome: keyboard path
         buttons = stub_sender[0]["attachments"][0]["payload"]["buttons"]
         assert buttons[0][0]["type"] == "request_contact"
 
@@ -356,3 +397,17 @@ class TestParseHelpers:
         from app.modules.maxauth.service import sender_display_name
         assert sender_display_name({"first_name": "A", "last_name": "B"}) == "A B"
         assert sender_display_name({}) == ""
+
+    def test_start_payload_roundtrip(self, max_enabled):
+        from app.modules.maxauth.service import (
+            make_start_payload, parse_start_payload)
+        assert parse_start_payload(make_start_payload(4821)) == 4821
+        assert parse_start_payload("garbage") is None
+        assert parse_start_payload("") is None
+        assert parse_start_payload(make_start_payload(7)[:-1] + "ff") is None
+
+    def test_start_deeplink_shape(self, max_enabled):
+        from app.modules.maxauth.service import make_start_deeplink
+        link = make_start_deeplink(99)
+        assert link.startswith("https://max.ru/test_bot?start=99_")
+        assert len(link.split("?start=")[1]) < 128
