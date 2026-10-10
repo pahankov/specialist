@@ -1,36 +1,41 @@
-import { useState, useRef, useEffect } from 'react'
-import './SharedComponents.css'
+import { useState, useRef, useEffect } from 'react';
+import './SharedComponents.css';
 
 interface TooltipProps {
-  content: string
-  position?: 'top' | 'bottom' | 'left' | 'right'
-  children: React.ReactNode
-  delay?: number
+  content: string;
+  position?: 'top' | 'bottom' | 'left' | 'right';
+  children: React.ReactNode;
+  delay?: number;
 }
 
-export default function Tooltip({ content, position = 'top', children, delay = 200 }: TooltipProps) {
-  const [visible, setVisible] = useState(false)
-  const timerRef = useRef<ReturnType<typeof setTimeout>>()
-  const triggerRef = useRef<HTMLDivElement>(null)
+export default function Tooltip({
+  content,
+  position = 'top',
+  children,
+  delay = 200,
+}: TooltipProps) {
+  const [visible, setVisible] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  const triggerRef = useRef<HTMLDivElement>(null);
 
   const show = () => {
-    timerRef.current = setTimeout(() => setVisible(true), delay)
-  }
+    timerRef.current = setTimeout(() => setVisible(true), delay);
+  };
 
   const hide = () => {
     if (timerRef.current) {
-      clearTimeout(timerRef.current)
+      clearTimeout(timerRef.current);
     }
-    setVisible(false)
-  }
+    setVisible(false);
+  };
 
   useEffect(() => {
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current)
-    }
-  }, [])
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
 
-  const positionClass = `tooltip-${position}`
+  const positionClass = `tooltip-${position}`;
 
   return (
     <div
@@ -43,11 +48,7 @@ export default function Tooltip({ content, position = 'top', children, delay = 2
       tabIndex={0}
     >
       {children}
-      {visible && (
-        <div className={`tooltip ${positionClass}`}>
-          {content}
-        </div>
-      )}
+      {visible && <div className={`tooltip ${positionClass}`}>{content}</div>}
     </div>
-  )
+  );
 }

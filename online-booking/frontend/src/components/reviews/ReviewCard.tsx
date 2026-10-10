@@ -1,8 +1,8 @@
-import type { Review } from '../../api/types'
-import './ReviewCard.css'
+import type { Review } from '../../api/types';
+import './ReviewCard.css';
 
 interface ReviewCardProps {
-  review: Review
+  review: Review;
 }
 
 function ReviewCard({ review }: ReviewCardProps) {
@@ -10,20 +10,20 @@ function ReviewCard({ review }: ReviewCardProps) {
     <span key={i} className={`star ${i < Math.round(review.rating) ? 'filled' : ''}`}>
       ★
     </span>
-  ))
+  ));
 
   const formatDate = (dateStr: string) => {
     try {
-      const date = new Date(dateStr)
+      const date = new Date(dateStr);
       return date.toLocaleDateString('ru-RU', {
         day: 'numeric',
         month: 'long',
         year: 'numeric',
-      })
+      });
     } catch {
-      return dateStr
+      return dateStr;
     }
-  }
+  };
 
   return (
     <div className="review-card card">
@@ -36,7 +36,7 @@ function ReviewCard({ review }: ReviewCardProps) {
       </div>
       {review.comment && <p className="review-comment">{review.comment}</p>}
     </div>
-  )
+  );
 }
 
-export default ReviewCard
+export default ReviewCard;

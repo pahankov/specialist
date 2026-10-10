@@ -1,31 +1,31 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { authApi } from '../../api/client'
-import { EMAIL_PLACEHOLDER } from '../../constants'
-import { getApiErrorMessage } from '../../utils/apiError'
-import './LoginPage.css'
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { authApi } from '../../api/client';
+import { EMAIL_PLACEHOLDER } from '../../constants';
+import { getApiErrorMessage } from '../../utils/apiError';
+import './LoginPage.css';
 
 function LoginPage() {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
-  const navigate = useNavigate()
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-    setLoading(true)
+    e.preventDefault();
+    setError('');
+    setLoading(true);
     try {
-      await authApi.login(email, password)
-      navigate('/admin/dashboard')
+      await authApi.login(email, password);
+      navigate('/admin/dashboard');
     } catch (err: any) {
-      setError(getApiErrorMessage(err, 'Ошибка входа'))
+      setError(getApiErrorMessage(err, 'Ошибка входа'));
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <div className="login-page">
@@ -36,7 +36,14 @@ function LoginPage() {
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label htmlFor="email">Email</label>
-            <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={EMAIL_PLACEHOLDER} required />
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder={EMAIL_PLACEHOLDER}
+              required
+            />
           </div>
           <div className="form-group">
             <label htmlFor="password">Пароль</label>
@@ -54,9 +61,17 @@ function LoginPage() {
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 style={{
-                  position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
-                  background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, padding: '4px 8px',
-                  color: '#666', lineHeight: 1
+                  position: 'absolute',
+                  right: 8,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: 18,
+                  padding: '4px 8px',
+                  color: '#666',
+                  lineHeight: 1,
                 }}
                 title={showPassword ? 'Скрыть пароль' : 'Показать пароль'}
               >
@@ -68,9 +83,11 @@ function LoginPage() {
             {loading ? 'Входим...' : 'Войти'}
           </button>
         </form>
-        <div className="login-footer"><a href="/">← Вернуться на главную</a></div>
+        <div className="login-footer">
+          <a href="/">← Вернуться на главную</a>
+        </div>
       </div>
     </div>
-  )
+  );
 }
-export default LoginPage
+export default LoginPage;

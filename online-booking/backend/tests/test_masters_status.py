@@ -45,7 +45,7 @@ class TestToggleMasterActive:
         data = resp.json()
         assert data["status"] in ("active", "inactive")
 
-    async def test_toggle_admin_self(self, client, super_admin_headers_2, super_admin_user_with_profile):
+    async def test_toggle_active_self(self, client, super_admin_headers_2, super_admin_user_with_profile):
         """Super admin cannot toggle themselves."""
         mp = super_admin_user_with_profile["master_profile"]
 

@@ -1,14 +1,20 @@
-import './SharedComponents.css'
+import './SharedComponents.css';
 
 interface EmptyStateProps {
-  icon?: string
-  title: string
-  description?: string
-  actionLabel?: string
-  onAction?: () => void
+  icon?: string;
+  title: string;
+  description?: string;
+  actionLabel?: string;
+  onAction?: () => void;
 }
 
-export default function EmptyState({ icon = '📭', title, description, actionLabel, onAction }: EmptyStateProps) {
+export default function EmptyState({
+  icon = '📭',
+  title,
+  description,
+  actionLabel,
+  onAction,
+}: EmptyStateProps) {
   return (
     <div className="empty-state">
       <div className="empty-state-icon">{icon}</div>
@@ -20,5 +26,5 @@ export default function EmptyState({ icon = '📭', title, description, actionLa
         </button>
       )}
     </div>
-  )
+  );
 }

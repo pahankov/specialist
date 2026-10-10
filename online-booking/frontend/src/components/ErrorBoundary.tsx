@@ -1,47 +1,49 @@
-import { Component, ErrorInfo, ReactNode } from 'react'
+import { Component, ErrorInfo, ReactNode } from 'react';
 
 interface Props {
-  children: ReactNode
+  children: ReactNode;
 }
 
 interface State {
-  hasError: boolean
-  error: Error | null
+  hasError: boolean;
+  error: Error | null;
 }
 
 class ErrorBoundary extends Component<Props, State> {
   public state: State = {
     hasError: false,
-    error: null
-  }
+    error: null,
+  };
 
   public static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error }
+    return { hasError: true, error };
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('Uncaught error:', error, errorInfo)
+    console.error('Uncaught error:', error, errorInfo);
   }
 
   public render() {
     if (this.state.hasError) {
       return (
-        <div style={{
-          padding: 40,
-          textAlign: 'center',
-          maxWidth: 600,
-          margin: '100px auto',
-          fontFamily: 'system-ui, sans-serif'
-        }}>
+        <div
+          style={{
+            padding: 40,
+            textAlign: 'center',
+            maxWidth: 600,
+            margin: '100px auto',
+            fontFamily: 'system-ui, sans-serif',
+          }}
+        >
           <h1 style={{ color: '#f44336', marginBottom: 16 }}>Что-то пошло не так</h1>
           <p style={{ color: '#666', marginBottom: 24 }}>
             {this.state.error?.message || 'Неизвестная ошибка'}
           </p>
           <button
             onClick={() => {
-              this.setState({ hasError: false, error: null })
+              this.setState({ hasError: false, error: null });
               // Neutral recovery: role sections guard themselves from here
-              window.location.href = '/'
+              window.location.href = '/';
             }}
             style={{
               background: '#667eea',
@@ -51,17 +53,17 @@ class ErrorBoundary extends Component<Props, State> {
               borderRadius: 8,
               cursor: 'pointer',
               fontSize: 14,
-              fontWeight: 600
+              fontWeight: 600,
             }}
           >
             Вернуться в админку
           </button>
         </div>
-      )
+      );
     }
 
-    return this.props.children
+    return this.props.children;
   }
 }
 
-export default ErrorBoundary
+export default ErrorBoundary;

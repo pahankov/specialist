@@ -28,7 +28,7 @@ jobs:
       - name: Run tests with pytest
         run: |
           cd online-booking/backend
-          python -m pytest tests/ -v --tb=short
+          python -m pytest tests/ -v --tb=short --cov=app --cov-report=term-missing --cov-fail-under=55
 
   frontend-lint:
     name: Frontend Lint
@@ -52,6 +52,11 @@ jobs:
         run: |
           cd online-booking/frontend
           npx eslint src/
+
+      - name: Check formatting
+        run: |
+          cd online-booking/frontend
+          npx prettier --check src/
 
       - name: Type check
         run: |

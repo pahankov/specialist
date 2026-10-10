@@ -1,21 +1,21 @@
-import type { ReactNode } from 'react'
-import Modal from './Modal'
+import type { ReactNode } from 'react';
+import Modal from './Modal';
 
 interface ConfirmDialogProps {
-  open: boolean
-  onClose: () => void
-  title: ReactNode
-  message?: ReactNode
-  children?: ReactNode
-  confirmLabel: string
-  onConfirm: () => void
+  open: boolean;
+  onClose: () => void;
+  title: ReactNode;
+  message?: ReactNode;
+  children?: ReactNode;
+  confirmLabel: string;
+  onConfirm: () => void;
   /** Red confirm button (destructive). Default: primary. */
-  danger?: boolean
+  danger?: boolean;
   /** Disable confirm button (e.g. empty required input). */
-  confirmDisabled?: boolean
+  confirmDisabled?: boolean;
   /** Hide cancel button (info/error dialogs). */
-  hideCancel?: boolean
-  cancelLabel?: string
+  hideCancel?: boolean;
+  cancelLabel?: string;
 }
 
 /** Shared confirmation dialog (delete / cancel / no-show / info). */
@@ -52,5 +52,5 @@ export default function ConfirmDialog({
         </button>
       </div>
     </Modal>
-  )
+  );
 }

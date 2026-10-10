@@ -1,7 +1,7 @@
-import BaseLayout, { type BaseNavItem } from './BaseLayout'
+import BaseLayout, { type BaseNavItem } from './BaseLayout';
 
 interface AdminLayoutProps {
-  navItems: BaseNavItem[]
+  navItems: BaseNavItem[];
 }
 
 /** Master section shell (/admin) — nav comes from App, chrome from BaseLayout. */
@@ -13,7 +13,7 @@ function AdminLayout({ navItems }: AdminLayoutProps) {
       userRole="Мастер"
       userFallbackName="Мастер"
     />
-  )
+  );
 }
 
-export default AdminLayout
+export default AdminLayout;

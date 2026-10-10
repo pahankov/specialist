@@ -1,40 +1,40 @@
-import { useState, useEffect } from 'react'
-import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom'
-import { authApi } from '../../api/client'
-import { Breadcrumb, KeyboardShortcutsHint } from '../../components/common'
-import { getCookie, decodeJwtPayload, clearAuthCookies } from '../../utils/cookies'
-import { getImpersonation, stopImpersonation } from '../../utils/impersonation'
-import { SUPER_PREFIX } from '../../utils/section'
-import './AdminLayout.css'
+import { useState, useEffect } from 'react';
+import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
+import { authApi } from '../../api/client';
+import { Breadcrumb, KeyboardShortcutsHint } from '../../components/common';
+import { getCookie, decodeJwtPayload, clearAuthCookies } from '../../utils/cookies';
+import { getImpersonation, stopImpersonation } from '../../utils/impersonation';
+import { SUPER_PREFIX } from '../../utils/section';
+import './AdminLayout.css';
 
 export interface BaseNavItem {
-  path: string
-  label: string
+  path: string;
+  label: string;
 }
 
 interface BaseLayoutProps {
-  navItems: BaseNavItem[]
-  layoutTitle: string
-  userRole: string
-  userFallbackName: string
+  navItems: BaseNavItem[];
+  layoutTitle: string;
+  userRole: string;
+  userFallbackName: string;
   /** Extra root class for section theming (e.g. "super-layout"). */
-  themeClass?: string
+  themeClass?: string;
 }
 
 interface LayoutUser {
-  id: number
-  name: string
+  id: number;
+  name: string;
 }
 
 function getLayoutUser(fallbackName: string): LayoutUser | null {
-  const token = getCookie('access_token')
-  if (!token) return null
-  const payload = decodeJwtPayload(token)
-  if (!payload?.sub) return null
+  const token = getCookie('access_token');
+  if (!token) return null;
+  const payload = decodeJwtPayload(token);
+  if (!payload?.sub) return null;
   return {
     id: parseInt(payload.sub, 10),
     name: payload.name || fallbackName,
-  }
+  };
 }
 
 /**
@@ -42,61 +42,72 @@ function getLayoutUser(fallbackName: string): LayoutUser | null {
  * Sections differ only by nav items, title/role labels and theme class —
  * DOM structure and classNames are identical so section CSS keeps working.
  */
-function BaseLayout({ navItems, layoutTitle, userRole, userFallbackName, themeClass = '' }: BaseLayoutProps) {
-  const navigate = useNavigate()
-  const location = useLocation()
-  const [user, setUser] = useState<LayoutUser | null>(null)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [impersonatedName, setImpersonatedName] = useState<string | null>(null)
+function BaseLayout({
+  navItems,
+  layoutTitle,
+  userRole,
+  userFallbackName,
+  themeClass = '',
+}: BaseLayoutProps) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [user, setUser] = useState<LayoutUser | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [impersonatedName, setImpersonatedName] = useState<string | null>(null);
 
   const exitImpersonation = () => {
-    stopImpersonation()
-    setImpersonatedName(null)
+    stopImpersonation();
+    setImpersonatedName(null);
     // Admin token restored → hard-land in the superadmin section
-    window.location.href = `${SUPER_PREFIX}/masters`
-  }
+    window.location.href = `${SUPER_PREFIX}/masters`;
+  };
 
   useEffect(() => {
-    setUser(getLayoutUser(userFallbackName))
-    setImpersonatedName(getImpersonation()?.masterName ?? null)
-  }, [userFallbackName])
+    setUser(getLayoutUser(userFallbackName));
+    setImpersonatedName(getImpersonation()?.masterName ?? null);
+  }, [userFallbackName]);
 
   // Close mobile menu on route change
   useEffect(() => {
-    setMobileMenuOpen(false)
-  }, [location.pathname])
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
 
   // Close mobile menu on resize to desktop
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth > 1024) {
-        setMobileMenuOpen(false)
+        setMobileMenuOpen(false);
       }
-    }
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [])
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const handleLogout = async () => {
     // Revoke server-side (httpOnly refresh cookie) first, then drop the
     // readable access token.
     try {
-      await authApi.logout()
-    } catch { /* ignore: proceed with local cleanup anyway */ }
+      await authApi.logout();
+    } catch {
+      /* ignore: proceed with local cleanup anyway */
+    }
 
-    clearAuthCookies()
-    navigate('/')
-  }
+    clearAuthCookies();
+    navigate('/');
+  };
 
-  const isActive = (path: string) => location.pathname === path
+  const isActive = (path: string) => location.pathname === path;
 
   // Build breadcrumb from current path
-  const breadcrumbs = location.pathname.split('/').filter(Boolean).map((segment, index, array) => {
-    const path = '/' + array.slice(0, index + 1).join('/')
-    const label = segment.charAt(0).toUpperCase() + segment.slice(1)
-    return { label, path }
-  })
+  const breadcrumbs = location.pathname
+    .split('/')
+    .filter(Boolean)
+    .map((segment, index, array) => {
+      const path = '/' + array.slice(0, index + 1).join('/');
+      const label = segment.charAt(0).toUpperCase() + segment.slice(1);
+      return { label, path };
+    });
 
   return (
     <div className={`admin-layout ${themeClass}`.trim()}>
@@ -116,7 +127,9 @@ function BaseLayout({ navItems, layoutTitle, userRole, userFallbackName, themeCl
         <div className="sidebar-overlay" onClick={() => setMobileMenuOpen(false)} />
       )}
 
-      <aside className={`admin-sidebar ${sidebarCollapsed ? 'collapsed' : ''} ${mobileMenuOpen ? 'mobile-open' : ''}`}>
+      <aside
+        className={`admin-sidebar ${sidebarCollapsed ? 'collapsed' : ''} ${mobileMenuOpen ? 'mobile-open' : ''}`}
+      >
         <div className="sidebar-header">
           <div className="sidebar-header-top">
             <button
@@ -132,9 +145,7 @@ function BaseLayout({ navItems, layoutTitle, userRole, userFallbackName, themeCl
               {!sidebarCollapsed && <p className="sidebar-subtitle">{userRole}</p>}
             </div>
           </div>
-          {user && !sidebarCollapsed && (
-            <p className="sidebar-user">👤 {user.name}</p>
-          )}
+          {user && !sidebarCollapsed && <p className="sidebar-user">👤 {user.name}</p>}
         </div>
         <nav className="sidebar-nav">
           {navItems.map((item) => (
@@ -146,7 +157,9 @@ function BaseLayout({ navItems, layoutTitle, userRole, userFallbackName, themeCl
               title={sidebarCollapsed ? item.label : undefined}
             >
               <span className="nav-icon">{item.label.split(' ')[0]}</span>
-              {!sidebarCollapsed && <span className="nav-label">{item.label.split(' ').slice(1).join(' ')}</span>}
+              {!sidebarCollapsed && (
+                <span className="nav-label">{item.label.split(' ').slice(1).join(' ')}</span>
+              )}
             </Link>
           ))}
         </nav>
@@ -161,15 +174,15 @@ function BaseLayout({ navItems, layoutTitle, userRole, userFallbackName, themeCl
       <main className="admin-main">
         {impersonatedName !== null && (
           <div className="impersonation-banner" role="alert">
-            <span>👁 Вы смотрите глазами мастера <strong>{impersonatedName}</strong> (режим поддержки)</span>
+            <span>
+              👁 Вы смотрите глазами мастера <strong>{impersonatedName}</strong> (режим поддержки)
+            </span>
             <button className="btn btn-sm btn-primary" onClick={exitImpersonation}>
               Выйти из режима
             </button>
           </div>
         )}
-        {breadcrumbs.length > 0 && (
-          <Breadcrumb items={breadcrumbs} />
-        )}
+        {breadcrumbs.length > 0 && <Breadcrumb items={breadcrumbs} />}
         <div className="main-content">
           <Outlet />
         </div>
@@ -177,7 +190,7 @@ function BaseLayout({ navItems, layoutTitle, userRole, userFallbackName, themeCl
 
       <KeyboardShortcutsHint />
     </div>
-  )
+  );
 }
 
-export default BaseLayout
+export default BaseLayout;

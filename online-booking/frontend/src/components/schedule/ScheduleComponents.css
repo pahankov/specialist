@@ -109,10 +109,22 @@
   display: inline-block;
 }
 
-.badge-active { background: #c8e6c9; color: #2e7d32; }
-.badge-inactive { background: #f5f5f5; color: #999; }
-.badge-today { background: #bbdefb; color: #1565c0; }
-.badge-past { background: #bdbdbd; color: #616161; }
+.badge-active {
+  background: #c8e6c9;
+  color: #2e7d32;
+}
+.badge-inactive {
+  background: #f5f5f5;
+  color: #999;
+}
+.badge-today {
+  background: #bbdefb;
+  color: #1565c0;
+}
+.badge-past {
+  background: #bdbdbd;
+  color: #616161;
+}
 
 .calendar-day-count {
   margin-top: 4px;
@@ -272,8 +284,14 @@
   font-size: 14px;
 }
 
-.appt-client { font-weight: 600; color: #333; }
-.appt-service { color: #666; font-size: 13px; }
+.appt-client {
+  font-weight: 600;
+  color: #333;
+}
+.appt-service {
+  color: #666;
+  font-size: 13px;
+}
 
 .appt-status,
 .status-free,
@@ -287,10 +305,22 @@
   font-weight: 600;
 }
 
-.status-pending { background: #fff8e1; color: #f57f17; }
-.status-confirmed { background: #e3f2fd; color: #1565c0; }
-.status-completed { background: #e8f5e9; color: #2e7d32; }
-.status-cancelled { background: #f5f5f5; color: #616161; }
+.status-pending {
+  background: #fff8e1;
+  color: #f57f17;
+}
+.status-confirmed {
+  background: #e3f2fd;
+  color: #1565c0;
+}
+.status-completed {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+.status-cancelled {
+  background: #f5f5f5;
+  color: #616161;
+}
 
 .time-slot-status {
   flex: 1;

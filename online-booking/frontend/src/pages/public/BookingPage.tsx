@@ -1,57 +1,59 @@
-import { useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { toast } from 'sonner'
-import { servicesApi, appointmentsApi } from '../../api/client'
-import type { Service } from '../../api/types'
-import { PHONE_PLACEHOLDER } from '../../constants'
-import PhoneInput, { isCompletePhone } from '../../components/common/PhoneInput'
-import './BookingPage.css'
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { toast } from 'sonner';
+import { servicesApi, appointmentsApi } from '../../api/client';
+import type { Service } from '../../api/types';
+import { PHONE_PLACEHOLDER } from '../../constants';
+import PhoneInput, { isCompletePhone } from '../../components/common/PhoneInput';
+import './BookingPage.css';
 
 function BookingPage() {
-  const [searchParams] = useSearchParams()
-  const defaultMasterId = searchParams.get('master_id') ? Number(searchParams.get('master_id')) : undefined
+  const [searchParams] = useSearchParams();
+  const defaultMasterId = searchParams.get('master_id')
+    ? Number(searchParams.get('master_id'))
+    : undefined;
 
-  const [services, setServices] = useState<Service[]>([])
-  const [selectedService, setSelectedService] = useState<Service | null>(null)
-  const [selectedDate, setSelectedDate] = useState<string>('')
-  const [clientName, setClientName] = useState('')
-  const [clientPhone, setClientPhone] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [submitting, setSubmitting] = useState(false)
-  const [success, setSuccess] = useState(false)
+  const [services, setServices] = useState<Service[]>([]);
+  const [selectedService, setSelectedService] = useState<Service | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string>('');
+  const [clientName, setClientName] = useState('');
+  const [clientPhone, setClientPhone] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [success, setSuccess] = useState(false);
 
   useEffect(() => {
     const fetchServices = async () => {
       try {
-        const res = await servicesApi.getAll(defaultMasterId)
-        setServices(res.data)
+        const res = await servicesApi.getAll(defaultMasterId);
+        setServices(res.data);
         if (res.data.length > 0) {
-          setSelectedService(res.data[0])
+          setSelectedService(res.data[0]);
         }
       } catch (err) {
-        console.error(err)
+        console.error(err);
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
-    }
+    };
 
-    fetchServices()
-  }, [defaultMasterId])
+    fetchServices();
+  }, [defaultMasterId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+    e.preventDefault();
 
     if (!selectedService || !selectedDate || !clientName || !clientPhone) {
-      toast.error('Заполните все поля')
-      return
+      toast.error('Заполните все поля');
+      return;
     }
     if (!isCompletePhone(clientPhone)) {
-      toast.error('Введите корректный номер телефона (11 цифр)')
-      return
+      toast.error('Введите корректный номер телефона (11 цифр)');
+      return;
     }
 
     try {
-      setSubmitting(true)
+      setSubmitting(true);
 
       const appointmentData = {
         master_id: selectedService!.master_id,
@@ -59,24 +61,24 @@ function BookingPage() {
         client_name: clientName,
         client_phone: clientPhone,
         appointment_date: new Date(selectedDate).toISOString(),
-      }
+      };
 
-      await appointmentsApi.create(appointmentData)
+      await appointmentsApi.create(appointmentData);
 
-      toast.success('Вы успешно записаны!')
-      setSuccess(true)
-      setClientName('')
-      setClientPhone('')
-      setSelectedDate('')
+      toast.success('Вы успешно записаны!');
+      setSuccess(true);
+      setClientName('');
+      setClientPhone('');
+      setSelectedDate('');
     } catch (err) {
-      toast.error('Не удалось записаться')
-      console.error(err)
+      toast.error('Не удалось записаться');
+      console.error(err);
     } finally {
-      setSubmitting(false)
+      setSubmitting(false);
     }
-  }
+  };
 
-  if (loading) return <div className="booking-page">Loading...</div>
+  if (loading) return <div className="booking-page">Loading...</div>;
 
   if (success) {
     return (
@@ -90,7 +92,7 @@ function BookingPage() {
           </button>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -151,17 +153,13 @@ function BookingPage() {
             />
           </fieldset>
 
-          <button
-            type="submit"
-            className="btn btn-primary btn-submit"
-            disabled={submitting}
-          >
+          <button type="submit" className="btn btn-primary btn-submit" disabled={submitting}>
             {submitting ? 'Записываем...' : 'Записаться'}
           </button>
         </form>
       </div>
     </div>
-  )
+  );
 }
 
-export default BookingPage
+export default BookingPage;

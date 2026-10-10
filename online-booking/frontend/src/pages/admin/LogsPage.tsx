@@ -1,79 +1,106 @@
-import { useEffect, useState } from 'react'
-import { adminApi } from '../../api/client'
-import type { AuditLogEntry } from '../../api/types'
-import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError'
-import { getCookie, decodeJwtPayload } from '../../utils/cookies'
-import { Pager, Skeleton, EmptyState } from '../../components/common'
-import { usePersistentState } from '../../utils/persistentState'
-import './LogsPage.css'
-import { entityLabels, actionLabels, levelLabels } from '../../constants/statusLabels'
+import { useEffect, useState } from 'react';
+import { adminApi } from '../../api/client';
+import type { AuditLogEntry } from '../../api/types';
+import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError';
+import { getCookie, decodeJwtPayload } from '../../utils/cookies';
+import { Pager, Skeleton, EmptyState, ResizableTh, useColumnWidths } from '../../components/common';
+import { usePersistentState } from '../../utils/persistentState';
+import '../../styles/tables.css';
+import './LogsPage.css';
+import { entityLabels, actionLabels, levelLabels } from '../../constants/statusLabels';
 
 function getIsAdmin(): boolean {
-  const token = getCookie('access_token')
-  if (!token) return false
-  return decodeJwtPayload(token)?.is_admin === true
+  const token = getCookie('access_token');
+  if (!token) return false;
+  return decodeJwtPayload(token)?.is_admin === true;
 }
 
 function LogsPage() {
-  const isAdmin = getIsAdmin()
-  const [logs, setLogs] = useState<AuditLogEntry[]>([])
-  const [total, setTotal] = useState(0)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [entityFilter, setEntityFilter] = usePersistentState('logs.entity', '')
-  const [levelFilter, setLevelFilter] = usePersistentState('logs.level', '')
-  const [actionFilter, setActionFilter] = usePersistentState('logs.action', '')
-  const [quickSearch, setQuickSearch] = usePersistentState('logs.search', '')
-  const [masterFilter, setMasterFilter] = usePersistentState('logs.master', '')
-  const [currentPage, setCurrentPage] = usePersistentState('logs.page', 0)
-  const pageSize = 20
-
+  const isAdmin = getIsAdmin();
+  const [logs, setLogs] = useState<AuditLogEntry[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [entityFilter, setEntityFilter] = usePersistentState('logs.entity', '');
+  const [levelFilter, setLevelFilter] = usePersistentState('logs.level', '');
+  const [actionFilter, setActionFilter] = usePersistentState('logs.action', '');
+  const [quickSearch, setQuickSearch] = usePersistentState('logs.search', '');
+  const [masterFilter, setMasterFilter] = usePersistentState('logs.master', '');
+  const [currentPage, setCurrentPage] = usePersistentState('logs.page', 0);
+  const pageSize = 20;
+  const { widths: colW, setWidth: setColW } = useColumnWidths('logs', {
+    date: 150,
+    level: 110,
+    action: 150,
+    object: 110,
+    object_id: 100,
+    master: 150,
+    details: 220,
+  });
 
   const fetchLogs = async () => {
     try {
-      const params: Record<string, string | number> = { limit: pageSize, offset: currentPage * pageSize }
-      if (entityFilter) params.entity_type = entityFilter
-      if (masterFilter) params.master_id = masterFilter
+      const params: Record<string, string | number> = {
+        limit: pageSize,
+        offset: currentPage * pageSize,
+      };
+      if (entityFilter) params.entity_type = entityFilter;
+      if (masterFilter) params.master_id = masterFilter;
 
       // Superadmin uses /audit-logs/all, regular master uses /audit-logs (own logs)
       const resp = isAdmin
         ? await adminApi.getAuditLogsAll(params)
-        : await adminApi.getAuditLogs(params)
-      setLogs(resp.data.logs)
-      setTotal(resp.data.total)
+        : await adminApi.getAuditLogs(params);
+      setLogs(resp.data.logs);
+      setTotal(resp.data.total);
     } catch (err: unknown) {
       if (getApiErrorStatus(err) === 401) {
-        window.location.href = '/admin/login'
+        window.location.href = '/admin/login';
       } else {
-        const detail = getApiErrorMessage(err, 'Ошибка загрузки логов')
-        setError(typeof detail === 'string' ? detail : JSON.stringify(detail))
+        const detail = getApiErrorMessage(err, 'Ошибка загрузки логов');
+        setError(typeof detail === 'string' ? detail : JSON.stringify(detail));
       }
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   useEffect(() => {
-    setLoading(true)
-    fetchLogs()
-  }, [entityFilter, masterFilter, currentPage])
+    setLoading(true);
+    fetchLogs();
+  }, [entityFilter, masterFilter, currentPage]);
 
-  if (loading) return <div><Skeleton rows={8} /></div>
-  if (error) return <div><div className="error-message">{error}</div></div>
+  if (loading)
+    return (
+      <div>
+        <Skeleton rows={8} />
+      </div>
+    );
+  if (error)
+    return (
+      <div>
+        <div className="error-message">{error}</div>
+      </div>
+    );
 
-  const visibleLogs = logs.filter(log => {
-    if (levelFilter && log.level !== levelFilter) return false
-    if (actionFilter && log.action !== actionFilter) return false
-    const q = quickSearch.trim().toLowerCase()
+  const visibleLogs = logs.filter((log) => {
+    if (levelFilter && log.level !== levelFilter) return false;
+    if (actionFilter && log.action !== actionFilter) return false;
+    const q = quickSearch.trim().toLowerCase();
     if (q) {
       const haystack = [
-        log.action, log.entity_type, log.details ?? '',
-        log.master_name ?? '', String(log.entity_id ?? ''),
-      ].join(' ').toLowerCase()
-      if (!haystack.includes(q)) return false
+        log.action,
+        log.entity_type,
+        log.details ?? '',
+        log.master_name ?? '',
+        String(log.entity_id ?? ''),
+      ]
+        .join(' ')
+        .toLowerCase();
+      if (!haystack.includes(q)) return false;
     }
-    return true
-  })
+    return true;
+  });
 
   const entityFilters = [
     { value: '', label: 'Все' },
@@ -81,20 +108,26 @@ function LogsPage() {
     { value: 'service', label: '💇 Услуги' },
     { value: 'client', label: '👤 Клиенты' },
     { value: 'master', label: '👨‍💼 Мастера' },
-    { value: 'auth', label: '🔑 Входы/выходы' }
-  ]
+    { value: 'auth', label: '🔑 Входы/выходы' },
+  ];
 
   return (
     <div>
-      <div className="page-header"><h1>📋 Журнал действий</h1><p>История всех операций в системе</p></div>
+      <div className="page-header">
+        <h1>📋 Журнал действий</h1>
+        <p>История всех операций в системе</p>
+      </div>
 
       {/* Entity filter */}
       <div className="filters-bar">
-        {entityFilters.map(f => (
+        {entityFilters.map((f) => (
           <button
             key={f.value}
             className={`filter-btn ${entityFilter === f.value ? 'active' : ''}`}
-            onClick={() => { setEntityFilter(f.value); setCurrentPage(0) }}
+            onClick={() => {
+              setEntityFilter(f.value);
+              setCurrentPage(0);
+            }}
           >
             {f.label}
           </button>
@@ -108,7 +141,10 @@ function LogsPage() {
             type="text"
             placeholder="Фильтр по ID мастера..."
             value={masterFilter}
-            onChange={(e) => { setMasterFilter(e.target.value); setCurrentPage(0) }}
+            onChange={(e) => {
+              setMasterFilter(e.target.value);
+              setCurrentPage(0);
+            }}
             className="filter-input"
             style={{ width: 200 }}
           />
@@ -138,7 +174,9 @@ function LogsPage() {
         >
           <option value="">Все действия</option>
           {Object.entries(actionLabels).map(([value, label]) => (
-            <option key={value} value={value}>{label}</option>
+            <option key={value} value={value}>
+              {label}
+            </option>
           ))}
         </select>
         <input
@@ -158,51 +196,83 @@ function LogsPage() {
             description={logs.length === 0 ? undefined : 'Измените фильтры'}
           />
         ) : (
-          <table className="logs-table">
+          <table className="logs-table resizable-table">
             <thead>
               <tr>
-                <th>Дата и время</th>
-                <th>Уровень</th>
-                <th>Действие</th>
-                <th>Объект</th>
-                <th>ID объекта</th>
-                <th>Мастер</th>
-                <th>Детали</th>
+                <ResizableTh width={colW.date} onResize={(w) => setColW('date', w)}>
+                  Дата и время
+                </ResizableTh>
+                <ResizableTh width={colW.level} onResize={(w) => setColW('level', w)}>
+                  Уровень
+                </ResizableTh>
+                <ResizableTh width={colW.action} onResize={(w) => setColW('action', w)}>
+                  Действие
+                </ResizableTh>
+                <ResizableTh width={colW.object} onResize={(w) => setColW('object', w)}>
+                  Объект
+                </ResizableTh>
+                <ResizableTh width={colW.object_id} onResize={(w) => setColW('object_id', w)}>
+                  ID объекта
+                </ResizableTh>
+                <ResizableTh width={colW.master} onResize={(w) => setColW('master', w)}>
+                  Мастер
+                </ResizableTh>
+                <ResizableTh width={colW.details} onResize={(w) => setColW('details', w)}>
+                  Детали
+                </ResizableTh>
               </tr>
             </thead>
             <tbody>
-              {visibleLogs.map(log => (
+              {visibleLogs.map((log) => (
                 <tr key={log.id}>
-                    <td>
-                      {log.created_at ? new Date(log.created_at).toLocaleString('ru-RU', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      }) : '—'}
-                    </td>
+                  <td>
+                    {log.created_at
+                      ? new Date(log.created_at).toLocaleString('ru-RU', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })
+                      : '—'}
+                  </td>
                   <td>
                     <span className={`level-badge level-${log.level}`}>
                       {levelLabels[log.level] || log.level}
                     </span>
                   </td>
                   <td>
-                    <span className={`status-badge ${
-                      log.action === 'delete' ? 'status-cancelled' :
-                      log.action === 'confirm' ? 'status-confirmed' :
-                      log.action === 'cancel' ? 'status-cancelled' :
-                      log.action === 'complete' ? 'status-completed' :
-                      log.action === 'create' ? 'status-pending' :
-                      'status-pending'
-                    }`}>
+                    <span
+                      className={`status-badge ${
+                        log.action === 'delete'
+                          ? 'status-cancelled'
+                          : log.action === 'confirm'
+                            ? 'status-confirmed'
+                            : log.action === 'cancel'
+                              ? 'status-cancelled'
+                              : log.action === 'complete'
+                                ? 'status-completed'
+                                : log.action === 'create'
+                                  ? 'status-pending'
+                                  : 'status-pending'
+                      }`}
+                    >
                       {actionLabels[log.action] || log.action}
                     </span>
                   </td>
                   <td>{entityLabels[log.entity_type] || log.entity_type}</td>
-                  <td><code>{log.entity_id || '—'}</code></td>
+                  <td>
+                    <code>{log.entity_id || '—'}</code>
+                  </td>
                   <td>{log.master_name || '—'}</td>
-                  <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <td
+                    style={{
+                      maxWidth: 200,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
                     {log.details || '—'}
                   </td>
                 </tr>
@@ -220,7 +290,7 @@ function LogsPage() {
         label={`Страница ${currentPage + 1} из ${Math.ceil(total / pageSize) || 1} (${total} записей)`}
       />
     </div>
-  )
+  );
 }
 
-export default LogsPage
+export default LogsPage;

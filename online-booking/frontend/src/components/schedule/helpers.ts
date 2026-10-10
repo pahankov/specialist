@@ -1,4 +1,4 @@
-import type { Appointment, DaySchedule } from '../../api/types'
+import type { Appointment, DaySchedule } from '../../api/types';
 
 export const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string }> = {
   free: { label: 'Свободно', bg: '#e0e0e0', text: '#666' },
@@ -7,124 +7,134 @@ export const STATUS_CONFIG: Record<string, { label: string; bg: string; text: st
   completed: { label: 'Завершена', bg: '#e8f5e9', text: '#2e7d32' },
   cancelled: { label: 'Отменена', bg: '#f5f5f5', text: '#616161' },
   'no-show': { label: 'Неявка', bg: '#fff3e0', text: '#e65100' },
-}
+};
 
 /** Local YYYY-MM-DD (never toISOString: UTC shifts the day for +03:00). */
 export function formatDate(date: Date): string {
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 export function formatHour(h: number): string {
-  return String(h).padStart(2, '0') + ':00'
+  return String(h).padStart(2, '0') + ':00';
 }
 
 export function getMonthDays(date: Date): { date: Date; isCurrentMonth: boolean }[] {
-  const year = date.getFullYear()
-  const month = date.getMonth()
-  const firstDay = new Date(year, month, 1)
-  const lastDay = new Date(year, month + 1, 0)
-  const days: { date: Date; isCurrentMonth: boolean }[] = []
-  const startDayOfWeek = firstDay.getDay() === 0 ? 6 : firstDay.getDay() - 1
+  const year = date.getFullYear();
+  const month = date.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  const days: { date: Date; isCurrentMonth: boolean }[] = [];
+  const startDayOfWeek = firstDay.getDay() === 0 ? 6 : firstDay.getDay() - 1;
 
   for (let i = 0; i < startDayOfWeek; i++) {
-    days.push({ date: new Date(year, month, 1 - (startDayOfWeek - i)), isCurrentMonth: false })
+    days.push({ date: new Date(year, month, 1 - (startDayOfWeek - i)), isCurrentMonth: false });
   }
   for (let d = 1; d <= lastDay.getDate(); d++) {
-    days.push({ date: new Date(year, month, d), isCurrentMonth: true })
+    days.push({ date: new Date(year, month, d), isCurrentMonth: true });
   }
-  return days
+  return days;
 }
 
-export function getHoursForDay(schedule: Record<string, DaySchedule>, date: Date): { start: number; end: number } {
-  const dateStr = formatDate(date)
-  return schedule[dateStr] || { start: 8, end: 22 }
+export function getHoursForDay(
+  schedule: Record<string, DaySchedule>,
+  date: Date,
+): { start: number; end: number } {
+  const dateStr = formatDate(date);
+  return schedule[dateStr] || { start: 8, end: 22 };
 }
 
 export function getAppointmentsForSlot(
   appointments: Appointment[],
   date: Date,
-  hour: number
+  hour: number,
 ): Appointment[] {
   // Compare via Date parts: backend strings may be naive or carry +03:00/Z,
   // string-splitting breaks across those shapes.
-  return appointments.filter(a => {
-    const d = new Date(a.appointment_date)
-    if (Number.isNaN(d.getTime())) return false
+  return appointments.filter((a) => {
+    const d = new Date(a.appointment_date);
+    if (Number.isNaN(d.getTime())) return false;
     return (
       d.getFullYear() === date.getFullYear() &&
       d.getMonth() === date.getMonth() &&
       d.getDate() === date.getDate() &&
       d.getHours() === hour
-    )
-  })
+    );
+  });
 }
 
 export function getSlotStatus(slots: Appointment[]): string {
-  if (slots.length === 0) return 'free'
-  const statusOrder = ['completed', 'confirmed', 'pending', 'cancelled']
+  if (slots.length === 0) return 'free';
+  const statusOrder = ['completed', 'confirmed', 'pending', 'cancelled'];
   for (const status of statusOrder) {
-    if (slots.some(s => s.status === status)) return status
+    if (slots.some((s) => s.status === status)) return status;
   }
-  return 'pending'
+  return 'pending';
 }
 
 export function isPast(date: Date): boolean {
-  const now = new Date()
-  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate())
-  const n = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  return d < n
+  const now = new Date();
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const n = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return d < n;
 }
 
 export function isToday(date: Date): boolean {
-  const today = new Date()
-  return date.getDate() === today.getDate() &&
-         date.getMonth() === today.getMonth() &&
-         date.getFullYear() === today.getFullYear()
+  const today = new Date();
+  return (
+    date.getDate() === today.getDate() &&
+    date.getMonth() === today.getMonth() &&
+    date.getFullYear() === today.getFullYear()
+  );
 }
 
 export function isSlotPast(date: Date, hour: number): boolean {
-  const slotDate = new Date(date)
-  slotDate.setHours(hour, 0, 0, 0)
-  return slotDate < new Date()
+  const slotDate = new Date(date);
+  slotDate.setHours(hour, 0, 0, 0);
+  return slotDate < new Date();
 }
 
 export function getMonthName(date: Date): string {
-  return date.toLocaleString('ru-RU', { month: 'long', year: 'numeric' })
+  return date.toLocaleString('ru-RU', { month: 'long', year: 'numeric' });
 }
 
 export function getFilteredClients(
   clients: { id: number; name: string; phone: string }[],
-  search: string
+  search: string,
 ): { id: number; name: string; phone: string }[] {
-  if (!search) return clients
-  const lower = search.toLowerCase()
-  return clients.filter(c =>
-    c.name.toLowerCase().includes(lower) || c.phone.includes(search)
-  )
+  if (!search) return clients;
+  const lower = search.toLowerCase();
+  return clients.filter((c) => c.name.toLowerCase().includes(lower) || c.phone.includes(search));
 }
 
 export function getFilteredServices(
   services: { id: number; name: string; duration_minutes: number; price: number | string }[],
-  search: string
+  search: string,
 ): { id: number; name: string; duration_minutes: number; price: number | string }[] {
-  if (!search) return services
-  const lower = search.toLowerCase()
-  return services.filter(s => s.name.toLowerCase().includes(lower))
+  if (!search) return services;
+  const lower = search.toLowerCase();
+  return services.filter((s) => s.name.toLowerCase().includes(lower));
 }
 
 export function formatPrice(price: number | string): string {
-  const num = typeof price === 'string' ? parseFloat(price) : price
-  return num.toLocaleString('ru-RU')
+  const num = typeof price === 'string' ? parseFloat(price) : price;
+  return num.toLocaleString('ru-RU');
 }
 
-export function buildMonthlyStats(stats: { confirmed_appointments: number; total_minutes: number; total_hours: number; revenue: number } | null): { value: string | number; label: string }[] {
-  if (!stats) return []
+export function buildMonthlyStats(
+  stats: {
+    confirmed_appointments: number;
+    total_minutes: number;
+    total_hours: number;
+    revenue: number;
+  } | null,
+): { value: string | number; label: string }[] {
+  if (!stats) return [];
   return [
     { value: stats.confirmed_appointments, label: 'Подтверждено записей' },
     { value: stats.total_hours, label: 'Часов (подт.)' },
     { value: `${formatPrice(stats.revenue)} ₽`, label: 'Доход (заверш.)' },
-  ]
+  ];
 }

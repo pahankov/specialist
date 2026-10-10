@@ -74,7 +74,7 @@ class TestUpsertMaster:
         assert user.name == "Elena V."
         assert c["updated"] == 1 and c["users_updated"] == 1
 
-    async def test_email_conflict_skips_row(self, psession):
+    async def test_master_email_conflict_skips_row(self, psession):
         from app.models.user import UserRole
         psession.add(User(id=99, name="Local Twin", email="elena@example.com",
                           phone="+79990009999", hashed_password=DEV_HASH,
@@ -112,7 +112,7 @@ class TestUpsertClient:
         assert prof.no_show_count == 2
         assert c["created"] == 1
 
-    async def test_email_conflict_skips_row(self, psession):
+    async def test_client_email_conflict_skips_row(self, psession):
         from app.models.user import UserRole
         psession.add(User(id=99, name="Local", email="ivan@example.com",
                           phone="+79990009999", hashed_password=DEV_HASH,

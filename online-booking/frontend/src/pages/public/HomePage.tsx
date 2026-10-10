@@ -1,66 +1,66 @@
-import { useEffect, useState, useMemo, useRef } from 'react'
-import { Link } from 'react-router-dom'
-import { Swiper, SwiperSlide } from 'swiper/react'
-import { Navigation, Autoplay } from 'swiper/modules'
-import { mastersApi, servicesApi } from '../../api/client'
-import type { Master, Service } from '../../api/types'
-import LoginModal from '../../components/LoginModal'
-import { ReviewsSection } from '../../components/reviews'
-import 'swiper/css'
-import 'swiper/css/navigation'
-import 'swiper/css/autoplay'
-import './HomePage.css'
+import { useEffect, useState, useMemo, useRef } from 'react';
+import { Link } from 'react-router-dom';
+import { Swiper, SwiperSlide } from 'swiper/react';
+import { Navigation, Autoplay } from 'swiper/modules';
+import { mastersApi, servicesApi } from '../../api/client';
+import type { Master, Service } from '../../api/types';
+import LoginModal from '../../components/LoginModal';
+import { ReviewsSection } from '../../components/reviews';
+import 'swiper/css';
+import 'swiper/css/navigation';
+import 'swiper/css/autoplay';
+import './HomePage.css';
 
 // Helper: shuffle array (Fisher-Yates)
 function shuffleArray<T>(array: T[]): T[] {
-  const shuffled = [...array]
+  const shuffled = [...array];
   for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
-  return shuffled
+  return shuffled;
 }
 
 // Helper: pick random N items
 function pickRandom<T>(array: T[], count: number): T[] {
-  return shuffleArray(array).slice(0, count)
+  return shuffleArray(array).slice(0, count);
 }
 
 function HomePage() {
-  const [allMasters, setAllMasters] = useState<Master[]>([])
-  const [allServices, setAllServices] = useState<Service[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [showLogin, setShowLogin] = useState(false)
-  const swiperInstance = useRef<any>(null)
-  
+  const [allMasters, setAllMasters] = useState<Master[]>([]);
+  const [allServices, setAllServices] = useState<Service[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showLogin, setShowLogin] = useState(false);
+  const swiperInstance = useRef<any>(null);
+
   // Random selection on each page load (memoized)
-  const randomServices = useMemo(() => pickRandom(allServices, 6), [allServices])
-  const randomMasters = useMemo(() => pickRandom(allMasters, 6), [allMasters])
+  const randomServices = useMemo(() => pickRandom(allServices, 6), [allServices]);
+  const randomMasters = useMemo(() => pickRandom(allMasters, 6), [allMasters]);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        setLoading(true)
+        setLoading(true);
         const [mastersRes, servicesRes] = await Promise.all([
           mastersApi.getAll(),
           servicesApi.getAll(),
-        ])
-        setAllMasters(mastersRes.data)
-        setAllServices(servicesRes.data)
+        ]);
+        setAllMasters(mastersRes.data);
+        setAllServices(servicesRes.data);
       } catch (err) {
-        setError('Не удалось загрузить данные')
-        console.error(err)
+        setError('Не удалось загрузить данные');
+        console.error(err);
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
-    }
+    };
 
-    fetchData()
-  }, [])
+    fetchData();
+  }, []);
 
-  if (loading) return <div className="home-page">Загрузка...</div>
-  if (error) return <div className="home-page error">{error}</div>
+  if (loading) return <div className="home-page">Загрузка...</div>;
+  if (error) return <div className="home-page error">{error}</div>;
 
   return (
     <div className="home-page">
@@ -76,7 +76,11 @@ function HomePage() {
       </header>
 
       {/* Carousel Section */}
-      <div className="carousel-container" onMouseEnter={() => swiperInstance.current?.autoplay?.stop()} onMouseLeave={() => swiperInstance.current?.autoplay?.start()}>
+      <div
+        className="carousel-container"
+        onMouseEnter={() => swiperInstance.current?.autoplay?.stop()}
+        onMouseLeave={() => swiperInstance.current?.autoplay?.start()}
+      >
         <Swiper
           modules={[Navigation, Autoplay]}
           spaceBetween={30}
@@ -93,8 +97,12 @@ function HomePage() {
             el: '.carousel-indicators',
             clickable: true,
           }}
-          onSlideChange={() => { /* ignore */ }}
-          onSwiper={(swiper) => { swiperInstance.current = swiper }}
+          onSlideChange={() => {
+            /* ignore */
+          }}
+          onSwiper={(swiper) => {
+            swiperInstance.current = swiper;
+          }}
         >
           {/* Slide 1: Services */}
           <SwiperSlide>
@@ -111,7 +119,10 @@ function HomePage() {
                           <span className="duration">⏱️ {service.duration_minutes} мин</span>
                           <span className="price">₽{service.price}</span>
                         </div>
-                        <Link to={`/booking?master_id=${service.master_id}`} className="btn btn-primary">
+                        <Link
+                          to={`/booking?master_id=${service.master_id}`}
+                          className="btn btn-primary"
+                        >
                           Записаться
                         </Link>
                       </div>
@@ -154,8 +165,12 @@ function HomePage() {
         </Swiper>
 
         {/* Navigation buttons */}
-        <button className="carousel-btn carousel-btn-prev" aria-label="Предыдущий слайд">‹</button>
-        <button className="carousel-btn carousel-btn-next" aria-label="Следующий слайд">›</button>
+        <button className="carousel-btn carousel-btn-prev" aria-label="Предыдущий слайд">
+          ‹
+        </button>
+        <button className="carousel-btn carousel-btn-next" aria-label="Следующий слайд">
+          ›
+        </button>
 
         {/* Pagination dots */}
         <div className="carousel-indicators" />
@@ -164,7 +179,7 @@ function HomePage() {
       {/* Login Modal */}
       <LoginModal isOpen={showLogin} onClose={() => setShowLogin(false)} />
     </div>
-  )
+  );
 }
 
-export default HomePage
+export default HomePage;

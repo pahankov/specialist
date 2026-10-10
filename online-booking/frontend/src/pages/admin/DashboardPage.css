@@ -15,7 +15,9 @@
 .stat-card {
   text-align: center;
   padding: 24px;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
   cursor: default;
 }
 
@@ -128,7 +130,9 @@
 
 .revenue-card {
   padding: 20px;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
 }
 
 .revenue-card:hover {

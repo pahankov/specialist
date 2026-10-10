@@ -1,51 +1,57 @@
-import { useEffect, useState } from 'react'
-import './SharedComponents.css'
+import { useEffect, useState } from 'react';
+import './SharedComponents.css';
 
 interface KeyboardShortcutsHintProps {
-  onSearch?: () => void
+  onSearch?: () => void;
 }
 
 export default function KeyboardShortcutsHint({ onSearch }: KeyboardShortcutsHintProps) {
-  const [showHint, setShowHint] = useState(false)
-  const [searchOpen, setSearchOpen] = useState(false)
+  const [showHint, setShowHint] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Ctrl+K or Cmd+K for search
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-        e.preventDefault()
+        e.preventDefault();
         if (onSearch) {
-          onSearch()
+          onSearch();
         } else {
-          setSearchOpen(true)
-          setShowHint(false)
+          setSearchOpen(true);
+          setShowHint(false);
         }
       }
 
       // Escape to close modals/search
       if (e.key === 'Escape') {
-        setSearchOpen(false)
-        setShowHint(false)
+        setSearchOpen(false);
+        setShowHint(false);
       }
 
       // ? to show keyboard shortcuts hint
       if (e.key === '?' && !e.ctrlKey && !e.metaKey) {
-        const target = e.target as HTMLElement
-        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
-        setShowHint(prev => !prev)
+        const target = e.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+        setShowHint((prev) => !prev);
       }
-    }
+    };
 
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [onSearch])
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onSearch]);
 
-  if (!showHint && !searchOpen) return null
+  if (!showHint && !searchOpen) return null;
 
   return (
     <>
       {/* Backdrop */}
-      <div className="keyboard-hint-backdrop" onClick={() => { setShowHint(false); setSearchOpen(false) }} />
+      <div
+        className="keyboard-hint-backdrop"
+        onClick={() => {
+          setShowHint(false);
+          setSearchOpen(false);
+        }}
+      />
 
       {/* Search modal */}
       {searchOpen && (
@@ -59,7 +65,7 @@ export default function KeyboardShortcutsHint({ onSearch }: KeyboardShortcutsHin
                 placeholder="Поиск..."
                 autoFocus
                 onKeyDown={(e) => {
-                  if (e.key === 'Escape') setSearchOpen(false)
+                  if (e.key === 'Escape') setSearchOpen(false);
                 }}
               />
               <button className="search-close" onClick={() => setSearchOpen(false)}>
@@ -67,7 +73,9 @@ export default function KeyboardShortcutsHint({ onSearch }: KeyboardShortcutsHin
               </button>
             </div>
             <div className="search-hint">
-              <span>Нажмите <kbd>Esc</kbd> для закрытия</span>
+              <span>
+                Нажмите <kbd>Esc</kbd> для закрытия
+              </span>
             </div>
           </div>
         </div>
@@ -99,5 +107,5 @@ export default function KeyboardShortcutsHint({ onSearch }: KeyboardShortcutsHin
         </div>
       )}
     </>
-  )
+  );
 }

@@ -1,240 +1,265 @@
-import { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { toast } from 'sonner'
-import { superAdminApi } from '../../api/client'
-import type { AuditLogEntry } from '../../api/types'
-import { Skeleton, EmptyState, Modal } from '../../components/common'
-import { getApiErrorMessage } from '../../utils/apiError'
-import { getCookie } from '../../utils/cookies'
-import { startImpersonation } from '../../utils/impersonation'
-import { useSectionPrefix, ADMIN_PREFIX } from '../../utils/section'
-import './MasterDetailPage.css'
-import { statusLabels } from '../../constants/statusLabels'
+import { useEffect, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
+import { superAdminApi } from '../../api/client';
+import type { AuditLogEntry } from '../../api/types';
+import { Skeleton, EmptyState, Modal } from '../../components/common';
+import { getApiErrorMessage } from '../../utils/apiError';
+import { getCookie } from '../../utils/cookies';
+import { startImpersonation } from '../../utils/impersonation';
+import { useSectionPrefix, ADMIN_PREFIX } from '../../utils/section';
+import './MasterDetailPage.css';
+import { statusLabels } from '../../constants/statusLabels';
 
-type TabType = 'overview' | 'reviews' | 'audit' | 'sessions'
+type TabType = 'overview' | 'reviews' | 'audit' | 'sessions';
 
 interface MasterSession {
-  id: number
-  created_at: string
-  expires_at: string
+  id: number;
+  created_at: string;
+  expires_at: string;
 }
 
 interface MasterStats {
-  total_appointments: number
-  status_counts: Record<string, number>
-  total_clients: number
-  total_services: number
-  total_revenue: number
-  avg_rating?: number | null
-  review_count: number
+  total_appointments: number;
+  status_counts: Record<string, number>;
+  total_clients: number;
+  total_services: number;
+  total_revenue: number;
+  avg_rating?: number | null;
+  review_count: number;
 }
 
 interface MasterFull {
-  id: number
-  user_id: number
-  name: string
-  email: string
-  phone?: string
-  telegram_username?: string
-  description?: string
-  avatar_url?: string
-  experience_years?: number
-  status: string
-  is_active: boolean
-  is_admin: boolean
-  tariff?: string
-  trial_ends_at?: string | null
-  created_at?: string
-  updated_at?: string
-  stats: MasterStats
+  id: number;
+  user_id: number;
+  name: string;
+  email: string;
+  phone?: string;
+  telegram_username?: string;
+  description?: string;
+  avatar_url?: string;
+  experience_years?: number;
+  status: string;
+  is_active: boolean;
+  is_admin: boolean;
+  tariff?: string;
+  trial_ends_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  stats: MasterStats;
   recent_reviews: {
-    id: number
-    client_name: string
-    client_phone: string
-    rating: number
-    comment?: string
-    is_published: boolean
-    created_at?: string
-  }[]
+    id: number;
+    client_name: string;
+    client_phone: string;
+    rating: number;
+    comment?: string;
+    is_published: boolean;
+    created_at?: string;
+  }[];
   recent_appointments: {
-    id: number
-    client_name?: string
-    appointment_date?: string
-    status: string
-    service_name?: string
-    service_price: number
-  }[]
+    id: number;
+    client_name?: string;
+    appointment_date?: string;
+    status: string;
+    service_name?: string;
+    service_price: number;
+  }[];
 }
 
-
 function MasterDetailPage() {
-  const { id } = useParams<{ id: string }>()
-  const navigate = useNavigate()
-  const section = useSectionPrefix()
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const section = useSectionPrefix();
 
-  const [master, setMaster] = useState<MasterFull | null>(null)
-  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([])
-  const [loading, setLoading] = useState(true)
-  const [auditLoading, setAuditLoading] = useState(false)
-  const [activeTab, setActiveTab] = useState<TabType>('overview')
-  const [sessions, setSessions] = useState<MasterSession[]>([])
-  const [sessionsLoading, setSessionsLoading] = useState(false)
-  const [showPasswordModal, setShowPasswordModal] = useState(false)
-  const [newPassword, setNewPassword] = useState('')
-  const [actionBusy, setActionBusy] = useState(false)
-  const [tariffDraft, setTariffDraft] = useState('')
-  const [trialDraft, setTrialDraft] = useState('')
+  const [master, setMaster] = useState<MasterFull | null>(null);
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<TabType>('overview');
+  const [sessions, setSessions] = useState<MasterSession[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [actionBusy, setActionBusy] = useState(false);
+  const [tariffDraft, setTariffDraft] = useState('');
+  const [trialDraft, setTrialDraft] = useState('');
   // Placeholder for bulk selection (used in MastersPage, kept for future use)
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [_selectedMasters, _setSelectedMasters] = useState<Set<number>>(new Set())
+  const [_selectedMasters, _setSelectedMasters] = useState<Set<number>>(new Set());
 
   const loadMaster = async () => {
-    if (!id) return
-    setLoading(true)
+    if (!id) return;
+    setLoading(true);
     try {
-      const { data } = await superAdminApi.getMasterFull(parseInt(id))
-      setMaster(data)
+      const { data } = await superAdminApi.getMasterFull(parseInt(id));
+      setMaster(data);
     } catch (err: unknown) {
-      const msg = getApiErrorMessage(err, 'Ошибка загрузки мастера')
-      toast.error(msg)
+      const msg = getApiErrorMessage(err, 'Ошибка загрузки мастера');
+      toast.error(msg);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const loadAuditLogs = async () => {
-    if (!id) return
-    setAuditLoading(true)
+    if (!id) return;
+    setAuditLoading(true);
     try {
-      const auditResp = await superAdminApi.getMastersAudit(parseInt(id), 1, 50)
-      setAuditLogs(auditResp.data.logs || [])
+      const auditResp = await superAdminApi.getMastersAudit(parseInt(id), 1, 50);
+      setAuditLogs(auditResp.data.logs || []);
     } catch {
       // Ignore audit errors
     } finally {
-      setAuditLoading(false)
+      setAuditLoading(false);
     }
-  }
+  };
 
-  useEffect(() => { loadMaster() }, [id])
   useEffect(() => {
-    if (activeTab === 'audit') loadAuditLogs()
-  }, [activeTab, id])
+    loadMaster();
+  }, [id]);
   useEffect(() => {
-    if (activeTab === 'sessions') loadSessions()
-  }, [activeTab, id])
+    if (activeTab === 'audit') loadAuditLogs();
+  }, [activeTab, id]);
+  useEffect(() => {
+    if (activeTab === 'sessions') loadSessions();
+  }, [activeTab, id]);
 
   const loadSessions = async () => {
-    if (!id) return
-    setSessionsLoading(true)
+    if (!id) return;
+    setSessionsLoading(true);
     try {
-      const { data } = await superAdminApi.getMasterSessions(parseInt(id))
-      setSessions(data)
+      const { data } = await superAdminApi.getMasterSessions(parseInt(id));
+      setSessions(data);
     } catch (err: unknown) {
-      toast.error(getApiErrorMessage(err, 'Ошибка загрузки сессий'))
+      toast.error(getApiErrorMessage(err, 'Ошибка загрузки сессий'));
     } finally {
-      setSessionsLoading(false)
+      setSessionsLoading(false);
     }
-  }
+  };
 
   const handleImpersonate = async () => {
-    if (!master || actionBusy) return
-    setActionBusy(true)
+    if (!master || actionBusy) return;
+    setActionBusy(true);
     try {
-      const { data } = await superAdminApi.impersonateMaster(master.id)
-      const adminToken = getCookie('access_token') ?? ''
-      startImpersonation(adminToken, data.access_token, data.name)
-      toast.success(`Вы вошли как ${data.name}`)
-      navigate(`${ADMIN_PREFIX}/dashboard`)
-      window.location.reload()
+      const { data } = await superAdminApi.impersonateMaster(master.id);
+      const adminToken = getCookie('access_token') ?? '';
+      startImpersonation(adminToken, data.access_token, data.name);
+      toast.success(`Вы вошли как ${data.name}`);
+      navigate(`${ADMIN_PREFIX}/dashboard`);
+      window.location.reload();
     } catch (err: unknown) {
-      toast.error(getApiErrorMessage(err, 'Не удалось войти от имени мастера'))
+      toast.error(getApiErrorMessage(err, 'Не удалось войти от имени мастера'));
     } finally {
-      setActionBusy(false)
+      setActionBusy(false);
     }
-  }
+  };
 
   const handlePasswordReset = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!master || actionBusy) return
-    setActionBusy(true)
+    e.preventDefault();
+    if (!master || actionBusy) return;
+    setActionBusy(true);
     try {
-      await superAdminApi.resetMasterPassword(master.id, newPassword)
-      toast.success('Пароль обновлён, сессии отозваны')
-      setShowPasswordModal(false)
-      setNewPassword('')
+      await superAdminApi.resetMasterPassword(master.id, newPassword);
+      toast.success('Пароль обновлён, сессии отозваны');
+      setShowPasswordModal(false);
+      setNewPassword('');
     } catch (err: unknown) {
-      toast.error(getApiErrorMessage(err, 'Не удалось сбросить пароль'))
+      toast.error(getApiErrorMessage(err, 'Не удалось сбросить пароль'));
     } finally {
-      setActionBusy(false)
+      setActionBusy(false);
     }
-  }
+  };
 
   const handleRevokeSessions = async () => {
-    if (!master || actionBusy) return
-    setActionBusy(true)
+    if (!master || actionBusy) return;
+    setActionBusy(true);
     try {
-      const { data } = await superAdminApi.revokeMasterSessions(master.id)
-      toast.success(`Отозвано сессий: ${data.revoked ?? 0}`)
-      loadSessions()
+      const { data } = await superAdminApi.revokeMasterSessions(master.id);
+      toast.success(`Отозвано сессий: ${data.revoked ?? 0}`);
+      loadSessions();
     } catch (err: unknown) {
-      toast.error(getApiErrorMessage(err, 'Не удалось отозвать сессии'))
+      toast.error(getApiErrorMessage(err, 'Не удалось отозвать сессии'));
     } finally {
-      setActionBusy(false)
+      setActionBusy(false);
     }
-  }
+  };
 
   if (loading) {
     return (
       <div className="master-detail">
         <div className="detail-header">
-          <button className="btn btn-ghost back-btn" onClick={() => navigate(`${section}/masters`)}>← Назад к мастерам</button>
+          <button className="btn btn-ghost back-btn" onClick={() => navigate(`${section}/masters`)}>
+            ← Назад к мастерам
+          </button>
           <Skeleton width="300px" height="32px" />
         </div>
         <div className="detail-content">
           <Skeleton rows={3} height="60px" />
         </div>
       </div>
-    )
+    );
   }
 
   if (!master) {
     return (
       <div className="master-detail">
-        <button className="btn btn-ghost back-btn" onClick={() => navigate(`${section}/masters`)}>← Назад</button>
+        <button className="btn btn-ghost back-btn" onClick={() => navigate(`${section}/masters`)}>
+          ← Назад
+        </button>
         <EmptyState icon="👤" title="Мастер не найден" />
       </div>
-    )
+    );
   }
 
   const ratingStars = master.stats.avg_rating
     ? '⭐'.repeat(Math.round(master.stats.avg_rating))
-    : '—'
+    : '—';
 
   return (
     <div className="master-detail">
       {/* Header */}
       <div className="detail-header">
-          <button className="btn btn-ghost back-btn" onClick={() => navigate(`${section}/masters`)}>← Назад к мастерам</button>
+        <button className="btn btn-ghost back-btn" onClick={() => navigate(`${section}/masters`)}>
+          ← Назад к мастерам
+        </button>
         <div className="detail-title">
           <h1>{master.name}</h1>
           <div className="detail-meta">
-            <span className={`status-badge ${master.status === 'active' ? 'status-active' : 'status-inactive'}`}>
-              {master.status === 'active' ? 'Активен' : master.status === 'suspended' ? 'Заблокирован' : 'Неактивен'}
+            <span
+              className={`status-badge ${master.status === 'active' ? 'status-active' : 'status-inactive'}`}
+            >
+              {master.status === 'active'
+                ? 'Активен'
+                : master.status === 'suspended'
+                  ? 'Заблокирован'
+                  : 'Неактивен'}
             </span>
             {master.is_admin && <span className="role-badge role-admin">👑 Суперпользователь</span>}
-            {master.telegram_username && <span className="telegram-link">@{master.telegram_username}</span>}
+            {master.telegram_username && (
+              <span className="telegram-link">@{master.telegram_username}</span>
+            )}
           </div>
         </div>
         <div className="detail-actions">
           <button
             className="btn btn-sm btn-success"
-            onClick={() => superAdminApi.toggleMasterActive(master.id).then(() => loadMaster()).catch(() => toast.error('Ошибка'))}
+            onClick={() =>
+              superAdminApi
+                .toggleMasterActive(master.id)
+                .then(() => loadMaster())
+                .catch(() => toast.error('Ошибка'))
+            }
           >
             {master.is_active ? '🔒 Заблокировать' : '🔓 Разблокировать'}
           </button>
           <button
             className="btn btn-sm btn-warn"
-            onClick={() => superAdminApi.suspendMaster(master.id).then(() => loadMaster()).catch(() => toast.error('Ошибка'))}
+            onClick={() =>
+              superAdminApi
+                .suspendMaster(master.id)
+                .then(() => loadMaster())
+                .catch(() => toast.error('Ошибка'))
+            }
           >
             ⏸ Заблокировать навсегда
           </button>
@@ -307,7 +332,9 @@ function MasterDetailPage() {
             </div>
             <div className="stat-card card">
               <div className="stat-icon">💰</div>
-              <div className="stat-value">{master.stats.total_revenue.toLocaleString('ru-RU')} ₽</div>
+              <div className="stat-value">
+                {master.stats.total_revenue.toLocaleString('ru-RU')} ₽
+              </div>
               <div className="stat-label">Выручка</div>
             </div>
             <div className="stat-card card">
@@ -336,14 +363,16 @@ function MasterDetailPage() {
                 <EmptyState icon="📅" title="Нет записей" />
               ) : (
                 <div className="appointment-list">
-                  {master.recent_appointments.map(a => (
+                  {master.recent_appointments.map((a) => (
                     <div key={a.id} className="appointment-row">
                       <div>
                         <div className="appt-client">{a.client_name || '—'}</div>
                         <div className="appt-service">{a.service_name || '—'}</div>
                       </div>
                       <div className="appt-date">
-                        {a.appointment_date ? new Date(a.appointment_date).toLocaleDateString('ru-RU') : '—'}
+                        {a.appointment_date
+                          ? new Date(a.appointment_date).toLocaleDateString('ru-RU')
+                          : '—'}
                       </div>
                       <span className={`status-badge status-${a.status}`}>
                         {statusLabels[a.status] || a.status}
@@ -368,7 +397,9 @@ function MasterDetailPage() {
                 </div>
                 <div className="info-row">
                   <span className="info-label">Telegram:</span>
-                  <span className="info-value">{master.telegram_username ? `@${master.telegram_username}` : '—'}</span>
+                  <span className="info-value">
+                    {master.telegram_username ? `@${master.telegram_username}` : '—'}
+                  </span>
                 </div>
                 <div className="info-row">
                   <span className="info-label">Тариф:</span>
@@ -376,20 +407,32 @@ function MasterDetailPage() {
                     <select
                       value={tariffDraft || master.tariff || 'trial'}
                       onChange={(e) => setTariffDraft(e.target.value)}
-                      style={{ padding: '4px 8px', borderRadius: 6, border: '2px solid #e0e0e0', fontSize: 13 }}
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: 6,
+                        border: '2px solid #e0e0e0',
+                        fontSize: 13,
+                      }}
                       title="Сменить тариф"
                     >
                       <option value="trial">🆓 Триал</option>
                       <option value="basic">Базовый</option>
                       <option value="pro">Профи</option>
                       <option value="business">Бизнес</option>
-                    </select>
-                    {' '}
+                    </select>{' '}
                     <input
                       type="date"
-                      value={trialDraft || (master.trial_ends_at ? master.trial_ends_at.slice(0, 10) : '')}
+                      value={
+                        trialDraft ||
+                        (master.trial_ends_at ? master.trial_ends_at.slice(0, 10) : '')
+                      }
                       onChange={(e) => setTrialDraft(e.target.value)}
-                      style={{ padding: '4px 8px', borderRadius: 6, border: '2px solid #e0e0e0', fontSize: 13 }}
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: 6,
+                        border: '2px solid #e0e0e0',
+                        fontSize: 13,
+                      }}
                       title="Конец триала"
                     />
                     {(tariffDraft || trialDraft) && (
@@ -398,20 +441,20 @@ function MasterDetailPage() {
                         style={{ marginLeft: 8 }}
                         disabled={actionBusy}
                         onClick={async () => {
-                          setActionBusy(true)
+                          setActionBusy(true);
                           try {
-                            const patch: { tariff?: string; trial_ends_at?: string } = {}
-                            if (tariffDraft) patch.tariff = tariffDraft
-                            if (trialDraft) patch.trial_ends_at = trialDraft
-                            await superAdminApi.updateMaster(master.id, patch)
-                            toast.success('Тариф обновлён')
-                            setTariffDraft('')
-                            setTrialDraft('')
-                            loadMaster()
+                            const patch: { tariff?: string; trial_ends_at?: string } = {};
+                            if (tariffDraft) patch.tariff = tariffDraft;
+                            if (trialDraft) patch.trial_ends_at = trialDraft;
+                            await superAdminApi.updateMaster(master.id, patch);
+                            toast.success('Тариф обновлён');
+                            setTariffDraft('');
+                            setTrialDraft('');
+                            loadMaster();
                           } catch (err: unknown) {
-                            toast.error(getApiErrorMessage(err, 'Не удалось обновить тариф'))
+                            toast.error(getApiErrorMessage(err, 'Не удалось обновить тариф'));
                           } finally {
-                            setActionBusy(false)
+                            setActionBusy(false);
                           }
                         }}
                       >
@@ -426,7 +469,11 @@ function MasterDetailPage() {
                 </div>
                 <div className="info-row">
                   <span className="info-label">Создан:</span>
-                  <span className="info-value">{master.created_at ? new Date(master.created_at).toLocaleDateString('ru-RU') : '—'}</span>
+                  <span className="info-value">
+                    {master.created_at
+                      ? new Date(master.created_at).toLocaleDateString('ru-RU')
+                      : '—'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -444,18 +491,28 @@ function MasterDetailPage() {
               </div>
             </div>
             {master.recent_reviews.length === 0 ? (
-              <EmptyState icon="⭐" title="Отзывов нет" description="Отзывы появятся после первых завершённых записей" />
+              <EmptyState
+                icon="⭐"
+                title="Отзывов нет"
+                description="Отзывы появятся после первых завершённых записей"
+              />
             ) : (
               <div className="reviews-list">
-                {master.recent_reviews.map(review => (
+                {master.recent_reviews.map((review) => (
                   <div key={review.id} className="review-card">
                     <div className="review-header">
                       <span className="review-client">{review.client_name}</span>
-                      <span className="review-rating">{'⭐'.repeat(Math.round(review.rating))}</span>
+                      <span className="review-rating">
+                        {'⭐'.repeat(Math.round(review.rating))}
+                      </span>
                     </div>
                     {review.comment && <p className="review-comment">{review.comment}</p>}
                     <div className="review-meta">
-                      <span>{review.created_at ? new Date(review.created_at).toLocaleDateString('ru-RU') : ''}</span>
+                      <span>
+                        {review.created_at
+                          ? new Date(review.created_at).toLocaleDateString('ru-RU')
+                          : ''}
+                      </span>
                       {review.is_published ? (
                         <span className="published-badge">✓ Опубликован</span>
                       ) : (
@@ -475,14 +532,20 @@ function MasterDetailPage() {
             {auditLoading ? (
               <Skeleton rows={3} height="48px" />
             ) : auditLogs.length === 0 ? (
-              <EmptyState icon="📋" title="Логи пусты" description="Действия с мастером появятся в логах" />
+              <EmptyState
+                icon="📋"
+                title="Логи пусты"
+                description="Действия с мастером появятся в логах"
+              />
             ) : (
               <div className="audit-list">
-                {auditLogs.map(log => (
+                {auditLogs.map((log) => (
                   <div key={log.id} className="audit-item">
                     <span className={`audit-level audit-${log.level}`}>{log.level}</span>
                     <div className="audit-content">
-                      <div className="audit-action">{log.action} — {log.entity_type} #{log.entity_id}</div>
+                      <div className="audit-action">
+                        {log.action} — {log.entity_type} #{log.entity_id}
+                      </div>
                       {log.details && <div className="audit-details">{log.details}</div>}
                     </div>
                     <span className="audit-time">
@@ -510,17 +573,23 @@ function MasterDetailPage() {
             {sessionsLoading ? (
               <Skeleton rows={2} height="48px" />
             ) : sessions.length === 0 ? (
-              <EmptyState icon="🔐" title="Нет активных сессий" description="Мастер нигде не вошёл" />
+              <EmptyState
+                icon="🔐"
+                title="Нет активных сессий"
+                description="Мастер нигде не вошёл"
+              />
             ) : (
               <div className="audit-list">
-                {sessions.map(s => (
+                {sessions.map((s) => (
                   <div key={s.id} className="audit-item">
                     <span className="audit-level audit-info">active</span>
                     <div className="audit-content">
                       <div className="audit-action">Сессия #{s.id}</div>
                       <div className="audit-details">
-                        создана {s.created_at ? new Date(s.created_at).toLocaleString('ru-RU') : '—'},
-                        истекает {s.expires_at ? new Date(s.expires_at).toLocaleString('ru-RU') : '—'}
+                        создана{' '}
+                        {s.created_at ? new Date(s.created_at).toLocaleString('ru-RU') : '—'},
+                        истекает{' '}
+                        {s.expires_at ? new Date(s.expires_at).toLocaleString('ru-RU') : '—'}
                       </div>
                     </div>
                   </div>
@@ -533,7 +602,10 @@ function MasterDetailPage() {
 
       <Modal
         open={showPasswordModal}
-        onClose={() => { setShowPasswordModal(false); setNewPassword('') }}
+        onClose={() => {
+          setShowPasswordModal(false);
+          setNewPassword('');
+        }}
         title="🔑 Новый пароль мастера"
       >
         <form onSubmit={handlePasswordReset}>
@@ -550,7 +622,11 @@ function MasterDetailPage() {
             />
           </div>
           <div className="modal-actions">
-            <button type="button" className="btn btn-ghost" onClick={() => setShowPasswordModal(false)}>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => setShowPasswordModal(false)}
+            >
               Отмена
             </button>
             <button type="submit" className="btn btn-primary" disabled={actionBusy}>
@@ -560,7 +636,7 @@ function MasterDetailPage() {
         </form>
       </Modal>
     </div>
-  )
+  );
 }
 
-export default MasterDetailPage
+export default MasterDetailPage;

@@ -1,58 +1,63 @@
-import { useEffect, useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
-import { adminApi } from '../../api/client'
-import type { DashboardStats, AdminStats } from '../../api/types'
-import { Skeleton, EmptyState, StatusBadge } from '../../components/common'
-import { getApiErrorMessage } from '../../utils/apiError'
-import { useSectionPrefix, SUPER_PREFIX } from '../../utils/section'
-import './DashboardPage.css'
-import { statusLabels } from '../../constants/statusLabels'
+import { useEffect, useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { adminApi } from '../../api/client';
+import type { DashboardStats, AdminStats } from '../../api/types';
+import { Skeleton, EmptyState, StatusBadge } from '../../components/common';
+import { getApiErrorMessage } from '../../utils/apiError';
+import { useSectionPrefix, SUPER_PREFIX } from '../../utils/section';
+import './DashboardPage.css';
+import { statusLabels } from '../../constants/statusLabels';
 
 function DashboardPage() {
-  const navigate = useNavigate()
-  const section = useSectionPrefix()
-  const isSuperSection = section === SUPER_PREFIX
-  const [stats, setStats] = useState<DashboardStats | AdminStats | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const navigate = useNavigate();
+  const section = useSectionPrefix();
+  const isSuperSection = section === SUPER_PREFIX;
+  const [stats, setStats] = useState<DashboardStats | AdminStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    setLoading(true)
-    adminApi.getDashboard()
-      .then(r => {
-        setStats(r.data)
+    setLoading(true);
+    adminApi
+      .getDashboard()
+      .then((r) => {
+        setStats(r.data);
       })
       .catch((err: any) => {
-        console.error('Dashboard error:', err)
+        console.error('Dashboard error:', err);
         if (err.response?.status === 401) {
-          window.location.href = '/admin/login'
+          window.location.href = '/admin/login';
         } else {
-          const detail = getApiErrorMessage(err, 'Неизвестная ошибка')
-          setError(`Ошибка загрузки: ${detail}`)
+          const detail = getApiErrorMessage(err, 'Неизвестная ошибка');
+          setError(`Ошибка загрузки: ${detail}`);
         }
       })
-      .finally(() => setLoading(false))
-  }, [])
+      .finally(() => setLoading(false));
+  }, []);
 
-  if (error) return <div><div className="error-message">{error}</div></div>
-  if (!stats) return null
-
+  if (error)
+    return (
+      <div>
+        <div className="error-message">{error}</div>
+      </div>
+    );
+  if (!stats) return null;
 
   // Check if this is global stats (superadmin)
-  const isGlobal = 'total_masters' in stats
-  const g = stats as AdminStats
+  const isGlobal = 'total_masters' in stats;
+  const g = stats as AdminStats;
 
   const handleCardClick = (suffix: string) => {
-    navigate(`${section}${suffix}`)
-  }
+    navigate(`${section}${suffix}`);
+  };
 
-  const statusCounts = stats.status_counts || {}
-  const pendingCount = statusCounts['pending'] || 0
-  const confirmedCount = statusCounts['confirmed'] || 0
-  const cancelledCount = statusCounts['cancelled'] || 0
-  const completedCount = statusCounts['completed'] || 0
+  const statusCounts = stats.status_counts || {};
+  const pendingCount = statusCounts['pending'] || 0;
+  const confirmedCount = statusCounts['confirmed'] || 0;
+  const cancelledCount = statusCounts['cancelled'] || 0;
+  const completedCount = statusCounts['completed'] || 0;
 
-  const avgRevenuePerAppointment = completedCount > 0 ? (g.total_revenue || 0) / completedCount : 0
+  const avgRevenuePerAppointment = completedCount > 0 ? (g.total_revenue || 0) / completedCount : 0;
 
   return (
     <div className="dashboard-page">
@@ -103,21 +108,21 @@ function DashboardPage() {
             </div>
             {/* Master-only: the super section has no services page */}
             {!isSuperSection && (
-            <div className="stat-card clickable" onClick={() => handleCardClick('/services')}>
-              <div className="stat-icon">💇</div>
-              <div className="stat-value">{stats.total_services}</div>
-              <div className="stat-label">Услуг</div>
-              <div className="card-hint">Нажмите для перехода →</div>
-            </div>
+              <div className="stat-card clickable" onClick={() => handleCardClick('/services')}>
+                <div className="stat-icon">💇</div>
+                <div className="stat-value">{stats.total_services}</div>
+                <div className="stat-label">Услуг</div>
+                <div className="card-hint">Нажмите для перехода →</div>
+              </div>
             )}
             {/* Global stats only: masters have no revenue section anymore */}
             {isGlobal && (
-            <div className="stat-card clickable" onClick={() => handleCardClick('/revenue')}>
-              <div className="stat-icon">💰</div>
-              <div className="stat-value">{stats.total_revenue.toLocaleString('ru-RU')} ₽</div>
-              <div className="stat-label">Доход</div>
-              <div className="card-hint">Нажмите для перехода →</div>
-            </div>
+              <div className="stat-card clickable" onClick={() => handleCardClick('/revenue')}>
+                <div className="stat-icon">💰</div>
+                <div className="stat-value">{stats.total_revenue.toLocaleString('ru-RU')} ₽</div>
+                <div className="stat-label">Доход</div>
+                <div className="card-hint">Нажмите для перехода →</div>
+              </div>
             )}
           </div>
 
@@ -136,9 +141,15 @@ function DashboardPage() {
                   <span className="revenue-card-title">Завершённые</span>
                 </div>
                 <div className="revenue-card-value">{completedCount}</div>
-                <div className="revenue-card-amount">{(completedCount > 0 ? (g.total_revenue || 0) : 0).toLocaleString('ru-RU')} ₽</div>
+                <div className="revenue-card-amount">
+                  {(completedCount > 0 ? g.total_revenue || 0 : 0).toLocaleString('ru-RU')} ₽
+                </div>
                 <div className="revenue-card-detail">
-                  Ср. чек: {avgRevenuePerAppointment > 0 ? avgRevenuePerAppointment.toLocaleString('ru-RU', { maximumFractionDigits: 0 }) : '—'} ₽
+                  Ср. чек:{' '}
+                  {avgRevenuePerAppointment > 0
+                    ? avgRevenuePerAppointment.toLocaleString('ru-RU', { maximumFractionDigits: 0 })
+                    : '—'}{' '}
+                  ₽
                 </div>
               </div>
 
@@ -186,26 +197,48 @@ function DashboardPage() {
                       </div>
                     </div>
                     <div className="funnel-step">
-                      <div className="funnel-bar confirmed-bar" style={{ width: `${(confirmedCount / stats.total_appointments) * 100}%` }}>
+                      <div
+                        className="funnel-bar confirmed-bar"
+                        style={{ width: `${(confirmedCount / stats.total_appointments) * 100}%` }}
+                      >
                         <span className="funnel-label">Подтверждено</span>
-                        <span className="funnel-value">{confirmedCount} ({Math.round((confirmedCount / stats.total_appointments) * 100)}%)</span>
+                        <span className="funnel-value">
+                          {confirmedCount} (
+                          {Math.round((confirmedCount / stats.total_appointments) * 100)}%)
+                        </span>
                       </div>
                     </div>
                     <div className="funnel-step">
-                      <div className="funnel-bar completed-bar" style={{ width: `${(completedCount / stats.total_appointments) * 100}%` }}>
+                      <div
+                        className="funnel-bar completed-bar"
+                        style={{ width: `${(completedCount / stats.total_appointments) * 100}%` }}
+                      >
                         <span className="funnel-label">Завершено</span>
-                        <span className="funnel-value">{completedCount} ({Math.round((completedCount / stats.total_appointments) * 100)}%)</span>
+                        <span className="funnel-value">
+                          {completedCount} (
+                          {Math.round((completedCount / stats.total_appointments) * 100)}%)
+                        </span>
                       </div>
                     </div>
                     <div className="funnel-step">
-                      <div className="funnel-bar cancelled-bar" style={{ width: `${(cancelledCount / stats.total_appointments) * 100}%` }}>
+                      <div
+                        className="funnel-bar cancelled-bar"
+                        style={{ width: `${(cancelledCount / stats.total_appointments) * 100}%` }}
+                      >
                         <span className="funnel-label">Отменено</span>
-                        <span className="funnel-value">{cancelledCount} ({Math.round((cancelledCount / stats.total_appointments) * 100)}%)</span>
+                        <span className="funnel-value">
+                          {cancelledCount} (
+                          {Math.round((cancelledCount / stats.total_appointments) * 100)}%)
+                        </span>
                       </div>
                     </div>
                   </>
                 ) : (
-                  <EmptyState icon="📊" title="Нет данных" description="Конверсия появится после первых записей" />
+                  <EmptyState
+                    icon="📊"
+                    title="Нет данных"
+                    description="Конверсия появится после первых записей"
+                  />
                 )}
               </div>
             </div>
@@ -213,7 +246,8 @@ function DashboardPage() {
 
           {/* ─── Bottom grid ─── */}
           <div className="dashboard-grid">
-            <div className="card"><h3>Статусы записей</h3>
+            <div className="card">
+              <h3>Статусы записей</h3>
               <div className="status-list">
                 {Object.entries(statusCounts).map(([s, c]) => (
                   <div key={s} className="status-row">
@@ -221,13 +255,24 @@ function DashboardPage() {
                     <span className="status-count">{c}</span>
                   </div>
                 ))}
-                {Object.keys(statusCounts).length === 0 && <EmptyState icon="📅" title="Нет записей" description="Записи появятся после бронирования" />}
+                {Object.keys(statusCounts).length === 0 && (
+                  <EmptyState
+                    icon="📅"
+                    title="Нет записей"
+                    description="Записи появятся после бронирования"
+                  />
+                )}
               </div>
             </div>
             <div className="card">
-              <div className="card-header"><h3>Ближайшие записи</h3><Link to={`${section}/appointments`} className="link">Все →</Link></div>
+              <div className="card-header">
+                <h3>Ближайшие записи</h3>
+                <Link to={`${section}/appointments`} className="link">
+                  Все →
+                </Link>
+              </div>
               <div className="appointment-list">
-                {(g.recent_appointments || []).slice(0, 5).map(a => (
+                {(g.recent_appointments || []).slice(0, 5).map((a) => (
                   <div key={a.id} className="appointment-row">
                     <div className="appt-info">
                       {isGlobal && 'master_name' in a && (
@@ -236,17 +281,30 @@ function DashboardPage() {
                       <span className="appt-client">{a.client_name || '—'}</span>
                       <span className="appt-service">{a.service_name || '—'}</span>
                     </div>
-                    <span className="appt-date">{new Date(a.appointment_date).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                    <span className="appt-date">
+                      {new Date(a.appointment_date).toLocaleString('ru-RU', {
+                        day: 'numeric',
+                        month: 'short',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </span>
                     <StatusBadge status={a.status} className="appt-status" />
                   </div>
                 ))}
-                {(!g.recent_appointments || g.recent_appointments.length === 0) && <EmptyState icon="📭" title="Нет записей" description="Ближайшие записи появятся здесь" />}
+                {(!g.recent_appointments || g.recent_appointments.length === 0) && (
+                  <EmptyState
+                    icon="📭"
+                    title="Нет записей"
+                    description="Ближайшие записи появятся здесь"
+                  />
+                )}
               </div>
             </div>
           </div>
         </>
       )}
     </div>
-  )
+  );
 }
-export default DashboardPage
+export default DashboardPage;

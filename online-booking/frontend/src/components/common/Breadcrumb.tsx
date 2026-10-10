@@ -1,19 +1,19 @@
-import { Link } from 'react-router-dom'
-import { useSectionPrefix } from '../../utils/section'
-import './SharedComponents.css'
+import { Link } from 'react-router-dom';
+import { useSectionPrefix } from '../../utils/section';
+import './SharedComponents.css';
 
 interface BreadcrumbItem {
-  label: string
-  path: string
+  label: string;
+  path: string;
 }
 
 interface BreadcrumbProps {
-  items: BreadcrumbItem[]
+  items: BreadcrumbItem[];
 }
 
 export default function Breadcrumb({ items }: BreadcrumbProps) {
-  const section = useSectionPrefix()
-  if (items.length === 0) return null
+  const section = useSectionPrefix();
+  if (items.length === 0) return null;
 
   return (
     <nav className="breadcrumb" aria-label="Навигационная цепочка">
@@ -31,5 +31,5 @@ export default function Breadcrumb({ items }: BreadcrumbProps) {
         </span>
       ))}
     </nav>
-  )
+  );
 }

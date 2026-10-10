@@ -440,6 +440,15 @@ npx vitest                              # Watch mode
 
 ## 📚 История версий
 
+### [1.14.0] — 2026-10-10
+- **CI-ворота:** `--cov-fail-under=55` в backend-тестах, `prettier --check` во фронте; 2 затенённых теста переименованы (`toggle_active_self`, `master/client_email_conflict`)
+- **Prettier:** стиль приведён к коду (single quotes), `--write` по 95 файлам, конфиг реально читается (был CJS-без-расширения)
+- **Доки:** `TESTING.md` сжат 1470→150 строк (актуальные счётчики, без дублей граблей)
+- **Deploy:** `deploy.yml` разбит на `scripts/deploy_{db,frontend,finalize}.sh` (дословно, `bash -n` чисто, абсолютные пути)
+- **Фронт-типы:** `StatsBase` (Dashboard/Admin/Master), `MasterDetail extends Master`; Services — настоящий `Pager` (API пагинирован); Logs — `ResizableTh` + `tables.css`
+- **Телефон:** один формат — маска `PhoneInput`; `libphonenumber-js` + `formatPhone.ts` удалены
+- Masters без пагинации осознанно: API не отдаёт `total` (limit 100 хватает); legacy `/login` живёт — его использует LoginPage
+
 ### [1.13.0] — 2026-10-10
 - **Squash миграций:** 12 файлов → один `5280b944554f_baseline_full_schema` (проверено: upgrade с нуля == `Base.metadata`); `env.py` — транзакционный DDL вместо AUTOCOMMIT; deploy штампует старые прод-БД (`stamp` при head `b2c3d4e5f6a7`), данные не трогаются; `docs/DB.md` обновлён
 - **Сиды — один канон:** новый `seed_common.py` (география 7 стран/457 городов, ревью с честными join вместо lazy-доступа); `seed_cities`/`seed_test_data`/`fix_production_db`/`create_minimal_reviews`/`seed_production` — тонкие делегаты (-520/+50 строк); `_hash_pw` ×2 → `hash_password`; суперюзер теперь гарантирует `MasterProfile`

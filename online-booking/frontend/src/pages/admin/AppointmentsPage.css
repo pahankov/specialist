@@ -81,7 +81,7 @@
   text-align: center;
 }
 
-.col-checkbox input[type="checkbox"] {
+.col-checkbox input[type='checkbox'] {
   width: 18px;
   height: 18px;
   cursor: pointer;

@@ -1,6 +1,6 @@
-import BaseLayout from './BaseLayout'
-import { SUPER_PREFIX } from '../../utils/section'
-import './SuperAdminLayout.css'
+import BaseLayout from './BaseLayout';
+import { SUPER_PREFIX } from '../../utils/section';
+import './SuperAdminLayout.css';
 
 const SUPER_NAV = [
   { path: `${SUPER_PREFIX}/dashboard`, label: '📊 Дашборд' },
@@ -10,7 +10,7 @@ const SUPER_NAV = [
   { path: `${SUPER_PREFIX}/clients`, label: '👥 Все клиенты' },
   { path: `${SUPER_PREFIX}/schedule`, label: '🕐 Расписание' },
   { path: `${SUPER_PREFIX}/logs`, label: '📋 Логи' },
-]
+];
 
 /**
  * Standalone superadmin shell: own URL section (/super), own navigation,
@@ -25,7 +25,7 @@ function SuperAdminLayout() {
       userFallbackName="Суперпользователь"
       themeClass="super-layout"
     />
-  )
+  );
 }
 
-export default SuperAdminLayout
+export default SuperAdminLayout;

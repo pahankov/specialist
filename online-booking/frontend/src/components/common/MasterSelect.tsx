@@ -1,26 +1,26 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { superAdminApi } from '../../api/client'
-import './SelectDropdown.css'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { superAdminApi } from '../../api/client';
+import './SelectDropdown.css';
 
 export interface MasterOption {
-  id: number
-  name: string
-  is_active?: boolean
-  tariff?: string
+  id: number;
+  name: string;
+  is_active?: boolean;
+  tariff?: string;
 }
 
 interface MasterSelectProps {
-  value: number | ''
-  onChange: (id: number | '') => void
-  label?: string
+  value: number | '';
+  onChange: (id: number | '') => void;
+  label?: string;
   /** Show "Все мастера" reset option. Default true. */
-  allowAll?: boolean
-  allLabel?: string
-  masters?: MasterOption[]
-  style?: CSSProperties
+  allowAll?: boolean;
+  allLabel?: string;
+  masters?: MasterOption[];
+  style?: CSSProperties;
 }
 
-let cachedMasters: MasterOption[] | null = null
+let cachedMasters: MasterOption[] | null = null;
 
 /** Master picker with live name filtering (replaces 4 copy-pasted selects). */
 export default function MasterSelect({
@@ -32,61 +32,69 @@ export default function MasterSelect({
   masters: mastersProp,
   style,
 }: MasterSelectProps) {
-  const [masters, setMasters] = useState<MasterOption[]>(mastersProp ?? cachedMasters ?? [])
-  const [query, setQuery] = useState('')
-  const [open, setOpen] = useState(false)
-  const boxRef = useRef<HTMLDivElement>(null)
+  const [masters, setMasters] = useState<MasterOption[]>(mastersProp ?? cachedMasters ?? []);
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+  const boxRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (mastersProp) {
-      setMasters(mastersProp)
-      return
+      setMasters(mastersProp);
+      return;
     }
     if (cachedMasters) {
-      setMasters(cachedMasters)
-      return
+      setMasters(cachedMasters);
+      return;
     }
-    let cancelled = false
-    superAdminApi.getAllMasters()
-      .then(r => {
-        if (cancelled) return
-        const list = (r.data as MasterOption[]).map(m => ({
-          id: m.id, name: m.name, is_active: m.is_active, tariff: m.tariff,
-        }))
-        cachedMasters = list
-        setMasters(list)
+    let cancelled = false;
+    superAdminApi
+      .getAllMasters()
+      .then((r) => {
+        if (cancelled) return;
+        const list = (r.data as MasterOption[]).map((m) => ({
+          id: m.id,
+          name: m.name,
+          is_active: m.is_active,
+          tariff: m.tariff,
+        }));
+        cachedMasters = list;
+        setMasters(list);
       })
-      .catch(() => { /* ignore: empty list */ })
-    return () => { cancelled = true }
-  }, [mastersProp])
+      .catch(() => {
+        /* ignore: empty list */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mastersProp]);
 
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
-      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false)
-    }
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
+    };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false)
-    }
-    document.addEventListener('mousedown', onDown)
-    document.addEventListener('keydown', onKey)
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
     return () => {
-      document.removeEventListener('mousedown', onDown)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [])
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, []);
 
-  const selected = masters.find(m => m.id === value) ?? null
+  const selected = masters.find((m) => m.id === value) ?? null;
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    if (!q) return masters
-    return masters.filter(m => m.name.toLowerCase().includes(q))
-  }, [masters, query])
+    const q = query.trim().toLowerCase();
+    if (!q) return masters;
+    return masters.filter((m) => m.name.toLowerCase().includes(q));
+  }, [masters, query]);
 
   const pick = (id: number | '') => {
-    onChange(id)
-    setQuery('')
-    setOpen(false)
-  }
+    onChange(id);
+    setQuery('');
+    setOpen(false);
+  };
 
   return (
     <div className="master-select" ref={boxRef} style={style}>
@@ -95,7 +103,10 @@ export default function MasterSelect({
         <input
           type="text"
           value={open ? query : (selected?.name ?? '')}
-          onChange={(e) => { setQuery(e.target.value); setOpen(true) }}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setOpen(true);
+          }}
           onFocus={() => setOpen(true)}
           placeholder={allowAll ? allLabel : 'Выберите мастера...'}
           className="master-select-input"
@@ -127,7 +138,7 @@ export default function MasterSelect({
           {filtered.length === 0 ? (
             <div className="master-select-empty">Ничего не найдено</div>
           ) : (
-            filtered.map(m => (
+            filtered.map((m) => (
               <div
                 key={m.id}
                 className={`master-select-item${m.id === value ? ' selected' : ''}`}
@@ -146,5 +157,5 @@ export default function MasterSelect({
         </div>
       )}
     </div>
-  )
+  );
 }
