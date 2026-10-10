@@ -257,6 +257,7 @@
 | channel | VARCHAR(10) | NOT NULL, DEFAULT 'sms' | 'sms' — код вводится на сайте; 'max' — код шлётся боту |
 | max_user_id | BIGINT | NULLABLE | MAX sender, подтвердивший код (факт подтверждения) |
 | max_user_name | VARCHAR(200) | NULLABLE | Имя из MAX (дефолт имени нового клиента) |
+| max_verified_phone | BOOLEAN | NOT NULL, DEFAULT FALSE | TRUE, если номер пришёл через `request_contact` с верным HMAC (доказанно привязан к MAX-аккаунту → `is_verified=True`) |
 
 ---
 

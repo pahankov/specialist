@@ -18,17 +18,18 @@
 | `POST` | `/api/v1/auth/logout` | Выход (очистка cookies) |
 | `POST` | `/api/v1/auth/client/login` | Legacy вход клиента по телефону |
 
-### MAX chat-bot auth (альтернатива SMS; бот @se14458556_bot)
+### MAX chat-bot auth (SMS-style; бот @se14458556_bot)
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
-| `POST` | `/api/v1/auth/max/start` | Выдать 6-значный код для MAX-бота (показывается на сайте; 10/min) |
-| `POST` | `/api/v1/auth/max/status` | Poll подтверждения; при `verified` — JWT-сессия + cookies (10/min) |
+| `POST` | `/api/v1/auth/max/start` | Заявка на код (код НЕ возвращается — бот пришлёт его в диалог; 10/min) |
+| `POST` | `/api/v1/auth/max/verify` | Проверка кода с сайта, JWT-сессия + cookies (10/min) |
 | `POST` | `/api/max/webhook` | Приём MAX Bot API updates (`message_created`, `bot_started`; секрет `X-Max-Bot-Api-Secret`) |
 
-Флоу: сайт показывает код → юзер шлёт его боту → webhook сверяет хэш с `otp_codes`
-(channel='max') → сайт по poll получает `verified` и входит. Имя из MAX — только
-дефолт для нового клиента (телефон при этом считается неподтверждённым,
-`is_verified=False`, как в SMS-флоу).
+Флоу: сайт берёт телефон → юзер делится номером с ботом (текст или кнопка
+`request_contact`) → бот присылает код в диалог (+ кнопка «Скопировать код») →
+юзер вводит код на сайте. Номер из `request_contact` с верным HMAC — доказанно
+привязан к MAX-аккаунту (`is_verified=True`); набранный текстом — нет
+(`is_verified=False`, как в SMS-флоу). Имя из MAX — дефолт нового клиента.
 
 ### Geography
 | Метод | Endpoint | Описание |

@@ -1,6 +1,6 @@
-"""Pydantic schemas for MAX chat-bot auth."""
+"""Pydantic schemas for MAX chat-bot auth (SMS-style flow)."""
 from pydantic import BaseModel, field_validator
-from typing import Literal, Optional
+from typing import Optional
 
 from app.utils.phone import normalize_phone
 
@@ -15,23 +15,30 @@ class MaxStartRequest(BaseModel):
 
 
 class MaxStartResponse(BaseModel):
-    code: str  # shown on site; user retypes it to the MAX bot
+    # NOTE: no code here — the bot delivers it into the MAX dialog.
     expires_in: int  # seconds
     bot_username: str
     bot_url: str
 
 
-class MaxStatusRequest(BaseModel):
+class MaxVerifyRequest(BaseModel):
     phone: str
+    code: str
 
     @field_validator('phone')
     @classmethod
     def validate_phone(cls, v: str) -> str:
         return normalize_phone(v)
 
+    @field_validator('code')
+    @classmethod
+    def validate_code(cls, v: str) -> str:
+        if not v.isdigit() or len(v) != 6:
+            raise ValueError('Код должен содержать 6 цифр')
+        return v
 
-class MaxStatusResponse(BaseModel):
-    status: Literal["pending", "verified", "expired", "disabled"]
-    access_token: Optional[str] = None
+
+class MaxVerifyResponse(BaseModel):
+    access_token: str
     token_type: str = "bearer"
     is_new_user: Optional[bool] = None

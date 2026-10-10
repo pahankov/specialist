@@ -59,21 +59,10 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [showRegisterPassword, setShowRegisterPassword] = useState(false);
 
-  // MAX chat-bot auth: code shown on site, user retypes it to the bot
+  // MAX chat-bot auth: code arrives INTO the MAX dialog, user types it on site
   const [maxPhone, setMaxPhone] = useState('');
-  const [maxCode, setMaxCode] = useState<MaxStartResponse | null>(null);
-  const [maxWaiting, setMaxWaiting] = useState(false);
-  const maxTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const stopMaxPolling = () => {
-    if (maxTimer.current) {
-      clearInterval(maxTimer.current);
-      maxTimer.current = null;
-    }
-  };
-
-  // Stop polling when the modal unmounts
-  useEffect(() => stopMaxPolling, []);
+  const [maxOffer, setMaxOffer] = useState<MaxStartResponse | null>(null);
+  const [maxCodeInput, setMaxCodeInput] = useState('');
 
   // DAData city autocomplete (debounced: each keystroke must not burn quota)
   const [citySuggestions, setCitySuggestions] = useState<DadataSuggestion[]>([]);
@@ -178,46 +167,40 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
     setLoading(true);
     try {
       const resp = await authApi.maxStart(maxPhone);
-      setMaxCode(resp.data);
-      setMaxWaiting(true);
-      stopMaxPolling();
-      const startedAt = Date.now();
-      const ttlMs = (resp.data.expires_in + 30) * 1000;
-      maxTimer.current = setInterval(async () => {
-        try {
-          const st = await authApi.maxStatus(maxPhone);
-          if (st.data.status === 'verified') {
-            stopMaxPolling();
-            setMaxWaiting(false);
-            toast.success('Вход через MAX выполнен!');
-            landByRole();
-          } else if (st.data.status !== 'pending' || Date.now() - startedAt > ttlMs) {
-            stopMaxPolling();
-            setMaxWaiting(false);
-            toast.error('Код истёк — запросите новый');
-          }
-        } catch {
-          /* network blip: keep polling until timeout */
-        }
-      }, 3000);
+      setMaxOffer(resp.data);
+      setMaxCodeInput('');
+      toast.success('Откройте бота в MAX — код придёт туда');
+    } catch (err: any) {
+      toast.error(err.response?.status === 503 ? 'Вход через MAX не настроен' : 'Ошибка');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMaxVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!/^\d{6}$/.test(maxCodeInput.trim())) {
+      toast.error('Код — 6 цифр из сообщения бота');
+      return;
+    }
+    setLoading(true);
+    try {
+      const resp = await authApi.maxVerify(maxPhone, maxCodeInput.trim());
+      toast.success(
+        resp.data.is_new_user ? 'Добро пожаловать! Аккаунт создан.' : 'Вход через MAX выполнен!',
+      );
+      landByRole();
     } catch (err: any) {
       const detail = err.response?.data?.detail;
-      toast.error(
-        err.response?.status === 503
-          ? 'Вход через MAX не настроен'
-          : typeof detail === 'string'
-            ? detail
-            : 'Ошибка',
-      );
+      toast.error(typeof detail === 'string' ? detail : 'Неверный код');
     } finally {
       setLoading(false);
     }
   };
 
   const resetMaxState = () => {
-    stopMaxPolling();
-    setMaxCode(null);
-    setMaxWaiting(false);
+    setMaxOffer(null);
+    setMaxCodeInput('');
   };
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -293,6 +276,89 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
     setCityInput('');
     setCitySuggestions([]);
   };
+
+  const maxForm = !maxOffer ? (
+    <form onSubmit={handleMaxStart}>
+      <div className="login-group">
+        <label>Телефон *</label>
+        <PhoneInput
+          value={maxPhone}
+          onChange={setMaxPhone}
+          placeholder="+7 (999) 123-45-67"
+          required
+        />
+      </div>
+
+      <button type="submit" className="btn btn-primary btn-submit" disabled={loading}>
+        {loading ? 'Отправляем...' : 'Получить код в MAX'}
+      </button>
+
+      <p className="login-footer">
+        <a
+          href="#"
+          onClick={(e) => {
+            e.preventDefault();
+            switchMode('login');
+          }}
+        >
+          Войти по паролю
+        </a>
+      </p>
+    </form>
+  ) : (
+    <form onSubmit={handleMaxVerify}>
+      <div className="max-code-box">
+        <p>
+          Бот пришлёт код в MAX
+          {maxOffer.bot_url ? (
+            <>
+              {' '}
+              (
+              <a href={maxOffer.bot_url} target="_blank" rel="noreferrer">
+                открыть {maxOffer.bot_username}
+              </a>
+              )
+            </>
+          ) : (
+            <> — найдите {maxOffer.bot_username} вручную</>
+          )}
+          . Введите его ниже:
+        </p>
+        <input
+          className="max-code-input"
+          value={maxCodeInput}
+          onChange={(e) => setMaxCodeInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+          placeholder="––––––"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          required
+        />
+        <button type="submit" className="btn btn-primary btn-submit" disabled={loading}>
+          {loading ? 'Проверяем...' : 'Войти'}
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost"
+          style={{ marginTop: 8 }}
+          onClick={resetMaxState}
+        >
+          Запросить новый код
+        </button>
+      </div>
+
+      <p className="login-footer">
+        <a
+          href="#"
+          onClick={(e) => {
+            e.preventDefault();
+            switchMode('login');
+          }}
+        >
+          Войти по паролю
+        </a>
+      </p>
+    </form>
+  );
 
   return (
     <Modal
@@ -390,64 +456,8 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
           </p>
         </form>
       ) : mode === 'max' ? (
-        /* ─── MAX CHAT-BOT FORM ─── */
-        <form onSubmit={handleMaxStart}>
-          <div className="login-group">
-            <label>Телефон *</label>
-            <PhoneInput
-              value={maxPhone}
-              onChange={setMaxPhone}
-              placeholder="+7 (999) 123-45-67"
-              required
-            />
-          </div>
-
-          {!maxCode ? (
-            <button type="submit" className="btn btn-primary btn-submit" disabled={loading}>
-              {loading ? 'Отправляем...' : 'Получить код'}
-            </button>
-          ) : (
-            <div className="max-code-box">
-              <p>Отправьте этот код нашему боту в MAX:</p>
-              <div className="max-code">{maxCode.code}</div>
-              {maxCode.bot_url ? (
-                <a
-                  className="btn btn-primary btn-submit"
-                  href={maxCode.bot_url}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Открыть бота {maxCode.bot_username}
-                </a>
-              ) : (
-                <p>
-                  Найдите бота <strong>{maxCode.bot_username}</strong> в MAX вручную
-                </p>
-              )}
-              {maxWaiting && <p className="max-waiting">Ждём подтверждение… вход произойдёт сам</p>}
-              <button
-                type="button"
-                className="btn btn-ghost"
-                style={{ marginTop: 8 }}
-                onClick={resetMaxState}
-              >
-                Запросить новый код
-              </button>
-            </div>
-          )}
-
-          <p className="login-footer">
-            <a
-              href="#"
-              onClick={(e) => {
-                e.preventDefault();
-                switchMode('login');
-              }}
-            >
-              Войти по паролю
-            </a>
-          </p>
-        </form>
+        /* MAX CHAT-BOT FORM (SMS-style: code arrives in MAX, typed here) */
+        maxForm
       ) : (
         /* ─── REGISTER FORM ─── */
         <form onSubmit={handleRegister}>

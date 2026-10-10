@@ -221,35 +221,30 @@
   color: #333;
 }
 
-.max-code {
-  font-size: 40px;
+.max-code-input {
+  width: 100%;
+  font-size: 32px;
   font-weight: 800;
-  letter-spacing: 12px;
-  text-indent: 12px;
+  letter-spacing: 10px;
+  text-indent: 10px;
+  text-align: center;
   color: #4338ca;
+  border: 2px solid #c7d2fe;
+  border-radius: 12px;
+  padding: 12px 8px;
   margin-bottom: 16px;
+  box-sizing: border-box;
   font-variant-numeric: tabular-nums;
+}
+
+.max-code-input:focus {
+  outline: none;
+  border-color: #667eea;
 }
 
 .max-code-box .btn-submit {
   width: 100%;
   margin-bottom: 4px;
-}
-
-.max-waiting {
-  color: #667eea !important;
-  font-weight: 600;
-  animation: maxPulse 1.5s ease-in-out infinite;
-}
-
-@keyframes maxPulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.4;
-  }
 }
 
 /* ─── Responsive ─── */

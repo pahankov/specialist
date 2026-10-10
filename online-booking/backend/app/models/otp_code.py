@@ -19,12 +19,15 @@ class OtpCode(Base):
     expires_at = Column(DateTime(timezone=True), nullable=False)
     is_used = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    # Auth channel: 'sms' (code typed on site) or 'max' (code sent to MAX bot).
-    # For 'max', max_user_id being set means the bot confirmed the code
-    # (is_used flips only when the site session is issued via /max/status).
+    # Auth channel: 'sms' (code typed on site) or 'max' (code delivered to MAX dialog).
+    # For 'max', max_user_id being set means the bot delivered a code for the
+    # request (is_used flips only when the site session is issued via /max/verify).
     channel = Column(String(10), nullable=False, default="sms")
     max_user_id = Column(BigInteger, nullable=True)
     max_user_name = Column(String(200), nullable=True)
+    # True when the dialog number came from a request_contact share whose
+    # HMAC matched (proven MAX-bound number -> user created verified).
+    max_verified_phone = Column(Boolean, nullable=False, default=False)
 
     def __repr__(self):
         return f"<OtpCode(phone={self.phone}, used={self.is_used})>"

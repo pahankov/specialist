@@ -1,4 +1,4 @@
-"""MAX chat-bot auth endpoints + webhook receiver."""
+"""MAX chat-bot auth endpoints + webhook receiver (SMS-style flow)."""
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -36,32 +36,27 @@ async def max_start(
     req: schemas.MaxStartRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    """Issue a 6-digit code shown on site; user retypes it to the MAX bot."""
+    """Register a pending MAX request. The code goes to the MAX dialog, not here."""
     if not settings.max_enabled:
         raise HTTPException(status_code=503, detail="Вход через MAX не настроен")
-    code, ttl = await service.start_max_auth(req.phone, db)
-    return {
-        "code": code,
-        "expires_in": ttl,
-        **_bot_card(),
-    }
+    ttl = await service.start_max_auth(req.phone, db)
+    return {"expires_in": ttl, **_bot_card()}
 
 
-@router.post("/max/status", response_model=schemas.MaxStatusResponse)
+@router.post("/max/verify", response_model=schemas.MaxVerifyResponse)
 @limiter.limit("10/minute")
-async def max_status(
+async def max_verify(
     request: Request,
     response: Response,
-    req: schemas.MaxStatusRequest,
+    req: schemas.MaxVerifyRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    """Poll bot confirmation. Issues the JWT session once (sets cookies)."""
+    """Check the dialog-delivered code, mint the JWT session (sets cookies)."""
     if not settings.max_enabled:
-        return {"status": "disabled", "token_type": "bearer"}
-    state = await service.get_max_status(req.phone, db)
-    if state != "verified":
-        return {"status": state, "token_type": "bearer"}
-    access_token, user, is_new = await service.complete_max_session(req.phone, db)
+        raise HTTPException(status_code=503, detail="Вход через MAX не настроен")
+    access_token, user, is_new = await service.verify_max_code(
+        req.phone, req.code, db
+    )
     cookie_token = await service.get_latest_refresh_token_value(db, user.id)
     set_auth_cookies(response, access_token, cookie_token)
     await log_action(
@@ -70,7 +65,6 @@ async def max_status(
     )
     await db.commit()
     return {
-        "status": "verified",
         "access_token": access_token,
         "token_type": "bearer",
         "is_new_user": is_new,
@@ -103,35 +97,50 @@ async def max_webhook(request: Request, db: AsyncSession = Depends(get_db)):
     logger.info("MAX webhook: update_type=%s", update_type)
 
     if update_type == "bot_started":
-        await _reply_to_sender(update, (
+        await _reply_with_keyboard(
+            update,
             "Здравствуйте! Это бот электронной записи.\n"
-            "Чтобы войти на сайт, введите номер телефона там, "
-            "получите 6-значный код и отправьте его сюда."
-        ))
+            "Введите номер на сайте и нажмите «Получить код в MAX», "
+            "а затем поделитесь номером здесь — пришлём код для входа.",
+        )
         return {"ok": True}
 
     if update_type == "message_created":
-        code, sender = service.parse_update_code(update)
-        sender_id = (sender or {}).get("user_id")
-        if code is None or sender_id is None:
-            await _reply_to_sender(
-                update, "Пришлите 6-значный код с сайта для входа.")
+        message = (update or {}).get("message") or {}
+        sender = message.get("sender") or {}
+        sender_id = sender.get("user_id")
+        if sender_id is None:
             return {"ok": True}
-        name = service.sender_display_name(sender or {})
-        outcome = await service.confirm_max_code(db, sender_id, name, code)
-        await _reply_to_sender(update, _outcome_text(outcome))
-        return {"ok": True, "outcome": outcome}
+
+        # 1. Contact share (HMAC-verified number when it matches).
+        phone, verified, name = service.parse_contact_phone(message)
+        # 2. Fallback: typed phone text.
+        if phone is None:
+            body = message.get("body") or {}
+            text = body.get("text") or message.get("text") or ""
+            phone = service.parse_phone_text(text)
+            name = service.sender_display_name(sender)
+        if phone is None:
+            await _reply_to_sender(
+                update,
+                "Пришлите номер телефона (или нажмите «Поделиться номером»), "
+                "а код для входа придёт сюда же.",
+            )
+            return {"ok": True}
+
+        code = await service.deliver_code_to_dialog(
+            db, phone, int(sender_id), name, verified)
+        if code is None:
+            await _reply_to_sender(
+                update,
+                "Заявки с таким номером нет. Сначала введите номер на сайте "
+                "и нажмите «Получить код в MAX».",
+            )
+            return {"ok": True, "outcome": "no_pending"}
+        await _reply_code(update, code)
+        return {"ok": True, "outcome": "delivered"}
 
     return {"ok": True}
-
-
-def _outcome_text(outcome: str) -> str:
-    return {
-        "confirmed": "Код принят! Вернитесь на сайт — вы уже вошли.",
-        "unknown": "Такой код не найден. Проверьте цифры и запросите новый на сайте.",
-        "expired": "Код истёк. Запросите новый код на сайте.",
-        "already": "Этот код уже использован. Запросите новый на сайте.",
-    }.get(outcome, "Пришлите 6-значный код с сайта для входа.")
 
 
 async def _reply_to_sender(update: dict, text: str) -> None:
@@ -147,3 +156,48 @@ async def _reply_to_sender(update: dict, text: str) -> None:
         await get_max_api().send_message(int(target), text)
     except (MaxApiError, ValueError, TypeError) as e:
         logger.warning("MAX reply failed (best-effort): %s", e)
+
+
+async def _reply_with_keyboard(update: dict, text: str) -> None:
+    """bot_started reply with a request_contact button."""
+    try:
+        message = (update or {}).get("message") or {}
+        sender = message.get("sender") or {}
+        target = sender.get("user_id") or (update or {}).get("chat_id")
+        if not target:
+            return
+        await get_max_api().send_message(
+            int(target), text,
+            attachments=[{
+                "type": "inline_keyboard",
+                "payload": {"buttons": [[
+                    {"type": "request_contact", "text": "Поделиться номером"},
+                ]]},
+            }],
+        )
+    except (MaxApiError, ValueError, TypeError) as e:
+        logger.warning("MAX keyboard reply failed (best-effort): %s", e)
+
+
+async def _reply_code(update: dict, code: str) -> None:
+    """Deliver the login code into the dialog (+ copy-to-clipboard button)."""
+    try:
+        message = (update or {}).get("message") or {}
+        sender = message.get("sender") or {}
+        target = sender.get("user_id") or (update or {}).get("chat_id")
+        if not target:
+            return
+        await get_max_api().send_message(
+            int(target),
+            f"Ваш код для входа: {code}\n"
+            "Введите его на сайте. Никому не сообщайте.",
+            attachments=[{
+                "type": "inline_keyboard",
+                "payload": {"buttons": [[
+                    {"type": "clipboard", "text": "Скопировать код",
+                     "payload": code},
+                ]]},
+            }],
+        )
+    except (MaxApiError, ValueError, TypeError) as e:
+        logger.warning("MAX code reply failed (best-effort): %s", e)

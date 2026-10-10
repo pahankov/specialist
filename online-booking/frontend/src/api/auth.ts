@@ -14,15 +14,13 @@ export interface UnifiedRegisterData {
 }
 
 export interface MaxStartResponse {
-  code: string;
   expires_in: number;
   bot_username: string;
   bot_url: string;
 }
 
-export interface MaxStatusResponse {
-  status: 'pending' | 'verified' | 'expired' | 'disabled';
-  access_token?: string;
+export interface MaxVerifyResponse {
+  access_token: string;
   token_type: string;
   is_new_user?: boolean;
 }
@@ -51,6 +49,6 @@ export const authApi = {
     apiClient.post<UnifiedRegisterResponse>('/api/v1/auth/register-unified', data),
   maxStart: (phone: string) =>
     apiClient.post<MaxStartResponse>('/api/v1/auth/max/start', { phone }),
-  maxStatus: (phone: string) =>
-    apiClient.post<MaxStatusResponse>('/api/v1/auth/max/status', { phone }),
+  maxVerify: (phone: string, code: string) =>
+    apiClient.post<MaxVerifyResponse>('/api/v1/auth/max/verify', { phone, code }),
 };

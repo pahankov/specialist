@@ -7,7 +7,6 @@ app.modules.maxauth.service.parse_update — this module only talks HTTP.
 """
 import logging
 from typing import Any, Optional
-
 import httpx
 
 from app.config import settings
@@ -61,11 +60,15 @@ class MaxBotApi:
         """Verify token and return bot info (BotInfo)."""
         return await self._request("GET", "/me")
 
-    async def send_message(self, user_id: int, text: str) -> dict:
+    async def send_message(
+        self, user_id: int, text: str, attachments: Optional[list] = None
+    ) -> dict:
         """Send a plain-text message to a dialog (<=2 msg/sec per dialog)."""
+        body: dict = {"text": text[:4000]}
+        if attachments:
+            body["attachments"] = attachments
         return await self._request(
-            "POST", "/messages", params={"user_id": user_id},
-            json={"text": text[:4000]},
+            "POST", "/messages", params={"user_id": user_id}, json=body,
         )
 
     async def get_updates(

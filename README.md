@@ -440,6 +440,12 @@ npx vitest                              # Watch mode
 
 ## 📚 История версий
 
+### [1.16.0] — 2026-10-10
+- **MAX развёрнут в SMS-стиль:** код приходит ОТ бота в диалог (а не наоборот): сайт → телефон → бот отдаёт код в чат (+ кнопка «Скопировать код») → ввод на сайте → `/max/verify`. Poll и показ кода на сайте удалены
+- **Проверенный номер:** кнопка `request_contact` + HMAC-SHA256 по докам MAX (`max_verified_phone`, такие юзеры сразу `is_verified=True`); набранный текстом номер — нет
+- **Фронт:** двухшаговая форма в LoginModal (без таймеров), `max-code-input`; `bot_started` отвечает клавиатурой «Поделиться номером»
+- Миграция `otp_codes.max_verified_phone`; тесты: backend 19 MAX, фронт 3 MAX
+
 ### [1.15.0] — 2026-10-10
 - **Вход через MAX-бота** (альтернатива SMS): сайт показывает 6-значный код → юзер шлёт его боту `@se14458556_bot` → webhook сверяет → автовход по poll. Имя из MAX — дефолт нового клиента, телефон при этом неподтверждён (`is_verified=False`)
 - **Backend:** модуль `maxauth` (`/max/start`, `/max/status`, `/api/max/webhook` с секретом `X-Max-Bot-Api-Secret`), `MaxBotApi` (`platform-api2.max.ru`), миграция `otp_codes` (channel/max_user_id/max_user_name), общие куки вынесены в `utils/cookies_http`, `hash_otp_code` — в `utils/security`

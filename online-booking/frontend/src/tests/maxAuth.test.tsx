@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -10,7 +10,7 @@ vi.mock('../api/client', () => ({
     loginUnified: vi.fn(),
     registerUnified: vi.fn(),
     maxStart: vi.fn(),
-    maxStatus: vi.fn(),
+    maxVerify: vi.fn(),
   },
 }));
 
@@ -20,6 +20,7 @@ vi.mock('sonner', () => ({
 }));
 
 const mocked = vi.mocked(authApi);
+const MASKED = '+7 (999) 123-45-67';
 
 function openMaxTab() {
   render(
@@ -30,55 +31,72 @@ function openMaxTab() {
   fireEvent.click(screen.getByText('Войти через MAX'));
 }
 
-describe('MAX chat-bot login', () => {
-  beforeEach(() => {
+function fillPhone() {
+  fireEvent.change(screen.getByPlaceholderText('+7 (999) 123-45-67'), {
+    target: { value: '+79991234567' },
+  });
+}
+
+describe('MAX chat-bot login (SMS-style)', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('requests a code and shows the bot step', async () => {
+    openMaxTab();
+    fillPhone();
     vi.mocked(mocked.maxStart).mockResolvedValue({
       data: {
-        code: '482910',
         expires_in: 300,
         bot_username: 'test_bot',
         bot_url: 'https://max.ru/test_bot',
       },
     } as never);
-    vi.mocked(mocked.maxStatus).mockResolvedValue({
-      data: { status: 'pending', token_type: 'bearer' },
-    } as never);
+    fireEvent.click(screen.getByText('Получить код в MAX'));
+    expect(await screen.findByText(/Бот пришлёт код в MAX/)).toBeInTheDocument();
+    expect(vi.mocked(mocked.maxStart)).toHaveBeenCalledWith(MASKED);
   });
 
-  afterEach(() => {
-    vi.useRealTimers();
-    vi.clearAllMocks();
-  });
-
-  async function startFlow() {
+  it('verifies the dialog code and logs in', async () => {
     openMaxTab();
-    fireEvent.change(screen.getByPlaceholderText('+7 (999) 123-45-67'), {
-      target: { value: '+79991234567' },
-    });
-    fireEvent.click(screen.getByText('Получить код'));
-    await screen.findByText('482910');
-  }
+    fillPhone();
+    vi.mocked(mocked.maxStart).mockResolvedValue({
+      data: { expires_in: 300, bot_username: 'b', bot_url: '' },
+    } as never);
+    fireEvent.click(screen.getByText('Получить код в MAX'));
+    await screen.findByText(/Бот пришлёт код в MAX/);
 
-  it('shows the code and bot link after start', async () => {
-    await startFlow();
-    expect(screen.getByText(/Открыть бота/)).toHaveAttribute('href', 'https://max.ru/test_bot');
-    // PhoneInput emits the masked value; backend normalizes it
-    expect(vi.mocked(mocked.maxStart)).toHaveBeenCalledWith('+7 (999) 123-45-67');
+    vi.mocked(mocked.maxVerify).mockResolvedValue({
+      data: { access_token: 'tok', token_type: 'bearer', is_new_user: true },
+    } as never);
+    fireEvent.change(screen.getByPlaceholderText('––––––'), {
+      target: { value: '482910' },
+    });
+    fireEvent.click(screen.getByText('Войти'));
+    await vi.waitFor(() => {
+      expect(vi.mocked(toast.success)).toHaveBeenCalledWith('Добро пожаловать! Аккаунт создан.');
+    });
+    expect(vi.mocked(mocked.maxVerify)).toHaveBeenCalledWith(MASKED, '482910');
   });
 
-  it('auto-logins when the bot confirms the code', async () => {
-    await startFlow();
-    vi.mocked(mocked.maxStatus).mockResolvedValue({
-      data: {
-        status: 'verified',
-        access_token: 'tok',
-        token_type: 'bearer',
-        is_new_user: true,
-      },
+  it('shows the error on wrong code', async () => {
+    openMaxTab();
+    fillPhone();
+    vi.mocked(mocked.maxStart).mockResolvedValue({
+      data: { expires_in: 300, bot_username: 'b', bot_url: '' },
     } as never);
-    // polling interval is 3s real time
-    await new Promise((r) => setTimeout(r, 3400));
-    expect(vi.mocked(mocked.maxStatus)).toHaveBeenCalledWith('+7 (999) 123-45-67');
-    expect(vi.mocked(toast.success)).toHaveBeenCalledWith('Вход через MAX выполнен!');
-  }, 15000);
+    fireEvent.click(screen.getByText('Получить код в MAX'));
+    await screen.findByText(/Бот пришлёт код в MAX/);
+
+    vi.mocked(mocked.maxVerify).mockRejectedValue({
+      response: { data: { detail: 'Неверный код' } },
+    });
+    fireEvent.change(screen.getByPlaceholderText('––––––'), {
+      target: { value: '000000' },
+    });
+    fireEvent.click(screen.getByText('Войти'));
+    await vi.waitFor(() => {
+      expect(vi.mocked(toast.error)).toHaveBeenCalledWith('Неверный код');
+    });
+  });
 });
