@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     MAX_BOT_USERNAME: str = ""
     MAX_BOT_URL: str = ""
     MAX_WEBHOOK_SECRET: str = ""
+    # Custom CA bundle for platform-api2.max.ru (Russian trusted CA).
+    # Empty = backend/certs/russian_trusted_ca.pem if present, else system store.
+    MAX_CA_BUNDLE: str = ""
 
     # DaData (address suggestions; secret never leaves the backend proxy)
     DADATA_API_KEY: str = ""
@@ -82,6 +85,18 @@ class Settings(BaseSettings):
     def max_enabled(self) -> bool:
         """MAX chat-bot auth available iff bot token is configured."""
         return bool(self.MAX_BOT_TOKEN)
+
+    @property
+    def max_verify(self):
+        """TLS verify target for MAX API: explicit bundle, repo CABundle, or True."""
+        import os
+        if self.MAX_CA_BUNDLE:
+            return self.MAX_CA_BUNDLE
+        backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        repo_bundle = os.path.join(backend_dir, "certs", "russian_trusted_ca.pem")
+        if os.path.isfile(repo_bundle):
+            return repo_bundle
+        return True
 
     def validate_secrets(self) -> None:
         """Fail-closed проверка секретов.

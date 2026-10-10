@@ -40,7 +40,9 @@ class MaxBotApi:
             raise MaxApiError("MAX_BOT_TOKEN is not configured")
         url = f"{BASE_URL}{path}"
         try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
+            async with httpx.AsyncClient(
+                timeout=self._timeout, verify=settings.max_verify
+            ) as client:
                 resp = await client.request(method, url, headers=self._headers(), **kwargs)
         except Exception as e:
             raise MaxApiError(f"MAX API unreachable: {e}")
@@ -90,6 +92,9 @@ class MaxBotApi:
 
     async def delete_webhook(self) -> dict:
         return await self._request("DELETE", "/subscriptions")
+
+    async def get_subscriptions(self) -> dict:
+        return await self._request("GET", "/subscriptions")
 
 
 def get_max_api() -> MaxBotApi:

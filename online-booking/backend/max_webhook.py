@@ -17,6 +17,9 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
+# Settings reads backend/.env relative to CWD — anchor CWD to this script's
+# dir so the script works from anywhere (repo root, cron, CI).
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 from app.config import settings
 from app.services.max_api import MaxApiError, MaxBotApi
@@ -26,15 +29,10 @@ DEFAULT_URL = "https://beauty-specialist.ru/api/max/webhook"
 
 async def cmd_status(api: MaxBotApi) -> int:
     try:
-        async with __import__("httpx").AsyncClient(timeout=15) as client:
-            resp = await client.get(
-                "https://platform-api2.max.ru/subscriptions",
-                headers={"Authorization": settings.MAX_BOT_TOKEN},
-            )
-        print(f"GET /subscriptions -> {resp.status_code}")
-        print(resp.text[:1000])
-        return 0 if resp.status_code == 200 else 1
-    except Exception as e:
+        result = await api.get_subscriptions()
+        print(f"Subscriptions: {result}")
+        return 0
+    except MaxApiError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
 
