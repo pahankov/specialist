@@ -20,10 +20,15 @@ def _add_column_if_missing(table: str, column: sa.Column) -> None:
     dialect = bind.dialect.name
     if dialect == 'postgresql':
         # Alembic has no native IF NOT EXISTS for ADD COLUMN — use raw DDL.
+        # NOTE: string DEFAULTs must be single-quoted (PG rejects bare
+        # `DEFAULT sms` with "cannot use column reference in DEFAULT").
         coltype = column.type.compile(dialect=bind.dialect)
         default = ''
         if column.server_default is not None:
-            default = f" DEFAULT {column.server_default.arg}"
+            arg = column.server_default.arg
+            if isinstance(arg, str):
+                arg = "'" + arg.replace("'", "''") + "'"
+            default = f" DEFAULT {arg}"
         nullable = '' if column.nullable else ' NOT NULL'
         bind.execute(
             sa.text(

@@ -252,6 +252,30 @@ alembic upgrade head
 
 ---
 
+## 16. Raw DDL в миграциях: строковые DEFAULT — только в кавычках
+
+**Проблема:** Хелпер `IF NOT EXISTS` собирал `ALTER TABLE ... DEFAULT sms` из
+`column.server_default.arg` как есть. SQLite проглотил, а прод-PG упал с
+`psycopg2.errors.FeatureNotSupported: cannot use column reference in DEFAULT
+expression` — PG трактует незакавыченный `sms` как имя колонки.
+
+**Решение:** Строковые дефолты экранировать вручную (`DEFAULT 'sms'`, `''` → `''''`):
+```python
+arg = column.server_default.arg
+if isinstance(arg, str):
+    arg = "'" + arg.replace("'", "''") + "'"
+```
+И проверять рендер под PG-диалект офлайн (без сервера):
+```python
+from sqlalchemy.dialects import postgresql
+col.type.compile(dialect=postgresql.dialect())  # VARCHAR(10), а не сюрприз
+```
+Урок шире: SQLite прощает то, что PG запрещает, — любой raw SQL в миграциях
+гонять минимум через компиляцию под `postgresql` диалект, даже если живого PG
+под рукой нет.
+
+---
+
 ## Checklist перед деплоем
 
 - [ ] `script_stop: false` (или все команды с `|| true`)
@@ -270,3 +294,4 @@ alembic upgrade head
 - [ ] Скрипты деплоя читают секреты только из env (`git grep -n "REDACTED_" -- '*.py'` пуст)
 - [ ] Integrity-чеки сборки соответствуют текущей архитектуре (проверены локальным `npm run build`)
 - [ ] Миграции со штамповкой проверены на слепке прод-`alembic_version`, а не на пустой БД (см. правило 15)
+- [ ] Raw DDL в миграциях проверен компиляцией под PG-диалект (см. правило 16)
