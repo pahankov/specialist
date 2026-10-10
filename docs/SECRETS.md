@@ -11,7 +11,7 @@
 
 | Где | Что | В git? |
 |---|---|---|
-| `online-booking/backend/.env` | ЕДИНСТВЕННЫЙ рантайм-файл: БД, JWT, Redis, SMS, DaData, OAuth, `SUPERUSER_*`, `PROD_*` | НЕТ (gitignored) |
+| `online-booking/backend/.env` | ЕДИНСТВЕННЫЙ рантайм-файл: БД, JWT, Redis, SMS, DaData, OAuth, `SUPERUSER_*`, `PROD_*`, `MAX_*` | НЕТ (gitignored) |
 | `LOCAL.md` (корень) | Человекочитаемое зеркало значений + SSH/серверные пароли (не для рантайма) | НЕТ (gitignored) |
 | GitHub Secrets | `SERVER_HOST`, `SERVER_SSH_KEY`, `DATABASE_URL` — только для деплоя | НЕТ (показывает `***`) |
 | `/var/www/beauty-specialist/online-booking/backend/.env` | Прод-канон (читает deploy workflow) | НЕТ (только на сервере) |
@@ -41,3 +41,17 @@
 3. Перезапусти бэкенд (`systemctl restart beauty-backend`).
 4. Проверь прод: `curl https://beauty-specialist.ru/api/v1/cities/search/?q=...`.
 5. Старый ключ отзови в кабинете провайдера.
+
+## MAX bot: серверная настройка (один раз)
+
+```bash
+# по SSH на сервере, из online-booking/backend (venv активен):
+nano .env   # добавь MAX_BOT_TOKEN, MAX_BOT_USERNAME, MAX_BOT_URL, MAX_WEBHOOK_SECRET
+python max_webhook.py status      # проверить текущую подписку
+python max_webhook.py subscribe   # подписать https://beauty-specialist.ru/api/max/webhook
+sudo systemctl restart beauty-backend
+# проверка: отправь боту любое сообщение, в логах — "MAX webhook: update_type=..."
+```
+
+Токен, показанный в чате/на скриншоте, считается скомпрометированным:
+перегенерируй его в настройках бота и обнови оба `.env` (локальный + серверный).

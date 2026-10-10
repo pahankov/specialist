@@ -1,6 +1,6 @@
 # Тестирование
 
-> Backend: 40 файлов, 322 теста (pytest, SQLite-файл на тест). Frontend: 15 файлов, 78 тестов (Vitest).
+> Backend: 41 файл, 334 теста (pytest, SQLite-файл на тест). Frontend: 16 файлов, 77 тестов (Vitest).
 > Чек-лист перед коммитом — только в [RULES.md](RULES.md), правила деплоя — в [DEPLOYMENT_RULES.md](DEPLOYMENT_RULES.md).
 
 ## Запуск
@@ -87,11 +87,11 @@ npx prettier --check src/                 # стиль (конфиг .prettierrc
 | test_fix_production_db.py | 2 | test_work_window.py | 2 |
 | test_health.py | 3 | | |
 
-## Frontend: файлы (78 всего)
+## Frontend: файлы (77 всего)
 
 Покрыто: `apiError`, `authRefresh` (очередь 401), `CitySelect`, `ClientsFilter`, `dadata`,
-`helpers` (schedule + `formatPhone`), schedule `hooks`, `impersonation`, `MasterSelect`,
-`Modal`/`ConfirmDialog`, `Pager`, `PhoneInput`, `section`, `SuperAdminLayout`,
+`helpers` (schedule), schedule `hooks`, `impersonation`, `MasterSelect`,
+`maxAuth` (MAX-вкладка: код + автовход), `Modal`/`ConfirmDialog`, `Pager`, `PhoneInput`, `section`, `SuperAdminLayout`,
 `StatusBadge`/`useAdminSort`. Не покрыто (сознательно): большие страницы и роутинг-гарды —
 их держит `tsc --noEmit` + ручной смоук.
 

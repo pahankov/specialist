@@ -21,34 +21,20 @@ from app.services.audit import log_action
 from app.modules.auth import service
 from app.modules.auth.token import create_access_token, create_refresh_token_payload
 from app.middleware.rate_limit import limiter
+from app.utils.cookies_http import set_auth_cookies
+
+
+def _set_auth_cookies(
+    response: Response, access_token: str, refresh_token_value: str
+) -> None:
+    """Backward-compatible alias — canonical home is app.utils.cookies_http."""
+    set_auth_cookies(response, access_token, refresh_token_value)
 
 logger = get_logger(__name__)
 
 router = APIRouter()
 
 security = HTTPBearer(auto_error=False)
-
-
-def _set_auth_cookies(
-    response: Response, access_token: str, refresh_token_value: str
-) -> None:
-    """Helper: set both access and refresh tokens as cookies."""
-    response.set_cookie(
-        key="refresh_token", value=refresh_token_value,
-        httponly=True,
-        secure=not settings.DEBUG,
-        samesite="lax",
-        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600,
-        path="/",
-    )
-    response.set_cookie(
-        key="access_token", value=access_token,
-        httponly=False,
-        secure=not settings.DEBUG,
-        samesite="lax",
-        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        path="/",
-    )
 
 
 # ─── Registration ─────────────────────────────────────────────────────

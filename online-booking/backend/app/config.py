@@ -51,6 +51,12 @@ class Settings(BaseSettings):
     SMSC_LOGIN: str = ""
     SMSC_PASSWORD: str = ""
 
+    # MAX messenger bot (chat-bot auth as SMS alternative; server-side only)
+    MAX_BOT_TOKEN: str = ""
+    MAX_BOT_USERNAME: str = ""
+    MAX_BOT_URL: str = ""
+    MAX_WEBHOOK_SECRET: str = ""
+
     # DaData (address suggestions; secret never leaves the backend proxy)
     DADATA_API_KEY: str = ""
     DADATA_SECRET: str = ""
@@ -71,6 +77,11 @@ class Settings(BaseSettings):
         if self.LOG_LEVEL:
             return self.LOG_LEVEL.upper()
         return "INFO" if self.APP_ENV == "production" else "DEBUG"
+
+    @property
+    def max_enabled(self) -> bool:
+        """MAX chat-bot auth available iff bot token is configured."""
+        return bool(self.MAX_BOT_TOKEN)
 
     def validate_secrets(self) -> None:
         """Fail-closed проверка секретов.

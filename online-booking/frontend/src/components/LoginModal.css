@@ -205,6 +205,53 @@
   color: #ff6b9d;
 }
 
+/* ─── MAX chat-bot auth ─── */
+.max-code-box {
+  text-align: center;
+  background: #f5f7ff;
+  border: 2px dashed #c7d2fe;
+  border-radius: 12px;
+  padding: 20px 16px;
+  margin-bottom: 16px;
+}
+
+.max-code-box p {
+  margin: 0 0 12px;
+  font-size: 14px;
+  color: #333;
+}
+
+.max-code {
+  font-size: 40px;
+  font-weight: 800;
+  letter-spacing: 12px;
+  text-indent: 12px;
+  color: #4338ca;
+  margin-bottom: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.max-code-box .btn-submit {
+  width: 100%;
+  margin-bottom: 4px;
+}
+
+.max-waiting {
+  color: #667eea !important;
+  font-weight: 600;
+  animation: maxPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes maxPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
 /* ─── Responsive ─── */
 @media (max-width: 480px) {
   .modal.login-modal {

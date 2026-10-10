@@ -21,6 +21,7 @@ from app.modules.review import router as review_router
 from app.modules.admin import router as admin_router
 from app.modules.city import router as city_router
 from app.modules.dadata.router import router as dadata_router
+from app.modules.maxauth import router as max_router, webhook_router as max_webhook_router
 
 # Инициализация логирования (LOG_LEVEL из env, иначе INFO в проде / DEBUG локально)
 setup_logging(settings.log_level)
@@ -56,7 +57,7 @@ app = FastAPI(
         "Все API-эндпоинты версионированы: `/api/v1/`. "
         "Список изменений: `GET /api/v1/admin/changelog`."
     ),
-    version="1.14.0",
+    version="1.15.0",
     contact={
         "name": "Support",
         "email": "support@beauty-specialist.ru",
@@ -153,6 +154,7 @@ async def health_check():
 # ─── Import and include module routers ─────────────────────────
 
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
+app.include_router(max_router, prefix="/api/v1/auth", tags=["max-auth"])
 app.include_router(city_router, prefix="/api/v1", tags=["cities"])
 app.include_router(user_router, prefix="/api/v1", tags=["users"])
 app.include_router(booking_router, prefix="/api/v1/appointments", tags=["appointments"])
@@ -161,3 +163,4 @@ app.include_router(schedule_router, prefix="/api/v1/working-hours", tags=["worki
 app.include_router(review_router, prefix="/api/v1/reviews", tags=["reviews"])
 app.include_router(admin_router)  # admin endpoints (User model, modules/admin/)
 app.include_router(dadata_router, prefix="/api/dadata")  # DAData address autocomplete proxy
+app.include_router(max_webhook_router, prefix="/api/max", tags=["max-webhook"])

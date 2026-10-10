@@ -244,7 +244,7 @@
 
 ### 13. otp_codes
 
-**Назначение:** OTP коды для SMS-авторизации
+**Назначение:** OTP коды для SMS-авторизации + MAX-чат-бот вход (channel)
 
 | Колонка | Тип | Ограничения | Описание |
 |---------|-----|-------------|----------|
@@ -252,8 +252,11 @@
 | phone | VARCHAR(20) | NOT NULL | Телефон |
 | code_hash | VARCHAR(255) | NOT NULL | Хэш кода |
 | expires_at | TIMESTAMP WITH TIME ZONE | NOT NULL | Срок действия |
-| is_used | BOOLEAN | DEFAULT FALSE | Использован ли |
+| is_used | BOOLEAN | DEFAULT FALSE | Сессия по коду выдана (для MAX — только через /max/status) |
 | created_at | TIMESTAMP WITH TIME ZONE | | Дата создания |
+| channel | VARCHAR(10) | NOT NULL, DEFAULT 'sms' | 'sms' — код вводится на сайте; 'max' — код шлётся боту |
+| max_user_id | BIGINT | NULLABLE | MAX sender, подтвердивший код (факт подтверждения) |
+| max_user_name | VARCHAR(200) | NULLABLE | Имя из MAX (дефолт имени нового клиента) |
 
 ---
 

@@ -5,6 +5,7 @@ here instead of reaching into app.modules.auth.service (module->module
 imports violate the modular architecture).
 """
 import bcrypt
+import hashlib
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -41,3 +42,8 @@ def validate_password_strength(password: str) -> str:
     if len(set(password)) < 4:
         raise ValueError("Пароль должен содержать минимум 4 уникальных символа")
     return password
+
+
+def hash_otp_code(code: str) -> str:
+    """Hash an OTP/MAX code for secure storage (sha256, codes are short-lived)."""
+    return hashlib.sha256(code.encode()).hexdigest()

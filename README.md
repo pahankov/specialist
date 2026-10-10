@@ -440,6 +440,12 @@ npx vitest                              # Watch mode
 
 ## 📚 История версий
 
+### [1.15.0] — 2026-10-10
+- **Вход через MAX-бота** (альтернатива SMS): сайт показывает 6-значный код → юзер шлёт его боту `@se14458556_bot` → webhook сверяет → автовход по poll. Имя из MAX — дефолт нового клиента, телефон при этом неподтверждён (`is_verified=False`)
+- **Backend:** модуль `maxauth` (`/max/start`, `/max/status`, `/api/max/webhook` с секретом `X-Max-Bot-Api-Secret`), `MaxBotApi` (`platform-api2.max.ru`), миграция `otp_codes` (channel/max_user_id/max_user_name), общие куки вынесены в `utils/cookies_http`, `hash_otp_code` — в `utils/security`
+- **Frontend:** вкладка «Войти через MAX» в LoginModal (код + кнопка бота + polling); мини-приложение в настройках бота НЕ нужно — ссылка не добавляется
+- **Ops:** `max_webhook.py subscribe/status/unsubscribe`; токен — только в `backend/.env` (в чате засвечен → перегенерировать после проверки)
+
 ### [1.14.0] — 2026-10-10
 - **CI-ворота:** `--cov-fail-under=55` в backend-тестах, `prettier --check` во фронте; 2 затенённых теста переименованы (`toggle_active_self`, `master/client_email_conflict`)
 - **Prettier:** стиль приведён к коду (single quotes), `--write` по 95 файлам, конфиг реально читается (был CJS-без-расширения)

@@ -5,7 +5,8 @@ import { toast } from 'sonner';
 import { authApi } from '../api/client';
 import { dadataApi, type DadataSuggestion } from '../api/dadata';
 import { PASSWORD_PLACEHOLDER } from '../constants';
-import PhoneInput from './common/PhoneInput';
+import type { MaxStartResponse } from '../api/auth';
+import PhoneInput, { isCompletePhone } from './common/PhoneInput';
 import { getCookie, decodeJwtPayload } from '../utils/cookies';
 import { ADMIN_PREFIX, SUPER_PREFIX } from '../utils/section';
 import Modal from './common/Modal';
@@ -16,7 +17,7 @@ interface LoginModalProps {
   onClose: () => void;
 }
 
-type ModalMode = 'login' | 'register';
+type ModalMode = 'login' | 'register' | 'max';
 
 interface LoginFormState {
   identifier: string; // email or phone
@@ -57,6 +58,22 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
   const [loading, setLoading] = useState(false);
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [showRegisterPassword, setShowRegisterPassword] = useState(false);
+
+  // MAX chat-bot auth: code shown on site, user retypes it to the bot
+  const [maxPhone, setMaxPhone] = useState('');
+  const [maxCode, setMaxCode] = useState<MaxStartResponse | null>(null);
+  const [maxWaiting, setMaxWaiting] = useState(false);
+  const maxTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopMaxPolling = () => {
+    if (maxTimer.current) {
+      clearInterval(maxTimer.current);
+      maxTimer.current = null;
+    }
+  };
+
+  // Stop polling when the modal unmounts
+  useEffect(() => stopMaxPolling, []);
 
   // DAData city autocomplete (debounced: each keystroke must not burn quota)
   const [citySuggestions, setCitySuggestions] = useState<DadataSuggestion[]>([]);
@@ -122,30 +139,85 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
     }
   }, [showCityDropdown, cityInput]);
 
+  const landByRole = () => {
+    setTimeout(() => {
+      onClose();
+      // Role-based landing: superadmins get their own section
+      let home = `${ADMIN_PREFIX}/dashboard`;
+      try {
+        if (decodeJwtPayload(getCookie('access_token') ?? '')?.is_admin === true) {
+          home = `${SUPER_PREFIX}/dashboard`;
+        }
+      } catch {
+        /* default to master section */
+      }
+      navigate(home, { replace: true });
+    }, 800);
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
       await authApi.loginUnified(loginForm.identifier, loginForm.password);
       toast.success('Вход выполнен!');
-      setTimeout(() => {
-        onClose();
-        // Role-based landing: superadmins get their own section
-        let home = `${ADMIN_PREFIX}/dashboard`;
-        try {
-          if (decodeJwtPayload(getCookie('access_token') ?? '')?.is_admin === true) {
-            home = `${SUPER_PREFIX}/dashboard`;
-          }
-        } catch {
-          /* default to master section */
-        }
-        navigate(home, { replace: true });
-      }, 800);
+      landByRole();
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Ошибка входа');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleMaxStart = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isCompletePhone(maxPhone)) {
+      toast.error('Введите корректный номер телефона (11 цифр)');
+      return;
+    }
+    setLoading(true);
+    try {
+      const resp = await authApi.maxStart(maxPhone);
+      setMaxCode(resp.data);
+      setMaxWaiting(true);
+      stopMaxPolling();
+      const startedAt = Date.now();
+      const ttlMs = (resp.data.expires_in + 30) * 1000;
+      maxTimer.current = setInterval(async () => {
+        try {
+          const st = await authApi.maxStatus(maxPhone);
+          if (st.data.status === 'verified') {
+            stopMaxPolling();
+            setMaxWaiting(false);
+            toast.success('Вход через MAX выполнен!');
+            landByRole();
+          } else if (st.data.status !== 'pending' || Date.now() - startedAt > ttlMs) {
+            stopMaxPolling();
+            setMaxWaiting(false);
+            toast.error('Код истёк — запросите новый');
+          }
+        } catch {
+          /* network blip: keep polling until timeout */
+        }
+      }, 3000);
+    } catch (err: any) {
+      const detail = err.response?.data?.detail;
+      toast.error(
+        err.response?.status === 503
+          ? 'Вход через MAX не настроен'
+          : typeof detail === 'string'
+            ? detail
+            : 'Ошибка',
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resetMaxState = () => {
+    stopMaxPolling();
+    setMaxCode(null);
+    setMaxWaiting(false);
   };
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -199,6 +271,7 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
   };
 
   const switchMode = (newMode: ModalMode) => {
+    resetMaxState();
     setMode(newMode);
     setLoginForm({
       identifier: '',
@@ -225,7 +298,9 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
     <Modal
       open={isOpen}
       onClose={onClose}
-      title={mode === 'login' ? 'Вход в систему' : 'Регистрация'}
+      title={
+        mode === 'login' ? 'Вход в систему' : mode === 'register' ? 'Регистрация' : 'Вход через MAX'
+      }
       className="login-modal"
     >
       {mode === 'login' ? (
@@ -301,6 +376,75 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
               }}
             >
               Зарегистрироваться
+            </a>
+            {' · '}
+            <a
+              href="#"
+              onClick={(e) => {
+                e.preventDefault();
+                switchMode('max');
+              }}
+            >
+              Войти через MAX
+            </a>
+          </p>
+        </form>
+      ) : mode === 'max' ? (
+        /* ─── MAX CHAT-BOT FORM ─── */
+        <form onSubmit={handleMaxStart}>
+          <div className="login-group">
+            <label>Телефон *</label>
+            <PhoneInput
+              value={maxPhone}
+              onChange={setMaxPhone}
+              placeholder="+7 (999) 123-45-67"
+              required
+            />
+          </div>
+
+          {!maxCode ? (
+            <button type="submit" className="btn btn-primary btn-submit" disabled={loading}>
+              {loading ? 'Отправляем...' : 'Получить код'}
+            </button>
+          ) : (
+            <div className="max-code-box">
+              <p>Отправьте этот код нашему боту в MAX:</p>
+              <div className="max-code">{maxCode.code}</div>
+              {maxCode.bot_url ? (
+                <a
+                  className="btn btn-primary btn-submit"
+                  href={maxCode.bot_url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Открыть бота {maxCode.bot_username}
+                </a>
+              ) : (
+                <p>
+                  Найдите бота <strong>{maxCode.bot_username}</strong> в MAX вручную
+                </p>
+              )}
+              {maxWaiting && <p className="max-waiting">Ждём подтверждение… вход произойдёт сам</p>}
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ marginTop: 8 }}
+                onClick={resetMaxState}
+              >
+                Запросить новый код
+              </button>
+            </div>
+          )}
+
+          <p className="login-footer">
+            <a
+              href="#"
+              onClick={(e) => {
+                e.preventDefault();
+                switchMode('login');
+              }}
+            >
+              Войти по паролю
             </a>
           </p>
         </form>

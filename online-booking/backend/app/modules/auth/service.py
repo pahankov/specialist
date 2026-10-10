@@ -16,21 +16,15 @@ from app.schemas.user import UserCreate, UserLoginByEmail, UserLoginByPhone
 from app.schemas.otp import SendOtpRequest
 from app.logging_config import get_logger
 from app.config import settings
-from app.utils.security import hash_password, verify_password
+from app.utils.security import hash_password, verify_password, hash_otp_code
 from app.utils.tokens import create_access_token, create_refresh_token_payload
 from datetime import datetime, timezone as dt_timezone, timedelta
-import hashlib
 import secrets
 
 logger = get_logger(__name__)
 
 SECRET_KEY = settings.SECRET_KEY
 ALGORITHM = settings.ALGORITHM
-
-
-def hash_otp_code(code: str) -> str:
-    """Hash an OTP code for secure storage."""
-    return hashlib.sha256(code.encode()).hexdigest()
 
 
 # ─── Registration ─────────────────────────────────────────────────────
@@ -173,7 +167,7 @@ async def verify_otp(phone: str, code: str, db: AsyncSession) -> tuple[str, User
     if datetime.now(dt_timezone.utc).replace(tzinfo=None) > otp.expires_at:
         raise HTTPException(status_code=410, detail="Код истёк. Запросите новый.")
 
-    if hashlib.sha256(code.encode()).hexdigest() != otp.code_hash:
+    if hash_otp_code(code) != otp.code_hash:
         raise HTTPException(status_code=400, detail="Неверный код")
 
     # Mark as used
