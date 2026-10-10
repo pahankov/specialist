@@ -259,6 +259,37 @@ class TestMaxVerify:
             "/api/v1/auth/max/verify", json={"phone": PHONE, "code": "123456"})
         assert resp.status_code == 503
 
+    async def test_master_login_via_max(
+        self, client, max_enabled, stub_sender, session
+    ):
+        """Existing master/admin enters by their account phone — role kept."""
+        import jwt as pyjwt
+        from app.config import settings
+        from app.models.user import User, UserRole
+        from app.models.master_profile import MasterProfile
+        from app.utils.security import hash_password
+
+        user = User(
+            name="Master", email="master@example.com", phone=PHONE_NORM,
+            hashed_password=hash_password("Password1!"),
+            role=UserRole.MASTER, is_active=True, is_verified=True,
+        )
+        session.add(user)
+        await session.flush()
+        session.add(MasterProfile(user_id=user.id))
+        await session.commit()
+
+        code = await self._delivered_code(client, stub_sender)
+        done = await client.post(
+            "/api/v1/auth/max/verify", json={"phone": PHONE, "code": code})
+        assert done.status_code == 200
+        body = done.json()
+        assert body["is_new_user"] is False
+        payload = pyjwt.decode(
+            body["access_token"], settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM])
+        assert payload["role"] == "MASTER"
+
 
 class TestParseHelpers:
     def test_parse_phone_text(self):
