@@ -1,7 +1,9 @@
-# Online Booking — Start (backend + frontend, main project only).
+# Online Booking - Start (backend + frontend, main project only).
 # For GigaCode worktrees use run_backend.bat / run_frontend.bat (they auto-detect worktree).
+# NOTE: this file is pure ASCII on purpose - powershell.exe 5.1 reads
+# BOM-less scripts as ANSI, and any multibyte char breaks parsing.
 $ErrorActionPreference = "Stop"
-# Script lives in scripts/ — repo root is one level up.
+# Script lives in scripts/ - repo root is one level up.
 $ProjectDir = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $BackendDir = Join-Path $ProjectDir "online-booking\backend"
 $FrontendDir = Join-Path $ProjectDir "online-booking\frontend"
@@ -12,9 +14,9 @@ $StartedAt = Get-Date
 function Write-Banner {
     param([string]$Title)
     Write-Host ""
-    Write-Host "  ╔════════════════════════════════════════╗" -ForegroundColor Cyan
-    Write-Host "  ║  $Title" -ForegroundColor Cyan
-    Write-Host "  ╚════════════════════════════════════════╝" -ForegroundColor Cyan
+    Write-Host "  +========================================+" -ForegroundColor Cyan
+    Write-Host "  |  $Title" -ForegroundColor Cyan
+    Write-Host "  +========================================+" -ForegroundColor Cyan
     Write-Host ""
 }
 
@@ -25,27 +27,27 @@ function Write-Step {
 
 function Write-Ok {
     param([string]$Message = "OK")
-    Write-Host "    ✓ $Message" -ForegroundColor Green
+    Write-Host "    [OK] $Message" -ForegroundColor Green
 }
 
 function Write-Warn {
     param([string]$Message)
-    Write-Host "    ⚠ $Message" -ForegroundColor DarkYellow
+    Write-Host "    [WARN] $Message" -ForegroundColor DarkYellow
 }
 
 function Write-Skip {
     param([string]$Message)
-    Write-Host "    → $Message" -ForegroundColor Gray
+    Write-Host "    [SKIP] $Message" -ForegroundColor Gray
 }
 
 function Write-Fail {
     param([string]$Message)
-    Write-Host "    ✗ $Message" -ForegroundColor Red
+    Write-Host "    [FAIL] $Message" -ForegroundColor Red
 }
 
-Write-Banner "🍬  Online Booking — Start"
+Write-Banner "Online Booking - Start"
 
-# ─── Clean compiled JS files ─────────────────────────────────────
+# --- Clean compiled JS files ---
 Write-Step 0 "Cleaning compiled files"
 $JsFiles = Get-ChildItem -Path "$FrontendDir\src" -Recurse -Filter "*.js" -File -ErrorAction SilentlyContinue
 if ($JsFiles) {
@@ -58,7 +60,7 @@ if (Test-Path "$FrontendDir\node_modules\.vite") {
 }
 Write-Ok "Clean"
 
-# ─── Check dependencies ──────────────────────────────────────────
+# --- Check dependencies ---
 Write-Step 1 "Checking dependencies"
 if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
     Write-Fail "Python not found"
@@ -70,14 +72,14 @@ if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
 }
 Write-Ok "python + node present"
 
-# ─── Free ports ──────────────────────────────────────────────────
+# --- Free ports ---
 Write-Step 2 "Freeing ports 8000/3000"
 Get-NetTCPConnection -LocalPort 8000 -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 1
 Write-Ok "Ports free"
 
-# ─── Backup DB ───────────────────────────────────────────────────
+# --- Backup DB ---
 Write-Step 3 "Backup DB"
 $DbFile = Join-Path $BackendDir "online_booking.db"
 if (Test-Path $DbFile) {
@@ -86,7 +88,7 @@ if (Test-Path $DbFile) {
 }
 Write-Ok "Backup done"
 
-# ─── Sync production DB ──────────────────────────────────────
+# --- Sync production DB ---
 # Pulls prod masters/clients/schedule into local DB (creds from backend/.env).
 # Best-effort: never blocks startup (offline/prod down => warning only).
 Write-Step 4 "Syncing production DB"
@@ -103,12 +105,12 @@ if (Test-Path $PyExe) {
     Write-Skip "No venv python"
 }
 
-# ─── Start backend ───────────────────────────────────────────────
+# --- Start backend ---
 Write-Step 5 "Starting backend (port 8000)"
 Start-Process "cmd.exe" -ArgumentList "/k", "cd /d `"$BackendDir`" && call venv\Scripts\activate.bat && python -m uvicorn app.main:app --host 0.0.0.0 --port 8000" -WindowStyle Minimized -WorkingDirectory $BackendDir
 Write-Ok "Backend console launched (minimized)"
 
-# ─── Health-check ────────────────────────────────────────────────
+# --- Health-check ---
 Write-Step 6 "Waiting for backend"
 $BackendReady = $false
 for ($i = 0; $i -lt 15; $i++) {
@@ -120,24 +122,24 @@ for ($i = 0; $i -lt 15; $i++) {
     } catch {}
 }
 if ($BackendReady) { Write-Ok "Backend ready" }
-else { Write-Warn "Backend not responding yet — check its console" }
+else { Write-Warn "Backend not responding yet - check its console" }
 
-# ─── Start frontend ──────────────────────────────────────────────
+# --- Start frontend ---
 Write-Step 7 "Starting frontend (port 3000)"
 Start-Process "cmd.exe" -ArgumentList "/k", "cd /d `"$FrontendDir`" && npx vite --host 0.0.0.0 --port 3000" -WindowStyle Minimized -WorkingDirectory $FrontendDir
 Write-Ok "Frontend console launched (minimized)"
 
-# ─── Done ────────────────────────────────────────────────────────
+# --- Done ---
 $Elapsed = [math]::Round(((Get-Date) - $StartedAt).TotalSeconds, 1)
 Write-Host ""
-Write-Host "  ╔════════════════════════════════════════╗" -ForegroundColor Green
-Write-Host "  ║  ✓ Done in ${Elapsed}s!" -ForegroundColor Green
-Write-Host "  ║" -ForegroundColor Green
-Write-Host "  ║  Backend:  http://localhost:8000" -ForegroundColor White
-Write-Host "  ║  Frontend: http://localhost:3000" -ForegroundColor White
-Write-Host "  ╚════════════════════════════════════════╝" -ForegroundColor Green
+Write-Host "  +========================================+" -ForegroundColor Green
+Write-Host "  |  Done in ${Elapsed}s!" -ForegroundColor Green
+Write-Host "  |" -ForegroundColor Green
+Write-Host "  |  Backend:  http://localhost:8000" -ForegroundColor White
+Write-Host "  |  Frontend: http://localhost:3000" -ForegroundColor White
+Write-Host "  +========================================+" -ForegroundColor Green
 Write-Host ""
-Write-Host "  Consoles minimized. To stop — close them from taskbar." -ForegroundColor Gray
+Write-Host "  Consoles minimized. To stop - close them from taskbar." -ForegroundColor Gray
 Write-Host ""
 Write-Host "  Press Enter to exit..." -ForegroundColor Gray
 $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
