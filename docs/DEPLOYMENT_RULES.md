@@ -230,6 +230,28 @@ grep -q "/api/dadata" dist/assets/*.js || exit 1
 
 ---
 
+## 15. Миграции проверять на слепке прод-состояния, а не на пустой БД
+
+**Проблема:** После squash (12 файлов → `5280b944554f_baseline_full_schema`) deploy упал с
+`Can't locate revision identified by 'b2c3d4e5f6a7'`. Причина: `alembic stamp X`
+сначала резолвит **текущую** версию БД в каталоге миграций, а старых файлов там уже
+нет. Локальная проверка на пустой БД (`upgrade head` с нуля) была зелёной и ничего
+не показала — ошибка проявляется только когда в `alembic_version` лежит старый head.
+
+**Решение:**
+```bash
+# Эмулируй прод: проставь старый head вручную и прогони ровно те команды, что в deploy
+UPDATE alembic_version SET version_num='b2c3d4e5f6a7';
+alembic stamp <new_baseline>   # <-- вот здесь и упало бы локально
+alembic upgrade head
+```
+Правило: любая операция со штамповкой/переписыванием истории миграций тестируется
+на БД, где в `alembic_version` лежит прод-значение. Пустая БД для таких проверок
+не годится. Рабочая последовательность после squash: `DELETE FROM alembic_version`
+→ `alembic stamp <baseline>` → `alembic upgrade head` (см. deploy.yml, блок ALEMBIC).
+
+---
+
 ## Checklist перед деплоем
 
 - [ ] `script_stop: false` (или все команды с `|| true`)
@@ -247,3 +269,4 @@ grep -q "/api/dadata" dist/assets/*.js || exit 1
 - [ ] Проверить **последнюю строку** вывода на `Process exited with status 0`
 - [ ] Скрипты деплоя читают секреты только из env (`git grep -n "REDACTED_" -- '*.py'` пуст)
 - [ ] Integrity-чеки сборки соответствуют текущей архитектуре (проверены локальным `npm run build`)
+- [ ] Миграции со штамповкой проверены на слепке прод-`alembic_version`, а не на пустой БД (см. правило 15)
