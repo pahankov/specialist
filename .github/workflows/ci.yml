@@ -12,6 +12,10 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RATE_LIMIT_DISABLED: "true"
+      # Test-only JWT secrets (.env is gitignored by design; fail-closed
+      # validation requires >= 32 chars even outside production).
+      SECRET_KEY: "ci-test-secret-key-not-for-production-01"
+      REFRESH_SECRET_KEY: "ci-test-refresh-key-not-for-production-01"
     steps:
       - uses: actions/checkout@v4
 
