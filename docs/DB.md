@@ -314,7 +314,9 @@
 
 > Старая цепочка из 12 миграций (`9a9c2edb` → `b2c3d4e5f6a7`) удалена после squash —
 > история сохранена в git (`git log -- alembic/versions/`). Прод-БД со старым head
-> штампуются автоматически (`alembic stamp 5280b944554f` в deploy workflow),
+> переводятся автоматически (deploy workflow: `DELETE FROM alembic_version` +
+> `alembic stamp 5280b944554f` — именно в таком порядке, т.к. plain `stamp`
+> падает с `Can't locate revision` на отсутствующих старых файлах),
 > данные не затрагиваются. Дата-миграция `a1b2c3d4e5f6` (backfill городов)
 > новым БД не нужна — города льются сидами (`seed_common.ensure_geography`).
 
