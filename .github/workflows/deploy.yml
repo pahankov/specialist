@@ -129,7 +129,17 @@ jobs:
             echo "=== OWNERSHIP DONE ==="
 
             # Pass DATABASE_URL to each script
+            # Squash (1.12.0+): single baseline 5280b944554f replaced the 12-file chain.
+            # A prod DB stamped at the old head carries the same schema the backend
+            # already runs on (plus idempotent fix_all_tables.sql above), so stamp it
+            # to the baseline and `upgrade head` becomes a no-op. Fresh DBs have no
+            # alembic_version row -> plain `upgrade head` builds everything.
             echo "=== ALEMBIC ==="
+            OLD_HEAD=$(sudo -u postgres psql -d online_booking -tAc "SELECT version_num FROM alembic_version" 2>/dev/null | tr -d '[:space:]' || true)
+            if [ "$OLD_HEAD" = "b2c3d4e5f6a7" ]; then
+              echo "Old migration chain detected - stamping to squashed baseline..."
+              DATABASE_URL="${DATABASE_URL}" alembic stamp 5280b944554f
+            fi
             DATABASE_URL="${DATABASE_URL}" alembic upgrade head
             echo "=== ALEMBIC DONE ==="
 

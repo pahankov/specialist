@@ -19,49 +19,24 @@ from datetime import datetime, timedelta, timezone, date, time
 sys.path.insert(0, os.path.dirname(__file__))
 
 from sqlalchemy import select, text
+from app.utils.security import hash_password
 from app.database import AsyncSessionLocal
 from app.models.user import User, UserRole
 from app.models.master_profile import MasterProfile, MasterStatus
 from app.models.service import Service
 from app.models.appointment import Appointment
 from app.models.review import Review
-from app.models.country import Country
-from app.models.city import City
-import bcrypt
 
 
-def _hash_pw(plain: str) -> str:
-    return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode("utf-8")
 
 
 async def ensure_geography(db):
-    """Create countries and cities if missing."""
-    result = await db.execute(select(Country).limit(1))
-    if result.scalar_one_or_none():
-        return
-    
-    countries_data = [
-        Country(code="RU", name_ru="Россия", name_en="Russia", phone_prefix="+7", is_active=True),
-        Country(code="KZ", name_ru="Казахстан", name_en="Kazakhstan", phone_prefix="+7", is_active=True),
-        Country(code="BY", name_ru="Беларусь", name_en="Belarus", phone_prefix="+375", is_active=True),
-    ]
-    for c in countries_data:
-        db.add(c)
-    await db.commit()
-    
-    russia = await db.execute(select(Country).where(Country.code == "RU"))
-    russia = russia.scalar_one()
-    
-    cities = [
-        "Москва", "Санкт-Петербург", "Новосибирск", "Екатеринбург",
-        "Казань", "Нижний Новгород", "Челябинск", "Самара",
-        "Омск", "Ростов-на-Дону", "Уфа", "Красноярск",
-        "Воронеж", "Пермь", "Волгоград",
-    ]
-    for name in cities:
-        db.add(City(country_id=russia.id, name_ru=name, name_en=name, slug=name.lower().replace(" ", "-"), is_active=True))
-    await db.commit()
-    print("  ✓ Geography ready")
+    """Canonical geography top-up (delegates to seed_common)."""
+    from seed_common import ensure_geography as _ensure_geo
+    await _ensure_geo(db)
+    print("  Geography ready")
+
+
 
 
 async def ensure_masters(db):
@@ -80,7 +55,7 @@ async def ensure_masters(db):
     for name, email, phone, desc in masters_data:
         user = User(
             name=name, email=email, phone=phone,
-            hashed_password=_hash_pw("password123"),
+            hashed_password=hash_password("password123"),
             role=UserRole.MASTER, is_active=True, is_verified=True,
             created_at=now - timedelta(days=random.randint(30, 365)),
         )
@@ -202,60 +177,11 @@ async def ensure_appointments(db):
 
 
 async def ensure_reviews(db):
-    """Create reviews for completed appointments if none exist."""
-    result = await db.execute(select(text('count(*)')).select_from(text('reviews')))
-    count = result.scalar() or 0
-    if count > 0:
-        print(f"  ✓ Reviews already exist ({count} records)")
-        return
-    
-    # Get completed appointments
-    result = await db.execute(select(Appointment).where(Appointment.status == "completed"))
-    completed = result.scalars().all()
-    
-    if not completed:
-        print("  ⚠ No completed appointments, skipping reviews")
-        return
-    
-    now = datetime.now(timezone.utc)
-    comments = [
-        "Отличный мастер! Рекомендую!",
-        "Очень довольна результатом",
-        "Буду приходить ещё",
-        "Профессиональный подход",
-        "Всё понравилось, спасибо!",
-        "Хороший сервис, приятная атмосфера",
-        "Мастер — золото!",
-        "Быстро и качественно",
-    ]
-    
-    review_count = 0
-    for appt in completed:
-        if random.random() > 0.3:  # 70% have reviews
-            cp_result = await db.execute(
-                select(User).where(User.id == appt.client_profile.user_id)
-            )
-            user = cp_result.scalar_one_or_none()
-            client_name = user.name if user else "Аноним"
-            client_phone = user.phone if user else "+7***"
-            
-            rating = random.choices([4, 5], weights=[0.3, 0.7], k=1)[0]
-            
-            review = Review(
-                appointment_id=appt.id,
-                master_id=appt.master_id,
-                client_name=client_name,
-                client_phone=client_phone,
-                rating=rating,
-                comment=random.choice(comments),
-                is_published=True,
-                created_at=appt.appointment_date + timedelta(days=random.randint(1, 7)),
-            )
-            db.add(review)
-            review_count += 1
-    
-    await db.commit()
-    print(f"  ✓ {review_count} reviews created")
+    """Canonical review seeding (delegates to seed_common.ensure_reviews)."""
+    from seed_common import ensure_reviews as _ensure_reviews
+    await _ensure_reviews(db)
+
+
 
 
 async def main():

@@ -65,10 +65,12 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    """Run migrations in 'online' mode with AUTOCOMMIT.
+    """Run migrations in 'online' mode inside a transaction.
 
-    PostgreSQL requires each DDL statement to be in its own transaction.
-    AUTOCOMMIT mode prevents one failed SQL from blocking the entire migration.
+    PostgreSQL DDL is transactional, so Alembic's default (one transaction
+    per migration) is correct: a failed migration rolls back instead of
+    leaving a half-applied schema. (Pre-1.12.0 used AUTOCOMMIT here;
+    removed during the migration squash.)
     """
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
@@ -77,10 +79,6 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        # Set AUTOCOMMIT - each statement commits immediately
-        connection = connection.execution_options(
-            isolation_level="AUTOCOMMIT"
-        )
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
@@ -88,8 +86,8 @@ def run_migrations_online() -> None:
             compare_type=True,
         )
 
-        # No context.begin_transaction() - we want autocommit
-        context.run_migrations()
+        with context.begin_transaction():
+            context.run_migrations()
 
 
 if context.is_offline_mode():

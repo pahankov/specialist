@@ -1,8 +1,8 @@
-"""baseline: capture current schema
+"""baseline_full_schema
 
-Revision ID: 4fdb5e791ead
-Revises: b2e8f1a3c9d0
-Create Date: 2026-09-29 08:02:04.761616
+Revision ID: 5280b944554f
+Revises: 
+Create Date: 2026-10-10 07:34:31.810147
 
 """
 from typing import Sequence, Union
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '4fdb5e791ead'
-down_revision: Union[str, None] = 'b2e8f1a3c9d0'
+revision: str = '5280b944554f'
+down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -72,12 +72,32 @@ def upgrade() -> None:
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
     sa.ForeignKeyConstraint(['city_id'], ['cities.id'], ondelete='SET NULL'),
-    sa.PrimaryKeyConstraint('id')
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('email'),
+    sa.UniqueConstraint('phone')
     )
     with op.batch_alter_table('users', schema=None) as batch_op:
         batch_op.create_index('ix_users_email', ['email'], unique=True)
         batch_op.create_index('ix_users_phone', ['phone'], unique=True)
         batch_op.create_index('ix_users_role', ['role'], unique=False)
+
+    op.create_table('audit_logs',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('master_id', sa.Integer(), nullable=True),
+    sa.Column('level', sa.String(length=10), nullable=False),
+    sa.Column('action', sa.String(length=50), nullable=False),
+    sa.Column('entity_type', sa.String(length=50), nullable=False),
+    sa.Column('entity_id', sa.Integer(), nullable=True),
+    sa.Column('details', sa.Text(), nullable=True),
+    sa.Column('ip_address', sa.String(length=45), nullable=True),
+    sa.Column('created_at', sa.DateTime(timezone=True), nullable=True),
+    sa.ForeignKeyConstraint(['master_id'], ['users.id'], ondelete='SET NULL'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    with op.batch_alter_table('audit_logs', schema=None) as batch_op:
+        batch_op.create_index('ix_audit_logs_master_at', ['master_id', 'created_at'], unique=False)
+        batch_op.create_index(batch_op.f('ix_audit_logs_master_id'), ['master_id'], unique=False)
+        batch_op.create_index('ix_audit_logs_master_type', ['master_id', 'entity_type'], unique=False)
 
     op.create_table('client_profiles',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -97,8 +117,12 @@ def upgrade() -> None:
     sa.Column('avatar_url', sa.String(length=500), nullable=True),
     sa.Column('telegram_username', sa.String(length=100), nullable=True),
     sa.Column('experience_years', sa.Integer(), nullable=True),
-    sa.Column('status', sa.Enum('ACTIVE', 'INACTIVE', 'SUSPENDED', name='masterstatus'), nullable=False),
+    sa.Column('status', sa.String(length=20), nullable=False),
     sa.Column('is_active', sa.Boolean(), nullable=True),
+    sa.Column('tariff', sa.String(length=20), nullable=False),
+    sa.Column('trial_ends_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('work_start_hour', sa.Integer(), nullable=False),
+    sa.Column('work_end_hour', sa.Integer(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
@@ -120,24 +144,6 @@ def upgrade() -> None:
     with op.batch_alter_table('refresh_tokens', schema=None) as batch_op:
         batch_op.create_index('ix_refresh_tokens_token', ['token'], unique=False)
         batch_op.create_index('ix_refresh_tokens_user_id', ['user_id'], unique=False)
-
-    op.create_table('audit_logs',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('master_id', sa.Integer(), nullable=True),
-    sa.Column('level', sa.String(length=10), nullable=False),
-    sa.Column('action', sa.String(length=50), nullable=False),
-    sa.Column('entity_type', sa.String(length=50), nullable=False),
-    sa.Column('entity_id', sa.Integer(), nullable=True),
-    sa.Column('details', sa.Text(), nullable=True),
-    sa.Column('ip_address', sa.String(length=45), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), nullable=True),
-    sa.ForeignKeyConstraint(['master_id'], ['master_profiles.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    with op.batch_alter_table('audit_logs', schema=None) as batch_op:
-        batch_op.create_index('ix_audit_logs_master_at', ['master_id', 'created_at'], unique=False)
-        batch_op.create_index(batch_op.f('ix_audit_logs_master_id'), ['master_id'], unique=False)
-        batch_op.create_index('ix_audit_logs_master_type', ['master_id', 'entity_type'], unique=False)
 
     op.create_table('blocked_slots',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -266,12 +272,6 @@ def downgrade() -> None:
         batch_op.drop_index('ix_blocked_slots_master')
 
     op.drop_table('blocked_slots')
-    with op.batch_alter_table('audit_logs', schema=None) as batch_op:
-        batch_op.drop_index('ix_audit_logs_master_type')
-        batch_op.drop_index(batch_op.f('ix_audit_logs_master_id'))
-        batch_op.drop_index('ix_audit_logs_master_at')
-
-    op.drop_table('audit_logs')
     with op.batch_alter_table('refresh_tokens', schema=None) as batch_op:
         batch_op.drop_index('ix_refresh_tokens_user_id')
         batch_op.drop_index('ix_refresh_tokens_token')
@@ -279,6 +279,12 @@ def downgrade() -> None:
     op.drop_table('refresh_tokens')
     op.drop_table('master_profiles')
     op.drop_table('client_profiles')
+    with op.batch_alter_table('audit_logs', schema=None) as batch_op:
+        batch_op.drop_index('ix_audit_logs_master_type')
+        batch_op.drop_index(batch_op.f('ix_audit_logs_master_id'))
+        batch_op.drop_index('ix_audit_logs_master_at')
+
+    op.drop_table('audit_logs')
     with op.batch_alter_table('users', schema=None) as batch_op:
         batch_op.drop_index('ix_users_role')
         batch_op.drop_index('ix_users_phone')

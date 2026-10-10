@@ -4,6 +4,7 @@ import random
 from datetime import datetime, timedelta, date, time, timezone
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.utils.security import hash_password
 
 from app.database import AsyncSessionLocal, engine, Base
 from app.models.user import User, UserRole
@@ -13,80 +14,16 @@ from app.models.service import Service
 from app.models.appointment import Appointment
 from app.models.working_hour import WorkingHour
 from app.models.review import Review
-from app.models.country import Country
-from app.models.city import City
-import bcrypt
 
 
-def _hash_pw(plain: str) -> str:
-    return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode("utf-8")
 
 
 async def seed_geography(db: AsyncSession):
-    """Create countries and cities if they don't exist."""
-    print("Creating countries and cities...")
-    
-    # Check if countries already exist
-    result = await db.execute(select(Country).limit(1))
-    if result.scalar_one_or_none():
-        print("  Geography data already exists. Skipping...")
-        return
-    
-    # Create countries
-    countries_data = [
-        Country(
-            code="RU",
-            name_ru="Россия",
-            name_en="Russia",
-            phone_prefix="+7",
-            is_active=True,
-        ),
-        Country(
-            code="KZ",
-            name_ru="Казахстан",
-            name_en="Kazakhstan",
-            phone_prefix="+7",
-            is_active=True,
-        ),
-        Country(
-            code="BY",
-            name_ru="Беларусь",
-            name_en="Belarus",
-            phone_prefix="+375",
-            is_active=True,
-        ),
-    ]
-    
-    for country in countries_data:
-        db.add(country)
-    
-    await db.commit()
-    
-    # Create cities for Russia (main country)
-    russian_cities = [
-        "Москва", "Санкт-Петербург", "Новосибирск", "Екатеринбург",
-        "Казань", "Нижний Новгород", "Челябинск", "Самара",
-        "Омск", "Ростов-на-Дону", "Уфа", "Красноярск",
-        "Воронеж", "Пермь", "Волгоград",
-    ]
-    
-    russia = await db.execute(select(Country).where(Country.code == "RU"))
-    russia_country = russia.scalar_one()
-    
-    cities = []
-    for city_name in russian_cities:
-        city = City(
-            country_id=russia_country.id,
-            name_ru=city_name,
-            name_en=city_name,  # Use Russian name for English too
-            slug=city_name.lower().replace(" ", "-"),
-            is_active=True,
-        )
-        db.add(city)
-        cities.append(city)
-    
-    await db.commit()
-    print(f"  [OK] Created {len(countries_data)} countries and {len(cities)} cities")
+    """Canonical geography top-up (delegates to seed_common.ensure_geography)."""
+    from seed_common import ensure_geography
+    await ensure_geography(db)
+
+
 
 # ─── Data pools ────────────────────────────────────────────────────────
 
@@ -148,6 +85,7 @@ SERVICE_TEMPLATES = [
     ("Борода оформление", 30, 1000),
 ]
 
+
 STATUSES = ["pending", "confirmed", "completed", "cancelled"]
 STATUS_WEIGHTS = [0.1, 0.25, 0.55, 0.1]
 
@@ -198,7 +136,7 @@ async def create_seed_data():
             name = MASTER_NAMES[i]
             email = f"master{i}@beauty.ru"
             phone = f"+7900{1000000 + i:06d}"
-            password = _hash_pw("password123")
+            password = hash_password("password123")
             
             # Check if user already exists
             existing = await db.execute(select(User).where(User.email == email))

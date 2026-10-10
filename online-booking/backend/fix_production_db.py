@@ -27,132 +27,25 @@ from app.utils.security import hash_password
 from sqlalchemy import select
 
 
-async def fix_geography(session):
-    """Create countries and cities if they don't exist."""
-    print("\n🌍 Checking geography data...")
-    
-    result = await session.execute(select(Country).limit(1))
-    if result.scalar_one_or_none():
-        print("  ✓ Geography data already exists")
-        return
-    
-    print("  Creating countries and cities...")
-    
-    countries_data = [
-        Country(code="RU", name_ru="Россия", name_en="Russia", phone_prefix="+7", is_active=True),
-        Country(code="KZ", name_ru="Казахстан", name_en="Kazakhstan", phone_prefix="+7", is_active=True),
-        Country(code="BY", name_ru="Беларусь", name_en="Belarus", phone_prefix="+375", is_active=True),
-    ]
-    
-    for country in countries_data:
-        session.add(country)
-    
-    await session.commit()
-    
-    russia = await session.execute(select(Country).where(Country.code == "RU"))
-    russia = russia.scalar_one()
-    
-    russian_cities = [
-        "Москва", "Санкт-Петербург", "Новосибирск", "Екатеринбург",
-        "Казань", "Нижний Новгород", "Челябинск", "Самара",
-        "Омск", "Ростов-на-Дону", "Уфа", "Красноярск",
-        "Воронеж", "Пермь", "Волгоград",
-    ]
-    
-    for city_name in russian_cities:
-        session.add(City(
-            country_id=russia.id,
-            name_ru=city_name,
-            name_en=city_name,
-            slug=city_name.lower().replace(" ", "-"),
-            is_active=True,
-        ))
-    
-    await session.commit()
-    print(f"  ✓ Created {len(countries_data)} countries and {len(russian_cities)} cities")
 
+async def fix_geography(session):
+    """Canonical geography top-up (delegates to seed_common)."""
+    from seed_common import ensure_geography
+    print("\n  Checking geography data...")
+    await ensure_geography(session)
 
 async def fix_superuser(session, email, password):
-    """Verify superuser exists with ADMIN role and has MasterProfile.
+    """Verify superuser (delegates to create_superuser.ensure_superuser).
 
+    Kept as a thin wrapper: deploy.yml and tests import this name.
     password=None keeps the existing hash (routine deploys must never
     reset the production password to a placeholder).
     """
-    print("\n👑 Checking superuser...")
-    
-    result = await session.execute(select(User).where(User.email == email))
-    user = result.scalar_one_or_none()
-    
-    if not user:
-        if not password:
-            print("  ERROR: superuser does not exist and SUPERUSER_PASSWORD is not set.")
-            raise SystemExit(1)
-        print(f"  Creating superuser: {email}")
-        user = User(
-            name="Павел",
-            email=email,
-            hashed_password=hash_password(password),
-            phone="+79615202311",
-            role=UserRole.ADMIN,
-            city_id=None,
-            is_active=True,
-            is_verified=True,
-        )
-        session.add(user)
-        await session.flush()
-        
-        master_profile = MasterProfile(
-            user_id=user.id,
-            telegram_username="",
-            description="Суперпользователь",
-            experience_years=10,
-        )
-        session.add(master_profile)
-        await session.commit()
-        print(f"  ✓ Superuser created (ID: {user.id})")
-    else:
-        print(f"  Found user: {user.email} (ID: {user.id})")
-        
-        if user.role != UserRole.ADMIN:
-            print(f"  Changing role from {user.role.value} to ADMIN")
-            user.role = UserRole.ADMIN
-        else:
-            print(f"  ✓ Role is already ADMIN")
-        
-        if not user.is_active:
-            print(f"  Activating user")
-            user.is_active = True
-        else:
-            print(f"  ✓ User is active")
-        
-        if password:
-            print(f"  Updating password")
-            user.hashed_password = hash_password(password)
-        else:
-            print(f"  Password kept (SUPERUSER_PASSWORD not set)")
-        
-        await session.commit()
-        
-        result = await session.execute(
-            select(MasterProfile).where(MasterProfile.user_id == user.id)
-        )
-        master_profile = result.scalar_one_or_none()
-        
-        if not master_profile:
-            print(f"  Creating MasterProfile for superuser")
-            master_profile = MasterProfile(
-                user_id=user.id,
-                telegram_username="",
-                description="Суперпользователь",
-                experience_years=10,
-            )
-            session.add(master_profile)
-            await session.commit()
-            print(f"  ✓ MasterProfile created")
-        else:
-            print(f"  ✓ MasterProfile exists")
-    
-    return user
+    from create_superuser import ensure_superuser
+    print("  Checking superuser...")
+    return await ensure_superuser(session, email, password)
+
+
 
 
 async def main():
@@ -161,7 +54,10 @@ async def main():
     # a scrubbed placeholder here would silently reset the prod password.
     SUPERUSER_EMAIL = os.getenv("SUPERUSER_EMAIL", "")
     SUPERUSER_PASSWORD = os.getenv("SUPERUSER_PASSWORD") or None
-    
+    if not SUPERUSER_EMAIL:
+        print("WARNING: SUPERUSER_EMAIL not set - skipping superuser check (exit 0).")
+        return
+
     print(f"Connecting to: {DATABASE_URL}")
     
     async with AsyncSessionLocal() as session:

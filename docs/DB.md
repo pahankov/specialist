@@ -304,24 +304,19 @@
 
 ## Миграции Alembic
 
-### Цепочка миграций
+### Цепочка миграций (squash 1.12.0)
 
 | # | Revision | Down | Описание | Дата |
 |---|----------|------|----------|------|
-| 1 | 9a9c2edb119f | None | initial_schema (пустой placeholder) | 2026-09-23 |
-| 2 | 08fbbef38349 | 9a9c2edb119f | Add master_profiles.status enum + working_hours.is_active | 2026-09-24 |
-| 3 | f43f84fe3057 | 08fbbef38349 | Fix timezone on DateTime; drop locations, social_accounts | 2026-09-28 |
-| 4 | aaa7fcc30d47 | f43f84fe3057 | Add countries.name_ru | 2026-09-28 |
-| 5 | sync_missing_columns | aaa7fcc30d47 | Add missing columns (no_show_count, preferred_service_ids, name_en) | 2026-09-28 |
-| 6 | b2e8f1a3c9d0 | sync_missing_columns | Add cities.name_en | 2026-09-29 |
-| 7 | 4fdb5e791ead | b2e8f1a3c9d0 | baseline_capture_current_schema (полный DDL) | 2026-09-29 |
-| 8 | 5c72771 | 4fdb5e791ead | fix_audit_logs_fk_to_users (FK на users.id вместо master_profiles) | 2026-09-30 |
-| 9 | e7a1c2d4b5f6 | 5c72771 | master_tariffs_trial (tariff + trial_ends_at, ретро-триал +180 дней) | 2026-10-08 |
-| 10 | f9b3c1d4e5a6 | e7a1c2d4b5f6 | master_work_window (work_start_hour/work_end_hour, дефолт 8–22) | 2026-10-09 |
-| 11 | a1b2c3d4e5f6 | f9b3c1d4e5a6 | backfill_user_cities (Москва/Питер/Краснодар по кругу, только NULL) | 2026-10-09 |
-| 12 | b2c3d4e5f6a7 | a1b2c3d4e5f6 | hot_path_indexes (appointments/users/services/working_hours) | 2026-10-09 |
+| 1 | 5280b944554f | None | baseline_full_schema — все 13 таблиц из моделей (проверено: upgrade с нуля == `Base.metadata`) | 2026-10-10 |
 
-**Head:** `b2c3d4e5f6a7`
+**Head:** `5280b944554f`
+
+> Старая цепочка из 12 миграций (`9a9c2edb` → `b2c3d4e5f6a7`) удалена после squash —
+> история сохранена в git (`git log -- alembic/versions/`). Прод-БД со старым head
+> штампуются автоматически (`alembic stamp 5280b944554f` в deploy workflow),
+> данные не затрагиваются. Дата-миграция `a1b2c3d4e5f6` (backfill городов)
+> новым БД не нужна — города льются сидами (`seed_common.ensure_geography`).
 
 ### Применение миграций
 

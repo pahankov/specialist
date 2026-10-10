@@ -440,6 +440,12 @@ npx vitest                              # Watch mode
 
 ## 📚 История версий
 
+### [1.13.0] — 2026-10-10
+- **Squash миграций:** 12 файлов → один `5280b944554f_baseline_full_schema` (проверено: upgrade с нуля == `Base.metadata`); `env.py` — транзакционный DDL вместо AUTOCOMMIT; deploy штампует старые прод-БД (`stamp` при head `b2c3d4e5f6a7`), данные не трогаются; `docs/DB.md` обновлён
+- **Сиды — один канон:** новый `seed_common.py` (география 7 стран/457 городов, ревью с честными join вместо lazy-доступа); `seed_cities`/`seed_test_data`/`fix_production_db`/`create_minimal_reviews`/`seed_production` — тонкие делегаты (-520/+50 строк); `_hash_pw` ×2 → `hash_password`; суперюзер теперь гарантирует `MasterProfile`
+- **Локальная БД:** wipe + `alembic upgrade head` + полный сид (20 мастеров, 60 клиентов, 508 записей, 168 отзывов), суперюзер `pahankov@mail.ru` сохранён; `.bak`-мусор удалён
+- **Гигиена:** `.gitattributes` (LF — конец `sed 's/\r$//'` на деплое), удалены мёртвые `schemas/client_profile.py`, `schemas/master_profile.py`
+
 ### [1.12.0] — 2026-10-09
 - **Логгер:** тихие `/health/docs/openapi` (без INFO-шума), `perf_counter`, без IP/UA в логах, `X-Request-ID` и на 500
 - **Лэйауты:** общий `BaseLayout` (`/admin` + `/super` — только nav/заголовок/тема различаются, DOM идентичен)

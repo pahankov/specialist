@@ -63,6 +63,20 @@ async def ensure_superuser(session, email: str, password: str | None) -> User:
         user.role = UserRole.ADMIN
         user.is_active = True
         user.is_verified = True
+        # Admin needs a MasterProfile for master-scoped endpoints/helpers
+        mp_result = await session.execute(
+            select(MasterProfile).where(MasterProfile.user_id == user.id)
+        )
+        if mp_result.scalar_one_or_none() is None:
+            session.add(MasterProfile(
+                user_id=user.id,
+                telegram_username=TELEGRAM_USERNAME,
+                description="Суперпользователь",
+                experience_years=10,
+                status="active",
+                is_active=True,
+            ))
+            print("  MasterProfile created")
         print("  Superuser updated:")
     else:
         if not password:
