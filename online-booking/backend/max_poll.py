@@ -18,6 +18,9 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(__file__))
+# Settings reads backend/.env relative to CWD — anchor CWD to this script's
+# dir so the poller works from anywhere (repo root, cron, CI).
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 from app.config import settings
 from app.services.max_api import MaxApiError, MaxBotApi
