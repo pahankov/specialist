@@ -56,7 +56,7 @@ describe('MAX chat-bot login (SMS-style)', () => {
     } as never);
     fireEvent.click(screen.getByText('Получить код в MAX'));
     expect(await screen.findByText(/бот сам встретит вас/)).toBeInTheDocument();
-    expect(screen.getByText(/открыть test_bot/)).toHaveAttribute(
+    expect(screen.getByText(/Открыть бота test_bot/)).toHaveAttribute(
       'href',
       'https://max.ru/test_bot?start=1_abcd',
     );

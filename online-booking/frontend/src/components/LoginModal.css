@@ -247,6 +247,18 @@
   margin-bottom: 4px;
 }
 
+.max-bot-btn {
+  display: block;
+  text-align: center;
+  text-decoration: none;
+  margin-bottom: 12px;
+}
+
+.max-hint {
+  font-size: 13px;
+  color: #666;
+}
+
 /* ─── Responsive ─── */
 @media (max-width: 480px) {
   .modal.login-modal {

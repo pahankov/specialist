@@ -314,20 +314,19 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
           ) : (
             <>Нажмите кнопку — бот сам встретит вас и пришлёт код</>
           )}
-          {(maxOffer.deeplink || maxOffer.bot_url) && (
-            <>
-              {' '}
-              (
-              <a href={maxOffer.deeplink || maxOffer.bot_url} target="_blank" rel="noreferrer">
-                открыть {maxOffer.bot_username}
-              </a>
-              )
-            </>
-          )}
-          {!maxOffer.deeplink && !maxOffer.bot_url && (
-            <> — найдите {maxOffer.bot_username} вручную</>
-          )}
-          . Не нашли бота? Поделитесь номером внутри диалога — код придёт туда. Введите код ниже:
+        </p>
+        {(maxOffer.deeplink || maxOffer.bot_url) && (
+          <a
+            className="btn btn-primary btn-submit max-bot-btn"
+            href={maxOffer.deeplink || maxOffer.bot_url}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Открыть бота {maxOffer.bot_username}
+          </a>
+        )}
+        <p className="max-hint">
+          Не нашли бота? Поделитесь номером внутри диалога — код придёт туда. Введите код ниже:
         </p>
         <input
           className="max-code-input"
