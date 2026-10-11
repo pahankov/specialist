@@ -37,23 +37,25 @@ def upgrade() -> None:
             'ON notifications (recipient_id, is_read)'
         ))
     else:
-        op.create_table(
-            'notifications',
-            sa.Column('id', sa.Integer(), primary_key=True),
-            sa.Column('sender_id', sa.Integer(), sa.ForeignKey('users.id', ondelete='SET NULL'),
-                      nullable=True),
-            sa.Column('recipient_id', sa.Integer(), sa.ForeignKey('users.id', ondelete='CASCADE'),
-                      nullable=False, index=True),
-            sa.Column('text', sa.Text(), nullable=False),
-            sa.Column('audience', sa.String(20), nullable=True),
-            sa.Column('is_read', sa.Boolean(), nullable=False, default=False),
-            sa.Column('created_at', sa.DateTime(timezone=True), nullable=True),
-            sa.Column('read_at', sa.DateTime(timezone=True), nullable=True),
-        )
-        op.create_index('ix_notifications_recipient_created', 'notifications',
-                        ['recipient_id', 'created_at'], unique=False)
-        op.create_index('ix_notifications_recipient_unread', 'notifications',
-                        ['recipient_id', 'is_read'], unique=False)
+        tables = sa.inspect(bind).get_table_names()
+        if 'notifications' not in tables:
+            op.create_table(
+                'notifications',
+                sa.Column('id', sa.Integer(), primary_key=True),
+                sa.Column('sender_id', sa.Integer(), sa.ForeignKey('users.id', ondelete='SET NULL'),
+                          nullable=True),
+                sa.Column('recipient_id', sa.Integer(), sa.ForeignKey('users.id', ondelete='CASCADE'),
+                          nullable=False, index=True),
+                sa.Column('text', sa.Text(), nullable=False),
+                sa.Column('audience', sa.String(20), nullable=True),
+                sa.Column('is_read', sa.Boolean(), nullable=False, default=False),
+                sa.Column('created_at', sa.DateTime(timezone=True), nullable=True),
+                sa.Column('read_at', sa.DateTime(timezone=True), nullable=True),
+            )
+            op.create_index('ix_notifications_recipient_created', 'notifications',
+                            ['recipient_id', 'created_at'], unique=False)
+            op.create_index('ix_notifications_recipient_unread', 'notifications',
+                            ['recipient_id', 'is_read'], unique=False)
 
 
 def downgrade() -> None:

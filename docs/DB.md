@@ -334,6 +334,15 @@
 
 ### Применение миграций
 
+> Локальный SQLite (`online_booking.db`): lifespan делает `create_all`,
+> который создаёт только **новые таблицы**, но **не добавляет колонки**
+> в существующие. После pull'а модели с новой колонкой старый файл
+> даст `no such column` на каждый запрос (пример 1.23.0: `users.created_by`).
+> Лечится прогоном `alembic upgrade head` с синхронным URL
+> (`DATABASE_URL=sqlite:///./online_booking.db`) либо точечным
+> `ALTER TABLE` из текста миграции. Все миграции после squash
+> идемпотентны и на SQLite (проверка через `inspect`).
+
 ```bash
 # На сервере:
 cd /var/www/beauty-specialist/online-booking/backend
