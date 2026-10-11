@@ -31,7 +31,7 @@ function ClientsPage() {
   const navigate = useNavigate();
   const section = useSectionPrefix();
   const isSuperSection = section === SUPER_PREFIX;
-  const { widths: colW, setWidth: setColW } = useColumnWidths('clients2', {
+  const { widths: colW, setWidth: setColW, resetWidths } = useColumnWidths('clients2', {
     check: 44,
     name: 180,
     phone: 140,
@@ -366,11 +366,20 @@ function ClientsPage() {
               </span>
             </h3>
             {clients.length > 0 && (
-              <Tooltip content="Добавить нового клиента">
-                <button className="btn btn-primary" onClick={openCreateForm}>
-                  + Добавить клиента
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={resetWidths}
+                  title="Вернуть стандартную ширину колонок таблицы"
+                >
+                  ⟲ Колонки
                 </button>
-              </Tooltip>
+                <Tooltip content="Добавить нового клиента">
+                  <button className="btn btn-primary" onClick={openCreateForm}>
+                    + Добавить клиента
+                  </button>
+                </Tooltip>
+              </div>
             )}
           </div>
 

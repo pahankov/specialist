@@ -18,6 +18,14 @@ export const adminApi = {
       city_name?: string | null;
     }>('/api/v1/admin/profile');
   },
+  updateProfile(data: { city_id?: number | null }) {
+    return apiClient.patch<{
+      id: number;
+      name: string;
+      city_id?: number | null;
+      city_name?: string | null;
+    }>('/api/v1/admin/profile', data);
+  },
   // Dashboard
   getDashboard() {
     return apiClient.get<DashboardStats>('/api/v1/admin/dashboard');

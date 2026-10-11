@@ -98,9 +98,15 @@ async def mark_no_show(
 
     if appointment.client_id:
         client_result = await db.execute(
-            select(ClientProfile).where(ClientProfile.user_id == appointment.client_id)
+            select(ClientProfile).where(ClientProfile.id == appointment.client_id)
         )
         client = client_result.scalar_one_or_none()
+        if client is None:
+            # Legacy rows (pre-1.23.3) stored users.id in client_id.
+            legacy = await db.execute(
+                select(ClientProfile).where(ClientProfile.user_id == appointment.client_id)
+            )
+            client = legacy.scalar_one_or_none()
         if client:
             client.no_show_count = (client.no_show_count or 0) + 1
 

@@ -1,7 +1,9 @@
 import type { Appointment } from '../../api/types';
 import {
   getAppointmentsForSlot,
+  getCoveringLive,
   getSlotStatus,
+  appointmentSpanHours,
   formatHour,
   isSlotPast,
   STATUS_CONFIG,
@@ -127,15 +129,23 @@ function generateHourSlots(
     // below, but the granule color and buttons follow live bookings only:
     // after a cancel the granule is green and bookable again.
     const live = slotsForHour.filter((s) => s.status !== 'cancelled');
-    const status = getSlotStatus(live);
+    // Span continuation: a long service (e.g. 90 мин) occupies the next
+    // granules too — they render busy and cannot be booked separately.
+    const coveredBy = live.length === 0 ? getCoveringLive(appointments, date, h) : null;
+    const busy = coveredBy ?? null;
+    const status = live.length > 0 ? getSlotStatus(live) : (busy?.status ?? 'free');
     const past = isSlotPast(date, h);
     const hourActive = !!activeHours[`${dateStr}-${h}`];
     const latestLive = live.length > 0 ? live.reduce((a, b) => (a.id > b.id ? a : b)) : null;
+    const spanNote =
+      latestLive !== null && appointmentSpanHours(latestLive) > 1
+        ? ` · ${appointmentSpanHours(latestLive)} гр.`
+        : '';
 
     slots.push(
       <div
         key={h}
-        className={`time-slot ${past ? 'slot-past' : hourActive ? 'slot-active' : 'slot-inactive'} ${status !== 'free' ? `slot-${status}` : ''}`}
+        className={`time-slot ${past ? 'slot-past' : hourActive ? 'slot-active' : 'slot-inactive'} ${status !== 'free' ? `slot-${status}` : ''}${coveredBy ? ' slot-covered' : ''}`}
       >
         <label className="time-slot-checkbox">
           <input
@@ -153,12 +163,27 @@ function generateHourSlots(
             {slotsForHour.map((a) => (
               <div key={a.id} className="time-slot-appt">
                 <span className="appt-client">{a.client_name || 'Клиент'}</span>
-                <span className="appt-service">{a.service_name}</span>
+                <span className="appt-service">
+                  {a.service_name}
+                  {a.status !== 'cancelled' && appointmentSpanHours(a) > 1
+                    ? ` · ${appointmentSpanHours(a)} гр.`
+                    : ''}
+                </span>
                 <span className={`appt-status status-${a.status}`}>
                   {STATUS_CONFIG[a.status]?.label || a.status}
                 </span>
               </div>
             ))}
+          </div>
+        ) : busy ? (
+          <div className="time-slot-appointments">
+            <div className="time-slot-appt">
+              <span className="appt-client">{busy.client_name || 'Клиент'}</span>
+              <span className="appt-service">{busy.service_name} · продолжение</span>
+              <span className={`appt-status status-${busy.status}`}>
+                {STATUS_CONFIG[busy.status]?.label || busy.status}
+              </span>
+            </div>
           </div>
         ) : (
           <span className="time-slot-status">
@@ -166,7 +191,7 @@ function generateHourSlots(
           </span>
         )}
 
-        {!past && hourActive && latestLive === null && (
+        {!past && hourActive && latestLive === null && coveredBy === null && (
           <button
             className="btn btn-sm btn-book"
             onClick={() => onOpenBooking(date, h)}
@@ -178,7 +203,7 @@ function generateHourSlots(
         {!past && latestLive !== null && (
           <button
             className="btn btn-sm btn-cancel"
-            title={`Отменить запись: ${latestLive.client_name || 'клиент'}`}
+            title={`Отменить запись: ${latestLive.client_name || 'клиент'}${spanNote}`}
             onClick={async (e) => {
               const btn = e.currentTarget;
               btn.disabled = true;

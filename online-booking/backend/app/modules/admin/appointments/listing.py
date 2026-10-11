@@ -199,7 +199,9 @@ async def get_appointments_by_date(
     return [
         {"id": a.id, "client_name": a.client_profile.user.name if a.client_profile else "Unknown",
          "client_phone": a.client_profile.user.phone if a.client_profile else "",
+         "service_id": a.service_id,
          "service_name": a.service.name if a.service else "",
-                     "appointment_date": a.appointment_date.isoformat(), "status": a.status}
-         for a in appointments
+         "service_duration": a.service.duration_minutes if a.service else None,
+         "appointment_date": a.appointment_date.isoformat(), "status": a.status}
+        for a in appointments
     ]

@@ -5,6 +5,9 @@ import {
   getMonthDays,
   getHoursForDay,
   getAppointmentsForSlot,
+  getCoveringLive,
+  getBlockingLive,
+  appointmentSpanHours,
   getSlotStatus,
   isPast,
   isToday,
@@ -254,6 +257,53 @@ describe('helpers', () => {
       expect(result).toHaveLength(3);
       expect(result[0].value).toBe(10);
       expect(result[1].label).toBe('Часов (подт.)');
+    });
+  });
+
+  describe('appointmentSpanHours', () => {
+    it('rounds duration up to whole granules', () => {
+      expect(appointmentSpanHours({ service_duration: 30 })).toBe(1);
+      expect(appointmentSpanHours({ service_duration: 60 })).toBe(1);
+      expect(appointmentSpanHours({ service_duration: 90 })).toBe(2);
+      expect(appointmentSpanHours({ service_duration: 121 })).toBe(3);
+    });
+
+    it('defaults to one granule without duration', () => {
+      expect(appointmentSpanHours({ service_duration: null })).toBe(1);
+      expect(appointmentSpanHours({ service_duration: undefined })).toBe(1);
+      expect(appointmentSpanHours({})).toBe(1);
+    });
+  });
+
+  describe('getCoveringLive', () => {
+    const day = new Date(2026, 9, 14);
+    const mk = (id: number, hour: number, status: string, dur: number | null) =>
+      ({
+        id,
+        appointment_date: `2026-10-14T${String(hour).padStart(2, '0')}:00:00`,
+        status,
+        service_duration: dur,
+      }) as Appointment;
+
+    it('finds a 90-min booking covering the next granule', () => {
+      const appts = [mk(1, 14, 'confirmed', 90)];
+      expect(getCoveringLive(appts, day, 15)?.id).toBe(1);
+      expect(getCoveringLive(appts, day, 14)).toBeNull();
+      expect(getCoveringLive(appts, day, 16)).toBeNull();
+    });
+
+    it('ignores cancelled bookings', () => {
+      const appts = [mk(1, 14, 'cancelled', 120)];
+      expect(getCoveringLive(appts, day, 15)).toBeNull();
+    });
+
+    it('getBlockingLive merges starters and continuations', () => {
+      const appts = [
+        mk(1, 14, 'confirmed', 90),
+        mk(2, 15, 'pending', 30),
+      ];
+      const blocking = getBlockingLive(appts, day, 15);
+      expect(blocking.map((a) => a.id).sort()).toEqual([1, 2]);
     });
   });
 });

@@ -35,7 +35,13 @@
 .form-actions {
   display: flex;
   gap: 12px;
+  justify-content: flex-end;
+  align-items: center;
   margin-top: 8px;
+}
+.form-actions .btn {
+  flex: 0 0 auto;
+  width: auto;
 }
 .form-actions .btn-ghost {
   background: #f0f0f0;

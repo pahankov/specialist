@@ -95,6 +95,8 @@ export interface Appointment {
   client_phone?: string;
   service_name?: string;
   service_price?: number | string;
+  /** Duration minutes (by-date endpoint) — drives granule spans */
+  service_duration?: number | null;
   master_name?: string | null;
 }
 

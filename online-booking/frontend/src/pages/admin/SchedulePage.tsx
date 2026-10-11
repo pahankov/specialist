@@ -16,7 +16,7 @@ import { ConfirmDialog, MasterSelect } from '../../components/common';
 import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError';
 import { getCookie, decodeJwtPayload } from '../../utils/cookies';
 import { MonthlyStatsComponent } from '../../components/schedule/MonthlyStats';
-import { getAppointmentsForSlot } from '../../components/schedule/helpers';
+import { getBlockingLive } from '../../components/schedule/helpers';
 import { usePersistentState } from '../../utils/persistentState';
 import {
   toggleDayWork,
@@ -56,7 +56,6 @@ function SchedulePage() {
     notes: '',
   });
   const [activeHours, setActiveHours] = useState<Record<string, boolean>>({});
-  const [longPressTriggered] = useState(false);
   const [monthlyStats, setMonthlyStats] = useState<MonthlyStats | null>(null);
   const [selectedMasterId, setSelectedMasterId] = usePersistentState<number | ''>(
     'schedule.master',
@@ -69,7 +68,9 @@ function SchedulePage() {
   const [windowEnd, setWindowEnd] = useState(22);
   const [windowDraft, setWindowDraft] = useState({ start: '8', end: '22' });
   const [windowSaving, setWindowSaving] = useState(false);
-  const [applyToAllDays, setApplyToAllDays] = usePersistentState('schedule.applyAll', false);
+  // Explicit opt-in per save (NOT persisted): bulk-applying silently on the
+  // next save just because it was checked once is exactly the reported bug.
+  const [applyToAllDays, setApplyToAllDays] = useState(false);
   // Regular masters see only their own schedule; superadmin must pick one
   // (they have no profile of their own — empty view means "not chosen",
   // not "everyone is off").
@@ -201,45 +202,6 @@ function SchedulePage() {
     [schedule, activeHours, appointments, selectedMasterId, isSuperAdmin, windowStart, windowEnd],
   );
 
-  const handleAddSlot = useCallback(
-    async (date: Date) => {
-      const y = date.getFullYear();
-      const m = String(date.getMonth() + 1).padStart(2, '0');
-      const d = String(date.getDate()).padStart(2, '0');
-      const dateStr = `${y}-${m}-${d}`;
-      // Check if already active
-      if (schedule[dateStr]) return;
-      // Superadmin has no schedule of their own: a master must be chosen
-      // (force-majeure adds go to the selected master).
-      if (isSuperAdmin && selectedMasterId === '') {
-        setError('Выберите мастера, чтобы добавить рабочий день');
-        return;
-      }
-
-      try {
-        const pad = (h: number) => `${String(h).padStart(2, '0')}:00`;
-        await adminApi.createWorkingHour({
-          master_id: selectedMasterId === '' ? undefined : selectedMasterId,
-          schedule_date: dateStr,
-          start_time: pad(windowStart),
-          end_time: pad(windowEnd),
-        });
-        setSchedule((prev) => ({
-          ...prev,
-          [dateStr]: { start: windowStart, end: windowEnd },
-        }));
-        const newActiveHours: Record<string, boolean> = {};
-        for (let h = windowStart; h < windowEnd; h++) {
-          newActiveHours[`${dateStr}-${h}`] = true;
-        }
-        setActiveHours((prev) => ({ ...prev, ...newActiveHours }));
-      } catch (err: unknown) {
-        setError(getApiErrorMessage(err, 'Не удалось добавить рабочий день'));
-      }
-    },
-    [schedule, selectedMasterId, isSuperAdmin, windowStart, windowEnd],
-  );
-
   // Toggling an hour persists to the server AND drives the day state:
   // turning any hour ON activates the whole day (it turns green),
   // turning the last hour OFF deactivates the day.
@@ -289,10 +251,9 @@ function SchedulePage() {
       // Turning OFF
       // A granule with a live booking cannot be unchecked: cancel the
       // booking first (mirrors the day toggle, which refuses days with rows).
+      // Span continuations count too: a 90-мин service blocks two granules.
       const [y, m, d] = dateStr.split('-').map(Number);
-      const liveHere = getAppointmentsForSlot(appointments, new Date(y, m - 1, d), hour).filter(
-        (a) => a.status !== 'cancelled',
-      );
+      const liveHere = getBlockingLive(appointments, new Date(y, m - 1, d), hour);
       if (liveHere.length > 0) {
         const who = liveHere.map((a) => a.client_name || 'клиент').join(', ');
         setError(`Нельзя снять час — в нём бронь (${who}). Сначала отмените запись.`);
@@ -717,8 +678,6 @@ function SchedulePage() {
             onNextMonth={handleNextMonth}
             onSelectDate={handleSelectDate}
             onToggleDay={handleToggleDay}
-            onAddSlot={handleAddSlot}
-            longPressTriggered={longPressTriggered}
           />
 
           {selectedDate && (

@@ -74,6 +74,53 @@ export function getSlotStatus(slots: Appointment[]): string {
   return 'pending';
 }
 
+/** How many hourly granules a booking occupies (90 мин → 2, 30 мин → 1). */
+export function appointmentSpanHours(a: Pick<Appointment, 'service_duration'>): number {
+  const dur = Number(a.service_duration);
+  if (!Number.isFinite(dur) || dur <= 0) return 1;
+  return Math.max(1, Math.ceil(dur / 60));
+}
+
+/** Whole-hour start of a booking on the given day (null when unparsable). */
+function startHourOnDay(a: Appointment, date: Date): number | null {
+  const d = new Date(a.appointment_date);
+  if (Number.isNaN(d.getTime())) return null;
+  if (
+    d.getFullYear() !== date.getFullYear() ||
+    d.getMonth() !== date.getMonth() ||
+    d.getDate() !== date.getDate()
+  )
+    return null;
+  return d.getHours();
+}
+
+/** Live booking that covers `hour` via an earlier start (span continuation).
+ * Same-day part only (capped at 24:00); cancelled bookings never block. */
+export function getCoveringLive(
+  appointments: Appointment[],
+  date: Date,
+  hour: number,
+): Appointment | null {
+  for (const a of appointments) {
+    if (a.status === 'cancelled') continue;
+    const start = startHourOnDay(a, date);
+    if (start === null || start >= hour) continue;
+    if (hour < Math.min(24, start + appointmentSpanHours(a))) return a;
+  }
+  return null;
+}
+
+/** All live bookings blocking `hour`: starters + span continuations. */
+export function getBlockingLive(appointments: Appointment[], date: Date, hour: number) {
+  const starters = getAppointmentsForSlot(appointments, date, hour).filter(
+    (s) => s.status !== 'cancelled',
+  );
+  const covering = getCoveringLive(appointments, date, hour);
+  const out = [...starters];
+  if (covering && !out.some((s) => s.id === covering.id)) out.push(covering);
+  return out;
+}
+
 export function isPast(date: Date): boolean {
   const now = new Date();
   const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());

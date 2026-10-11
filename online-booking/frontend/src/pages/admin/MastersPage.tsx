@@ -35,7 +35,7 @@ import './MastersPage.css';
 function MastersPage() {
   const navigate = useNavigate();
   const section = useSectionPrefix();
-  const { widths: colW, setWidth: setColW } = useColumnWidths('masters', {
+  const { widths: colW, setWidth: setColW, resetWidths } = useColumnWidths('masters', {
     check: 44,
     name: 170,
     email: 200,
@@ -326,6 +326,13 @@ function MastersPage() {
               + Добавить мастера
             </button>
           )}
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={resetWidths}
+            title="Вернуть стандартную ширину колонок таблицы"
+          >
+            ⟲ Колонки
+          </button>
         </div>
       </div>
 

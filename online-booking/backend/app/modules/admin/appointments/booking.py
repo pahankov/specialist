@@ -23,8 +23,12 @@ router = APIRouter()
 
 async def _find_or_create_client(
     db: AsyncSession, phone: str, name: str, created_by: int | None = None,
-) -> User:
-    """Helper: find existing client by phone or create new one."""
+) -> tuple[User, ClientProfile]:
+    """Helper: find existing client by phone or create new one.
+
+    Returns (user, profile). Appointment.client_id is a ClientProfile.id
+    (same as the /book endpoint stores) — never a users.id.
+    """
     from app.schemas.client import normalize_phone
     normalized = normalize_phone(phone)
     result = await db.execute(select(User).where(User.phone == normalized))
@@ -38,7 +42,18 @@ async def _find_or_create_client(
         db.add(client_profile)
         await db.commit()
         await db.refresh(user)
-    return user
+        await db.refresh(client_profile)
+        return user, client_profile
+    profile_result = await db.execute(
+        select(ClientProfile).where(ClientProfile.user_id == user.id)
+    )
+    profile = profile_result.scalar_one_or_none()
+    if profile is None:
+        profile = ClientProfile(user_id=user.id)
+        db.add(profile)
+        await db.commit()
+        await db.refresh(profile)
+    return user, profile
 
 
 @router.post("/appointments", response_model=AppointmentResponse, status_code=201)
@@ -54,10 +69,10 @@ async def create_appointment(
     mp = result.scalar_one_or_none()
     if not mp or data.master_id != mp.id:
         raise HTTPException(status_code=403, detail="Not your master")
-    client = await _find_or_create_client(
+    client, profile = await _find_or_create_client(
         db, data.client_phone, data.client_name, created_by=master.id)
     new_appointment = Appointment(
-        master_id=data.master_id, service_id=data.service_id, client_id=client.id,
+        master_id=data.master_id, service_id=data.service_id, client_id=profile.id,
         appointment_date=data.appointment_date, status="pending", notes=data.notes
     )
     db.add(new_appointment)

@@ -344,7 +344,13 @@ button.tariff-badge.tariff-btn:hover {
   display: flex;
   gap: 12px;
   justify-content: flex-end;
+  align-items: center;
   margin-top: 8px;
+}
+
+.form-actions .btn {
+  flex: 0 0 auto;
+  width: auto;
 }
 
 /* Skeleton table loading */

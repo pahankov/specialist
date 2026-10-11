@@ -128,6 +128,7 @@
 | `GET` | `/admin/work-window` | Окно рабочего времени мастера (`?master_id=` для суперадмина) |
 | `PATCH` | `/admin/work-window` | Задать окно (`start_hour`/`end_hour`, 0–24) |
 | `GET` | `/admin/profile` | Свой профиль панели (`id/name/city_id/city_name` — дефолты форм) |
+| `PATCH` | `/admin/profile` | Свой город (`city_id`) — дефолт для новых клиентов |
 | `GET` | `/admin/audit-logs` | Журнал действий (пагинация, фильтрация; есть сущность `auth` — входы/выходы) |
 | `GET` | `/admin/export/appointments` | Экспорт записей в CSV (`status`, `master_id`, `ids`, `include_master`) |
 | `GET` | `/admin/export/clients` | Экспорт клиентов в CSV (`ids`, `search`, `master_id`; есть колонка Город) |

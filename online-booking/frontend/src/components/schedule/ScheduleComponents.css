@@ -27,6 +27,16 @@
   text-transform: capitalize;
 }
 
+.calendar-hint {
+  text-align: center;
+  font-size: 13px;
+  color: #666;
+  background: #f8f9ff;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+}
+
 .calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
@@ -133,29 +143,6 @@
   font-weight: 500;
 }
 
-.calendar-add-slot-btn {
-  margin-top: 4px;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  border: 2px solid #4caf50;
-  background: white;
-  color: #4caf50;
-  font-size: 16px;
-  font-weight: 700;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s ease;
-}
-
-.calendar-add-slot-btn:hover {
-  background: #4caf50;
-  color: white;
-  transform: scale(1.1);
-}
-
 /* Time slots */
 .schedule-time-slots {
   margin-bottom: 24px;
@@ -252,6 +239,14 @@
 .time-slot.slot-cancelled {
   border: 2px dashed #bdbdbd;
   background: #fafafa;
+}
+
+/* Span continuation: a long service occupies this granule via an earlier
+ * start — same status tint, dashed edge to show it belongs to the booking
+ * above (cancel there). */
+.time-slot.slot-covered {
+  border-style: dashed;
+  opacity: 0.85;
 }
 
 .time-slot-checkbox input {

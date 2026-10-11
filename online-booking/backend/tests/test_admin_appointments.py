@@ -305,6 +305,41 @@ class TestAdminAppointmentsByDate:
         assert "client_name" in resp.json()[0]
         assert "service_name" in resp.json()[0]
 
+    async def test_by_date_carries_service_duration(
+        self, client, auth_headers, test_master_data, test_service_data
+    ):
+        """by-date rows carry service_id/duration for granule spans."""
+        service_resp = await client.post(
+            "/api/v1/services/",
+            json={**test_service_data, "master_id": 1, "duration_minutes": 90},
+            headers=auth_headers,
+        )
+        assert service_resp.status_code == 201, service_resp.text
+        service_id = service_resp.json()["id"]
+
+        future_date = datetime.now() + timedelta(days=7)
+        created = await client.post("/api/v1/admin/appointments", json={
+            "master_id": 1,
+            "service_id": service_id,
+            "client_name": "Span Test",
+            "client_phone": "+79996660009",
+            "appointment_date": future_date.isoformat(),
+        }, headers=auth_headers)
+        assert created.status_code == 201, created.text
+
+        date_from = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+        date_to = (datetime.now() + timedelta(days=14)).strftime("%Y-%m-%d")
+
+        resp = await client.get(
+            "/api/v1/admin/appointments/by-date",
+            params={"date_from": date_from, "date_to": date_to},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        row = next(r for r in resp.json() if r["client_name"] == "Span Test")
+        assert row["service_id"] == service_id
+        assert row["service_duration"] == 90
+
 
 class TestMarkNoShow:
     """Tests for PATCH /api/v1/admin/appointments/{id}/no-show"""

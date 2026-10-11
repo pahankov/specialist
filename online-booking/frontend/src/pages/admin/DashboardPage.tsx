@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { toast } from 'sonner';
 import { adminApi } from '../../api/client';
 import type { DashboardStats, AdminStats } from '../../api/types';
 import { Skeleton, EmptyState, StatusBadge } from '../../components/common';
+import CitySelect, { type CityOption } from '../../components/common/CitySelect';
 import { getApiErrorMessage } from '../../utils/apiError';
 import { useSectionPrefix, SUPER_PREFIX } from '../../utils/section';
 import './DashboardPage.css';
@@ -15,6 +17,36 @@ function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | AdminStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  // Own city (master only): default for newly created clients.
+  const [myCity, setMyCity] = useState<CityOption | null>(null);
+  const [myCityLoaded, setMyCityLoaded] = useState(false);
+
+  useEffect(() => {
+    if (isSuperSection) return;
+    adminApi
+      .getProfile()
+      .then((r) => {
+        if (r.data.city_id != null) {
+          setMyCity({ id: r.data.city_id, name: r.data.city_name || '', source: 'local' });
+        }
+      })
+      .catch(() => {
+        /* profile is optional — dashboard works without it */
+      })
+      .finally(() => setMyCityLoaded(true));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleCityChange = async (city: CityOption | null) => {
+    if (!city?.id) return;
+    try {
+      const { data } = await adminApi.updateProfile({ city_id: city.id });
+      setMyCity({ id: city.id, name: data.city_name || city.name, source: 'local' });
+      toast.success(`Ваш город — ${data.city_name || city.name}. Новые клиенты получат его автоматически`);
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Не удалось сохранить город'));
+    }
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -65,6 +97,34 @@ function DashboardPage() {
         <h1>{isGlobal ? '🍬 Глобальный дашборд' : 'Дашборд'}</h1>
         <p>{isGlobal ? 'Общая статистика по всей системе' : 'Обзор вашей записи и статистики'}</p>
       </div>
+
+      {!isSuperSection && myCityLoaded && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              flexWrap: 'wrap',
+            }}
+          >
+            <span style={{ fontSize: 14, fontWeight: 600 }}>📍 Мой город:</span>
+            <div style={{ minWidth: 260, flex: '1 1 260px', maxWidth: 420 }}>
+              <CitySelect
+                value={myCity?.id ?? null}
+                valueName={myCity?.name ?? ''}
+                onChange={handleCityChange}
+                label=""
+              />
+            </div>
+            <span style={{ fontSize: 12, color: '#666' }}>
+              {myCity
+                ? 'Новые клиенты получат его автоматически'
+                : 'Укажите город, чтобы находить друг друга с клиентами'}
+            </span>
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <div className="stats-grid">

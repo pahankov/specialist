@@ -130,6 +130,12 @@
   display: flex;
   gap: 12px;
   justify-content: flex-end;
+  align-items: center;
+}
+
+.form-actions .btn {
+  flex: 0 0 auto;
+  width: auto;
 }
 
 .input-disabled {

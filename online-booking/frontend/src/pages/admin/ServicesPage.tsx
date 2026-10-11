@@ -17,7 +17,7 @@ import '../../styles/tables.css';
 import './ServicesPage.css';
 
 function ServicesPage() {
-  const { widths: colW, setWidth: setColW } = useColumnWidths('services', {
+  const { widths: colW, setWidth: setColW, resetWidths } = useColumnWidths('services', {
     name: 200,
     category: 130,
     desc: 260,
@@ -240,11 +240,20 @@ function ServicesPage() {
       <div className="card">
         <div className="card-header">
           <h3>Список услуг ({total})</h3>
-          {services.length > 0 && (
-            <button className="btn btn-primary" onClick={openCreateForm}>
-              + Добавить услугу
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={resetWidths}
+              title="Вернуть стандартную ширину колонок таблицы"
+            >
+              ⟲ Колонки
             </button>
-          )}
+            {services.length > 0 && (
+              <button className="btn btn-primary" onClick={openCreateForm}>
+                + Добавить услугу
+              </button>
+            )}
+          </div>
         </div>
         {services.length === 0 ? (
           <EmptyState

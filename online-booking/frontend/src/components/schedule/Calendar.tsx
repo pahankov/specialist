@@ -20,8 +20,6 @@ interface CalendarProps {
   onNextMonth: () => void;
   onSelectDate: (date: Date) => void;
   onToggleDay: (date: Date) => void;
-  onAddSlot: (date: Date) => void;
-  longPressTriggered: boolean;
 }
 
 const LONG_PRESS_MS = 500;
@@ -35,20 +33,22 @@ export function Calendar({
   onNextMonth,
   onSelectDate,
   onToggleDay,
-  onAddSlot,
-  longPressTriggered,
 }: CalendarProps) {
   const monthDays = getMonthDays(currentMonth);
   const monthName = currentMonth.toLocaleString('ru-RU', { month: 'long', year: 'numeric' });
 
   const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pressDateRef = useRef<Date | null>(null);
+  // Long-press also produces a click on release — swallow that click so the
+  // day toggles without opening its slots.
+  const longPressFiredRef = useRef(false);
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLElement>, date: Date) => {
       const tile = (e.target as HTMLElement).closest('.calendar-day');
       if (!tile || isPast(date)) return;
 
+      longPressFiredRef.current = false;
       pressDateRef.current = date;
       if (pressTimerRef.current) {
         clearTimeout(pressTimerRef.current);
@@ -56,6 +56,7 @@ export function Calendar({
       }
       pressTimerRef.current = setTimeout(() => {
         if (pressDateRef.current) {
+          longPressFiredRef.current = true;
           onToggleDay(pressDateRef.current);
           pressDateRef.current = null;
         }
@@ -72,6 +73,17 @@ export function Calendar({
     pressDateRef.current = null;
   }, []);
 
+  const handleDayClick = useCallback(
+    (date: Date, isCurrentMonth: boolean, past: boolean) => {
+      if (longPressFiredRef.current) {
+        longPressFiredRef.current = false;
+        return;
+      }
+      if (isCurrentMonth && !past) onSelectDate(date);
+    },
+    [onSelectDate],
+  );
+
   return (
     <div className="schedule-calendar">
       <div className="calendar-header">
@@ -83,6 +95,8 @@ export function Calendar({
           →
         </button>
       </div>
+
+      <div className="calendar-hint">👆 Удерживайте день, чтобы включить/выключить рабочий день</div>
 
       <div className="calendar-grid">
         {['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map((name, i) => (
@@ -115,12 +129,11 @@ export function Calendar({
               key={i}
               data-date={day.date.toISOString()}
               className={`calendar-day ${day.isCurrentMonth ? '' : 'other-month'} ${active ? 'active' : 'inactive'} ${today ? 'today' : ''} ${selected ? 'selected' : ''} ${past ? 'past' : ''}`}
-              onClick={() =>
-                day.isCurrentMonth && !past && !longPressTriggered && onSelectDate(day.date)
-              }
+              onClick={() => handleDayClick(day.date, day.isCurrentMonth, past)}
               onPointerDown={(e) => handlePointerDown(e, day.date)}
               onPointerUp={handlePointerUp}
               onPointerCancel={handlePointerUp}
+              onContextMenu={(e) => e.preventDefault()}
             >
               <div className="calendar-day-number">{day.date.getDate()}</div>
               <div
@@ -130,18 +143,6 @@ export function Calendar({
               </div>
               {active && !past && apptCount > 0 && (
                 <div className="calendar-day-count">{apptCount} записей</div>
-              )}
-              {!active && !past && day.isCurrentMonth && (
-                <button
-                  className="calendar-add-slot-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onAddSlot(day.date);
-                  }}
-                  title="Добавить рабочий день"
-                >
-                  +
-                </button>
               )}
             </div>
           );

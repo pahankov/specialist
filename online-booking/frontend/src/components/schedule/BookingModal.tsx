@@ -199,6 +199,17 @@ export function BookingModal({
             У мастера пока нет услуг — добавьте их в разделе «Услуги», иначе записать некого
           </div>
         )}
+        {selectedService && hour !== null && (
+          <div className="field-hint">
+            {(() => {
+              const span = Math.max(1, Math.ceil((Number(selectedService.duration_minutes) || 60) / 60));
+              const endH = hour + Math.floor((Number(selectedService.duration_minutes) || 60) / 60);
+              const endM = (Number(selectedService.duration_minutes) || 60) % 60;
+              const end = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+              return `Займёт гранулы ${formatHour(hour)}–${end}${span > 1 ? ` (${span} шт.) — соседние тоже станут заняты` : ''}`;
+            })()}
+          </div>
+        )}
       </div>
 
       <div className="form-group">

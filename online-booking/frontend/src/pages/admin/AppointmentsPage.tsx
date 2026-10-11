@@ -30,7 +30,7 @@ type SortDirection = 'asc' | 'desc';
 function AppointmentsPage() {
   const section = useSectionPrefix();
   const isSuperSection = section === SUPER_PREFIX;
-  const { widths: colW, setWidth: setColW } = useColumnWidths('appointments2', {
+  const { widths: colW, setWidth: setColW, resetWidths } = useColumnWidths('appointments2', {
     check: 44,
     date: 150,
     client: 160,
@@ -383,13 +383,21 @@ function AppointmentsPage() {
       </div>
 
       {/* Advanced filters toggle */}
-      <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center' }}>
+      <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center', gap: 8 }}>
         <button
           className="btn btn-ghost"
           onClick={() => setShowFilters((p) => !p)}
           style={{ fontSize: 13 }}
         >
           {showFilters ? '▲ Скрыть фильтры' : '▼ Расширенные фильтры'}
+        </button>
+        <button
+          className="btn btn-ghost"
+          onClick={resetWidths}
+          style={{ fontSize: 13 }}
+          title="Вернуть стандартную ширину колонок таблицы"
+        >
+          ⟲ Колонки
         </button>
       </div>
 
@@ -572,6 +580,7 @@ function AppointmentsPage() {
                   </ResizableTh>
                   <ResizableTh
                     width={colW.date}
+                    minWidth={140}
                     onResize={(w) => setColW('date', w)}
                     className={`sortable ${sortField === 'appointment_date' ? 'active' : ''}`}
                     onClick={() => handleSort('appointment_date')}
@@ -587,6 +596,7 @@ function AppointmentsPage() {
                   </ResizableTh>
                   <ResizableTh
                     width={colW.client}
+                    minWidth={120}
                     onResize={(w) => setColW('client', w)}
                     className={`sortable ${sortField === 'client_name' ? 'active' : ''}`}
                     onClick={() => handleSort('client_name')}
@@ -596,11 +606,16 @@ function AppointmentsPage() {
                       {sortField === 'client_name' ? (sortDirection === 'asc' ? '↑' : '↓') : '⇅'}
                     </span>
                   </ResizableTh>
-                  <ResizableTh width={colW.phone} onResize={(w) => setColW('phone', w)}>
+                  <ResizableTh
+                    width={colW.phone}
+                    minWidth={120}
+                    onResize={(w) => setColW('phone', w)}
+                  >
                     Телефон
                   </ResizableTh>
                   <ResizableTh
                     width={colW.service}
+                    minWidth={120}
                     onResize={(w) => setColW('service', w)}
                     className={`sortable ${sortField === 'service_name' ? 'active' : ''}`}
                     onClick={() => handleSort('service_name')}
@@ -612,6 +627,7 @@ function AppointmentsPage() {
                   </ResizableTh>
                   <ResizableTh
                     width={colW.price}
+                    minWidth={80}
                     onResize={(w) => setColW('price', w)}
                     className={`sortable ${sortField === 'service_price' ? 'active' : ''}`}
                     onClick={() => handleSort('service_price')}
@@ -623,6 +639,7 @@ function AppointmentsPage() {
                   </ResizableTh>
                   <ResizableTh
                     width={colW.status}
+                    minWidth={130}
                     onResize={(w) => setColW('status', w)}
                     className={`sortable ${sortField === 'status' ? 'active' : ''}`}
                     onClick={() => handleSort('status')}
