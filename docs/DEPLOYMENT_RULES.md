@@ -276,6 +276,27 @@ col.type.compile(dialect=postgresql.dialect())  # VARCHAR(10), а не сюрп�
 
 ---
 
+## 17. Скрипты деплоя проверяются машиной, а не глазами
+
+**Проблема:** `seed_common.py` уехал на прод с `IndentationError` — тесты его не
+импортируют (только `app/`), одноразовая `ast.parse`-проверка забылась, падение
+выяснилось только в прод-логе `fix_production_db.py`. Та же семейная болезнь:
+`start.ps1` с UTF-8 символами без BOM — `powershell.exe` 5.1 читает как ANSI,
+парсер падает, `start.bat` молча умирает.
+
+**Решение:** два CI-гейта (см. `ci.yml`):
+```bash
+# все backend/*.py скрипты обязаны компилироваться
+python -m py_compile seed_common.py seed_cities.py ... max_webhook.py
+# start.ps1 обязан быть чистым ASCII (blind double-click entry point)
+grep -P '[^\x00-\x7F]' scripts/start.ps1 && exit 1
+```
+Плюс регресс-тесты на логику скриптов, где это дёшево (`tests/test_seed_common.py`:
+импорт, `infer_category`, идемпотентность географии). Что машиной не проверить
+(PG-рендер без PG) — то минимум правилом в этом файле.
+
+---
+
 ## Checklist перед деплоем
 
 - [ ] `script_stop: false` (или все команды с `|| true`)
@@ -295,3 +316,4 @@ col.type.compile(dialect=postgresql.dialect())  # VARCHAR(10), а не сюрп�
 - [ ] Integrity-чеки сборки соответствуют текущей архитектуре (проверены локальным `npm run build`)
 - [ ] Миграции со штамповкой проверены на слепке прод-`alembic_version`, а не на пустой БД (см. правило 15)
 - [ ] Raw DDL в миграциях проверен компиляцией под PG-диалект (см. правило 16)
+- [ ] Скрипты деплоя проходят py_compile + ASCII-гейты в CI (см. правило 17)

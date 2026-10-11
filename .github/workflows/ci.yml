@@ -41,6 +41,17 @@ jobs:
           cd online-booking/backend
           python -m py_compile seed_common.py seed_cities.py seed_test_data.py seed_production.py fix_production_db.py fix_production_masters.py create_minimal_reviews.py create_superuser.py pull_production.py backup_db.py restore_db.py max_poll.py max_webhook.py
 
+      - name: ASCII-check start.ps1
+        # powershell.exe 5.1 reads BOM-less scripts as ANSI: any multibyte
+        # char breaks parsing and start.bat dies instantly with no message.
+        # Scoped to start.ps1 (blind double-click entry point).
+        run: |
+          if grep -P '[^\x00-\x7F]' scripts/start.ps1; then
+            echo "ERROR: non-ASCII bytes in scripts/start.ps1 (see above)"
+            exit 1
+          fi
+          echo "start.ps1 is pure ASCII"
+
   frontend-lint:
     name: Frontend Lint
     runs-on: ubuntu-latest

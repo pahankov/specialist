@@ -1,12 +1,12 @@
 # Тестирование
 
-> Backend: 42 файла, 369 тестов (pytest, SQLite-файл на тест). Frontend: 20 файлов, 89 тестов (Vitest).
+> Backend: 43 файла, 378 тестов (pytest, SQLite-файл на тест). Frontend: 20 файлов, 89 тестов (Vitest).
 > Чек-лист перед коммитом — только в [RULES.md](RULES.md), правила деплоя — в [DEPLOYMENT_RULES.md](DEPLOYMENT_RULES.md).
 
 ## Запуск
 
 ```powershell
-# Backend (369 passed, ~6 мин)
+# Backend (378 passed, ~9 мин)
 cd online-booking\backend
 $env:PYTHONPATH='.'
 pytest tests/ -v                          # всё
@@ -62,7 +62,7 @@ npx prettier --check src/                 # стиль (конфиг .prettierrc
     `test_toggle_admin_self` ×2, `test_email_conflict_skips_row` ×2; переименованы).
 12. `client_profiles.user_id NOT NULL` — сначала User+flush, потом профиль.
 
-## Backend: файлы (сгенерировано, 369 всего)
+## Backend: файлы (сгенерировано, 378 всего)
 
 | Файл | N | Файл | N |
 |---|---|---|---|
@@ -80,13 +80,13 @@ npx prettier --check src/                 # стиль (конфиг .prettierrc
 | test_auth_tokens.py | 12 | test_password_security.py | 11 |
 | test_booking_flow.py | 7 | test_pull_production.py | 12 |
 | test_cache_service.py | 19 | test_rate_limiting.py | 3 |
-| test_cities_resolve.py | 2 | test_refresh_tokens.py | 5 |
+| test_cities_resolve.py | 4 | test_refresh_tokens.py | 5 |
 | test_clients.py | 9 | test_reviews.py | 12 |
 | test_create_superuser.py | 4 | test_schedule.py | 7 |
 | test_dadata_proxy.py | 5 | test_services.py | 10 |
 | test_export_tasks.py | 4 | test_validation_handler.py | 2 |
 | test_fix_production_db.py | 2 | test_work_window.py | 2 |
-| test_health.py | 3 |  |  |
+| test_health.py | 3 | test_seed_common.py | 7 |
 ## Frontend: файлы (89 всего)
 
 Покрыто: `apiError`, `authRefresh` (очередь 401), `CitySelect`, `ClientsFilter`, `dadata`,
@@ -100,7 +100,7 @@ npx prettier --check src/                 # стиль (конфиг .prettierrc
 
 | Gate | Где | Fail → |
 |---|---|---|
-| pytest 369 + `--cov-fail-under=55` | `ci.yml` backend-tests | PR/деплой blocked |
+| pytest 378 + `--cov-fail-under=55` | `ci.yml` backend-tests | PR/деплой blocked |
 | eslint (0 errors) + `tsc --noEmit` + `vitest run` + `prettier --check` | `ci.yml` frontend-lint | PR/деплой blocked |
 | pytest на сервере до restart | `deploy.yml` | deploy abort |
 | pg_dump перед миграциями | `deploy.yml` | warn, continue |
