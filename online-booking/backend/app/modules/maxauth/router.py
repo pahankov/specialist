@@ -17,6 +17,10 @@ logger = get_logger(__name__)
 router = APIRouter()
 webhook_router = APIRouter()
 
+# Retry delay when MAX reports dialog.not.found right after bot_started
+# (dialog creation races the event delivery).
+DIALOG_RETRY_DELAY = 4
+
 
 def _bot_card() -> dict:
     return {
@@ -177,17 +181,46 @@ async def max_webhook(request: Request, db: AsyncSession = Depends(get_db)):
     return {"ok": True}
 
 
+def _resolve_target(update: dict):
+    """Dialog reply target: message sender, then update user, then chat.
+
+    bot_started carries `user` but no message.sender; chat_id is the last
+    resort (a stale/wrong chat id yields dialog.not.found — retried below).
+    """
+    update = update or {}
+    message = update.get("message") or {}
+    sender = message.get("sender") or {}
+    user = update.get("user") or {}
+    return (
+        sender.get("user_id") or user.get("user_id") or update.get("chat_id")
+    )
+
+
+async def _send_with_dialog_retry(target: int, text: str, attachments=None) -> None:
+    """Send once; on dialog.not.found retry once after a short delay."""
+    import asyncio
+
+    try:
+        await get_max_api().send_message(target, text, attachments)
+        return
+    except MaxApiError as e:
+        if "dialog.not.found" not in str(e):
+            raise
+        logger.info(
+            "MAX dialog not ready for %s, retrying once in %ss",
+            target, DIALOG_RETRY_DELAY,
+        )
+        await asyncio.sleep(DIALOG_RETRY_DELAY)
+        await get_max_api().send_message(target, text, attachments)
+
+
 async def _reply_to_sender(update: dict, text: str) -> None:
     """Best-effort bot reply; never fails the webhook (else MAX retries)."""
     try:
-        message = (update or {}).get("message") or {}
-        sender = message.get("sender") or {}
-        # Dialog reply target: message sender, else the dialog chat itself
-        # (bot_started carries user/chat_id but no message.sender).
-        target = sender.get("user_id") or (update or {}).get("chat_id")
+        target = _resolve_target(update)
         if not target:
             return
-        await get_max_api().send_message(int(target), text)
+        await _send_with_dialog_retry(int(target), text)
     except (MaxApiError, ValueError, TypeError) as e:
         logger.warning("MAX reply failed (best-effort): %s", e)
 
@@ -195,12 +228,10 @@ async def _reply_to_sender(update: dict, text: str) -> None:
 async def _reply_with_keyboard(update: dict, text: str) -> None:
     """bot_started reply with a request_contact button."""
     try:
-        message = (update or {}).get("message") or {}
-        sender = message.get("sender") or {}
-        target = sender.get("user_id") or (update or {}).get("chat_id")
+        target = _resolve_target(update)
         if not target:
             return
-        await get_max_api().send_message(
+        await _send_with_dialog_retry(
             int(target), text,
             attachments=[{
                 "type": "inline_keyboard",
@@ -216,12 +247,10 @@ async def _reply_with_keyboard(update: dict, text: str) -> None:
 async def _reply_code(update: dict, code: str) -> None:
     """Deliver the login code into the dialog (+ copy-to-clipboard button)."""
     try:
-        message = (update or {}).get("message") or {}
-        sender = message.get("sender") or {}
-        target = sender.get("user_id") or (update or {}).get("chat_id")
+        target = _resolve_target(update)
         if not target:
             return
         text, attachments = service.build_code_message(code)
-        await get_max_api().send_message(int(target), text, attachments)
+        await _send_with_dialog_retry(int(target), text, attachments)
     except (MaxApiError, ValueError, TypeError) as e:
         logger.warning("MAX code reply failed (best-effort): %s", e)

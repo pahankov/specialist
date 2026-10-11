@@ -162,6 +162,49 @@ class TestMaxWebhook:
         buttons = stub_sender[0]["attachments"][0]["payload"]["buttons"]
         assert buttons[0][0]["type"] == "request_contact"
 
+    async def test_reply_prefers_update_user_over_chat(
+        self, client, max_enabled, stub_sender
+    ):
+        """bot_started reply goes to update.user, not a stale chat_id."""
+        hook = await client.post(
+            "/api/max/webhook",
+            json={"update_type": "bot_started", "timestamp": 1, "chat_id": 9999,
+                  "user": {"user_id": 4242}},
+            headers={"X-Max-Bot-Api-Secret": "test-secret"},
+        )
+        assert hook.status_code == 200
+        assert stub_sender
+        assert stub_sender[0]["user_id"] == 4242
+
+    async def test_dialog_not_found_retries_once(
+        self, client, max_enabled, monkeypatch
+    ):
+        """Transient dialog.not.found (dialog creation race) is retried once."""
+        import sys
+        from app.services.max_api import MaxApiError
+        mod = sys.modules["app.modules.maxauth.router"]
+        monkeypatch.setattr(mod, "DIALOG_RETRY_DELAY", 0)
+
+        calls = []
+
+        class FlakyApi:
+            async def send_message(self, user_id, text, attachments=None):
+                calls.append(user_id)
+                if len(calls) == 1:
+                    raise MaxApiError(
+                        'MAX API 404: {"code":"dialog.not.found"}')
+                return {"ok": True}
+
+        monkeypatch.setattr(mod, "get_max_api", lambda: FlakyApi())
+        hook = await client.post(
+            "/api/max/webhook",
+            json={"update_type": "bot_started", "timestamp": 1, "chat_id": 1001,
+                  "user": {"user_id": 4242}},
+            headers={"X-Max-Bot-Api-Secret": "test-secret"},
+        )
+        assert hook.status_code == 200  # best-effort: webhook still 200
+        assert calls == [4242, 4242]
+
     async def test_typed_phone_gets_code(
         self, client, max_enabled, stub_sender
     ):
