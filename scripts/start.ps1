@@ -8,7 +8,7 @@ $ProjectDir = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Pat
 $BackendDir = Join-Path $ProjectDir "online-booking\backend"
 $FrontendDir = Join-Path $ProjectDir "online-booking\frontend"
 
-$TotalSteps = 8
+$TotalSteps = 9
 $StartedAt = Get-Date
 
 function Write-Banner {
@@ -105,13 +105,31 @@ if (Test-Path $PyExe) {
     Write-Skip "No venv python"
 }
 
+# --- Start MAX poller (dev bridge) ---
+# Forwards MAX bot events to the local backend (localhost is unreachable
+# from the internet, so webhooks only work on prod). Skipped silently when
+# MAX_BOT_TOKEN is not set in backend/.env.
+Write-Step 5 "Starting MAX poller (dev bridge)"
+$MaxToken = ""
+$EnvFile = Join-Path $BackendDir ".env"
+if (Test-Path $EnvFile) {
+    $m = Select-String -Pattern "^MAX_BOT_TOKEN=(.+)$" -Path $EnvFile | Select-Object -First 1
+    if ($m) { $MaxToken = $m.Matches[0].Groups[1].Value.Trim() }
+}
+if ($MaxToken -ne "") {
+    Start-Process "cmd.exe" -ArgumentList "/k", "cd /d `"$BackendDir`" && call venv\Scripts\activate.bat && python max_poll.py" -WindowStyle Minimized -WorkingDirectory $BackendDir
+    Write-Ok "MAX poller launched (minimized)"
+} else {
+    Write-Skip "MAX_BOT_TOKEN not set, poller skipped"
+}
+
 # --- Start backend ---
-Write-Step 5 "Starting backend (port 8000)"
+Write-Step 6 "Starting backend (port 8000)"
 Start-Process "cmd.exe" -ArgumentList "/k", "cd /d `"$BackendDir`" && call venv\Scripts\activate.bat && python -m uvicorn app.main:app --host 0.0.0.0 --port 8000" -WindowStyle Minimized -WorkingDirectory $BackendDir
 Write-Ok "Backend console launched (minimized)"
 
 # --- Health-check ---
-Write-Step 6 "Waiting for backend"
+Write-Step 7 "Waiting for backend"
 $BackendReady = $false
 for ($i = 0; $i -lt 15; $i++) {
     Start-Sleep -Seconds 1
@@ -125,7 +143,7 @@ if ($BackendReady) { Write-Ok "Backend ready" }
 else { Write-Warn "Backend not responding yet - check its console" }
 
 # --- Start frontend ---
-Write-Step 7 "Starting frontend (port 3000)"
+Write-Step 8 "Starting frontend (port 3000)"
 Start-Process "cmd.exe" -ArgumentList "/k", "cd /d `"$FrontendDir`" && npx vite --host 0.0.0.0 --port 3000" -WindowStyle Minimized -WorkingDirectory $FrontendDir
 Write-Ok "Frontend console launched (minimized)"
 
