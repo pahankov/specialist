@@ -7,7 +7,7 @@ import { dadataApi, type DadataSuggestion } from '../api/dadata';
 import { PASSWORD_PLACEHOLDER } from '../constants';
 import type { MaxStartResponse } from '../api/auth';
 import PhoneInput, { isCompletePhone } from './common/PhoneInput';
-import { getCookie, decodeJwtPayload } from '../utils/cookies';
+import { getCookie, decodeJwtPayload, getUserRole } from '../utils/cookies';
 import { ADMIN_PREFIX, SUPER_PREFIX } from '../utils/section';
 import Modal from './common/Modal';
 import './LoginModal.css';
@@ -131,14 +131,18 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
   const landByRole = () => {
     setTimeout(() => {
       onClose();
-      // Role-based landing: superadmins get their own section
-      let home = `${ADMIN_PREFIX}/dashboard`;
+      // Role-based landing: admins and masters get their sections,
+      // clients land on booking (no cabinet yet — see README roadmap).
+      const role = getUserRole();
+      let home = '/booking';
       try {
         if (decodeJwtPayload(getCookie('access_token') ?? '')?.is_admin === true) {
           home = `${SUPER_PREFIX}/dashboard`;
+        } else if (role === 'MASTER') {
+          home = `${ADMIN_PREFIX}/dashboard`;
         }
       } catch {
-        /* default to master section */
+        /* default to booking */
       }
       navigate(home, { replace: true });
     }, 800);

@@ -7,9 +7,20 @@ export function getCookie(name: string): string | null {
 
 export interface JwtPayload {
   sub?: string;
+  role?: string;
   is_admin?: boolean;
   name?: string;
   exp?: number;
+}
+
+export function getUserRole(): string | null {
+  const token = getCookie('access_token');
+  if (!token) return null;
+  try {
+    return decodeJwtPayload(token)?.role ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export function decodeJwtPayload(token: string): JwtPayload | null {

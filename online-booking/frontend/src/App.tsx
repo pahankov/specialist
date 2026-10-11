@@ -15,7 +15,7 @@ import MasterDetailPage from './pages/admin/MasterDetailPage';
 import LogsPage from './pages/admin/LogsPage';
 import RevenuePage from './pages/admin/RevenuePage';
 import ErrorBoundary from './components/ErrorBoundary';
-import { getCookie, decodeJwtPayload } from './utils/cookies';
+import { getCookie, decodeJwtPayload, getUserRole } from './utils/cookies';
 import { ADMIN_PREFIX, SUPER_PREFIX } from './utils/section';
 import './App.css';
 
@@ -44,13 +44,17 @@ function RequireSuperAdmin({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-/** Master section: superadmins have their own section under /super. */
+/** Master section: superadmins have their own section under /super,
+    clients land on booking (no master UI for CLIENT role). */
 function RequireMasterSection({ children }: { children: React.ReactNode }) {
   if (!getIsAuthenticated()) {
     return <Navigate to="/" replace />;
   }
   if (getIsAdmin()) {
     return <Navigate to={`${SUPER_PREFIX}/dashboard`} replace />;
+  }
+  if (getUserRole() === 'CLIENT') {
+    return <Navigate to="/booking" replace />;
   }
   return <>{children}</>;
 }
