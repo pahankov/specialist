@@ -136,7 +136,9 @@ function SchedulePage() {
     return () => {
       cancelled = true;
     };
-  }, [currentMonth, selectedMasterId]);
+    // NOTE: currentMonth is a fresh Date every render — depend on the stable
+    // ISO string, otherwise the fetch loops forever and trips rate limits.
+  }, [currentMonthISO, selectedMasterId]);
 
   useEffect(() => {
     if (!bookingForm.open) return;
@@ -380,7 +382,7 @@ function SchedulePage() {
         /* ignore */
       }
     }
-  }, [bookingForm, currentMonth, handleCloseBooking, selectedMasterId]);
+  }, [bookingForm, currentMonthISO, handleCloseBooking, selectedMasterId]);
 
   const refreshMonthAppointments = useCallback(async () => {
     const from = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth()).padStart(2, '0')}-01`;
@@ -396,7 +398,7 @@ function SchedulePage() {
     } catch {
       /* ignore */
     }
-  }, [currentMonth, selectedMasterId]);
+  }, [currentMonthISO, selectedMasterId]);
 
   const handleCancelSlotAppointment = useCallback(
     async (id: number) => {
