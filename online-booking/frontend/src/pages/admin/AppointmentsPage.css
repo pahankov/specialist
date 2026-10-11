@@ -49,6 +49,24 @@
   width: 1%;
 }
 
+/* Frozen actions column: pinned to the right edge with its own background,
+ * so row buttons stay visible AND clickable no matter how the resizable
+ * columns are dragged or scrolled. This is the standard admin-table pattern
+ * (AG Grid / MUI DataGrid pinned columns). */
+.appointments-table th:last-child,
+.appointments-table td:last-child {
+  position: sticky;
+  right: 0;
+  z-index: 3;
+  background: #fff;
+  box-shadow: -8px 0 8px -8px rgba(26, 26, 46, 0.25);
+}
+
+.appointments-table td:last-child {
+  overflow: visible;
+  min-width: 150px;
+}
+
 .appointments-page .page-header {
   display: flex;
   justify-content: space-between;

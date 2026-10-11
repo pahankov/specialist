@@ -22,23 +22,22 @@
   background: none !important;
 }
 
-/* Master theme: MID-TONE muted mauve — clearly lighter than the near-black
- * super slate-blue and clearly different from client teal, but not white.
- * Every dark-theme foreground rule needs a matching override here. */
+/* Master theme: vivid brand raspberry — colorful like the app's pink brand,
+ * clearly not super slate-blue, clearly not client teal. */
 .master-layout .admin-sidebar {
-  background: linear-gradient(180deg, #7e7691 0%, #5f5872 100%);
+  background: linear-gradient(180deg, #d6336c 0%, #96214e 50%, #6f1740 100%);
 }
 
 .master-layout .sidebar-header {
-  border-bottom-color: rgba(255, 255, 255, 0.16);
+  border-bottom-color: rgba(255, 255, 255, 0.2);
 }
 
 .master-layout .sidebar-brand h2 {
-  color: #ffffff;
+  color: #fff;
 }
 
 .master-layout .sidebar-subtitle {
-  color: rgba(255, 255, 255, 0.65);
+  color: rgba(255, 255, 255, 0.72);
 }
 
 .master-layout .sidebar-user {
@@ -46,49 +45,54 @@
 }
 
 .master-layout .collapse-btn {
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .master-layout .collapse-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.24);
   color: #fff;
 }
 
 .master-layout .nav-item {
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .master-layout .nav-item:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.14);
   color: #fff;
 }
 
 .master-layout .nav-item.active {
-  background: rgba(233, 69, 96, 0.3);
+  background: rgba(255, 255, 255, 0.22);
   color: #fff;
-  border-left-color: #ff8fab;
+  border-left-color: #ffd0da;
 }
 
 .master-layout .sidebar-footer {
-  border-top-color: rgba(255, 255, 255, 0.16);
+  border-top-color: rgba(255, 255, 255, 0.2);
 }
 
 .master-layout .btn-logout {
-  color: rgba(255, 255, 255, 0.75);
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .master-layout .btn-logout:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.14);
   color: #fff;
 }
 
 .master-layout .bell-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.master-layout .bell-badge {
+  background: #fff;
+  color: #a61e4d;
 }
 
 .master-layout .hamburger-btn {
-  background: #5f5872;
+  background: #96214e;
   border: none;
 }
 
