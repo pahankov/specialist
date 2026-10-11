@@ -22,79 +22,78 @@
   background: none !important;
 }
 
-/* Master theme: LIGHT lavender-gray sidebar — unmistakable next to the
- * dark super slate-blue and dark client teal, yet calm (no loud colors).
- * Every dark-theme foreground rule needs a light override here. */
+/* Master theme: MID-TONE muted mauve — clearly lighter than the near-black
+ * super slate-blue and clearly different from client teal, but not white.
+ * Every dark-theme foreground rule needs a matching override here. */
 .master-layout .admin-sidebar {
-  background: linear-gradient(180deg, #f6f4fb 0%, #e8e4f1 100%);
-  border-right: 1px solid #d9d4e6;
+  background: linear-gradient(180deg, #7e7691 0%, #5f5872 100%);
 }
 
 .master-layout .sidebar-header {
-  border-bottom-color: rgba(76, 71, 87, 0.14);
+  border-bottom-color: rgba(255, 255, 255, 0.16);
 }
 
 .master-layout .sidebar-brand h2 {
-  color: #9f1239;
+  color: #ffffff;
 }
 
 .master-layout .sidebar-subtitle {
-  color: #8a8496;
+  color: rgba(255, 255, 255, 0.65);
 }
 
 .master-layout .sidebar-user {
-  color: #9f1239;
+  color: #ffd9e2;
 }
 
 .master-layout .collapse-btn {
-  background: rgba(76, 71, 87, 0.08);
-  color: #6b6577;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.75);
 }
 
 .master-layout .collapse-btn:hover {
-  background: rgba(76, 71, 87, 0.16);
-  color: #1a1a2e;
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
 }
 
 .master-layout .nav-item {
-  color: #4c4757;
+  color: rgba(255, 255, 255, 0.8);
 }
 
 .master-layout .nav-item:hover {
-  background: rgba(76, 71, 87, 0.08);
-  color: #1a1a2e;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
 }
 
 .master-layout .nav-item.active {
-  background: rgba(233, 69, 96, 0.13);
-  color: #be123c;
-  border-left-color: #e94560;
+  background: rgba(233, 69, 96, 0.3);
+  color: #fff;
+  border-left-color: #ff8fab;
 }
 
 .master-layout .sidebar-footer {
-  border-top-color: rgba(76, 71, 87, 0.14);
+  border-top-color: rgba(255, 255, 255, 0.16);
 }
 
 .master-layout .btn-logout {
-  color: #6b6577;
+  color: rgba(255, 255, 255, 0.75);
 }
 
 .master-layout .btn-logout:hover {
-  background: rgba(76, 71, 87, 0.1);
-  color: #1a1a2e;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
 }
 
 .master-layout .bell-btn:hover {
-  background: rgba(76, 71, 87, 0.1);
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .master-layout .hamburger-btn {
-  background: #f6f4fb;
-  border: 1px solid #d9d4e6;
+  background: #5f5872;
+  border: none;
 }
 
 .master-layout .hamburger-line {
-  background: #4c4757;
+  background: #fff;
 }
 
 /* ─── Sidebar ─────────────────────────────────────────────── */

@@ -62,6 +62,12 @@ export default function ResizableTh({
 }: ResizableThProps) {
   const moved = useRef(false);
 
+  // Effective width: garbage from storage falls back instead of breaking layout.
+  const effWidth =
+    Number.isFinite(width) && width > 0
+      ? Math.max(minWidth, width)
+      : (defaultWidth ?? minWidth);
+
   const startDrag = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -94,11 +100,17 @@ export default function ResizableTh({
       {...rest}
       onClick={onClick}
       onClickCapture={swallowAfterDrag}
-      // Floor the RENDERED width too, not just drags: stored widths from
-      // older versions (or over-zealous dragging) must never collapse a
-      // column into clipped invisibility. min-width wins over max-width
-      // in CSS when they conflict, so old tiny values heal automatically.
-      style={{ ...style, width, minWidth: Math.max(minWidth, width), maxWidth: width }}
+      // Floor the RENDERED width itself, not just via min-width: Chrome
+      // ignores min/max-width on cells when computing fixed-layout columns
+      // (uses `width` only), so a min-width floor alone still clips to the
+      // stored tiny value. Old broken values heal automatically; garbage
+      // falls back to the default.
+      style={{
+        ...style,
+        width: effWidth,
+        minWidth: effWidth,
+        maxWidth: effWidth,
+      }}
     >
       {children}
       <span
