@@ -589,14 +589,19 @@ function SchedulePage() {
                     end_hour: end,
                   };
                   const saveOnce = () => adminApi.updateWorkWindow(payload);
+                  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
                   try {
                     let data: { start_hour: number; end_hour: number };
                     try {
                       ({ data } = await saveOnce());
                     } catch (firstErr: unknown) {
-                      // One retry on transport-level failure (no response):
-                      // a single blip must not look like "not saving".
-                      if (getApiErrorStatus(firstErr) === undefined) {
+                      const status = getApiErrorStatus(firstErr);
+                      if (status === undefined) {
+                        // Transport-level blip (no response): one immediate retry.
+                        ({ data } = await saveOnce());
+                      } else if (status === 429) {
+                        // Rate-limited: wait out the window, then one retry.
+                        await sleep(1500);
                         ({ data } = await saveOnce());
                       } else {
                         throw firstErr;

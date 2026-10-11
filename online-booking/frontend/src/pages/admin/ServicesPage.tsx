@@ -240,9 +240,11 @@ function ServicesPage() {
       <div className="card">
         <div className="card-header">
           <h3>Список услуг ({total})</h3>
-          <button className="btn btn-primary" onClick={openCreateForm}>
-            + Добавить услугу
-          </button>
+          {services.length > 0 && (
+            <button className="btn btn-primary" onClick={openCreateForm}>
+              + Добавить услугу
+            </button>
+          )}
         </div>
         {services.length === 0 ? (
           <EmptyState

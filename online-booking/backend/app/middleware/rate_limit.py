@@ -40,9 +40,11 @@ class _NoOpLimiter:
 if os.getenv("RATE_LIMIT_DISABLED") == "true":
     limiter = _NoOpLimiter()
 else:
-    # Global default: 60 req/min everywhere; auth endpoints override to 10/min
-    # via @limiter.limit("10/minute") on router handlers.
-    limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
+    # Global default: 120 req/min per IP. OPTIONS preflights never reach
+    # the limiter (CORS middleware sits outside SlowAPI and answers them),
+    # but dev StrictMode double-fires every effect, so 60 was tripping on
+    # ordinary navigation. Auth endpoints override to 10/min on handlers.
+    limiter = Limiter(key_func=get_remote_address, default_limits=["120/minute"])
 
 
 def wire_rate_limit(app):

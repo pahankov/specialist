@@ -9,6 +9,15 @@ import type {
 } from './types';
 
 export const adminApi = {
+  // Own panel profile (id/name/city — form defaults)
+  getProfile() {
+    return apiClient.get<{
+      id: number;
+      name: string;
+      city_id?: number | null;
+      city_name?: string | null;
+    }>('/api/v1/admin/profile');
+  },
   // Dashboard
   getDashboard() {
     return apiClient.get<DashboardStats>('/api/v1/admin/dashboard');

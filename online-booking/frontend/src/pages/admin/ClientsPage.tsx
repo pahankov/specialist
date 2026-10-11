@@ -51,6 +51,10 @@ function ClientsPage() {
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [city, setCity] = useState<CityOption | null>(null);
+  // Own city of the panel user (master): default for newly created clients
+  // so master and client share the city and can find each other.
+  const [myCity, setMyCity] = useState<CityOption | null>(null);
+  const [myCityLoaded, setMyCityLoaded] = useState(false);
   const [search, setSearch] = usePersistentState('clients.search', '');
   const [searchInput, setSearchInput] = usePersistentState('clients.searchInput', '');
   const [masterIdFilter, setMasterIdFilter] = usePersistentState<number | ''>('clients.master', '');
@@ -121,6 +125,32 @@ function ClientsPage() {
     setCity(null);
     setEditingId(null);
     setShowForm(false);
+  };
+
+  const ensureMyCity = async (): Promise<CityOption | null> => {
+    if (myCityLoaded) return myCity;
+    try {
+      const { data } = await adminApi.getProfile();
+      const c =
+        data.city_id != null
+          ? { id: data.city_id, name: data.city_name || '', source: 'local' as const }
+          : null;
+      setMyCity(c);
+      return c;
+    } catch {
+      return null;
+    } finally {
+      setMyCityLoaded(true);
+    }
+  };
+
+  const openCreateForm = async () => {
+    setName('');
+    setPhone('');
+    setEmail('');
+    setCity(await ensureMyCity());
+    setEditingId(null);
+    setShowForm(true);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -292,6 +322,11 @@ function ClientsPage() {
                 onChange={setCity}
                 style={{ marginBottom: 0 }}
               />
+              {editingId === null && city && myCity && city.id === myCity.id && (
+                <span style={{ fontSize: 12, color: '#666' }}>
+                  Ваш город — подставлен автоматически, можно сменить
+                </span>
+              )}
             </div>
             <div className="form-actions">
               <button type="submit" className="btn btn-primary">
@@ -330,11 +365,13 @@ function ClientsPage() {
                 {totalClients > pageSize ? ` из ${totalClients}` : ''})
               </span>
             </h3>
-            <Tooltip content="Добавить нового клиента">
-              <button className="btn btn-primary" onClick={() => setShowForm(true)}>
-                + Добавить клиента
-              </button>
-            </Tooltip>
+            {clients.length > 0 && (
+              <Tooltip content="Добавить нового клиента">
+                <button className="btn btn-primary" onClick={openCreateForm}>
+                  + Добавить клиента
+                </button>
+              </Tooltip>
+            )}
           </div>
 
           {clients.length === 0 ? (
@@ -343,7 +380,7 @@ function ClientsPage() {
               title="Клиенты не найдены"
               description="Добавьте первого клиента или измените параметры поиска"
               actionLabel="+ Добавить клиента"
-              onAction={() => setShowForm(true)}
+              onAction={openCreateForm}
             />
           ) : (
             <div style={{ overflowX: 'auto' }}>

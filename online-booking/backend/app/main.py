@@ -58,7 +58,7 @@ app = FastAPI(
         "Все API-эндпоинты версионированы: `/api/v1/`. "
         "Список изменений: `GET /api/v1/admin/changelog`."
     ),
-    version="1.23.0",
+    version="1.23.1",
     contact={
         "name": "Support",
         "email": "support@beauty-specialist.ru",
@@ -117,6 +117,14 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 # ─── Middleware ────────────────────────────────────────────────
+# ORDER MATTERS (Starlette: last added = outermost):
+# 1. SlowAPI first — 2. CORS second (outside SlowAPI) — 3. logging last.
+# CORS must wrap SlowAPI so that (a) OPTIONS preflights are answered by
+# CORS and never consume rate-limit budget, and (b) 429 responses flow
+# back through CORS and carry Access-Control-Allow-Origin (without it the
+# browser hides the 429 body and axios reports a misleading Network Error).
+
+wire_rate_limit(app)
 
 app.add_middleware(
     CORSMiddleware,
@@ -125,9 +133,6 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
-
-# slowapi rate limiting (state + 429 handler + middleware; no-op in tests)
-wire_rate_limit(app)
 
 # Request logging — LAST middleware so it wraps everything
 app.add_middleware(RequestLoggingMiddleware)

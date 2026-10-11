@@ -321,9 +321,11 @@ function MastersPage() {
           >
             📥 Экспорт CSV{selectedMasters.size > 0 ? ` (${selectedMasters.size})` : ''}
           </button>
-          <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
-            + Добавить мастера
-          </button>
+          {masters.length > 0 && (
+            <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
+              + Добавить мастера
+            </button>
+          )}
         </div>
       </div>
 

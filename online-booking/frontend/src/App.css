@@ -31,16 +31,45 @@
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
+  box-shadow:
+    0 2px 6px rgba(26, 26, 46, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 6px 14px rgba(26, 26, 46, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.btn:active {
+  transform: translateY(0);
+  box-shadow:
+    0 1px 3px rgba(26, 26, 46, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.btn:disabled {
+  transform: none;
+  box-shadow: none;
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .btn-primary {
   background: linear-gradient(135deg, #ff6b9d 0%, #ff5a8a 100%);
   color: white;
+  box-shadow:
+    0 4px 12px rgba(255, 107, 157, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
 .btn-primary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(255, 107, 157, 0.3);
+  box-shadow:
+    0 8px 20px rgba(255, 107, 157, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 
 .btn-secondary {
