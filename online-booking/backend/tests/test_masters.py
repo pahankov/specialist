@@ -138,3 +138,69 @@ class TestDeleteMaster:
         """Returns 404 when deleting non-existent master."""
         resp = await client.delete("/api/v1/masters/99999")
         assert resp.status_code == 404
+
+
+class TestMastersCityAndRating:
+    """City filter + batched city_name/avg_rating enrichment."""
+
+    async def _make_master(self, session, name, email, phone, city_id=None):
+        from sqlalchemy import select
+        from app.models.user import User, UserRole
+        from app.models.master_profile import MasterProfile
+        from app.utils.security import hash_password
+        u = User(name=name, email=email, phone=phone,
+                 hashed_password=hash_password("Password1!"),
+                 role=UserRole.MASTER, city_id=city_id,
+                 is_active=True, is_verified=True)
+        session.add(u)
+        await session.flush()
+        session.add(MasterProfile(user_id=u.id, status="active", is_active=True))
+        await session.flush()
+        mp = (await session.execute(
+            select(MasterProfile).where(
+                MasterProfile.user_id == u.id))).scalar_one()
+        return mp
+
+    async def test_city_filter_and_enrichment(self, client, session):
+        from sqlalchemy import select
+        from app.models.country import Country
+        from app.models.city import City
+        from app.models.review import Review
+
+        session.add(Country(code="X1", name_ru="X", name_en="X", phone_prefix="+1"))
+        await session.flush()
+        c = (await session.execute(
+            select(Country).where(Country.code == "X1")
+        )).scalar_one()
+        session.add(City(country_id=c.id, name_ru="Alpha", slug="alpha"))
+        session.add(City(country_id=c.id, name_ru="Beta", slug="beta"))
+        await session.flush()
+        from sqlalchemy import select as _select
+        alpha = (await session.execute(
+            _select(City).where(City.slug == "alpha"))).scalar_one()
+        beta = (await session.execute(
+            _select(City).where(City.slug == "beta"))).scalar_one()
+
+        mp_a = await self._make_master(
+            session, "Anna", "anna-x@example.com", "+79990001001", alpha.id)
+        await self._make_master(
+            session, "Boris", "boris-x@example.com", "+79990001002", beta.id)
+        session.add(Review(appointment_id=1, master_id=mp_a.id,
+                           client_name="C", client_phone="+70000000000",
+                           rating=5.0, is_published=True))
+        await session.commit()
+
+        resp = await client.get("/api/v1/masters/")
+        assert resp.status_code == 200
+        by_name = {m["name"]: m for m in resp.json()}
+        assert by_name["Anna"]["city_name"] == "Alpha"
+        assert by_name["Anna"]["city_id"] == alpha.id
+        assert by_name["Anna"]["avg_rating"] == 5.0
+        assert by_name["Boris"]["avg_rating"] is None
+
+        resp = await client.get(f"/api/v1/masters/?city_id={alpha.id}")
+        names = [m["name"] for m in resp.json()]
+        assert names == ["Anna"]
+
+        resp = await client.get("/api/v1/masters/?city_id=999999")
+        assert resp.json() == []

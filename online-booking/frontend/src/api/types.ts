@@ -53,6 +53,8 @@ export interface Master {
   tariff?: string;
   trial_ends_at?: string | null;
   city_id?: number;
+  city_name?: string | null;
+  avg_rating?: number | null;
   created_at: string;
   updated_at?: string;
 }
@@ -64,6 +66,7 @@ export interface Service {
   description?: string;
   duration_minutes: number;
   price: number | string;
+  category?: string | null;
   is_active: boolean;
 }
 

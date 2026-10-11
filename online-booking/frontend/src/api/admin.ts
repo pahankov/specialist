@@ -112,12 +112,19 @@ export const adminApi = {
     description?: string;
     duration_minutes: number;
     price: number;
+    category?: string;
   }) {
     return apiClient.post<Service>('/api/v1/admin/services', data);
   },
   updateService(
     id: number,
-    data: { name?: string; description?: string; duration_minutes?: number; price?: number },
+    data: {
+      name?: string;
+      description?: string;
+      duration_minutes?: number;
+      price?: number;
+      category?: string;
+    },
   ) {
     return apiClient.patch<Service>(`/api/v1/admin/services/${id}`, data);
   },

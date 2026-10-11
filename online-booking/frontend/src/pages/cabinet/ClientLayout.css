@@ -1,0 +1,33 @@
+@import url('../admin/AdminLayout.css');
+
+/* Client theme: same shell structure, distinct teal accent
+ * so the three sections are visually unmistakable. */
+
+.client-layout .admin-sidebar {
+  background: linear-gradient(180deg, #0f766e 0%, #134e4a 100%);
+}
+
+.client-layout .sidebar-brand h2,
+.client-layout .sidebar-user,
+.client-layout .sidebar-subtitle {
+  color: #e6fffa;
+}
+
+.client-layout .nav-item {
+  color: #ccfbf1;
+}
+
+.client-layout .nav-item:hover {
+  background: rgba(204, 251, 241, 0.15);
+  color: #fff;
+}
+
+.client-layout .nav-item.active {
+  background: rgba(45, 212, 191, 0.25);
+  color: #fff;
+}
+
+.client-layout .collapse-btn,
+.client-layout .btn-logout {
+  color: #ccfbf1;
+}

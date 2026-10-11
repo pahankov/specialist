@@ -17,8 +17,9 @@ import './ServicesPage.css';
 
 function ServicesPage() {
   const { widths: colW, setWidth: setColW } = useColumnWidths('services', {
-    name: 220,
-    desc: 300,
+    name: 200,
+    category: 130,
+    desc: 260,
     duration: 120,
     price: 110,
     actions: 120,
@@ -37,6 +38,7 @@ function ServicesPage() {
   const [description, setDescription] = useState('');
   const [duration, setDuration] = useState(30);
   const [price, setPrice] = useState(1000);
+  const [category, setCategory] = useState('');
 
   const fetchData = async () => {
     try {
@@ -62,6 +64,7 @@ function ServicesPage() {
     setDescription('');
     setDuration(30);
     setPrice(1000);
+    setCategory('');
     setEditingId(null);
     setShowForm(false);
   };
@@ -80,10 +83,17 @@ function ServicesPage() {
           description,
           duration_minutes: duration,
           price,
+          category: category || undefined,
         });
         toast.success('Услуга обновлена');
       } else {
-        await adminApi.createService({ name, description, duration_minutes: duration, price });
+        await adminApi.createService({
+          name,
+          description,
+          duration_minutes: duration,
+          price,
+          category: category || undefined,
+        });
         toast.success('Услуга создана');
       }
       resetForm();
@@ -98,6 +108,7 @@ function ServicesPage() {
     setDescription(s.description || '');
     setDuration(s.duration_minutes);
     setPrice(Number(s.price));
+    setCategory(s.category || '');
     setEditingId(s.id);
     setShowForm(true);
     setError('');
@@ -179,6 +190,20 @@ function ServicesPage() {
                 placeholder="Описание услуги"
               />
             </div>
+            <div className="form-group">
+              <label>Категория</label>
+              <input
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                placeholder="Например: Ногти, Шугаринг, Ресницы"
+                list="service-categories"
+              />
+              <datalist id="service-categories">
+                {[...new Set(services.map((s) => s.category).filter(Boolean))].map((c) => (
+                  <option key={c} value={c as string} />
+                ))}
+              </datalist>
+            </div>
             <div className="form-actions">
               <button type="submit" className="btn btn-primary">
                 {editingId ? 'Сохранить' : 'Создать'}
@@ -211,6 +236,12 @@ function ServicesPage() {
                 <ResizableTh width={colW.name} onResize={(w) => setColW('name', w)}>
                   Название
                 </ResizableTh>
+                <ResizableTh
+                  width={colW.category}
+                  onResize={(w) => setColW('category', w)}
+                >
+                  Категория
+                </ResizableTh>
                 <ResizableTh width={colW.desc} onResize={(w) => setColW('desc', w)}>
                   Описание
                 </ResizableTh>
@@ -231,6 +262,7 @@ function ServicesPage() {
                   <td>
                     <strong>{s.name}</strong>
                   </td>
+                  <td>{s.category || '—'}</td>
                   <td>{s.description || '—'}</td>
                   <td>{s.duration_minutes} мин</td>
                   <td>{formatPrice(s.price)} ₽</td>

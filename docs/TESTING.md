@@ -1,12 +1,12 @@
 # Тестирование
 
-> Backend: 41 файл, 334 теста (pytest, SQLite-файл на тест). Frontend: 16 файлов, 77 тестов (Vitest).
+> Backend: 42 файла, 360 тестов (pytest, SQLite-файл на тест). Frontend: 19 файлов, 86 тестов (Vitest).
 > Чек-лист перед коммитом — только в [RULES.md](RULES.md), правила деплоя — в [DEPLOYMENT_RULES.md](DEPLOYMENT_RULES.md).
 
 ## Запуск
 
 ```powershell
-# Backend (322 passed, ~4 мин)
+# Backend (369 passed, ~6 мин)
 cd online-booking\backend
 $env:PYTHONPATH='.'
 pytest tests/ -v                          # всё
@@ -62,7 +62,7 @@ npx prettier --check src/                 # стиль (конфиг .prettierrc
     `test_toggle_admin_self` ×2, `test_email_conflict_skips_row` ×2; переименованы).
 12. `client_profiles.user_id NOT NULL` — сначала User+flush, потом профиль.
 
-## Backend: файлы (сгенерировано, 322 всего)
+## Backend: файлы (сгенерировано, 369 всего)
 
 | Файл | N | Файл | N |
 |---|---|---|---|
@@ -70,36 +70,36 @@ npx prettier --check src/                 # стиль (конфиг .prettierrc
 | test_admin_audit.py | 4 | test_log_level.py | 3 |
 | test_admin_clients.py | 11 | test_master_mutations.py | 7 |
 | test_admin_dashboard.py | 4 | test_master_stats.py | 6 |
-| test_admin_working_hours.py | 11 | test_master_tariff_status.py | 14 |
-| test_appointments.py | 10 | test_masters.py | 10 |
-| test_appointments_filters.py | 2 | test_masters_bulk.py | 6 |
-| test_auth.py | 9 | test_masters_crud.py | 19 |
-| test_auth_dependencies.py | 10 | test_masters_security.py | 11 |
-| test_auth_service.py | 13 | test_masters_status.py | 12 |
+| test_admin_services.py | 9 | test_master_tariff_status.py | 14 |
+| test_admin_working_hours.py | 11 | test_masters.py | 11 |
+| test_appointments.py | 10 | test_masters_bulk.py | 6 |
+| test_appointments_filters.py | 2 | test_masters_crud.py | 19 |
+| test_auth.py | 9 | test_masters_security.py | 11 |
+| test_auth_dependencies.py | 10 | test_masters_status.py | 12 |
+| test_auth_service.py | 13 | test_max_auth.py | 28 |
 | test_auth_tokens.py | 12 | test_password_security.py | 11 |
 | test_booking_flow.py | 7 | test_pull_production.py | 12 |
 | test_cache_service.py | 19 | test_rate_limiting.py | 3 |
 | test_cities_resolve.py | 2 | test_refresh_tokens.py | 5 |
 | test_clients.py | 9 | test_reviews.py | 12 |
 | test_create_superuser.py | 4 | test_schedule.py | 7 |
-| test_dadata_proxy.py | 5 | test_services.py | 8 |
+| test_dadata_proxy.py | 5 | test_services.py | 10 |
 | test_export_tasks.py | 4 | test_validation_handler.py | 2 |
 | test_fix_production_db.py | 2 | test_work_window.py | 2 |
-| test_health.py | 3 | | |
-
-## Frontend: файлы (77 всего)
+| test_health.py | 3 |  |  |
+## Frontend: файлы (86 всего)
 
 Покрыто: `apiError`, `authRefresh` (очередь 401), `CitySelect`, `ClientsFilter`, `dadata`,
 `helpers` (schedule), schedule `hooks`, `impersonation`, `MasterSelect`,
 `maxAuth` (MAX-вкладка: код + автовход), `Modal`/`ConfirmDialog`, `Pager`, `PhoneInput`, `section`, `SuperAdminLayout`,
-`StatusBadge`/`useAdminSort`. Не покрыто (сознательно): большие страницы и роутинг-гарды —
+`StatusBadge`/`useAdminSort`, `cookies` (getUserRole), `maxAuth` (4: deeplink-кнопка, verify, ошибка), `CabinetPage` (список/отмена/empty/статы/город), `ClientLayout` (свой nav под `/cabinet`), `BookingWizard` (мастер→категории→публичная запись). Не покрыто (сознательно): большие страницы и роутинг-гарды —
 их держит `tsc --noEmit` + ручной смоук.
 
 ## CI/CD гейты
 
 | Gate | Где | Fail → |
 |---|---|---|
-| pytest 322 + `--cov-fail-under=55` | `ci.yml` backend-tests | PR/деплой blocked |
+| pytest 369 + `--cov-fail-under=55` | `ci.yml` backend-tests | PR/деплой blocked |
 | eslint (0 errors) + `tsc --noEmit` + `vitest run` + `prettier --check` | `ci.yml` frontend-lint | PR/деплой blocked |
 | pytest на сервере до restart | `deploy.yml` | deploy abort |
 | pg_dump перед миграциями | `deploy.yml` | warn, continue |

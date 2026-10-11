@@ -8,11 +8,14 @@ class Service(Base):
     __tablename__ = "services"
     __table_args__ = (
         Index('ix_services_master_active', 'master_id', 'is_active'),
+        Index('ix_services_category', 'category'),
     )
 
     id = Column(Integer, primary_key=True)
     master_id = Column(Integer, ForeignKey("master_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
     name = Column(String(200), nullable=False)
+    # Service category for client-side grouping (e.g. "Ногти", "Шугаринг", "Ресницы").
+    category = Column(String(50), nullable=True)
     description = Column(Text)
     duration_minutes = Column(Integer, nullable=False)
     price = Column(Numeric(10, 2), nullable=False)

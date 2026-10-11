@@ -50,7 +50,7 @@
 ### Masters
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
-| `GET` | `/api/v1/masters/` | Список мастеров (пагинация) |
+| `GET` | `/api/v1/masters/?city_id=` | Активные мастера (+`city_id/city_name/avg_rating` в ответе; фильтр по городу) |
 | `GET` | `/api/v1/masters/{id}` | Мастер по ID |
 | `POST` | `/api/v1/masters/` | Создать мастера |
 | `PATCH` | `/api/v1/masters/{id}` | Обновить мастера |
@@ -59,7 +59,7 @@
 ### Services
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
-| `GET` | `/api/v1/services/` | Список услуг (пагинация) |
+| `GET` | `/api/v1/services/?master_id=` | Список услуг (+`category` для группировки) |
 | `GET` | `/api/v1/services/{id}` | Услуга по ID |
 | `POST` | `/api/v1/services/` | Создать услугу |
 | `DELETE` | `/api/v1/services/{id}` | Удалить услугу |
@@ -81,6 +81,15 @@
 | `GET` | `/api/v1/clients/{id}` | Клиент по ID |
 | `POST` | `/api/v1/clients/` | Создать клиента |
 | `DELETE` | `/api/v1/clients/{id}` | Удалить клиента |
+
+### Cabinet (JWT CLIENT required — личный кабинет)
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| `GET` | `/api/v1/client/me` | Свой профиль (имя/телефон/город для шапки) |
+| `PATCH` | `/api/v1/client/me` | Имя/город (`city_id` проверяется, 404) |
+| `GET` | `/api/v1/client/stats` | Дашборд: траты, визиты, предстоящие, любимые мастер/услуга |
+| `GET` | `/api/v1/client/appointments` | Свои записи (все, новые сверху; фронт делит на будущие/историю) |
+| `POST` | `/api/v1/client/appointments/{id}/cancel` | Отмена своей pending/confirmed записи (чужая — 404, финальная — 400; пишется в аудит) |
 
 ### Working Hours
 | Метод | Endpoint | Описание |

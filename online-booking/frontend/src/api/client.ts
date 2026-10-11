@@ -6,9 +6,11 @@
  * - ./auth — authApi
  * - ./admin — adminApi
  * - ./superadmin — superAdminAuthApi, superAdminApi
+ * - ./cabinet — cabinetApi (client self-service)
  */
 export { default, refreshClient } from './http';
 export * from './public';
 export * from './auth';
 export * from './admin';
 export * from './superadmin';
+export * from './cabinet';

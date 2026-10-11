@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from sqlalchemy import select, text
 from app.utils.security import hash_password
+from seed_common import infer_category
 from app.database import AsyncSessionLocal
 from app.models.user import User, UserRole
 from app.models.master_profile import MasterProfile, MasterStatus
@@ -103,8 +104,9 @@ async def ensure_services(db):
         for svc_name, duration, price in chosen:
             db.add(Service(
                 master_id=mp.id, name=svc_name,
-                description=f"Услуга от мастера {master.name}",
+                description=f"Услуга мастера {master.name}",
                 duration_minutes=duration, price=price, is_active=True,
+                category=infer_category(svc_name),
                 created_at=now - timedelta(days=random.randint(10, 300)),
             ))
     

@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import func, cast, String
 from sqlalchemy.orm import joinedload
-from typing import List
+from typing import List, Optional
 import bcrypt
 from pydantic import BaseModel
 
@@ -31,9 +31,13 @@ async def get_masters(
     db: AsyncSession = Depends(get_db),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
+    city_id: Optional[int] = Query(None, description="Filter by user's city"),
 ):
     """Get all active masters (public endpoint)."""
-    result = await db.execute(
+    from app.models.city import City
+    from app.models.review import Review
+
+    query = (
         select(MasterProfile)
         .join(MasterProfile.user)
         .options(joinedload(MasterProfile.user))
@@ -41,11 +45,37 @@ async def get_masters(
             User.role == UserRole.MASTER,
             cast(MasterProfile.status, String) == 'active'
         )
-        .order_by(User.name)
-        .offset(offset).limit(limit)
     )
+    if city_id is not None:
+        query = query.where(User.city_id == city_id)
+    result = await db.execute(query.order_by(User.name).offset(offset).limit(limit))
     profiles = result.scalars().all()
-    return [_master_profile_to_dict(mp) for mp in profiles]
+    if not profiles:
+        return []
+
+    # Batch enrichment: city names + average ratings (two queries, no N+1).
+    mp_ids = [mp.id for mp in profiles]
+    city_ids = {mp.user.city_id for mp in profiles if mp.user.city_id}
+    cities = {}
+    if city_ids:
+        city_rows = (await db.execute(
+            select(City).where(City.id.in_(city_ids))
+        )).scalars().all()
+        cities = {c.id: c.name_ru for c in city_rows}
+    ratings = dict((await db.execute(
+        select(Review.master_id, func.avg(Review.rating))
+        .where(Review.master_id.in_(mp_ids), Review.is_published == True)
+        .group_by(Review.master_id)
+    )).all())
+    out = []
+    for mp in profiles:
+        d = _master_profile_to_dict(mp)
+        d["city_id"] = mp.user.city_id
+        d["city_name"] = cities.get(mp.user.city_id)
+        avg = ratings.get(mp.id)
+        d["avg_rating"] = round(float(avg), 1) if avg is not None else None
+        out.append(d)
+    return out
 
 
 @router.get("/masters/{master_id}", response_model=dict)

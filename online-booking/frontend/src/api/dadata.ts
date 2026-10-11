@@ -2,16 +2,12 @@ import axios from 'axios';
 import apiClient from './http';
 
 // Same-origin proxy path (NO direct DaData calls — the secret must never
-// reach the browser bundle):
-// - dev: vite proxies /api/dadata -> suggestions.dadata.ru (needs
-//   VITE_DADATA_TOKEN in frontend .env for the direct dev path)
-// - prod: nginx proxies /api/dadata -> backend proxy (server-side keys)
-const DADATA_TOKEN = import.meta.env.VITE_DADATA_TOKEN ?? '';
-
+// reach the browser bundle). Both dev (vite -> localhost:8000) and prod
+// (nginx -> backend) terminate at the backend proxy, which authenticates
+// with server-side keys from backend/.env.
 const dadataClient = axios.create({
   baseURL: '/api/dadata',
   headers: {
-    Authorization: `Token ${DADATA_TOKEN}`,
     'Content-Type': 'application/json',
   },
 });

@@ -132,9 +132,9 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
     setTimeout(() => {
       onClose();
       // Role-based landing: admins and masters get their sections,
-      // clients land on booking (no cabinet yet — see README roadmap).
+      // clients land in their cabinet.
       const role = getUserRole();
-      let home = '/booking';
+      let home = '/cabinet';
       try {
         if (decodeJwtPayload(getCookie('access_token') ?? '')?.is_admin === true) {
           home = `${SUPER_PREFIX}/dashboard`;

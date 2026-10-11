@@ -87,3 +87,27 @@ class TestDeleteService:
         """Returns 404 for non-existent service."""
         resp = await client.delete("/api/v1/services/99999")
         assert resp.status_code == 404
+
+
+class TestServiceCategory:
+    """Category round-trips through public create/get."""
+
+    async def test_create_and_get_with_category(
+        self, client, test_master_data, test_service_data
+    ):
+        await client.post("/api/v1/auth/register", json=test_master_data)
+        create = await client.post("/api/v1/services/", json={
+            **test_service_data, "master_id": 1, "category": "Ногти"})
+        assert create.status_code == 201
+        assert create.json()["category"] == "Ногти"
+
+        service_id = create.json()["id"]
+        got = await client.get(f"/api/v1/services/{service_id}")
+        assert got.json()["category"] == "Ногти"
+
+    async def test_category_optional(self, client, test_master_data, test_service_data):
+        await client.post("/api/v1/auth/register", json=test_master_data)
+        create = await client.post(
+            "/api/v1/services/", json={**test_service_data, "master_id": 1})
+        assert create.status_code == 201
+        assert create.json()["category"] is None

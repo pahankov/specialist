@@ -1,11 +1,14 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { Navigation, Autoplay } from 'swiper/modules';
-import { mastersApi, servicesApi } from '../../api/client';
+import { toast } from 'sonner';
+import { mastersApi, servicesApi, authApi } from '../../api/client';
 import type { Master, Service } from '../../api/types';
 import LoginModal from '../../components/LoginModal';
 import { ReviewsSection } from '../../components/reviews';
+import { getCookie, decodeJwtPayload, clearAuthCookies } from '../../utils/cookies';
+import { ADMIN_PREFIX, SUPER_PREFIX } from '../../utils/section';
 import 'swiper/css';
 import 'swiper/css/navigation';
 import 'swiper/css/autoplay';
@@ -27,12 +30,51 @@ function pickRandom<T>(array: T[], count: number): T[] {
 }
 
 function HomePage() {
+  const navigate = useNavigate();
   const [allMasters, setAllMasters] = useState<Master[]>([]);
   const [allServices, setAllServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showLogin, setShowLogin] = useState(false);
+  const [authName, setAuthName] = useState<string | null>(null);
+  const [authRole, setAuthRole] = useState<string | null>(null);
   const swiperInstance = useRef<any>(null);
+
+  const refreshAuth = () => {
+    try {
+      const payload = decodeJwtPayload(getCookie('access_token') ?? '');
+      if (payload?.sub) {
+        setAuthName(payload.name || 'Гость');
+        setAuthRole(payload.role || null);
+        return;
+      }
+    } catch {
+      /* not authenticated */
+    }
+    setAuthName(null);
+    setAuthRole(null);
+  };
+
+  useEffect(() => {
+    refreshAuth();
+  }, [showLogin]);
+
+  const handleLogout = async () => {
+    try {
+      await authApi.logout();
+    } catch {
+      /* proceed with local cleanup anyway */
+    }
+    clearAuthCookies();
+    refreshAuth();
+    toast.success('Вы вышли из аккаунта');
+  };
+
+  const homeForRole = () => {
+    if (authRole === 'ADMIN') return `${SUPER_PREFIX}/dashboard`;
+    if (authRole === 'MASTER') return `${ADMIN_PREFIX}/dashboard`;
+    return '/cabinet';
+  };
 
   // Random selection on each page load (memoized)
   const randomServices = useMemo(() => pickRandom(allServices, 6), [allServices]);
@@ -69,9 +111,21 @@ function HomePage() {
         <div className="hero-content">
           <h1>Электронная запись</h1>
           <p>Запишитесь к лучшему мастеру красоты</p>
-          <button className="btn btn-primary btn-login" onClick={() => setShowLogin(true)}>
-            Вход в систему
-          </button>
+          {authName ? (
+            <div className="hero-auth">
+              <span className="hero-user">👤 {authName}</span>
+              <button className="btn btn-primary" onClick={() => navigate(homeForRole())}>
+                {authRole === 'CLIENT' ? 'Мои записи' : 'Панель'}
+              </button>
+              <button className="btn btn-ghost" onClick={handleLogout}>
+                Выйти
+              </button>
+            </div>
+          ) : (
+            <button className="btn btn-primary btn-login" onClick={() => setShowLogin(true)}>
+              Вход в систему
+            </button>
+          )}
         </div>
       </header>
 

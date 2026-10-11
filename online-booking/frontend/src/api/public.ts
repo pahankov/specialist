@@ -72,7 +72,10 @@ export const blockedSlotsApi = {
 };
 
 export const mastersApi = {
-  getAll: () => apiClient.get<Master[]>('/api/v1/masters/'),
+  getAll: (cityId?: number) =>
+    apiClient.get<Master[]>('/api/v1/masters/', {
+      params: cityId ? { city_id: cityId } : undefined,
+    }),
   getById: (id: number) => apiClient.get<Master>(`/api/v1/masters/${id}`),
   create: (data: {
     name: string;

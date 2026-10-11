@@ -33,7 +33,8 @@ async def create_admin_service(
     mp_id = await get_master_profile_id(db, master)
     new_service = Service(
         master_id=mp_id, name=data.name, description=data.description,
-        duration_minutes=data.duration_minutes, price=data.price, is_active=True
+        duration_minutes=data.duration_minutes, price=data.price,
+        category=data.category, is_active=True
     )
     db.add(new_service)
     await db.flush()

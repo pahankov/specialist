@@ -20,6 +20,7 @@ from app.modules.schedule import router as schedule_router
 from app.modules.review import router as review_router
 from app.modules.admin import router as admin_router
 from app.modules.city import router as city_router
+from app.modules.client import router as client_router
 from app.modules.dadata.router import router as dadata_router
 from app.modules.maxauth import router as max_router, webhook_router as max_webhook_router
 
@@ -57,7 +58,7 @@ app = FastAPI(
         "Все API-эндпоинты версионированы: `/api/v1/`. "
         "Список изменений: `GET /api/v1/admin/changelog`."
     ),
-    version="1.18.1",
+    version="1.20.0",
     contact={
         "name": "Support",
         "email": "support@beauty-specialist.ru",
@@ -161,6 +162,7 @@ app.include_router(booking_router, prefix="/api/v1/appointments", tags=["appoint
 app.include_router(service_router, prefix="/api/v1/services", tags=["services"])
 app.include_router(schedule_router, prefix="/api/v1/working-hours", tags=["working-hours"])
 app.include_router(review_router, prefix="/api/v1/reviews", tags=["reviews"])
+app.include_router(client_router, prefix="/api/v1/client", tags=["client"])
 app.include_router(admin_router)  # admin endpoints (User model, modules/admin/)
 app.include_router(dadata_router, prefix="/api/dadata")  # DAData address autocomplete proxy
 app.include_router(max_webhook_router, prefix="/api/max", tags=["max-webhook"])

@@ -14,6 +14,8 @@ import MastersPage from './pages/admin/MastersPage';
 import MasterDetailPage from './pages/admin/MasterDetailPage';
 import LogsPage from './pages/admin/LogsPage';
 import RevenuePage from './pages/admin/RevenuePage';
+import CabinetPage from './pages/cabinet/CabinetPage';
+import ClientLayout from './pages/cabinet/ClientLayout';
 import ErrorBoundary from './components/ErrorBoundary';
 import { getCookie, decodeJwtPayload, getUserRole } from './utils/cookies';
 import { ADMIN_PREFIX, SUPER_PREFIX } from './utils/section';
@@ -54,7 +56,21 @@ function RequireMasterSection({ children }: { children: React.ReactNode }) {
     return <Navigate to={`${SUPER_PREFIX}/dashboard`} replace />;
   }
   if (getUserRole() === 'CLIENT') {
-    return <Navigate to="/booking" replace />;
+    return <Navigate to="/cabinet" replace />;
+  }
+  return <>{children}</>;
+}
+
+/** Client cabinet: CLIENT role only (masters/admins have their own homes). */
+function RequireClient({ children }: { children: React.ReactNode }) {
+  if (!getIsAuthenticated()) {
+    return <Navigate to="/" replace />;
+  }
+  if (getIsAdmin()) {
+    return <Navigate to={`${SUPER_PREFIX}/dashboard`} replace />;
+  }
+  if (getUserRole() !== 'CLIENT') {
+    return <Navigate to={`${ADMIN_PREFIX}/dashboard`} replace />;
   }
   return <>{children}</>;
 }
@@ -80,6 +96,16 @@ function App() {
           {/* Public routes */}
           <Route path="/" element={<HomePage />} />
           <Route path="/booking" element={<BookingPage />} />
+          <Route
+            path="/cabinet"
+            element={
+              <RequireClient>
+                <ClientLayout />
+              </RequireClient>
+            }
+          >
+            <Route index element={<CabinetPage />} />
+          </Route>
 
           {/* Logins happen via modal on home */}
           <Route path="/admin/login" element={<Navigate to="/" replace />} />

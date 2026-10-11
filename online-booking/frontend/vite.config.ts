@@ -7,13 +7,12 @@ export default defineConfig({
     port: 3000,
     host: '0.0.0.0',
     proxy: {
+      // DaData goes through the backend proxy (server-side keys) in dev too,
+      // exactly like prod (nginx -> backend). No secrets in the bundle, no
+      // VITE_DADATA_TOKEN needed: direct calls always 401 without it.
       '/api/dadata': {
-        target: 'https://suggestions.dadata.ru',
+        target: 'http://localhost:8000',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/dadata/, '/suggestions/api/4_1/rs/suggest/address'),
-        headers: {
-          'Origin': 'http://localhost:3000',
-        },
       },
     },
   },

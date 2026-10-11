@@ -211,8 +211,7 @@ async def ensure_geography(session: AsyncSession) -> tuple:
     return new_countries, new_cities
 
 
-async def ensure_reviews(session: AsyncSession, seed: int = 42) -> int:
-    """Create reviews for completed appointments (idempotent). Returns count.
+async def ensure_reviews(session: AsyncSession, seed: int = 42) -> int:    """Create reviews for completed appointments (idempotent). Returns count.
 
     Fixed version of the two old copies: no lazy relationship access
     (appt.client_profile.user_id raised MissingGreenlet under async),
@@ -257,3 +256,24 @@ async def ensure_reviews(session: AsyncSession, seed: int = 42) -> int:
     await session.commit()
     print(f"  Created {made} reviews")
     return made
+
+
+# --- Service categories (mirrors f7a8b9c1d2e3 migration rules) ---
+
+CATEGORY_RULES = [
+    ("Ногти", ("ногт", "маник", "педик")),
+    ("Шугаринг", ("шугаринг", "депил", "воск", "эпиляц")),
+    ("Ресницы и брови", ("ресниц", "бров", "lash", "brow")),
+    ("Волосы", ("волос", "стриж", "окраш", "уклад", "прическ")),
+    ("Массаж", ("массаж",)),
+    ("Макияж", ("макияж", "мейк", "визаж")),
+]
+
+
+def infer_category(name: str) -> str:
+    """Guess service category by name stems (same rules as the migration)."""
+    low = (name or "").lower()
+    for category, stems in CATEGORY_RULES:
+        if any(s in low for s in stems):
+            return category
+    return "Прочее"

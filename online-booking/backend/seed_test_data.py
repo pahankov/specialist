@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, date, time, timezone
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.utils.security import hash_password
+from seed_common import infer_category
 
 from app.database import AsyncSessionLocal, engine, Base
 from app.models.user import User, UserRole
@@ -183,9 +184,10 @@ async def create_seed_data():
                 svc = Service(
                     master_id=mp.id,
                     name=svc_name,
-                    description=f"Услуга от мастера (master_id={mp.user_id})",
+                    description=f"Услуга мастера (master_id={mp.user_id})",
                     duration_minutes=duration,
                     price=price,
+                    category=infer_category(svc_name),
                     is_active=random.random() > 0.1,
                     created_at=now - timedelta(days=random.randint(10, 300)),
                 )

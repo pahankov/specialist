@@ -60,6 +60,34 @@ legend {
   accent-color: #ff6b9d;
 }
 
+.service-option.selected {
+  border-color: #ff6b9d;
+  background: #fff9fb;
+}
+
+.masters-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.service-category {
+  margin-bottom: 1.5rem;
+}
+
+.service-category:last-child {
+  margin-bottom: 0;
+}
+
+.service-category-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #2d3748;
+  margin: 0 0 0.75rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 2px solid #ffe3ec;
+}
+
 .service-label {
   display: flex;
   flex-direction: column;

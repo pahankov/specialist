@@ -130,6 +130,7 @@
 | description | TEXT | NULLABLE | Описание |
 | duration_minutes | INTEGER | NOT NULL | Длительность (минуты) |
 | price | NUMERIC(10, 2) | NOT NULL | Цена |
+| category | VARCHAR(50) | NULLABLE | Категория для группировки (Ногти, Шугаринг, ...) |
 | is_active | BOOLEAN | DEFAULT TRUE | Активна ли |
 | created_at | TIMESTAMP WITH TIME ZONE | | Дата создания |
 | updated_at | TIMESTAMP WITH TIME ZONE | | Дата обновления |
@@ -314,8 +315,12 @@
 | # | Revision | Down | Описание | Дата |
 |---|----------|------|----------|------|
 | 1 | 5280b944554f | None | baseline_full_schema — все 13 таблиц из моделей (проверено: upgrade с нуля == `Base.metadata`) | 2026-10-10 |
+| 2 | c4d5e6f7a8b9 | 5280b944554f | MAX-поля `otp_codes` (channel/max_user_id/max_user_name) | 2026-10-10 |
+| 3 | d5e6f7a8b9c1 | c4d5e6f7a8b9 | `otp_codes.max_verified_phone` | 2026-10-10 |
+| 4 | e6f7a8b9c1d2 | d5e6f7a8b9c1 | `users.max_user_id` (привязка MAX-аккаунта) | 2026-10-10 |
+| 5 | f7a8b9c1d2e3 | e6f7a8b9c1d2 | `services.category` + backfill по ключевым словам | 2026-10-11 |
 
-**Head:** `5280b944554f`
+**Head:** `f7a8b9c1d2e3`
 
 > Старая цепочка из 12 миграций (`9a9c2edb` → `b2c3d4e5f6a7`) удалена после squash —
 > история сохранена в git (`git log -- alembic/versions/`). Прод-БД со старым head

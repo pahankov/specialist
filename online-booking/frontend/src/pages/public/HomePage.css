@@ -55,6 +55,19 @@
   box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
 }
 
+.hero-auth {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.hero-user {
+  font-size: 18px;
+  font-weight: 700;
+}
+
 /* Sections */
 .services-section,
 .masters-section {
