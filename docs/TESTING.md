@@ -1,6 +1,6 @@
 # Тестирование
 
-> Backend: 42 файла, 360 тестов (pytest, SQLite-файл на тест). Frontend: 19 файлов, 86 тестов (Vitest).
+> Backend: 42 файла, 369 тестов (pytest, SQLite-файл на тест). Frontend: 20 файлов, 89 тестов (Vitest).
 > Чек-лист перед коммитом — только в [RULES.md](RULES.md), правила деплоя — в [DEPLOYMENT_RULES.md](DEPLOYMENT_RULES.md).
 
 ## Запуск
@@ -87,12 +87,13 @@ npx prettier --check src/                 # стиль (конфиг .prettierrc
 | test_export_tasks.py | 4 | test_validation_handler.py | 2 |
 | test_fix_production_db.py | 2 | test_work_window.py | 2 |
 | test_health.py | 3 |  |  |
-## Frontend: файлы (86 всего)
+## Frontend: файлы (89 всего)
 
 Покрыто: `apiError`, `authRefresh` (очередь 401), `CitySelect`, `ClientsFilter`, `dadata`,
 `helpers` (schedule), schedule `hooks`, `impersonation`, `MasterSelect`,
-`maxAuth` (MAX-вкладка: код + автовход), `Modal`/`ConfirmDialog`, `Pager`, `PhoneInput`, `section`, `SuperAdminLayout`,
-`StatusBadge`/`useAdminSort`, `cookies` (getUserRole), `maxAuth` (4: deeplink-кнопка, verify, ошибка), `CabinetPage` (список/отмена/empty/статы/город), `ClientLayout` (свой nav под `/cabinet`), `BookingWizard` (мастер→категории→публичная запись). Не покрыто (сознательно): большие страницы и роутинг-гарды —
+`maxAuth` (4: deeplink-кнопка, verify, ошибка), `Modal`/`ConfirmDialog`, `Pager`, `PhoneInput`, `section`, `SuperAdminLayout`,
+`StatusBadge`/`useAdminSort`, `cookies` (getUserRole),
+`CabinetPage` (список/отмена/empty/статы/город), `ClientLayout` (свой nav под `/cabinet`), `BookingWizard` (мастер→категории→публичная запись). Не покрыто (сознательно): большие страницы и роутинг-гарды —
 их держит `tsc --noEmit` + ручной смоук.
 
 ## CI/CD гейты

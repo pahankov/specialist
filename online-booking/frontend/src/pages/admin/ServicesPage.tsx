@@ -236,10 +236,7 @@ function ServicesPage() {
                 <ResizableTh width={colW.name} onResize={(w) => setColW('name', w)}>
                   Название
                 </ResizableTh>
-                <ResizableTh
-                  width={colW.category}
-                  onResize={(w) => setColW('category', w)}
-                >
+                <ResizableTh width={colW.category} onResize={(w) => setColW('category', w)}>
                   Категория
                 </ResizableTh>
                 <ResizableTh width={colW.desc} onResize={(w) => setColW('desc', w)}>
