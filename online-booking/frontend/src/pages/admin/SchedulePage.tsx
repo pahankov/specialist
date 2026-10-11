@@ -13,7 +13,7 @@ import { Calendar } from '../../components/schedule/Calendar';
 import { TimeSlots } from '../../components/schedule/TimeSlots';
 import { BookingModal } from '../../components/schedule/BookingModal';
 import { ConfirmDialog, MasterSelect } from '../../components/common';
-import { getApiErrorMessage } from '../../utils/apiError';
+import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError';
 import { getCookie, decodeJwtPayload } from '../../utils/cookies';
 import { MonthlyStatsComponent } from '../../components/schedule/MonthlyStats';
 import { getAppointmentsForSlot } from '../../components/schedule/helpers';
@@ -62,12 +62,14 @@ function SchedulePage() {
     'schedule.master',
     '',
   );
-  // Daily work window (whole hours): drives how many granules render.
+  // Daily work window (whole hours): drives how many granules render
+  // AND the default hours for newly added working days.
   // Master sees own window; superadmin sees the selected master's.
   const [windowStart, setWindowStart] = useState(8);
   const [windowEnd, setWindowEnd] = useState(22);
   const [windowDraft, setWindowDraft] = useState({ start: '8', end: '22' });
   const [windowSaving, setWindowSaving] = useState(false);
+  const [applyToAllDays, setApplyToAllDays] = usePersistentState('schedule.applyAll', false);
   // Regular masters see only their own schedule; superadmin must pick one
   // (they have no profile of their own — empty view means "not chosen",
   // not "everyone is off").
@@ -186,13 +188,15 @@ function SchedulePage() {
         appointments,
         setError,
         selectedMasterId,
+        windowStart,
+        windowEnd,
       );
       if (result) {
         setSchedule(result.newSchedule);
         setActiveHours(result.newActiveHours);
       }
     },
-    [schedule, activeHours, appointments, selectedMasterId, isSuperAdmin],
+    [schedule, activeHours, appointments, selectedMasterId, isSuperAdmin, windowStart, windowEnd],
   );
 
   const handleAddSlot = useCallback(
@@ -211,18 +215,19 @@ function SchedulePage() {
       }
 
       try {
+        const pad = (h: number) => `${String(h).padStart(2, '0')}:00`;
         await adminApi.createWorkingHour({
           master_id: selectedMasterId === '' ? undefined : selectedMasterId,
           schedule_date: dateStr,
-          start_time: '09:00',
-          end_time: '18:00',
+          start_time: pad(windowStart),
+          end_time: pad(windowEnd),
         });
         setSchedule((prev) => ({
           ...prev,
-          [dateStr]: { start: 9, end: 18 },
+          [dateStr]: { start: windowStart, end: windowEnd },
         }));
         const newActiveHours: Record<string, boolean> = {};
-        for (let h = 9; h < 18; h++) {
+        for (let h = windowStart; h < windowEnd; h++) {
           newActiveHours[`${dateStr}-${h}`] = true;
         }
         setActiveHours((prev) => ({ ...prev, ...newActiveHours }));
@@ -230,7 +235,7 @@ function SchedulePage() {
         setError(getApiErrorMessage(err, 'Не удалось добавить рабочий день'));
       }
     },
-    [schedule, selectedMasterId, isSuperAdmin],
+    [schedule, selectedMasterId, isSuperAdmin, windowStart, windowEnd],
   );
 
   // Toggling an hour persists to the server AND drives the day state:
@@ -406,6 +411,71 @@ function SchedulePage() {
     [refreshMonthAppointments],
   );
 
+  // Bulk-apply the saved window to every working day of the viewed month.
+  // Days holding live bookings are skipped (shrinking hours under a booking
+  // would strand it) and reported.
+  const applyWindowToMonth = useCallback(
+    async (start: number, end: number): Promise<{ updated: number; skipped: number }> => {
+      const pad = (h: number) => `${String(h).padStart(2, '0')}:00`;
+      const masterParam = selectedMasterId !== '' ? selectedMasterId : undefined;
+      let rows: { id: number; schedule_date: string }[] = [];
+      try {
+        rows = (await adminApi.getWorkingHours(masterParam)).data.filter((h: any) =>
+          String(h.schedule_date).startsWith(currentMonthISO),
+        );
+      } catch {
+        return { updated: 0, skipped: 0 };
+      }
+      let updated = 0;
+      let skipped = 0;
+      const liveByDay = new Set(
+        appointments
+          .filter((a) => a.status !== 'cancelled')
+          .map((a) => String(a.appointment_date).slice(0, 10)),
+      );
+      for (const row of rows) {
+        if (liveByDay.has(row.schedule_date)) {
+          skipped += 1;
+          continue;
+        }
+        try {
+          await adminApi.updateWorkingHour(row.id, {
+            schedule_date: row.schedule_date,
+            start_time: pad(start),
+            end_time: pad(end),
+          });
+          updated += 1;
+        } catch {
+          skipped += 1;
+        }
+      }
+      if (updated > 0) {
+        setSchedule((prev) => {
+          const next = { ...prev };
+          for (const row of rows) {
+            if (!liveByDay.has(row.schedule_date) && next[row.schedule_date]) {
+              next[row.schedule_date] = { start, end };
+            }
+          }
+          return next;
+        });
+        setActiveHours((prev) => {
+          const next = { ...prev };
+          for (const row of rows) {
+            if (liveByDay.has(row.schedule_date)) continue;
+            for (const k of Object.keys(next)) {
+              if (k.startsWith(`${row.schedule_date}-`)) delete next[k];
+            }
+            for (let h = start; h < end; h++) next[`${row.schedule_date}-${h}`] = true;
+          }
+          return next;
+        });
+      }
+      return { updated, skipped };
+    },
+    [appointments, currentMonthISO, selectedMasterId],
+  );
+
   if (loading)
     return <div style={{ padding: 60, textAlign: 'center', color: '#666' }}>Загрузка...</div>;
 
@@ -513,30 +583,53 @@ function SchedulePage() {
                     return;
                   }
                   setWindowSaving(true);
+                  const payload = {
+                    ...(selectedMasterId !== '' ? { master_id: selectedMasterId } : {}),
+                    start_hour: start,
+                    end_hour: end,
+                  };
+                  const saveOnce = () => adminApi.updateWorkWindow(payload);
                   try {
-                    const { data } = await adminApi.updateWorkWindow({
-                      ...(selectedMasterId !== '' ? { master_id: selectedMasterId } : {}),
-                      start_hour: start,
-                      end_hour: end,
-                    });
-                    // Re-read from the server: if it disagrees, the save did not
-                    // stick and the user must see an error, not a silent revert
-                    const check = await adminApi
-                      .getWorkWindow(selectedMasterId !== '' ? selectedMasterId : undefined)
-                      .then((r) => r.data)
-                      .catch(() => null);
-                    if (!check || check.start_hour !== start || check.end_hour !== end) {
-                      setError(
-                        `Не сохранилось: сервер вернул ${check ? `${check.start_hour}:00–${check.end_hour}:00` : 'ошибку'}`,
-                      );
-                      return;
+                    let data: { start_hour: number; end_hour: number };
+                    try {
+                      ({ data } = await saveOnce());
+                    } catch (firstErr: unknown) {
+                      // One retry on transport-level failure (no response):
+                      // a single blip must not look like "not saving".
+                      if (getApiErrorStatus(firstErr) === undefined) {
+                        ({ data } = await saveOnce());
+                      } else {
+                        throw firstErr;
+                      }
                     }
                     setWindowStart(data.start_hour);
                     setWindowEnd(data.end_hour);
                     setWindowDraft({ start: String(data.start_hour), end: String(data.end_hour) });
-                    toast.success(`Рабочее время сохранено: ${data.start_hour}:00–${data.end_hour}:00`);
+
+                    let suffix = '';
+                    if (applyToAllDays) {
+                      const applied = await applyWindowToMonth(
+                        data.start_hour,
+                        data.end_hour,
+                      );
+                      suffix =
+                        applied.updated > 0
+                          ? ` Обновлено дней: ${applied.updated}` +
+                            (applied.skipped > 0 ? ` (с бронями пропущено: ${applied.skipped})` : '')
+                          : applied.skipped > 0
+                            ? ` Все дни с бронями — часы не тронуты (${applied.skipped})`
+                            : ' Рабочих дней в месяце пока нет';
+                    }
+                    toast.success(
+                      `Рабочее время сохранено: ${data.start_hour}:00–${data.end_hour}:00.${suffix}`,
+                    );
                   } catch (err: unknown) {
-                    setError(getApiErrorMessage(err, 'Не удалось сохранить рабочее время'));
+                    const status = getApiErrorStatus(err);
+                    setError(
+                      status !== undefined
+                        ? getApiErrorMessage(err, 'Не удалось сохранить рабочее время')
+                        : 'Нет связи с сервером — проверьте соединение и нажмите «Сохранить» ещё раз',
+                    );
                   } finally {
                     setWindowSaving(false);
                   }
@@ -544,6 +637,25 @@ function SchedulePage() {
               >
                 Сохранить
               </button>
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  cursor: 'pointer',
+                  fontSize: 13,
+                  color: '#555',
+                }}
+                title="Выставить это время всем рабочим дням текущего месяца (дни с записями пропускаются)"
+              >
+                <input
+                  type="checkbox"
+                  checked={applyToAllDays}
+                  onChange={() => setApplyToAllDays((v) => !v)}
+                  style={{ width: 16, height: 16, accentColor: '#e94560' }}
+                />
+                Применить ко всем дням месяца
+              </label>
             </div>
           </div>
           {/* Legend */}

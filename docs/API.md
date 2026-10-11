@@ -116,7 +116,7 @@
 | `POST` | `/admin/services` | Создать услугу |
 | `PATCH` | `/admin/services/{id}` | Обновить услугу |
 | `DELETE` | `/admin/services/{id}` | Soft-delete услуги |
-| `GET` | `/admin/clients` | Список клиентов (пагинация; есть `city_id`/`city_name`) |
+| `GET` | `/admin/clients` | Свои клиенты (мастер: с записями у него или созданные им; супер: все). Пагинация, `city_id`/`city_name` |
 | `POST` | `/admin/clients` | Создать клиента (можно с `city_id`) |
 | `PATCH` | `/admin/clients/{id}` | Обновить клиента (можно `city_id`) |
 | `DELETE` | `/admin/clients/{id}` | Удалить клиента |

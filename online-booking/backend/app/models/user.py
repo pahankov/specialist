@@ -35,6 +35,9 @@ class User(Base):
     name = Column(String(100), nullable=False)
     role = Column(Enum(UserRole), nullable=False, default=UserRole.CLIENT)
     city_id = Column(Integer, ForeignKey("cities.id", ondelete="SET NULL"), nullable=True)
+    # Which master created this user (set on ClientsPage "+ Добавить клиента").
+    # Lets a master see "own" clients: booked with them OR created by them.
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)  # email verified
     # Bound MAX messenger account: after the first MAX login the sender id is

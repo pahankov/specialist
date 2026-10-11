@@ -139,6 +139,15 @@ async def export_clients_csv(
         .where(User.role == "CLIENT")
         .order_by(User.name)
     )
+    if master.role != UserRole.ADMIN:
+        # Strict own-scope for masters (same rule as the clients list).
+        from app.modules.admin.helpers import own_client_user_ids
+        own_ids = await own_client_user_ids(db, master)
+        if not own_ids:
+            return Response(content="ID,Имя,Телефон,Email,Город\n",
+                            media_type='text/csv; charset=utf-8',
+                            headers={'Content-Disposition': 'attachment; filename=clients.csv'})
+        client_query = client_query.where(User.id.in_(own_ids))
     if ids:
         wanted = [int(x) for x in ids.split(",") if x.strip().isdigit()]
         if wanted:

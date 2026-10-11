@@ -1,7 +1,7 @@
 """Admin client CRUD endpoints with pagination."""
 from fastapi import APIRouter, Depends, Query, Response, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 from sqlalchemy.orm import joinedload
 from typing import List, Optional
 
@@ -13,8 +13,7 @@ from app.schemas.client import ClientCreate, ClientUpdate, ClientResponse
 from app.schemas.pagination import PaginatedResponse
 from app.dependencies.auth import require_master
 from app.dependencies.crud import get_or_404
-from app.models.user import UserRole
-from app.modules.admin.helpers import get_master_profile_id
+from app.modules.admin.helpers import get_master_profile_id, own_client_user_ids
 from app.services.audit import log_action
 from app.logging_config import get_logger
 from pydantic import BaseModel
@@ -22,6 +21,26 @@ from pydantic import BaseModel
 logger = get_logger(__name__)
 
 router = APIRouter()
+
+
+async def _require_own_client(db: AsyncSession, master: User, user: User) -> None:
+    """403 unless the client is the master's own (booked or created).
+
+    Uses 404 (not 403) so one master cannot probe another's book.
+    """
+    if master.role == UserRole.ADMIN:
+        return
+    if user.created_by == master.id:
+        return
+    mp_id = await get_master_profile_id(db, master)
+    hit = await db.execute(
+        select(Appointment.id)
+        .join(ClientProfile, Appointment.client_id == ClientProfile.id)
+        .where(Appointment.master_id == mp_id, ClientProfile.user_id == user.id)
+        .limit(1)
+    )
+    if hit.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="Client not found")
 
 
 @router.get("/clients", response_model=PaginatedResponse[ClientResponse])
@@ -57,6 +76,16 @@ async def get_admin_clients(
     if not is_admin and master_id is not None:
         effective_master_id = await get_master_profile_id(db, master)
 
+    # Regular master: strictly OWN clients (booked with them or created
+    # by them). The master_id filter above is then redundant but harmless.
+    if not is_admin:
+        own_ids = await own_client_user_ids(db, master)
+        if not own_ids:
+            return PaginatedResponse(items=[], total=0, page=page,
+                                     page_size=page_size, total_pages=0)
+        base_query = base_query.where(ClientProfile.user_id.in_(own_ids))
+        effective_master_id = None
+
     # If master_id filter is specified, only return clients who have appointments with this master
     if effective_master_id is not None:
         base_query = base_query.where(
@@ -73,7 +102,7 @@ async def get_admin_clients(
         )
 
     # Count total
-    count_query = select(func.count(ClientProfile.id)).select_from(base_query.subquery())
+    count_query = select(func.count()).select_from(base_query.subquery())
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
 
@@ -159,7 +188,7 @@ async def create_admin_client(
     else:
         city_name = None
 
-    user = User(name=data.name, phone=data.phone, email=data.email, role=UserRole.CLIENT, city_id=data.city_id)
+    user = User(name=data.name, phone=data.phone, email=data.email, role=UserRole.CLIENT, city_id=data.city_id, created_by=master.id)
     db.add(user)
     await db.flush()
     
@@ -197,7 +226,8 @@ async def update_admin_client(
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="Client not found")
-    
+    await _require_own_client(db, master, user)
+
     if data.phone and data.phone != user.phone:
         result = await db.execute(select(User).where(User.phone == data.phone))
         if result.scalar_one_or_none():
@@ -242,6 +272,7 @@ async def toggle_client_active(
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="Client not found")
+    await _require_own_client(db, master, user)
 
     user.is_active = not user.is_active
     await log_action(
@@ -293,13 +324,16 @@ async def bulk_set_client_city(
         select(ClientProfile.user_id)
         .join(ClientProfile.user)
     )
-    effective_bulk_master = data.master_id
     if master.role != UserRole.ADMIN:
-        effective_bulk_master = await get_master_profile_id(db, master)
-    if effective_bulk_master is not None:
+        # Strict own-scope: booked with me or created by me.
+        own_ids = await own_client_user_ids(db, master)
+        if not own_ids:
+            return {"updated": 0, "city_id": data.city_id, "city_name": city_obj.name_ru}
+        sub = sub.where(ClientProfile.user_id.in_(own_ids))
+    elif data.master_id is not None:
         sub = sub.where(
             ClientProfile.id.in_(
-                select(Appointment.client_id).where(Appointment.master_id == effective_bulk_master)
+                select(Appointment.client_id).where(Appointment.master_id == data.master_id)
             )
         )
     if data.search:
@@ -335,7 +369,8 @@ async def delete_admin_client(
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="Client not found")
-    
+    await _require_own_client(db, master, user)
+
     # Also delete the client_profile
     profile_result = await db.execute(
         select(ClientProfile).where(ClientProfile.user_id == client_id)

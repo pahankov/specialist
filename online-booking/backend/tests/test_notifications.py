@@ -53,9 +53,14 @@ class TestBellBroadcast:
         )
         assert r.status_code == 403
 
-    async def test_master_my_clients(self, client, session, auth_headers):
-        await _mk_user(session, "C9", "cb9@example.com", "CLIENT")
-        await session.commit()
+    async def test_master_my_clients(self, client, auth_headers):
+        # Own = created by me (created_by stamp) even with no bookings yet.
+        created = await client.post(
+            "/api/v1/admin/clients",
+            json={"name": "Mine", "phone": "+79990001234"},
+            headers=auth_headers,
+        )
+        assert created.status_code == 201, created.text
         r = await client.post(
             "/api/v1/admin/notifications/broadcast",
             json={"audience": "my_clients", "text": "Master news"},
@@ -64,13 +69,19 @@ class TestBellBroadcast:
         assert r.status_code == 200, r.text
         assert r.json()["created"] >= 1
 
-    async def test_master_selected_only_clients(self, client, session, auth_headers):
-        c = await _mk_user(session, "CS", "cbs@example.com", "CLIENT")
-        m2 = await _mk_user(session, "M2", "mbs@example.com", "MASTER")
+    async def test_master_selected_only_own(self, client, session, auth_headers):
+        own = await client.post(
+            "/api/v1/admin/clients",
+            json={"name": "Own", "phone": "+79990004321"},
+            headers=auth_headers,
+        )
+        assert own.status_code == 201, own.text
+        stranger = await _mk_user(session, "Stranger", "strangerx@example.com", "CLIENT")
         await session.commit()
         r = await client.post(
             "/api/v1/admin/notifications/broadcast",
-            json={"audience": "selected", "user_ids": [c.id, m2.id], "text": "Hi"},
+            json={"audience": "selected",
+                  "user_ids": [own.json()["id"], stranger.id], "text": "Hi"},
             headers=auth_headers,
         )
         assert r.status_code == 200, r.text

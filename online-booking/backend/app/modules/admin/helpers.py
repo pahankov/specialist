@@ -5,6 +5,7 @@ from sqlalchemy.future import select
 
 from app.models.user import User, UserRole
 from app.models.master_profile import MasterProfile
+from app.models.client_profile import ClientProfile
 from app.models.appointment import Appointment
 from app.dependencies.crud import get_owned_or_404, get_or_404
 
@@ -23,6 +24,25 @@ async def get_master_profile_id(db: AsyncSession, master: User) -> int:
     if not mp:
         raise HTTPException(status_code=403, detail="Not a master")
     return mp.id
+
+
+async def own_client_user_ids(db: AsyncSession, master: User) -> set:
+    """User ids of a regular master's OWN clients.
+
+    Own = booked at least once with this master OR created by this
+    master (ClientsPage "+ Добавить клиента" stamps created_by).
+    Superadmin must not call this (sees everyone).
+    """
+    mp_id = await get_master_profile_id(db, master)
+    booked = await db.execute(
+        select(ClientProfile.user_id)
+        .join(Appointment, Appointment.client_id == ClientProfile.id)
+        .where(Appointment.master_id == mp_id)
+    )
+    created = await db.execute(
+        select(User.id).where(User.created_by == master.id)
+    )
+    return {r[0] for r in booked.all()} | {r[0] for r in created.all()}
 
 
 async def get_appointment_for_master(

@@ -2,6 +2,8 @@ export { default as Breadcrumb } from './Breadcrumb';
 export { default as Modal } from './Modal';
 export { default as ConfirmDialog } from './ConfirmDialog';
 export { default as MasterSelect } from './MasterSelect';
+export { default as RecipientPicker } from './RecipientPicker';
+export type { RecipientOption } from './RecipientPicker';
 export { default as CitySelect } from './CitySelect';
 export { default as PhoneInput } from './PhoneInput';
 export { default as ResizableTh, useColumnWidths } from './ResizableTh';

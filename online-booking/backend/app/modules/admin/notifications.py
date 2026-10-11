@@ -17,11 +17,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies.auth import get_current_user, require_master
-from app.models.appointment import Appointment
-from app.models.client_profile import ClientProfile
 from app.models.notification import Notification
 from app.models.user import User, UserRole
-from app.modules.admin.helpers import get_master_profile_id
+from app.modules.admin.helpers import own_client_user_ids
 from app.services.audit import log_action
 from app.logging_config import get_logger
 
@@ -56,15 +54,6 @@ class InboxItem(BaseModel):
     model_config = {"from_attributes": True}
 
 
-async def _own_client_user_ids(db: AsyncSession, mp_id: int) -> set:
-    rows = await db.execute(
-        select(ClientProfile.user_id)
-        .join(Appointment, Appointment.client_id == ClientProfile.id)
-        .where(Appointment.master_id == mp_id)
-    )
-    return {r[0] for r in rows.all()}
-
-
 async def resolve_targets(
     db: AsyncSession, sender: User, audience: Audience, user_ids: Optional[List[int]]
 ) -> tuple[list[User], int]:
@@ -80,7 +69,10 @@ async def resolve_targets(
         )
         users = list(rows.scalars().all())
         if not is_admin:
-            allowed = [u for u in users if u.role == UserRole.CLIENT]
+            # Master: only OWN clients (booked or created) — others are skipped.
+            own = await own_client_user_ids(db, sender)
+            allowed = [u for u in users
+                       if u.role == UserRole.CLIENT and u.id in own]
             return allowed, len(users) - len(allowed)
         return users, 0
 
@@ -90,15 +82,11 @@ async def resolve_targets(
                 status_code=400,
                 detail="Суперпользователь: используйте audiences all/masters/clients/selected",
             )
-        mp_id = await get_master_profile_id(db, sender)
-        own = await _own_client_user_ids(db, mp_id)
-        if own:
-            rows = await db.execute(
-                select(User).where(User.id.in_(list(own)), User.is_active == True)  # noqa: E712
-            )
-            return list(rows.scalars().all()), 0
+        own = await own_client_user_ids(db, sender)
+        if not own:
+            return [], 0
         rows = await db.execute(
-            select(User).where(User.role == UserRole.CLIENT, User.is_active == True)  # noqa: E712
+            select(User).where(User.id.in_(list(own)), User.is_active == True)  # noqa: E712
         )
         return list(rows.scalars().all()), 0
 

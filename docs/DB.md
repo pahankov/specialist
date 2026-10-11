@@ -50,10 +50,11 @@
 | is_active | BOOLEAN | DEFAULT TRUE | Мягкое удаление |
 | is_verified | BOOLEAN | DEFAULT FALSE | Верификация (email/phone) |
 | max_user_id | BIGINT | UNIQUE, NULLABLE | Привязанный MAX-аккаунт (push-вход без share; ставится при первом MAX-входе) |
+| created_by | INTEGER | FK -> users.id ON DELETE SET NULL, NULLABLE | Кто создал (мастер через «+ Добавить клиента»/запись); свои клиенты мастера = с записями у него ИЛИ created_by = он |
 | created_at | TIMESTAMP WITH TIME ZONE | | Дата создания |
 | updated_at | TIMESTAMP WITH TIME ZONE | | Дата обновления |
 
-**Индексы:** `ix_users_email` (UNIQUE), `ix_users_phone` (UNIQUE), `ix_users_role`, `ix_users_max_user_id` (UNIQUE, NULL не конфликтуют)
+**Индексы:** `ix_users_email` (UNIQUE), `ix_users_phone` (UNIQUE), `ix_users_role`, `ix_users_max_user_id` (UNIQUE, NULL не конфликтуют), `ix_users_created_by`
 
 **Enums (UserRole):**
 - `CLIENT` — обычный пользователь
@@ -319,16 +320,17 @@
 | 3 | d5e6f7a8b9c1 | c4d5e6f7a8b9 | `otp_codes.max_verified_phone` | 2026-10-10 |
 | 4 | e6f7a8b9c1d2 | d5e6f7a8b9c1 | `users.max_user_id` (привязка MAX-аккаунта) | 2026-10-10 |
 | 5 | f7a8b9c1d2e3 | e6f7a8b9c1d2 | `services.category` + backfill по ключевым словам | 2026-10-11 |
+| 6 | a1b2c3d4e5f6 | f7a8b9c1d2e3 | таблица `notifications` (внутренний колокольчик) | 2026-10-11 |
+| 7 | c3d4e5f6a7b8 | a1b2c3d4e5f6 | `users.created_by` (свои клиенты мастера) | 2026-10-11 |
 
-**Head:** `f7a8b9c1d2e3`
+**Head:** `c3d4e5f6a7b8`
 
 > Старая цепочка из 12 миграций (`9a9c2edb` → `b2c3d4e5f6a7`) удалена после squash —
 > история сохранена в git (`git log -- alembic/versions/`). Прод-БД со старым head
 > переводятся автоматически (deploy workflow: `DELETE FROM alembic_version` +
 > `alembic stamp 5280b944554f` — именно в таком порядке, т.к. plain `stamp`
 > падает с `Can't locate revision` на отсутствующих старых файлах),
-> данные не затрагиваются. Дата-миграция `a1b2c3d4e5f6` (backfill городов)
-> новым БД не нужна — города льются сидами (`seed_common.ensure_geography`).
+> данные не затрагиваются. Backfill городов новым БД не нужен — города льются сидами (`seed_common.ensure_geography`).
 
 ### Применение миграций
 

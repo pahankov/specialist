@@ -22,34 +22,39 @@
   background: none !important;
 }
 
-/* Master theme: warm rose gradient — unmistakable vs super slate / client teal. */
+/* Master theme: muted slate-plum — calm, distinct from super slate-blue
+ * (sky accent) and client teal. Rose accent kept only on the active item. */
 .master-layout .admin-sidebar {
-  background: linear-gradient(180deg, #9f1239 0%, #4c0519 100%);
+  background: linear-gradient(180deg, #2e2a3e 0%, #1e1c2a 100%);
 }
 
 .master-layout .sidebar-brand h2,
 .master-layout .sidebar-user,
 .master-layout .sidebar-subtitle {
-  color: #ffe4e6;
+  color: #e9e4f0;
 }
 
 .master-layout .nav-item {
-  color: #fecdd3;
+  color: #b8b2c7;
 }
 
 .master-layout .nav-item:hover {
-  background: rgba(254, 205, 211, 0.15);
+  background: rgba(185, 178, 199, 0.12);
   color: #fff;
 }
 
 .master-layout .nav-item.active {
-  background: rgba(251, 113, 133, 0.25);
-  color: #fff;
+  background: rgba(233, 69, 96, 0.16);
+  color: #fda4af;
 }
 
 .master-layout .collapse-btn,
 .master-layout .btn-logout {
-  color: #fecdd3;
+  color: #b8b2c7;
+}
+
+.master-layout .bell-btn:hover {
+  background: rgba(185, 178, 199, 0.14);
 }
 
 /* ─── Sidebar ─────────────────────────────────────────────── */

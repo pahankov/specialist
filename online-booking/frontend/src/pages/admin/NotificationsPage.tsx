@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { adminApi } from '../../api/client';
-import { ConfirmDialog, EmptyState, Skeleton } from '../../components/common';
+import { adminApi, superAdminApi } from '../../api/client';
+import {
+  ConfirmDialog,
+  EmptyState,
+  RecipientPicker,
+  Skeleton,
+  type RecipientOption,
+} from '../../components/common';
 import { getApiErrorMessage } from '../../utils/apiError';
 import { useSectionPrefix, SUPER_PREFIX } from '../../utils/section';
 import './NotificationsPage.css';
@@ -10,12 +16,12 @@ const SUPER_AUDIENCES = [
   { value: 'all', label: '🌍 Всем (мастера + клиенты)' },
   { value: 'masters', label: '👨‍💼 Всем мастерам' },
   { value: 'clients', label: '👥 Всем клиентам' },
-  { value: 'selected', label: '🎯 Отдельным (ID через запятую)' },
+  { value: 'selected', label: '🎯 Отдельным получателям' },
 ];
 
 const MASTER_AUDIENCES = [
   { value: 'my_clients', label: '👥 Моим клиентам' },
-  { value: 'selected', label: '🎯 Отдельным клиентам (ID через запятую)' },
+  { value: 'selected', label: '🎯 Отдельным клиентам' },
 ];
 
 interface InboxItem {
@@ -33,7 +39,6 @@ function NotificationsPage() {
   const audiences = isSuperSection ? SUPER_AUDIENCES : MASTER_AUDIENCES;
   const [tab, setTab] = useState<'send' | 'inbox'>('send');
   const [audience, setAudience] = useState(isSuperSection ? 'clients' : 'my_clients');
-  const [idsInput, setIdsInput] = useState('');
   const [text, setText] = useState('');
   const [count, setCount] = useState<number | null>(null);
   const [countsLoading, setCountsLoading] = useState(false);
@@ -45,15 +50,55 @@ function NotificationsPage() {
     skipped_not_allowed: number;
   } | null>(null);
 
+  // Recipient picker for audience=selected (checkboxes + name search).
+  const [recipients, setRecipients] = useState<RecipientOption[]>([]);
+  const [recipientsLoading, setRecipientsLoading] = useState(false);
+  const [picked, setPicked] = useState<Set<number>>(new Set());
+  const parsedIds = [...picked];
+
   const [inbox, setInbox] = useState<InboxItem[]>([]);
   const [unread, setUnread] = useState(0);
   const [inboxLoading, setInboxLoading] = useState(false);
 
-  const parsedIds = idsInput
-    .split(/[,;\s]+/)
-    .map((s) => Number(s.trim()))
-    .filter((n) => Number.isInteger(n) && n > 0)
-    .slice(0, 500);
+  useEffect(() => {
+    if (audience !== 'selected') return;
+    let cancelled = false;
+    (async () => {
+      setRecipientsLoading(true);
+      try {
+        const clientsResp = await adminApi.getClients({ page: 1, page_size: 500 });
+        const list: RecipientOption[] = (clientsResp.data.items || []).map((c) => ({
+          id: c.id,
+          name: c.name,
+          sub: c.phone || undefined,
+        }));
+        if (isSuperSection) {
+          try {
+            const { data: masters } = await superAdminApi.getAllMasters();
+            for (const m of masters as { id: number; user_id: number; name: string }[]) {
+              list.push({ id: m.user_id, name: m.name, sub: 'мастер' });
+            }
+          } catch {
+            /* clients alone are enough */
+          }
+        }
+        if (!cancelled) {
+          // Drop picks that vanished (e.g. section switch).
+          const ids = new Set(list.map((r) => r.id));
+          setPicked((prev) => new Set([...prev].filter((id) => ids.has(id))));
+          setRecipients(list);
+        }
+      } catch {
+        if (!cancelled) setRecipients([]);
+      } finally {
+        if (!cancelled) setRecipientsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audience]);
 
   useEffect(() => {
     let cancelled = false;
@@ -80,7 +125,7 @@ function NotificationsPage() {
       clearTimeout(t);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [audience, idsInput]);
+  }, [audience, picked]);
 
   const fetchInbox = async () => {
     setInboxLoading(true);
@@ -189,16 +234,14 @@ function NotificationsPage() {
 
           {audience === 'selected' && (
             <div className="form-group">
-              <label>ID получателей через запятую</label>
-              <input
-                value={idsInput}
-                onChange={(e) => setIdsInput(e.target.value)}
-                placeholder="Например: 12, 45, 78"
-                inputMode="numeric"
+              <label>Получатели</label>
+              <RecipientPicker
+                items={recipients}
+                selected={picked}
+                onChange={setPicked}
+                loading={recipientsLoading}
+                placeholder="Введите имя для поиска..."
               />
-              {idsInput.trim() && parsedIds.length === 0 && (
-                <span className="hint-error">Нет корректных ID — только числа через запятую</span>
-              )}
             </div>
           )}
 
@@ -222,7 +265,9 @@ function NotificationsPage() {
               </span>
             ) : (
               <span className="counts-muted">
-                {audience === 'selected' ? 'Укажите ID, чтобы увидеть охват' : 'Охват подгружается…'}
+                {audience === 'selected'
+                  ? 'Отметьте получателей выше, чтобы увидеть охват'
+                  : 'Охват подгружается…'}
               </span>
             )}
           </div>

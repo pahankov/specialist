@@ -129,3 +129,56 @@ class TestAdminDeleteClient:
         """Returns 404 for non-existent client."""
         resp = await client.delete("/api/v1/admin/clients/99999", headers=auth_headers)
         assert resp.status_code == 404
+
+
+class TestMasterOwnScope:
+    """Masters see strictly their own clients (booked or created by them)."""
+
+    async def _second_master_headers(self, client):
+        reg = await client.post("/api/v1/auth/register", json={
+            "name": "Second Master", "email": "second_master@example.com",
+            "password": "SecurePass123!", "phone": "+79990009988",
+            "role": "MASTER",
+        })
+        assert reg.status_code == 201, reg.text
+        login = await client.post("/api/v1/auth/login", json={
+            "email": "second_master@example.com", "password": "SecurePass123!"})
+        assert login.status_code == 200, login.text
+        return {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    async def test_master_sees_only_own(self, client, auth_headers):
+        created = await client.post(
+            "/api/v1/admin/clients",
+            json={"name": "Own Client", "phone": "+79991110011"},
+            headers=auth_headers,
+        )
+        assert created.status_code == 201, created.text
+
+        other = await self._second_master_headers(client)
+        resp = await client.get("/api/v1/admin/clients", headers=other)
+        assert resp.status_code == 200
+        assert resp.json()["items"] == []
+        assert resp.json()["total"] == 0
+
+        mine = await client.get("/api/v1/admin/clients", headers=auth_headers)
+        assert mine.status_code == 200
+        assert any(c["id"] == created.json()["id"] for c in mine.json()["items"])
+
+    async def test_master_cannot_touch_foreign_client(self, client, auth_headers):
+        created = await client.post(
+            "/api/v1/admin/clients",
+            json={"name": "Foreign", "phone": "+79991110022"},
+            headers=auth_headers,
+        )
+        cid = created.json()["id"]
+        other = await self._second_master_headers(client)
+
+        assert (await client.patch(
+            f"/api/v1/admin/clients/{cid}", json={"name": "Hacked"}, headers=other,
+        )).status_code == 404
+        assert (await client.delete(
+            f"/api/v1/admin/clients/{cid}", headers=other,
+        )).status_code == 404
+        assert (await client.post(
+            f"/api/v1/admin/clients/{cid}/toggle-active", headers=other,
+        )).status_code == 404

@@ -21,14 +21,17 @@ logger = get_logger(__name__)
 router = APIRouter()
 
 
-async def _find_or_create_client(db: AsyncSession, phone: str, name: str) -> User:
+async def _find_or_create_client(
+    db: AsyncSession, phone: str, name: str, created_by: int | None = None,
+) -> User:
     """Helper: find existing client by phone or create new one."""
     from app.schemas.client import normalize_phone
     normalized = normalize_phone(phone)
     result = await db.execute(select(User).where(User.phone == normalized))
     user = result.scalar_one_or_none()
     if not user:
-        user = User(name=name, phone=normalized, role=UserRole.CLIENT)
+        user = User(name=name, phone=normalized, role=UserRole.CLIENT,
+                    created_by=created_by)
         db.add(user)
         await db.flush()
         client_profile = ClientProfile(user_id=user.id)
@@ -51,7 +54,8 @@ async def create_appointment(
     mp = result.scalar_one_or_none()
     if not mp or data.master_id != mp.id:
         raise HTTPException(status_code=403, detail="Not your master")
-    client = await _find_or_create_client(db, data.client_phone, data.client_name)
+    client = await _find_or_create_client(
+        db, data.client_phone, data.client_name, created_by=master.id)
     new_appointment = Appointment(
         master_id=data.master_id, service_id=data.service_id, client_id=client.id,
         appointment_date=data.appointment_date, status="pending", notes=data.notes
