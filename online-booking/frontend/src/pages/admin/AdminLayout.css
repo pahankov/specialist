@@ -22,39 +22,79 @@
   background: none !important;
 }
 
-/* Master theme: muted slate-plum — calm, distinct from super slate-blue
- * (sky accent) and client teal. Rose accent kept only on the active item. */
+/* Master theme: LIGHT lavender-gray sidebar — unmistakable next to the
+ * dark super slate-blue and dark client teal, yet calm (no loud colors).
+ * Every dark-theme foreground rule needs a light override here. */
 .master-layout .admin-sidebar {
-  background: linear-gradient(180deg, #2e2a3e 0%, #1e1c2a 100%);
+  background: linear-gradient(180deg, #f6f4fb 0%, #e8e4f1 100%);
+  border-right: 1px solid #d9d4e6;
 }
 
-.master-layout .sidebar-brand h2,
-.master-layout .sidebar-user,
+.master-layout .sidebar-header {
+  border-bottom-color: rgba(76, 71, 87, 0.14);
+}
+
+.master-layout .sidebar-brand h2 {
+  color: #9f1239;
+}
+
 .master-layout .sidebar-subtitle {
-  color: #e9e4f0;
+  color: #8a8496;
+}
+
+.master-layout .sidebar-user {
+  color: #9f1239;
+}
+
+.master-layout .collapse-btn {
+  background: rgba(76, 71, 87, 0.08);
+  color: #6b6577;
+}
+
+.master-layout .collapse-btn:hover {
+  background: rgba(76, 71, 87, 0.16);
+  color: #1a1a2e;
 }
 
 .master-layout .nav-item {
-  color: #b8b2c7;
+  color: #4c4757;
 }
 
 .master-layout .nav-item:hover {
-  background: rgba(185, 178, 199, 0.12);
-  color: #fff;
+  background: rgba(76, 71, 87, 0.08);
+  color: #1a1a2e;
 }
 
 .master-layout .nav-item.active {
-  background: rgba(233, 69, 96, 0.16);
-  color: #fda4af;
+  background: rgba(233, 69, 96, 0.13);
+  color: #be123c;
+  border-left-color: #e94560;
 }
 
-.master-layout .collapse-btn,
+.master-layout .sidebar-footer {
+  border-top-color: rgba(76, 71, 87, 0.14);
+}
+
 .master-layout .btn-logout {
-  color: #b8b2c7;
+  color: #6b6577;
+}
+
+.master-layout .btn-logout:hover {
+  background: rgba(76, 71, 87, 0.1);
+  color: #1a1a2e;
 }
 
 .master-layout .bell-btn:hover {
-  background: rgba(185, 178, 199, 0.14);
+  background: rgba(76, 71, 87, 0.1);
+}
+
+.master-layout .hamburger-btn {
+  background: #f6f4fb;
+  border: 1px solid #d9d4e6;
+}
+
+.master-layout .hamburger-line {
+  background: #4c4757;
 }
 
 /* ─── Sidebar ─────────────────────────────────────────────── */
