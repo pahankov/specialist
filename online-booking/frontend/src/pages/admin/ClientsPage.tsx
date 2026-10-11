@@ -22,7 +22,7 @@ import {
   CitySelect,
 } from '../../components/common';
 import type { CityOption } from '../../components/common/CitySelect';
-import { useSectionPrefix } from '../../utils/section';
+import { useSectionPrefix, SUPER_PREFIX } from '../../utils/section';
 import '../../styles/filters.css';
 import '../../styles/tables.css';
 import './ClientsPage.css';
@@ -30,6 +30,7 @@ import './ClientsPage.css';
 function ClientsPage() {
   const navigate = useNavigate();
   const section = useSectionPrefix();
+  const isSuperSection = section === SUPER_PREFIX;
   const { widths: colW, setWidth: setColW } = useColumnWidths('clients2', {
     check: 44,
     name: 180,
@@ -87,7 +88,7 @@ function ClientsPage() {
         sort_dir?: string;
       } = { page: currentPage + 1, page_size: pageSize };
       if (search?.trim()) params.search = search.trim();
-      if (masterIdFilter !== '') params.master_id = masterIdFilter;
+      if (isSuperSection && masterIdFilter !== '') params.master_id = masterIdFilter;
       if (sortKey) {
         params.sort_by = sortKey;
         params.sort_dir = sortDir;
@@ -176,18 +177,16 @@ function ClientsPage() {
   };
 
   return (
-    <div>
-      <div
-        className="page-header"
-        style={{ display: 'flex', alignItems: 'center', gap: 16, justifyContent: 'center' }}
-      >
+    <div className="clients-page">
+      <div className="page-header">
         <div>
           <h1>Управление клиентами</h1>
-          <p>Добавление, редактирование и удаление клиентов</p>
+          <p>{isSuperSection ? 'Добавление, редактирование и удаление клиентов' : 'Ваши клиенты — создавайте новых и записывайте на услуги'}</p>
         </div>
-        <button
-          className="btn btn-ghost"
-          onClick={async () => {
+        <div className="page-header-actions">
+          <button
+            className="btn btn-ghost"
+            onClick={async () => {
             try {
               const params = new URLSearchParams();
               if (selectedClients.size > 0) {
@@ -208,7 +207,8 @@ function ClientsPage() {
           title={selectedClients.size > 0 ? 'Выгрузить отмеченных' : 'Выгрузить всех по фильтру'}
         >
           📥 Экспорт CSV{selectedClients.size > 0 ? ` (${selectedClients.size})` : ''}
-        </button>
+          </button>
+        </div>
       </div>
 
       {/* Search and filter bar */}
@@ -230,13 +230,15 @@ function ClientsPage() {
               className="filter-control"
             />
           </div>
-          <MasterSelect
-            value={masterIdFilter}
-            onChange={setMasterIdFilter}
-            allLabel="Все клиенты"
-            style={{ marginBottom: 0 }}
-          />
-          {(search || masterIdFilter !== '') && (
+          {isSuperSection && (
+            <MasterSelect
+              value={masterIdFilter}
+              onChange={setMasterIdFilter}
+              allLabel="Все клиенты"
+              style={{ marginBottom: 0 }}
+            />
+          )}
+          {(search || (isSuperSection && masterIdFilter !== '')) && (
             <div className="filter-cell-bottom">
               <button
                 className="btn btn-ghost"

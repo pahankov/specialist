@@ -324,17 +324,15 @@ function AppointmentsPage() {
 
   return (
     <div className="appointments-page">
-      <div
-        className="page-header"
-        style={{ display: 'flex', alignItems: 'center', gap: 16, justifyContent: 'center' }}
-      >
+      <div className="page-header">
         <div>
           <h1>Управление записями</h1>
-          <p>Подтверждение, завершение и отмена записей</p>
+          <p>{isSuperSection ? 'Подтверждение, завершение и отмена записей' : 'Мои записи — подтверждение, завершение и отмена'}</p>
         </div>
-        <button
-          className="btn btn-ghost"
-          onClick={async () => {
+        <div className="page-header-actions">
+          <button
+            className="btn btn-ghost"
+            onClick={async () => {
             const params = new URLSearchParams();
             if (selectedAppointments.size > 0) {
               params.set('ids', [...selectedAppointments].join(','));
@@ -366,7 +364,8 @@ function AppointmentsPage() {
           }
         >
           📥 Экспорт CSV{selectedAppointments.size > 0 ? ` (${selectedAppointments.size})` : ''}
-        </button>
+          </button>
+        </div>
       </div>
 
       {error && <div className="error-message">{error}</div>}
@@ -404,14 +403,16 @@ function AppointmentsPage() {
               gap: 12,
             }}
           >
-            {/* Master filter — full-width first row */}
-            <div style={{ gridColumn: '1 / -1' }}>
-              <MasterSelect
-                value={masterIdFilter}
-                onChange={setMasterIdFilter}
-                style={{ marginBottom: 0, maxWidth: 480 }}
-              />
-            </div>
+            {/* Master filter — superadmin only; masters see only their own rows */}
+            {isSuperSection && (
+              <div style={{ gridColumn: '1 / -1' }}>
+                <MasterSelect
+                  value={masterIdFilter}
+                  onChange={setMasterIdFilter}
+                  style={{ marginBottom: 0, maxWidth: 480 }}
+                />
+              </div>
+            )}
 
             {/* Client filter */}
             <div className="filter-cell">

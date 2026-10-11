@@ -461,6 +461,9 @@ function SchedulePage() {
               }}
             >
               <span style={{ fontSize: 14, fontWeight: 600 }}>🕐 Рабочее время:</span>
+              <span style={{ fontSize: 12, color: '#888' }}>
+                (сохранено {windowStart}:00–{windowEnd}:00)
+              </span>
               <span style={{ fontSize: 13, color: '#666' }}>с</span>
               <input
                 type="number"
@@ -530,7 +533,8 @@ function SchedulePage() {
                     }
                     setWindowStart(data.start_hour);
                     setWindowEnd(data.end_hour);
-                    toast.success(`Рабочее время: ${data.start_hour}:00–${data.end_hour}:00`);
+                    setWindowDraft({ start: String(data.start_hour), end: String(data.end_hour) });
+                    toast.success(`Рабочее время сохранено: ${data.start_hour}:00–${data.end_hour}:00`);
                   } catch (err: unknown) {
                     setError(getApiErrorMessage(err, 'Не удалось сохранить рабочее время'));
                   } finally {

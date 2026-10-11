@@ -168,6 +168,25 @@ export const adminApi = {
     );
   },
 
+  // Notifications (MAX broadcast)
+  getNotificationCounts(audience: string, user_ids?: string) {
+    return apiClient.get<{
+      audience: string;
+      total: number;
+      with_max: number;
+      without_max: number;
+      skipped_not_allowed: number;
+    }>('/api/v1/admin/notifications/audience-counts', { params: { audience, user_ids } });
+  },
+  broadcastNotification(data: { audience: string; user_ids?: number[]; text: string }) {
+    return apiClient.post<{
+      total: number;
+      sent: number;
+      skipped_no_max: number;
+      skipped_not_allowed: number;
+    }>('/api/v1/admin/notifications/broadcast', data);
+  },
+
   // Audit Logs
   getAuditLogs(params?: Record<string, string | number | boolean | undefined>) {
     return apiClient.get('/api/v1/admin/audit-logs', { params });

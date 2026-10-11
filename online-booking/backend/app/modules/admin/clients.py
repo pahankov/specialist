@@ -13,6 +13,8 @@ from app.schemas.client import ClientCreate, ClientUpdate, ClientResponse
 from app.schemas.pagination import PaginatedResponse
 from app.dependencies.auth import require_master
 from app.dependencies.crud import get_or_404
+from app.models.user import UserRole
+from app.modules.admin.helpers import get_master_profile_id
 from app.services.audit import log_action
 from app.logging_config import get_logger
 from pydantic import BaseModel
@@ -45,13 +47,21 @@ async def get_admin_clients(
         .options(joinedload(ClientProfile.user))
     )
 
-    is_admin = master.role == User.Role.ADMIN if hasattr(User, 'Role') else master.role.value == "ADMIN" if hasattr(master.role, 'value') else master.role == "ADMIN"
-    
+    is_admin = master.role == UserRole.ADMIN
+
+    # Master may list all clients (needed to book newcomers with no
+    # appointments yet). A master_id filter from a non-admin is forced to
+    # their own profile so one master cannot enumerate another's book.
+    # Superadmin sees all unless master_id narrows it.
+    effective_master_id = master_id
+    if not is_admin and master_id is not None:
+        effective_master_id = await get_master_profile_id(db, master)
+
     # If master_id filter is specified, only return clients who have appointments with this master
-    if master_id is not None:
+    if effective_master_id is not None:
         base_query = base_query.where(
             ClientProfile.id.in_(
-                select(Appointment.client_id).where(Appointment.master_id == master_id)
+                select(Appointment.client_id).where(Appointment.master_id == effective_master_id)
             )
         )
 
@@ -283,10 +293,13 @@ async def bulk_set_client_city(
         select(ClientProfile.user_id)
         .join(ClientProfile.user)
     )
-    if data.master_id is not None:
+    effective_bulk_master = data.master_id
+    if master.role != UserRole.ADMIN:
+        effective_bulk_master = await get_master_profile_id(db, master)
+    if effective_bulk_master is not None:
         sub = sub.where(
             ClientProfile.id.in_(
-                select(Appointment.client_id).where(Appointment.master_id == data.master_id)
+                select(Appointment.client_id).where(Appointment.master_id == effective_bulk_master)
             )
         )
     if data.search:

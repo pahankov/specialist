@@ -134,6 +134,8 @@
 | `GET` | `/admin/blocked-slots` | Заблокированные слоты |
 | `POST` | `/admin/blocked-slots` | Заблокировать слот |
 | `DELETE` | `/admin/blocked-slots/{id}` | Убрать блокировку |
+| `GET` | `/admin/notifications/audience-counts` | Охват аудитории (`audience`, `user_ids`): всего/с MAX/без MAX |
+| `POST` | `/admin/notifications/broadcast` | Рассылка через MAX-бота (`audience`, `user_ids?`, `text` 1–4000). Супер: `all/masters/clients/selected`; мастер: `my_clients/selected` (только CLIENT). Доставка только привязанным `max_user_id`, пропуск считается |
 
 ### Superadmin (JWT required, is_admin=true)
 | Метод | Endpoint | Описание |

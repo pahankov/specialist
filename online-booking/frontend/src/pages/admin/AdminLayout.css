@@ -22,6 +22,36 @@
   background: none !important;
 }
 
+/* Master theme: warm rose gradient — unmistakable vs super slate / client teal. */
+.master-layout .admin-sidebar {
+  background: linear-gradient(180deg, #9f1239 0%, #4c0519 100%);
+}
+
+.master-layout .sidebar-brand h2,
+.master-layout .sidebar-user,
+.master-layout .sidebar-subtitle {
+  color: #ffe4e6;
+}
+
+.master-layout .nav-item {
+  color: #fecdd3;
+}
+
+.master-layout .nav-item:hover {
+  background: rgba(254, 205, 211, 0.15);
+  color: #fff;
+}
+
+.master-layout .nav-item.active {
+  background: rgba(251, 113, 133, 0.25);
+  color: #fff;
+}
+
+.master-layout .collapse-btn,
+.master-layout .btn-logout {
+  color: #fecdd3;
+}
+
 /* ─── Sidebar ─────────────────────────────────────────────── */
 
 .admin-sidebar {

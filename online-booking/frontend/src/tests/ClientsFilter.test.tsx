@@ -28,9 +28,9 @@ beforeEach(() => {
 });
 
 describe('ClientsPage master filter', () => {
-  it('sends master_id after picking a master', async () => {
+  it('sends master_id after picking a master (super section)', async () => {
     render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={['/super/clients']}>
         <ClientsPage />
       </MemoryRouter>,
     );
@@ -46,5 +46,16 @@ describe('ClientsPage master filter', () => {
       const withMaster = calls.filter(([params]) => params && params.master_id === 77);
       expect(withMaster.length).toBeGreaterThan(0);
     });
+  });
+
+  it('hides the master picker in the master section', async () => {
+    render(
+      <MemoryRouter initialEntries={['/admin/clients']}>
+        <ClientsPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(getClients).toHaveBeenCalled());
+    expect(screen.queryByLabelText('Мастер')).toBeNull();
   });
 });

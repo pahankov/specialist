@@ -12,6 +12,7 @@ function AdminLayout({ navItems }: AdminLayoutProps) {
       layoutTitle="🍬 Мастерская"
       userRole="Мастер"
       userFallbackName="Мастер"
+      themeClass="master-layout"
     />
   );
 }

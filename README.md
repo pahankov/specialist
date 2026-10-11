@@ -447,6 +447,12 @@ npx vitest                              # Watch mode
 
 ## 📚 История версий
 
+### [1.21.0] — 2026-10-11
+- **Панель мастера:** MasterSelect скрыт в `/admin` (мастер видит только свои записи; фильтр мастеров — только у супера); шапки записей/клиентов на `space-between` (чинился «двойной» экспорт); сайдбар мастера — бордо-тема `master-layout`
+- **Услуги:** категория первой строкой + `services.lastCategory` (подстановка последней при создании)
+- **Расписание:** у окна показан сохранённый диапазон, draft синхронизируется после save; тест `test_master_own_window` (свой GET/PATCH без master_id)
+- **Уведомления (MAX):** `POST /admin/notifications/broadcast` + `GET /admin/notifications/audience-counts` — супер: all/masters/clients/selected, мастер: my_clients/selected (только CLIENT); доставка привязанным `max_user_id`, пропуск без привязки; страница 🔔 в обоих разделах; тесты (5)
+
 ### [1.20.1] — 2026-10-11
 - **Регресс после падений:** `/cities/resolve` открыт для CLIENT (был 401 из кабинета); `seed_common` починен + покрыт тестами (7); CI: `py_compile`-гейт скриптов и ASCII-гейт `start.ps1`
 

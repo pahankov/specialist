@@ -19,6 +19,7 @@ from app.modules.admin.masters import router as masters_router
 from app.modules.admin.admin_reviews import router as admin_reviews_router
 from app.modules.admin.health import router as health_router
 from app.modules.admin.changelog import router as changelog_router
+from app.modules.admin.notifications import router as notifications_router
 
 router.include_router(dashboard_router)
 router.include_router(appointments_router)
@@ -33,3 +34,4 @@ router.include_router(audit_router)
 router.include_router(export_router)
 router.include_router(health_router)
 router.include_router(changelog_router)
+router.include_router(notifications_router)

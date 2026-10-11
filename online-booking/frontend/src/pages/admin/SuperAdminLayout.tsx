@@ -9,6 +9,7 @@ const SUPER_NAV = [
   { path: `${SUPER_PREFIX}/appointments`, label: '📅 Все записи' },
   { path: `${SUPER_PREFIX}/clients`, label: '👥 Все клиенты' },
   { path: `${SUPER_PREFIX}/schedule`, label: '🕐 Расписание' },
+  { path: `${SUPER_PREFIX}/notifications`, label: '🔔 Уведомления' },
   { path: `${SUPER_PREFIX}/logs`, label: '📋 Логи' },
 ];
 

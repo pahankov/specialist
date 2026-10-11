@@ -9,6 +9,7 @@ import {
   EmptyState,
   Pager,
 } from '../../components/common';
+import { usePersistentState } from '../../utils/persistentState';
 import type { Service } from '../../api/types';
 import { formatPrice } from '../../components/schedule/helpers';
 import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError';
@@ -38,6 +39,7 @@ function ServicesPage() {
   const [description, setDescription] = useState('');
   const [duration, setDuration] = useState(30);
   const [price, setPrice] = useState(1000);
+  const [lastCategory, setLastCategory] = usePersistentState('services.lastCategory', '');
   const [category, setCategory] = useState('');
 
   const fetchData = async () => {
@@ -73,6 +75,17 @@ function ServicesPage() {
     setError(getApiErrorMessage(err, 'Ошибка сервера'));
   };
 
+  const openCreateForm = () => {
+    setName('');
+    setDescription('');
+    setDuration(30);
+    setPrice(1000);
+    setCategory(lastCategory);
+    setEditingId(null);
+    setShowForm(true);
+    setError('');
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -86,6 +99,7 @@ function ServicesPage() {
           category: category || undefined,
         });
         toast.success('Услуга обновлена');
+        if (category) setLastCategory(category);
       } else {
         await adminApi.createService({
           name,
@@ -95,6 +109,7 @@ function ServicesPage() {
           category: category || undefined,
         });
         toast.success('Услуга создана');
+        if (category) setLastCategory(category);
       }
       resetForm();
       fetchData();
@@ -151,6 +166,26 @@ function ServicesPage() {
         <div className="card form-card">
           <h3>{editingId ? 'Редактировать услугу' : 'Новая услуга'}</h3>
           <form onSubmit={handleSubmit}>
+            <div className="form-group" style={{ marginBottom: 16 }}>
+              <label>Категория</label>
+              <input
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                placeholder="Например: Ногти, Шугаринг, Ресницы"
+                list="service-categories"
+                autoFocus={!editingId}
+              />
+              <datalist id="service-categories">
+                {[...new Set(services.map((s) => s.category).filter(Boolean))].map((c) => (
+                  <option key={c} value={c as string} />
+                ))}
+              </datalist>
+              {!editingId && lastCategory && (
+                <span style={{ fontSize: 12, color: '#666' }}>
+                  Последняя: {lastCategory} — подставлена автоматически
+                </span>
+              )}
+            </div>
             <div className="form-row">
               <div className="form-group">
                 <label>Название</label>
@@ -190,20 +225,6 @@ function ServicesPage() {
                 placeholder="Описание услуги"
               />
             </div>
-            <div className="form-group">
-              <label>Категория</label>
-              <input
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                placeholder="Например: Ногти, Шугаринг, Ресницы"
-                list="service-categories"
-              />
-              <datalist id="service-categories">
-                {[...new Set(services.map((s) => s.category).filter(Boolean))].map((c) => (
-                  <option key={c} value={c as string} />
-                ))}
-              </datalist>
-            </div>
             <div className="form-actions">
               <button type="submit" className="btn btn-primary">
                 {editingId ? 'Сохранить' : 'Создать'}
@@ -219,7 +240,7 @@ function ServicesPage() {
       <div className="card">
         <div className="card-header">
           <h3>Список услуг ({total})</h3>
-          <button className="btn btn-primary" onClick={() => setShowForm(true)}>
+          <button className="btn btn-primary" onClick={openCreateForm}>
             + Добавить услугу
           </button>
         </div>
@@ -227,7 +248,7 @@ function ServicesPage() {
           <EmptyState
             title="Нет услуг"
             actionLabel="Добавить услугу"
-            onAction={() => setShowForm(true)}
+            onAction={openCreateForm}
           />
         ) : (
           <table className="services-table resizable-table">
