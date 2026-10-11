@@ -31,3 +31,32 @@ class TestResolveCity:
             headers=super_admin_headers,
         )
         assert r.status_code == 400
+
+    async def test_resolve_allowed_for_client(self, client, session):
+        """Cabinet/booking city pickers run as CLIENT (was 401 via require_master)."""
+        from app.models.user import User, UserRole
+        from app.models.client_profile import ClientProfile
+        from app.modules.auth.token import create_access_token
+
+        await self._seed_ru(session)
+        user = User(name="C", phone="+79990003333", role=UserRole.CLIENT)
+        session.add(user)
+        await session.flush()
+        session.add(ClientProfile(user_id=user.id))
+        await session.commit()
+        token = create_access_token({
+            "sub": str(user.id), "role": "CLIENT", "name": user.name,
+            "is_admin": False,
+        })
+        headers = {"Authorization": f"Bearer {token}"}
+        r = await client.post(
+            "/api/v1/cities/resolve", json={"name": "Гвардейск"},
+            headers=headers,
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["name_ru"] == "Гвардейск"
+
+    async def test_resolve_anonymous_rejected(self, client, session):
+        await self._seed_ru(session)
+        r = await client.post("/api/v1/cities/resolve", json={"name": "Гвардейск"})
+        assert r.status_code in (401, 403)

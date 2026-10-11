@@ -11,7 +11,7 @@ from app.models.country import Country
 from app.models.city import City
 from app.schemas.country import CountryResponse, CountryCreate, CountryUpdate
 from app.schemas.city import CityResponse, CityCreate, CityUpdate
-from app.dependencies.auth import require_master
+from app.dependencies.auth import get_current_user, require_master
 from app.models.user import User
 from app.logging_config import get_logger
 
@@ -118,13 +118,15 @@ class CityResolveRequest(BaseModel):
 @router.post("/cities/resolve", response_model=CityResponse, status_code=200)
 async def resolve_city(
     body: CityResolveRequest,
-    master: User = Depends(require_master),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Get-or-create a city by exact Russian name.
 
     Used when a DaData suggestion has no local match yet: the name comes
     from a DaData pick (not free text), so junk rows are unlikely.
+    Any authenticated role may resolve (masters in their forms, clients
+    in cabinet/booking) — creation is idempotent per (country, name).
     """
     name = body.name.strip()
     if not name:
@@ -164,5 +166,5 @@ async def resolve_city(
     db.add(city)
     await db.commit()
     await db.refresh(city)
-    logger.info("Пользователь %s добавил город %s (id=%s)", master.email, name, city.id)
+    logger.info("Пользователь %s добавил город %s (id=%s)", user.email, name, city.id)
     return city

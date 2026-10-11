@@ -34,6 +34,13 @@ jobs:
           cd online-booking/backend
           python -m pytest tests/ -v --tb=short --cov=app --cov-report=term-missing --cov-fail-under=55
 
+      - name: Compile-check deploy scripts
+        # seed_common.py shipped with an IndentationError once: tests never
+        # import backend/*.py scripts, so only a syntax gate catches it.
+        run: |
+          cd online-booking/backend
+          python -m py_compile seed_common.py seed_cities.py seed_test_data.py seed_production.py fix_production_db.py fix_production_masters.py create_minimal_reviews.py create_superuser.py pull_production.py backup_db.py restore_db.py max_poll.py max_webhook.py
+
   frontend-lint:
     name: Frontend Lint
     runs-on: ubuntu-latest

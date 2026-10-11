@@ -211,7 +211,8 @@ async def ensure_geography(session: AsyncSession) -> tuple:
     return new_countries, new_cities
 
 
-async def ensure_reviews(session: AsyncSession, seed: int = 42) -> int:    """Create reviews for completed appointments (idempotent). Returns count.
+async def ensure_reviews(session: AsyncSession, seed: int = 42) -> int:
+    """Create reviews for completed appointments (idempotent). Returns count.
 
     Fixed version of the two old copies: no lazy relationship access
     (appt.client_profile.user_id raised MissingGreenlet under async),
