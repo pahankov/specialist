@@ -17,6 +17,9 @@ from app.models.user import User
 from app.modules.client.schemas import (
     ClientMeResponse, ClientMeUpdate, ClientStatsResponse,
 )
+from app.modules.admin.notifications import (
+    client_inbox, client_mark_read, client_read_all, client_unread_count,
+)
 from app.schemas.appointment import AppointmentWithDetails
 from app.services.audit import log_action
 from app.utils import utcnow_naive
@@ -211,3 +214,40 @@ async def cancel_my_appointment(
     await db.commit()
     logger.info("Client user_id=%s cancelled appointment %s", user.id, appointment.id)
     return _to_details(appointment)
+
+
+@router.get("/notifications/inbox")
+async def get_notifications_inbox(
+    unread_only: bool = False,
+    page: int = 1,
+    page_size: int = 20,
+    user: User = Depends(require_client),
+    db: AsyncSession = Depends(get_db),
+):
+    """Own bell inbox (newest first + unread counter)."""
+    return await client_inbox(db, user, unread_only, page, page_size)
+
+
+@router.get("/notifications/unread-count")
+async def get_notifications_unread(
+    user: User = Depends(require_client),
+    db: AsyncSession = Depends(get_db),
+):
+    return await client_unread_count(db, user)
+
+
+@router.post("/notifications/{notif_id}/read")
+async def read_notification(
+    notif_id: int,
+    user: User = Depends(require_client),
+    db: AsyncSession = Depends(get_db),
+):
+    return await client_mark_read(db, user, notif_id)
+
+
+@router.post("/notifications/read-all")
+async def read_all_notifications(
+    user: User = Depends(require_client),
+    db: AsyncSession = Depends(get_db),
+):
+    return await client_read_all(db, user)

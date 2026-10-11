@@ -13,7 +13,7 @@ sudo -u postgres psql -d online_booking -f fix_all_tables.sql || echo "[WARN] Sc
 # Fix table ownership (tables created by postgres, migrations run as specialist)
 # Single-table ALTER fails every new migration otherwise (see DEPLOYMENT_RULES#5)
 echo "=== FIX TABLE OWNERSHIP ==="
-for tbl in users master_profiles client_profiles services appointments working_hours blocked_slots reviews refresh_tokens audit_logs countries cities otp_codes; do
+for tbl in users master_profiles client_profiles services appointments working_hours blocked_slots reviews refresh_tokens audit_logs countries cities otp_codes notifications; do
   sudo -u postgres psql -d online_booking -c "ALTER TABLE ${tbl} OWNER TO specialist;" 2>/dev/null || echo "[WARN] Ownership fix skipped for ${tbl}"
 done
 echo "=== OWNERSHIP DONE ==="

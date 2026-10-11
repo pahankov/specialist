@@ -1,30 +1,28 @@
-"""Broadcast notifications via MAX bot.
+"""Internal bell notifications (no messenger binding).
 
 Superadmin audiences: all / masters / clients / selected user_ids.
-Master audiences: my_clients (CLIENT-role users with an appointment
-with me, plus newcomers I created — resolved as all active CLIENTs
-visible to me) / selected (must be CLIENT role).
+Master audiences: my_clients / selected (CLIENT role only).
 
-Delivery is immediate via MaxBotApi.send_message to bound
-User.max_user_id. Unbound users are counted as skipped_no_max.
-No new tables — sends are audit-logged.
+Broadcast writes one row per recipient into `notifications`;
+inbox endpoints serve master/super panels (client cabinet lives
+in app.modules.client.router).
 """
+from datetime import datetime, timezone
 from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies.auth import require_master
+from app.dependencies.auth import get_current_user, require_master
 from app.models.appointment import Appointment
 from app.models.client_profile import ClientProfile
-from app.models.master_profile import MasterProfile
+from app.models.notification import Notification
 from app.models.user import User, UserRole
 from app.modules.admin.helpers import get_master_profile_id
 from app.services.audit import log_action
-from app.services.max_api import MaxApiError, get_max_api
 from app.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -32,6 +30,7 @@ logger = get_logger(__name__)
 router = APIRouter()
 
 Audience = Literal["all", "masters", "clients", "my_clients", "selected"]
+MAX_TARGETS = 2000
 
 
 class BroadcastRequest(BaseModel):
@@ -42,13 +41,22 @@ class BroadcastRequest(BaseModel):
 
 class BroadcastResult(BaseModel):
     total: int
-    sent: int
-    skipped_no_max: int
+    created: int
     skipped_not_allowed: int = 0
 
 
+class InboxItem(BaseModel):
+    id: int
+    text: str
+    audience: Optional[str] = None
+    sender_name: Optional[str] = None
+    is_read: bool
+    created_at: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
 async def _own_client_user_ids(db: AsyncSession, mp_id: int) -> set:
-    """User ids of CLIENTs booked with this master profile."""
     rows = await db.execute(
         select(ClientProfile.user_id)
         .join(Appointment, Appointment.client_id == ClientProfile.id)
@@ -57,7 +65,7 @@ async def _own_client_user_ids(db: AsyncSession, mp_id: int) -> set:
     return {r[0] for r in rows.all()}
 
 
-async def _resolve_targets(
+async def resolve_targets(
     db: AsyncSession, sender: User, audience: Audience, user_ids: Optional[List[int]]
 ) -> tuple[list[User], int]:
     """Return (targets, skipped_not_allowed). Raises 403/400 on bad audience."""
@@ -70,13 +78,11 @@ async def _resolve_targets(
         rows = await db.execute(
             select(User).where(User.id.in_(uniq), User.is_active == True)  # noqa: E712
         )
-        users = rows.scalars().all()
+        users = list(rows.scalars().all())
         if not is_admin:
-            # Master may message CLIENTs only (mirrors Clients visibility).
             allowed = [u for u in users if u.role == UserRole.CLIENT]
-            skipped = len(users) - len(allowed)
-            return allowed, skipped
-        return list(users), 0
+            return allowed, len(users) - len(allowed)
+        return users, 0
 
     if audience == "my_clients":
         if is_admin:
@@ -91,14 +97,11 @@ async def _resolve_targets(
                 select(User).where(User.id.in_(list(own)), User.is_active == True)  # noqa: E712
             )
             return list(rows.scalars().all()), 0
-        # New master with no bookings yet: fall back to visible CLIENTs
-        # so the first announcement is still possible.
         rows = await db.execute(
             select(User).where(User.role == UserRole.CLIENT, User.is_active == True)  # noqa: E712
         )
         return list(rows.scalars().all()), 0
 
-    # Preset audiences are superadmin-only.
     if not is_admin:
         raise HTTPException(
             status_code=403, detail="Доступно только суперпользователю (мастер: my_clients/selected)"
@@ -122,6 +125,63 @@ async def _resolve_targets(
     raise HTTPException(status_code=400, detail="Неизвестная аудитория")
 
 
+def _to_item(n: Notification) -> dict:
+    return {
+        "id": n.id,
+        "text": n.text,
+        "audience": n.audience,
+        "sender_name": n.sender.name if getattr(n, "sender", None) else None,
+        "is_read": bool(n.is_read),
+        "created_at": n.created_at.isoformat() if n.created_at else None,
+    }
+
+
+async def _inbox(db: AsyncSession, user: User, unread_only: bool,
+                 page: int, page_size: int) -> dict:
+    base = select(Notification).where(Notification.recipient_id == user.id)
+    if unread_only:
+        base = base.where(Notification.is_read == False)  # noqa: E712
+    total = (await db.execute(
+        select(func.count()).select_from(base.subquery())
+    )).scalar() or 0
+    unread = (await db.execute(
+        select(func.count(Notification.id)).where(
+            Notification.recipient_id == user.id,
+            Notification.is_read == False,  # noqa: E712
+        )
+    )).scalar() or 0
+    rows = (await db.execute(
+        base.order_by(Notification.created_at.desc(), Notification.id.desc())
+        .offset((page - 1) * page_size).limit(page_size)
+    )).scalars().all()
+    # Bulk sender names (no N+1).
+    sender_ids = {n.sender_id for n in rows if n.sender_id}
+    names: dict = {}
+    if sender_ids:
+        srows = await db.execute(select(User.id, User.name).where(User.id.in_(sender_ids)))
+        names = dict(srows.all())
+    items = []
+    for n in rows:
+        d = _to_item(n)
+        d["sender_name"] = names.get(n.sender_id)
+        items.append(d)
+    return {"items": items, "total": total, "unread": unread,
+            "page": page, "page_size": page_size}
+
+
+async def _mark_read(db: AsyncSession, user: User, notif_id: int) -> dict:
+    n = (await db.execute(select(Notification).where(
+        Notification.id == notif_id, Notification.recipient_id == user.id))).scalar_one_or_none()
+    if n is None:
+        raise HTTPException(status_code=404, detail="Уведомление не найдено")
+    if not n.is_read:
+        n.is_read = True
+        n.read_at = datetime.now(timezone.utc)
+        await db.commit()
+        await db.refresh(n)
+    return _to_item(n)
+
+
 @router.get("/notifications/audience-counts")
 async def audience_counts(
     audience: Audience = Query(...),
@@ -129,22 +189,15 @@ async def audience_counts(
     sender: User = Depends(require_master),
     db: AsyncSession = Depends(get_db),
 ):
-    """How many users an audience resolves to (and how many have MAX bound)."""
+    """How many users an audience resolves to."""
     ids = None
     if user_ids:
         try:
             ids = [int(x) for x in user_ids.split(",") if x.strip()]
         except ValueError:
             raise HTTPException(status_code=400, detail="user_ids: числа через запятую")
-    targets, skipped = await _resolve_targets(db, sender, audience, ids)
-    with_max = sum(1 for u in targets if u.max_user_id is not None)
-    return {
-        "audience": audience,
-        "total": len(targets),
-        "with_max": with_max,
-        "without_max": len(targets) - with_max,
-        "skipped_not_allowed": skipped,
-    }
+    targets, skipped = await resolve_targets(db, sender, audience, ids)
+    return {"audience": audience, "total": len(targets), "skipped_not_allowed": skipped}
 
 
 @router.post("/notifications/broadcast", response_model=BroadcastResult)
@@ -153,41 +206,119 @@ async def broadcast(
     sender: User = Depends(require_master),
     db: AsyncSession = Depends(get_db),
 ):
-    """Send text to an audience via MAX bot (immediate, audit-logged)."""
+    """Internal broadcast: one inbox row per recipient (no messenger needed)."""
     text = data.text.strip()
     if not text:
         raise HTTPException(status_code=400, detail="Текст пустой")
 
-    api = get_max_api()
-    if not api.enabled:
-        raise HTTPException(status_code=503, detail="MAX_BOT_TOKEN не настроен")
-
-    targets, skipped_not_allowed = await _resolve_targets(db, sender, data.audience, data.user_ids)
-
-    sent = 0
-    skipped_no_max = 0
-    for u in targets:
-        if u.max_user_id is None:
-            skipped_no_max += 1
-            continue
-        try:
-            await api.send_message(int(u.max_user_id), text)
-            sent += 1
-        except MaxApiError as e:
-            logger.warning("Broadcast to user=%s failed: %s", u.id, e)
-            skipped_no_max += 1
-
+    targets, skipped = await resolve_targets(db, sender, data.audience, data.user_ids)
+    targets = targets[:MAX_TARGETS]
+    now = datetime.now(timezone.utc)
+    db.add_all([
+        Notification(sender_id=sender.id, recipient_id=u.id,
+                     text=text, audience=data.audience, created_at=now)
+        for u in targets
+    ])
     await log_action(
         db, sender.id, "broadcast", "notification", None,
-        f"audience={data.audience} total={len(targets)} sent={sent} no_max={skipped_no_max}",
-        level="info",
+        f"audience={data.audience} recipients={len(targets)}", level="info",
     )
     await db.commit()
-    logger.info(
-        "Broadcast: sender=%s audience=%s total=%d sent=%d no_max=%d",
-        sender.id, data.audience, len(targets), sent, skipped_no_max,
+    logger.info("Bell broadcast: sender=%s audience=%s recipients=%d",
+                sender.id, data.audience, len(targets))
+    return BroadcastResult(total=len(targets), created=len(targets), skipped_not_allowed=skipped)
+
+
+@router.get("/notifications/inbox")
+async def admin_inbox(
+    unread_only: bool = Query(False),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    user: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db),
+):
+    """Own inbox for master/super panels."""
+    return await _inbox(db, user, unread_only, page, page_size)
+
+
+@router.get("/notifications/unread-count")
+async def admin_unread_count(
+    user: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db),
+):
+    """Lightweight bell badge poll."""
+    unread = (await db.execute(
+        select(func.count(Notification.id)).where(
+            Notification.recipient_id == user.id,
+            Notification.is_read == False,  # noqa: E712
+        )
+    )).scalar() or 0
+    return {"unread": unread}
+
+
+@router.post("/notifications/{notif_id}/read")
+async def admin_mark_read(
+    notif_id: int,
+    user: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db),
+):
+    return await _mark_read(db, user, notif_id)
+
+
+@router.post("/notifications/read-all")
+async def admin_read_all(
+    user: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db),
+):
+    from sqlalchemy import update as sa_update
+
+    await db.execute(
+        sa_update(Notification)
+        .where(Notification.recipient_id == user.id,
+               Notification.is_read == False)  # noqa: E712
+        .values(is_read=True, read_at=datetime.now(timezone.utc))
     )
-    return BroadcastResult(
-        total=len(targets), sent=sent,
-        skipped_no_max=skipped_no_max, skipped_not_allowed=skipped_not_allowed,
+    await db.commit()
+    return {"ok": True}
+
+
+# ─── Shared helpers for the client cabinet (any authenticated user) ───
+
+async def client_inbox(db: AsyncSession, user: User, unread_only: bool,
+                       page: int, page_size: int) -> dict:
+    return await _inbox(db, user, unread_only, page, page_size)
+
+
+async def client_mark_read(db: AsyncSession, user: User, notif_id: int) -> dict:
+    return await _mark_read(db, user, notif_id)
+
+
+async def client_read_all(db: AsyncSession, user: User) -> dict:
+    from sqlalchemy import update as sa_update
+
+    await db.execute(
+        sa_update(Notification)
+        .where(Notification.recipient_id == user.id,
+               Notification.is_read == False)  # noqa: E712
+        .values(is_read=True, read_at=datetime.now(timezone.utc))
     )
+    await db.commit()
+    return {"ok": True}
+
+
+async def client_unread_count(db: AsyncSession, user: User) -> dict:
+    unread = (await db.execute(
+        select(func.count(Notification.id)).where(
+            Notification.recipient_id == user.id,
+            Notification.is_read == False,  # noqa: E712
+        )
+    )).scalar() or 0
+    return {"unread": unread}
+
+
+async def any_user_unread_count(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Bell badge for any role (panels + cabinet share one hook)."""
+    return await client_unread_count(db, user)

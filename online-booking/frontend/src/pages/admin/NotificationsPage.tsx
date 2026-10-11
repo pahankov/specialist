@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { adminApi } from '../../api/client';
-import { ConfirmDialog, Skeleton } from '../../components/common';
+import { ConfirmDialog, EmptyState, Skeleton } from '../../components/common';
 import { getApiErrorMessage } from '../../utils/apiError';
 import { useSectionPrefix, SUPER_PREFIX } from '../../utils/section';
 import './NotificationsPage.css';
@@ -18,28 +18,36 @@ const MASTER_AUDIENCES = [
   { value: 'selected', label: '🎯 Отдельным клиентам (ID через запятую)' },
 ];
 
+interface InboxItem {
+  id: number;
+  text: string;
+  audience?: string | null;
+  sender_name?: string | null;
+  is_read: boolean;
+  created_at?: string | null;
+}
+
 function NotificationsPage() {
   const section = useSectionPrefix();
   const isSuperSection = section === SUPER_PREFIX;
   const audiences = isSuperSection ? SUPER_AUDIENCES : MASTER_AUDIENCES;
+  const [tab, setTab] = useState<'send' | 'inbox'>('send');
   const [audience, setAudience] = useState(isSuperSection ? 'clients' : 'my_clients');
   const [idsInput, setIdsInput] = useState('');
   const [text, setText] = useState('');
-  const [counts, setCounts] = useState<{
-    total: number;
-    with_max: number;
-    without_max: number;
-    skipped_not_allowed: number;
-  } | null>(null);
+  const [count, setCount] = useState<number | null>(null);
   const [countsLoading, setCountsLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [lastResult, setLastResult] = useState<{
     total: number;
-    sent: number;
-    skipped_no_max: number;
+    created: number;
     skipped_not_allowed: number;
   } | null>(null);
+
+  const [inbox, setInbox] = useState<InboxItem[]>([]);
+  const [unread, setUnread] = useState(0);
+  const [inboxLoading, setInboxLoading] = useState(false);
 
   const parsedIds = idsInput
     .split(/[,;\s]+/)
@@ -51,7 +59,7 @@ function NotificationsPage() {
     let cancelled = false;
     const t = setTimeout(async () => {
       if (audience === 'selected' && parsedIds.length === 0) {
-        setCounts(null);
+        setCount(null);
         return;
       }
       setCountsLoading(true);
@@ -60,9 +68,9 @@ function NotificationsPage() {
           audience,
           audience === 'selected' ? parsedIds.join(',') : undefined,
         );
-        if (!cancelled) setCounts(data);
+        if (!cancelled) setCount(data.total);
       } catch {
-        if (!cancelled) setCounts(null);
+        if (!cancelled) setCount(null);
       } finally {
         if (!cancelled) setCountsLoading(false);
       }
@@ -73,6 +81,24 @@ function NotificationsPage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [audience, idsInput]);
+
+  const fetchInbox = async () => {
+    setInboxLoading(true);
+    try {
+      const { data } = await adminApi.getNotificationsInbox({ page: 1, page_size: 50 });
+      setInbox(data.items);
+      setUnread(data.unread);
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Не удалось загрузить входящие'));
+    } finally {
+      setInboxLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (tab === 'inbox') fetchInbox();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
 
   const handleSend = async () => {
     if (!text.trim()) {
@@ -92,14 +118,32 @@ function NotificationsPage() {
       });
       setLastResult(data);
       setConfirmOpen(false);
-      toast.success(`Отправлено: ${data.sent} из ${data.total}`);
-      if (data.skipped_no_max > 0) {
-        toast.warning(`Без привязанного MAX пропущено: ${data.skipped_no_max}`);
-      }
+      setText('');
+      toast.success(`В колокольчики доставлено: ${data.created} из ${data.total}`);
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'Не удалось отправить'));
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleRead = async (id: number) => {
+    try {
+      await adminApi.readNotification(id);
+      setInbox((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)));
+      setUnread((u) => Math.max(0, u - 1));
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const handleReadAll = async () => {
+    try {
+      await adminApi.readAllNotifications();
+      setInbox((prev) => prev.map((n) => ({ ...n, is_read: true })));
+      setUnread(0);
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Не удалось отметить прочитанным'));
     }
   };
 
@@ -110,100 +154,143 @@ function NotificationsPage() {
           <h1>🔔 Уведомления</h1>
           <p>
             {isSuperSection
-              ? 'Рассылка всем, мастерам, клиентам или точечно — через MAX-бота'
-              : 'Рассылка своим клиентам — через MAX-бота'}
+              ? 'Внутренняя рассылка: всем, мастерам, клиентам или точечно'
+              : 'Внутренняя рассылка своим клиентам + ваши входящие'}
           </p>
         </div>
-      </div>
-
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div className="form-group">
-          <label>Кому отправить</label>
-          <select value={audience} onChange={(e) => setAudience(e.target.value)}>
-            {audiences.map((a) => (
-              <option key={a.value} value={a.value}>
-                {a.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {audience === 'selected' && (
-          <div className="form-group">
-            <label>ID получателей через запятую</label>
-            <input
-              value={idsInput}
-              onChange={(e) => setIdsInput(e.target.value)}
-              placeholder="Например: 12, 45, 78"
-              inputMode="numeric"
-            />
-            {idsInput.trim() && parsedIds.length === 0 && (
-              <span className="hint-error">Нет корректных ID — только числа через запятую</span>
-            )}
-          </div>
-        )}
-
-        <div className="form-group">
-          <label>Текст сообщения ({text.length}/4000)</label>
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value.slice(0, 4000))}
-            rows={5}
-            placeholder="Например: Напоминаем о записи завтра в 14:00. Для переноса напишите нам."
-            style={{ resize: 'vertical' }}
-          />
-        </div>
-
-        <div className="counts-row">
-          {countsLoading ? (
-            <Skeleton width="240px" height="20px" />
-          ) : counts ? (
-            <span className="counts">
-              Получателей: <strong>{counts.total}</strong> · с MAX:{' '}
-              <strong>{counts.with_max}</strong> · без MAX (пропуск): {counts.without_max}
-              {counts.skipped_not_allowed > 0 && (
-                <> · без доступа: {counts.skipped_not_allowed}</>
-              )}
-            </span>
-          ) : (
-            <span className="counts-muted">
-              {audience === 'selected'
-                ? 'Укажите ID, чтобы увидеть охват'
-                : 'Охват подгружается…'}
-            </span>
-          )}
-        </div>
-
-        <p className="hint">
-          💡 Доставка только тем, кто привязал MAX (вход через MAX-бота). Остальные попадут в
-          «пропуск» — попросите их привязать MAX при следующем визите.
-        </p>
-
-        <div className="form-actions">
+        <div className="page-header-actions">
           <button
-            className="btn btn-primary"
-            disabled={sending || !text.trim() || (audience === 'selected' && parsedIds.length === 0)}
-            onClick={() => setConfirmOpen(true)}
+            className={`btn ${tab === 'send' ? 'btn-primary' : 'btn-ghost'}`}
+            onClick={() => setTab('send')}
           >
-            {sending ? 'Отправка…' : '📤 Отправить'}
+            📤 Отправить
+          </button>
+          <button
+            className={`btn ${tab === 'inbox' ? 'btn-primary' : 'btn-ghost'}`}
+            onClick={() => setTab('inbox')}
+          >
+            📥 Входящие{unread > 0 ? ` (${unread})` : ''}
           </button>
         </div>
-
-        {lastResult && (
-          <div className="result-box">
-            ✅ Последний результат: отправлено {lastResult.sent} из {lastResult.total}
-            {lastResult.skipped_no_max > 0 && ` (без MAX: ${lastResult.skipped_no_max})`}
-            {lastResult.skipped_not_allowed > 0 &&
-              ` (без доступа: ${lastResult.skipped_not_allowed})`}
-          </div>
-        )}
       </div>
+
+      {tab === 'send' ? (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="form-group">
+            <label>Кому отправить</label>
+            <select value={audience} onChange={(e) => setAudience(e.target.value)}>
+              {audiences.map((a) => (
+                <option key={a.value} value={a.value}>
+                  {a.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {audience === 'selected' && (
+            <div className="form-group">
+              <label>ID получателей через запятую</label>
+              <input
+                value={idsInput}
+                onChange={(e) => setIdsInput(e.target.value)}
+                placeholder="Например: 12, 45, 78"
+                inputMode="numeric"
+              />
+              {idsInput.trim() && parsedIds.length === 0 && (
+                <span className="hint-error">Нет корректных ID — только числа через запятую</span>
+              )}
+            </div>
+          )}
+
+          <div className="form-group">
+            <label>Текст сообщения ({text.length}/4000)</label>
+            <textarea
+              value={text}
+              onChange={(e) => setText(e.target.value.slice(0, 4000))}
+              rows={5}
+              placeholder="Например: С 1 ноября новые часы работы — смотрите расписание."
+              style={{ resize: 'vertical' }}
+            />
+          </div>
+
+          <div className="counts-row">
+            {countsLoading ? (
+              <Skeleton width="200px" height="20px" />
+            ) : count !== null ? (
+              <span className="counts">
+                Получателей: <strong>{count}</strong> — сообщение появится у них в колокольчике
+              </span>
+            ) : (
+              <span className="counts-muted">
+                {audience === 'selected' ? 'Укажите ID, чтобы увидеть охват' : 'Охват подгружается…'}
+              </span>
+            )}
+          </div>
+
+          <div className="form-actions">
+            <button
+              className="btn btn-primary"
+              disabled={
+                sending || !text.trim() || (audience === 'selected' && parsedIds.length === 0)
+              }
+              onClick={() => setConfirmOpen(true)}
+            >
+              {sending ? 'Отправка…' : '📤 Отправить'}
+            </button>
+          </div>
+
+          {lastResult && (
+            <div className="result-box">
+              ✅ Доставлено в колокольчики: {lastResult.created} из {lastResult.total}
+              {lastResult.skipped_not_allowed > 0 &&
+                ` (без доступа: ${lastResult.skipped_not_allowed})`}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="card">
+          <div className="card-header">
+            <h3>
+              Входящие {unread > 0 && <span className="client-count">({unread} новых)</span>}
+            </h3>
+            {unread > 0 && (
+              <button className="btn btn-ghost" onClick={handleReadAll}>
+                ✓ Прочитать все
+              </button>
+            )}
+          </div>
+          {inboxLoading ? (
+            <Skeleton rows={4} />
+          ) : inbox.length === 0 ? (
+            <EmptyState title="Пока тихо" description="Входящих уведомлений нет" icon="🔕" />
+          ) : (
+            <div className="inbox-list">
+              {inbox.map((n) => (
+                <div key={n.id} className={`inbox-item${n.is_read ? '' : ' unread'}`}>
+                  <div className="inbox-text">{n.text}</div>
+                  <div className="inbox-meta">
+                    {n.sender_name && <span>от {n.sender_name}</span>}
+                    {n.created_at && (
+                      <span>{new Date(n.created_at).toLocaleString('ru-RU')}</span>
+                    )}
+                    {!n.is_read && (
+                      <button className="btn btn-sm btn-ghost" onClick={() => handleRead(n.id)}>
+                        ✓ Прочитано
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <ConfirmDialog
         open={confirmOpen}
         onClose={() => setConfirmOpen(false)}
         title="📤 Отправить рассылку?"
-        message={`Получателей: ${counts?.total ?? '?'}, с MAX: ${counts?.with_max ?? '?'}. Отмена невозможна — сообщения уйдут сразу.`}
+        message={`Получателей: ${count ?? '?'}. Сообщение появится в их колокольчике.`}
         confirmLabel="Отправить"
         onConfirm={handleSend}
       />

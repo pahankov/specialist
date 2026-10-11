@@ -1,47 +1,30 @@
-"""Broadcast notifications via MAX (super/master audiences)."""
-import pytest
+"""Internal bell notifications (no messenger binding)."""
 
 
-@pytest.fixture
-def fake_max(monkeypatch):
-    sent = []
-
-    class FakeApi:
-        enabled = True
-
-        async def send_message(self, user_id: int, text: str, attachments=None):
-            sent.append((user_id, text))
-            return {"ok": True}
-
-    import app.modules.admin.notifications as notif
-
-    monkeypatch.setattr(notif, "get_max_api", lambda: FakeApi())
-    return sent
-
-
-async def _mk_user(session, name, email, role, max_uid=None):
+async def _mk_user(session, name, email, role):
     from app.models.user import User, UserRole
     from app.utils.security import hash_password
 
     u = User(
         name=name, email=email,
         hashed_password=hash_password("SecurePass123!"),
-        phone=None, role=UserRole(role),
-        max_user_id=max_uid, is_active=True,
+        phone=None, role=UserRole(role), is_active=True,
     )
     session.add(u)
     await session.flush()
     return u
 
 
-class TestBroadcast:
-    async def test_super_to_clients(self, client, session, super_admin_headers, fake_max):
+class TestBellBroadcast:
+    async def test_super_to_clients_creates_rows(self, client, session, super_admin_headers):
         from app.models.master_profile import MasterProfile
         from app.models.client_profile import ClientProfile
+        from app.models.notification import Notification
+        from sqlalchemy import select, func
 
-        c1 = await _mk_user(session, "C1", "c1n@example.com", "CLIENT", max_uid=111)
-        c2 = await _mk_user(session, "C2", "c2n@example.com", "CLIENT", max_uid=None)
-        m = await _mk_user(session, "M", "mn@example.com", "MASTER", max_uid=222)
+        c1 = await _mk_user(session, "C1", "cb1@example.com", "CLIENT")
+        c2 = await _mk_user(session, "C2", "cb2@example.com", "CLIENT")
+        m = await _mk_user(session, "M", "mb@example.com", "MASTER")
         session.add(ClientProfile(user_id=c1.id))
         session.add(ClientProfile(user_id=c2.id))
         session.add(MasterProfile(user_id=m.id))
@@ -49,15 +32,18 @@ class TestBroadcast:
 
         r = await client.post(
             "/api/v1/admin/notifications/broadcast",
-            json={"audience": "clients", "text": "Hello clients"},
+            json={"audience": "clients", "text": "Hello inbox"},
             headers=super_admin_headers,
         )
         assert r.status_code == 200, r.text
         body = r.json()
         assert body["total"] == 2
-        assert body["sent"] == 1
-        assert body["skipped_no_max"] == 1
-        assert fake_max == [(111, "Hello clients")]
+        assert body["created"] == 2
+
+        n = (await session.execute(
+            select(func.count(Notification.id)).where(Notification.recipient_id == c1.id)
+        )).scalar()
+        assert n == 1
 
     async def test_master_all_forbidden(self, client, auth_headers):
         r = await client.post(
@@ -67,9 +53,8 @@ class TestBroadcast:
         )
         assert r.status_code == 403
 
-    async def test_master_my_clients_fallback(self, client, session, auth_headers, fake_max):
-        # auth master has no bookings: falls back to visible CLIENTs
-        await _mk_user(session, "C9", "c9n@example.com", "CLIENT", max_uid=999)
+    async def test_master_my_clients(self, client, session, auth_headers):
+        await _mk_user(session, "C9", "cb9@example.com", "CLIENT")
         await session.commit()
         r = await client.post(
             "/api/v1/admin/notifications/broadcast",
@@ -77,13 +62,11 @@ class TestBroadcast:
             headers=auth_headers,
         )
         assert r.status_code == 200, r.text
-        assert r.json()["sent"] >= 1
+        assert r.json()["created"] >= 1
 
-    async def test_master_selected_only_clients(
-        self, client, session, auth_headers, fake_max
-    ):
-        c = await _mk_user(session, "CS", "csn@example.com", "CLIENT", max_uid=555)
-        m2 = await _mk_user(session, "M2", "m2n@example.com", "MASTER", max_uid=666)
+    async def test_master_selected_only_clients(self, client, session, auth_headers):
+        c = await _mk_user(session, "CS", "cbs@example.com", "CLIENT")
+        m2 = await _mk_user(session, "M2", "mbs@example.com", "MASTER")
         await session.commit()
         r = await client.post(
             "/api/v1/admin/notifications/broadcast",
@@ -94,7 +77,32 @@ class TestBroadcast:
         body = r.json()
         assert body["total"] == 1
         assert body["skipped_not_allowed"] == 1
-        assert fake_max == [(555, "Hi")]
+
+    async def test_inbox_and_read(self, client, session, super_admin_headers):
+        from sqlalchemy import select
+        from app.models.notification import Notification
+        from app.models.user import User
+
+        me = (await session.execute(
+            select(User).where(User.email == "superadmin@example.com")
+        )).scalar_one()
+        session.add(Notification(sender_id=None, recipient_id=me.id,
+                                 text="Ping", audience="all"))
+        await session.commit()
+
+        r = await client.get("/api/v1/admin/notifications/inbox", headers=super_admin_headers)
+        assert r.status_code == 200, r.text
+        assert r.json()["unread"] >= 1
+        nid = r.json()["items"][0]["id"]
+
+        u = await client.get("/api/v1/admin/notifications/unread-count",
+                             headers=super_admin_headers)
+        assert u.json()["unread"] >= 1
+
+        mr = await client.post(f"/api/v1/admin/notifications/{nid}/read",
+                               headers=super_admin_headers)
+        assert mr.status_code == 200
+        assert mr.json()["is_read"] is True
 
     async def test_audience_counts(self, client, super_admin_headers):
         r = await client.get(
@@ -104,3 +112,37 @@ class TestBroadcast:
         )
         assert r.status_code == 200, r.text
         assert "total" in r.json()
+
+
+class TestClientInbox:
+    async def _login_client(self, client, session):
+        from app.models.user import User, UserRole
+        from app.utils.security import hash_password
+        from app.modules.auth.token import create_access_token
+
+        u = User(name="Cab", email="cabinbox@example.com",
+                 hashed_password=hash_password("SecurePass123!"),
+                 phone="+79990001199", role=UserRole.CLIENT, is_active=True)
+        session.add(u)
+        await session.commit()
+        token = create_access_token({"sub": str(u.id), "role": "CLIENT",
+                                     "name": u.name, "is_admin": False})
+        return {"Authorization": f"Bearer {token}"}, u.id
+
+    async def test_client_inbox_flow(self, client, session):
+        from app.models.notification import Notification
+
+        headers, uid = await self._login_client(client, session)
+        session.add(Notification(sender_id=None, recipient_id=uid, text="Hello client"))
+        await session.commit()
+
+        r = await client.get("/api/v1/client/notifications/inbox", headers=headers)
+        assert r.status_code == 200, r.text
+        assert r.json()["unread"] == 1
+
+        nid = r.json()["items"][0]["id"]
+        mr = await client.post(f"/api/v1/client/notifications/{nid}/read", headers=headers)
+        assert mr.status_code == 200
+
+        u = await client.get("/api/v1/client/notifications/unread-count", headers=headers)
+        assert u.json()["unread"] == 0

@@ -86,6 +86,39 @@
   gap: 8px;
 }
 
+/* Bell: inbox link with unread badge (all sections share BaseLayout). */
+.bell-btn {
+  position: relative;
+  margin-left: auto;
+  font-size: 20px;
+  line-height: 1;
+  text-decoration: none;
+  padding: 6px;
+  border-radius: 8px;
+  transition: background 0.2s;
+}
+
+.bell-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.bell-badge {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: #e94560;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .collapse-btn {
   background: rgba(255, 255, 255, 0.08);
   border: none;

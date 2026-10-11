@@ -38,4 +38,27 @@ export const cabinetApi = {
   cancelAppointment(id: number) {
     return apiClient.post<Appointment>(`/api/v1/client/appointments/${id}/cancel`);
   },
+  notificationsInbox(params?: { unread_only?: boolean; page?: number; page_size?: number }) {
+    return apiClient.get<{
+      items: {
+        id: number;
+        text: string;
+        audience?: string | null;
+        sender_name?: string | null;
+        is_read: boolean;
+        created_at?: string | null;
+      }[];
+      total: number;
+      unread: number;
+    }>('/api/v1/client/notifications/inbox', { params });
+  },
+  notificationsUnread() {
+    return apiClient.get<{ unread: number }>('/api/v1/client/notifications/unread-count');
+  },
+  readNotification(id: number) {
+    return apiClient.post(`/api/v1/client/notifications/${id}/read`);
+  },
+  readAllNotifications() {
+    return apiClient.post('/api/v1/client/notifications/read-all');
+  },
 };

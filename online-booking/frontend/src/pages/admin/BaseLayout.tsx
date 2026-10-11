@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
-import { authApi } from '../../api/client';
+import { adminApi, authApi, cabinetApi } from '../../api/client';
 import { Breadcrumb, KeyboardShortcutsHint } from '../../components/common';
 import { getCookie, decodeJwtPayload, clearAuthCookies } from '../../utils/cookies';
 import { getImpersonation, stopImpersonation } from '../../utils/impersonation';
@@ -55,6 +55,39 @@ function BaseLayout({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [impersonatedName, setImpersonatedName] = useState<string | null>(null);
+  const [unread, setUnread] = useState(0);
+
+  const bellLink = location.pathname.startsWith(SUPER_PREFIX)
+    ? `${SUPER_PREFIX}/notifications`
+    : location.pathname.startsWith('/admin')
+      ? '/admin/notifications'
+      : '/cabinet';
+
+  // Bell badge: panels hit the admin counter, cabinet the client one.
+  useEffect(() => {
+    let cancelled = false;
+    const fetchUnread = async () => {
+      try {
+        const { data } = await adminApi.getNotificationsUnread();
+        if (!cancelled) setUnread(data.unread || 0);
+        return;
+      } catch {
+        /* not a panel token — try the cabinet counter */
+      }
+      try {
+        const { data } = await cabinetApi.notificationsUnread();
+        if (!cancelled) setUnread(data.unread || 0);
+      } catch {
+        /* logged out or cabinet without notifications — hide badge */
+      }
+    };
+    fetchUnread();
+    const t = setInterval(fetchUnread, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [location.pathname]);
 
   const exitImpersonation = () => {
     stopImpersonation();
@@ -144,6 +177,15 @@ function BaseLayout({
               <h2>{layoutTitle}</h2>
               {!sidebarCollapsed && <p className="sidebar-subtitle">{userRole}</p>}
             </div>
+            <Link
+              to={bellLink}
+              className="bell-btn"
+              title={unread > 0 ? `Уведомления (${unread} новых)` : 'Уведомления'}
+              aria-label="Уведомления"
+            >
+              🔔
+              {unread > 0 && <span className="bell-badge">{unread > 99 ? '99+' : unread}</span>}
+            </Link>
           </div>
           {user && !sidebarCollapsed && <p className="sidebar-user">👤 {user.name}</p>}
         </div>

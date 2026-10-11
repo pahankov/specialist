@@ -168,23 +168,43 @@ export const adminApi = {
     );
   },
 
-  // Notifications (MAX broadcast)
+  // Notifications (internal bell — no messenger binding)
   getNotificationCounts(audience: string, user_ids?: string) {
     return apiClient.get<{
       audience: string;
       total: number;
-      with_max: number;
-      without_max: number;
       skipped_not_allowed: number;
     }>('/api/v1/admin/notifications/audience-counts', { params: { audience, user_ids } });
   },
   broadcastNotification(data: { audience: string; user_ids?: number[]; text: string }) {
     return apiClient.post<{
       total: number;
-      sent: number;
-      skipped_no_max: number;
+      created: number;
       skipped_not_allowed: number;
     }>('/api/v1/admin/notifications/broadcast', data);
+  },
+  getNotificationsInbox(params?: { unread_only?: boolean; page?: number; page_size?: number }) {
+    return apiClient.get<{
+      items: {
+        id: number;
+        text: string;
+        audience?: string | null;
+        sender_name?: string | null;
+        is_read: boolean;
+        created_at?: string | null;
+      }[];
+      total: number;
+      unread: number;
+    }>('/api/v1/admin/notifications/inbox', { params });
+  },
+  getNotificationsUnread() {
+    return apiClient.get<{ unread: number }>('/api/v1/admin/notifications/unread-count');
+  },
+  readNotification(id: number) {
+    return apiClient.post(`/api/v1/admin/notifications/${id}/read`);
+  },
+  readAllNotifications() {
+    return apiClient.post('/api/v1/admin/notifications/read-all');
   },
 
   // Audit Logs

@@ -134,8 +134,13 @@
 | `GET` | `/admin/blocked-slots` | Заблокированные слоты |
 | `POST` | `/admin/blocked-slots` | Заблокировать слот |
 | `DELETE` | `/admin/blocked-slots/{id}` | Убрать блокировку |
-| `GET` | `/admin/notifications/audience-counts` | Охват аудитории (`audience`, `user_ids`): всего/с MAX/без MAX |
-| `POST` | `/admin/notifications/broadcast` | Рассылка через MAX-бота (`audience`, `user_ids?`, `text` 1–4000). Супер: `all/masters/clients/selected`; мастер: `my_clients/selected` (только CLIENT). Доставка только привязанным `max_user_id`, пропуск считается |
+| `GET` | `/admin/notifications/audience-counts` | Охват аудитории (`audience`, `user_ids`): всего получателей |
+| `POST` | `/admin/notifications/broadcast` | Внутренняя рассылка в колокольчик (`audience`, `user_ids?`, `text` 1–4000). Супер: `all/masters/clients/selected`; мастер: `my_clients/selected` (только CLIENT). Пишет по строке на получателя, без мессенджеров |
+| `GET` | `/admin/notifications/inbox` | Свои входящие (панели): `unread_only`, пагинация, счётчик `unread` |
+| `GET` | `/admin/notifications/unread-count` | Бейдж колокольчика (панели) |
+| `POST` | `/admin/notifications/{id}/read`, `/admin/notifications/read-all` | Отметить прочитанным |
+| `GET` | `/client/notifications/inbox`, `/client/notifications/unread-count` | Входящие и бейдж кабинета |
+| `POST` | `/client/notifications/{id}/read`, `/client/notifications/read-all` | Прочитанное в кабинете |
 
 ### Superadmin (JWT required, is_admin=true)
 | Метод | Endpoint | Описание |
