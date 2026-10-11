@@ -322,8 +322,9 @@
 | 5 | f7a8b9c1d2e3 | e6f7a8b9c1d2 | `services.category` + backfill по ключевым словам | 2026-10-11 |
 | 6 | a1b2c3d4e5f6 | f7a8b9c1d2e3 | таблица `notifications` (внутренний колокольчик) | 2026-10-11 |
 | 7 | c3d4e5f6a7b8 | a1b2c3d4e5f6 | `users.created_by` (свои клиенты мастера) | 2026-10-11 |
+| 8 | d4e5f6a7b8c9 | c3d4e5f6a7b8 | таблица `notification_broadcasts` (история отправок) | 2026-10-11 |
 
-**Head:** `c3d4e5f6a7b8`
+**Head:** `d4e5f6a7b8c9`
 
 > Старая цепочка из 12 миграций (`9a9c2edb` → `b2c3d4e5f6a7`) удалена после squash —
 > история сохранена в git (`git log -- alembic/versions/`). Прод-БД со старым head

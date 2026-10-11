@@ -124,6 +124,57 @@ class TestBellBroadcast:
         assert r.status_code == 200, r.text
         assert "total" in r.json()
 
+    async def test_sent_history(self, client, session, super_admin_headers):
+        from app.models.master_profile import MasterProfile
+        from app.models.client_profile import ClientProfile
+
+        c1 = await _mk_user(session, "H1", "h1x@example.com", "CLIENT")
+        session.add(ClientProfile(user_id=c1.id))
+        await session.commit()
+
+        b = await client.post(
+            "/api/v1/admin/notifications/broadcast",
+            json={"audience": "clients", "text": "History check"},
+            headers=super_admin_headers,
+        )
+        assert b.status_code == 200, b.text
+
+        r = await client.get(
+            "/api/v1/admin/notifications/sent", headers=super_admin_headers
+        )
+        assert r.status_code == 200, r.text
+        items = r.json()["items"]
+        assert len(items) >= 1
+        first = items[0]
+        assert first["text"] == "History check"
+        assert first["audience"] == "clients"
+        assert first["recipient_count"] >= 1
+        assert any(x["id"] == c1.id for x in first["recipients"])
+        assert first["created_at"]
+
+    async def test_sent_history_is_own_only(self, client, auth_headers, super_admin_headers):
+        await client.post(
+            "/api/v1/admin/clients",
+            json={"name": "Own Hist", "phone": "+79990007766"},
+            headers=auth_headers,
+        )
+        b = await client.post(
+            "/api/v1/admin/notifications/broadcast",
+            json={"audience": "my_clients", "text": "Master news"},
+            headers=auth_headers,
+        )
+        assert b.status_code == 200, b.text
+
+        mine = await client.get(
+            "/api/v1/admin/notifications/sent", headers=auth_headers
+        )
+        assert any(i["text"] == "Master news" for i in mine.json()["items"])
+
+        others = await client.get(
+            "/api/v1/admin/notifications/sent", headers=super_admin_headers
+        )
+        assert all(i["text"] != "Master news" for i in others.json()["items"])
+
 
 class TestClientInbox:
     async def _login_client(self, client, session):

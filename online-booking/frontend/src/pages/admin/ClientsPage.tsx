@@ -414,6 +414,7 @@ function ClientsPage() {
                     </ResizableTh>
                     <ResizableTh
                       width={colW.name}
+                      minWidth={130}
                       onResize={(w) => setColW('name', w)}
                       onClick={() => toggleSort('name')}
                       style={{ cursor: 'pointer', userSelect: 'none' }}
@@ -421,17 +422,30 @@ function ClientsPage() {
                     >
                       Имя{sortArrow('name')}
                     </ResizableTh>
-                    <ResizableTh width={colW.phone} onResize={(w) => setColW('phone', w)}>
+                    <ResizableTh
+                      width={colW.phone}
+                      minWidth={120}
+                      onResize={(w) => setColW('phone', w)}
+                    >
                       Телефон
                     </ResizableTh>
-                    <ResizableTh width={colW.email} onResize={(w) => setColW('email', w)}>
+                    <ResizableTh
+                      width={colW.email}
+                      minWidth={140}
+                      onResize={(w) => setColW('email', w)}
+                    >
                       Email
                     </ResizableTh>
-                    <ResizableTh width={colW.city} onResize={(w) => setColW('city', w)}>
+                    <ResizableTh
+                      width={colW.city}
+                      minWidth={100}
+                      onResize={(w) => setColW('city', w)}
+                    >
                       Город
                     </ResizableTh>
                     <ResizableTh
                       width={colW.noshow}
+                      minWidth={80}
                       onResize={(w) => setColW('noshow', w)}
                       onClick={() => toggleSort('no_show')}
                       style={{ cursor: 'pointer', userSelect: 'none' }}

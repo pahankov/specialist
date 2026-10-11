@@ -37,7 +37,7 @@ function NotificationsPage() {
   const section = useSectionPrefix();
   const isSuperSection = section === SUPER_PREFIX;
   const audiences = isSuperSection ? SUPER_AUDIENCES : MASTER_AUDIENCES;
-  const [tab, setTab] = useState<'send' | 'inbox'>('send');
+  const [tab, setTab] = useState<'send' | 'inbox' | 'sent'>('send');
   const [audience, setAudience] = useState(isSuperSection ? 'clients' : 'my_clients');
   const [text, setText] = useState('');
   const [count, setCount] = useState<number | null>(null);
@@ -140,8 +140,39 @@ function NotificationsPage() {
     }
   };
 
+  interface SentItem {
+    id: number;
+    audience: string;
+    text: string;
+    recipients: { id: number; name: string }[];
+    recipient_count: number;
+    created_at?: string | null;
+  }
+
+  const [sent, setSent] = useState<SentItem[]>([]);
+  const [sentTotal, setSentTotal] = useState(0);
+  const [sentLoading, setSentLoading] = useState(false);
+  const [expandedSent, setExpandedSent] = useState<Set<number>>(new Set());
+
+  const audienceLabel = (value: string) =>
+    audiences.find((a) => a.value === value)?.label ?? value;
+
+  const fetchSent = async () => {
+    setSentLoading(true);
+    try {
+      const { data } = await adminApi.getSentBroadcasts({ page: 1, page_size: 50 });
+      setSent(data.items);
+      setSentTotal(data.total);
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Не удалось загрузить отправленные'));
+    } finally {
+      setSentLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (tab === 'inbox') fetchInbox();
+    if (tab === 'sent') fetchSent();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
@@ -165,6 +196,7 @@ function NotificationsPage() {
       setConfirmOpen(false);
       setText('');
       toast.success(`В колокольчики доставлено: ${data.created} из ${data.total}`);
+      fetchSent();
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'Не удалось отправить'));
     } finally {
@@ -215,6 +247,13 @@ function NotificationsPage() {
             onClick={() => setTab('inbox')}
           >
             📥 Входящие{unread > 0 ? ` (${unread})` : ''}
+          </button>
+          <button
+            className={`btn ${tab === 'sent' ? 'btn-primary' : 'btn-ghost'}`}
+            onClick={() => setTab('sent')}
+            title="Какие, когда и кому вы отправляли"
+          >
+            📤 Отправленные
           </button>
         </div>
       </div>
@@ -292,7 +331,7 @@ function NotificationsPage() {
             </div>
           )}
         </div>
-      ) : (
+      ) : tab === 'inbox' ? (
         <div className="card">
           <div className="card-header">
             <h3>
@@ -326,6 +365,63 @@ function NotificationsPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="card">
+          <div className="card-header">
+            <h3>
+              Отправленные{' '}
+              {sentTotal > 0 && <span className="client-count">({sentTotal})</span>}
+            </h3>
+          </div>
+          {sentLoading ? (
+            <Skeleton rows={4} />
+          ) : sent.length === 0 ? (
+            <EmptyState
+              title="Вы ещё ничего не отправляли"
+              description="Рассылка из вкладки «Отправить» появится здесь с датой и получателями"
+              icon="📭"
+            />
+          ) : (
+            <div className="inbox-list">
+              {sent.map((s) => {
+                const expanded = expandedSent.has(s.id);
+                const shown = expanded ? s.recipients : s.recipients.slice(0, 5);
+                return (
+                  <div key={s.id} className="inbox-item">
+                    <div className="inbox-text">{s.text}</div>
+                    <div className="inbox-meta">
+                      <span>{audienceLabel(s.audience)}</span>
+                      <span>
+                        {s.created_at
+                          ? new Date(s.created_at).toLocaleString('ru-RU')
+                          : ''}
+                      </span>
+                      <span>
+                        Получателей: {s.recipient_count}
+                        {shown.length > 0 && ` (${shown.map((r) => r.name).join(', ')})`}
+                      </span>
+                      {s.recipients.length > 5 && (
+                        <button
+                          className="btn btn-sm btn-ghost"
+                          onClick={() =>
+                            setExpandedSent((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(s.id)) next.delete(s.id);
+                              else next.add(s.id);
+                              return next;
+                            })
+                          }
+                        >
+                          {expanded ? 'Скрыть' : `Все ${s.recipients.length}`}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

@@ -265,22 +265,34 @@ function ServicesPage() {
           <table className="services-table resizable-table">
             <thead>
               <tr>
-                <ResizableTh width={colW.name} onResize={(w) => setColW('name', w)}>
+                <ResizableTh width={colW.name} minWidth={140} onResize={(w) => setColW('name', w)}>
                   Название
                 </ResizableTh>
-                <ResizableTh width={colW.category} onResize={(w) => setColW('category', w)}>
+                <ResizableTh
+                  width={colW.category}
+                  minWidth={100}
+                  onResize={(w) => setColW('category', w)}
+                >
                   Категория
                 </ResizableTh>
-                <ResizableTh width={colW.desc} onResize={(w) => setColW('desc', w)}>
+                <ResizableTh width={colW.desc} minWidth={150} onResize={(w) => setColW('desc', w)}>
                   Описание
                 </ResizableTh>
-                <ResizableTh width={colW.duration} onResize={(w) => setColW('duration', w)}>
+                <ResizableTh
+                  width={colW.duration}
+                  minWidth={90}
+                  onResize={(w) => setColW('duration', w)}
+                >
                   Длительность
                 </ResizableTh>
-                <ResizableTh width={colW.price} onResize={(w) => setColW('price', w)}>
+                <ResizableTh width={colW.price} minWidth={80} onResize={(w) => setColW('price', w)}>
                   Цена
                 </ResizableTh>
-                <ResizableTh width={colW.actions} onResize={(w) => setColW('actions', w)}>
+                <ResizableTh
+                  width={colW.actions}
+                  minWidth={220}
+                  onResize={(w) => setColW('actions', w)}
+                >
                   Действия
                 </ResizableTh>
               </tr>

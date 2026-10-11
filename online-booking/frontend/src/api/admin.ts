@@ -200,8 +200,7 @@ export const adminApi = {
       skipped_not_allowed: number;
     }>('/api/v1/admin/notifications/broadcast', data);
   },
-  getNotificationsInbox(params?: { unread_only?: boolean; page?: number; page_size?: number }) {
-    return apiClient.get<{
+  getNotificationsInbox(params?: { unread_only?: boolean; page?: number; page_size?: number }) {    return apiClient.get<{
       items: {
         id: number;
         text: string;
@@ -222,6 +221,21 @@ export const adminApi = {
   },
   readAllNotifications() {
     return apiClient.post('/api/v1/admin/notifications/read-all');
+  },
+  getSentBroadcasts(params?: { page?: number; page_size?: number }) {
+    return apiClient.get<{
+      items: {
+        id: number;
+        audience: string;
+        text: string;
+        recipients: { id: number; name: string }[];
+        recipient_count: number;
+        created_at?: string | null;
+      }[];
+      total: number;
+      page: number;
+      page_size: number;
+    }>('/api/v1/admin/notifications/sent', { params });
   },
 
   // Audit Logs

@@ -94,7 +94,11 @@ export default function ResizableTh({
       {...rest}
       onClick={onClick}
       onClickCapture={swallowAfterDrag}
-      style={{ ...style, width, minWidth: width, maxWidth: width }}
+      // Floor the RENDERED width too, not just drags: stored widths from
+      // older versions (or over-zealous dragging) must never collapse a
+      // column into clipped invisibility. min-width wins over max-width
+      // in CSS when they conflict, so old tiny values heal automatically.
+      style={{ ...style, width, minWidth: Math.max(minWidth, width), maxWidth: width }}
     >
       {children}
       <span

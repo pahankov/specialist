@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.dependencies.auth import get_current_user, require_master
 from app.models.notification import Notification
+from app.models.notification_broadcast import NotificationBroadcast
 from app.models.user import User, UserRole
 from app.modules.admin.helpers import own_client_user_ids
 from app.services.audit import log_action
@@ -207,6 +208,11 @@ async def broadcast(
                      text=text, audience=data.audience, created_at=now)
         for u in targets
     ])
+    db.add(NotificationBroadcast(
+        sender_id=sender.id, audience=data.audience, text=text,
+        recipients=[{"id": u.id, "name": u.name} for u in targets],
+        created_at=now,
+    ))
     await log_action(
         db, sender.id, "broadcast", "notification", None,
         f"audience={data.audience} recipients={len(targets)}", level="info",
@@ -215,6 +221,43 @@ async def broadcast(
     logger.info("Bell broadcast: sender=%s audience=%s recipients=%d",
                 sender.id, data.audience, len(targets))
     return BroadcastResult(total=len(targets), created=len(targets), skipped_not_allowed=skipped)
+
+
+@router.get("/notifications/sent")
+async def sent_history(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    sender: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db),
+):
+    """Own sent broadcasts: what/when/to-whom, newest first."""
+    base = select(NotificationBroadcast).where(
+        NotificationBroadcast.sender_id == sender.id
+    )
+    total = (await db.execute(
+        select(func.count()).select_from(base.subquery())
+    )).scalar() or 0
+    rows = (await db.execute(
+        base.order_by(NotificationBroadcast.created_at.desc(),
+                      NotificationBroadcast.id.desc())
+        .offset((page - 1) * page_size).limit(page_size)
+    )).scalars().all()
+    return {
+        "items": [
+            {
+                "id": b.id,
+                "audience": b.audience,
+                "text": b.text,
+                "recipients": b.recipients or [],
+                "recipient_count": len(b.recipients or []),
+                "created_at": b.created_at.isoformat() if b.created_at else None,
+            }
+            for b in rows
+        ],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
 
 
 @router.get("/notifications/inbox")

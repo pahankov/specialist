@@ -406,6 +406,7 @@ function MastersPage() {
                 </ResizableTh>
                 <ResizableTh
                   width={colW.name}
+                  minWidth={140}
                   onResize={(w) => setColW('name', w)}
                   onClick={() => toggleSort('name')}
                   style={{ cursor: 'pointer', userSelect: 'none' }}
@@ -415,6 +416,7 @@ function MastersPage() {
                 </ResizableTh>
                 <ResizableTh
                   width={colW.email}
+                  minWidth={150}
                   onResize={(w) => setColW('email', w)}
                   onClick={() => toggleSort('email')}
                   style={{ cursor: 'pointer', userSelect: 'none' }}
@@ -422,11 +424,16 @@ function MastersPage() {
                 >
                   Email{sortArrow('email')}
                 </ResizableTh>
-                <ResizableTh width={colW.phone} onResize={(w) => setColW('phone', w)}>
+                <ResizableTh
+                  width={colW.phone}
+                  minWidth={110}
+                  onResize={(w) => setColW('phone', w)}
+                >
                   Телефон
                 </ResizableTh>
                 <ResizableTh
                   width={colW.status}
+                  minWidth={110}
                   onResize={(w) => setColW('status', w)}
                   onClick={() => toggleSort('status')}
                   style={{ cursor: 'pointer', userSelect: 'none' }}
@@ -434,10 +441,18 @@ function MastersPage() {
                 >
                   Статус{sortArrow('status')}
                 </ResizableTh>
-                <ResizableTh width={colW.role} onResize={(w) => setColW('role', w)}>
+                <ResizableTh
+                  width={colW.role}
+                  minWidth={130}
+                  onResize={(w) => setColW('role', w)}
+                >
                   Роль
                 </ResizableTh>
-                <ResizableTh width={colW.tariff} onResize={(w) => setColW('tariff', w)}>
+                <ResizableTh
+                  width={colW.tariff}
+                  minWidth={90}
+                  onResize={(w) => setColW('tariff', w)}
+                >
                   Тариф
                 </ResizableTh>
                 <ResizableTh
