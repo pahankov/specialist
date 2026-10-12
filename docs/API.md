@@ -110,7 +110,7 @@
 | `POST` | `/admin/appointments/book` | Админская запись (выбор клиента из БД; суперадмин шлёт `master_id`) |
 | `GET` | `/admin/appointments/by-date` | Записи по дате (есть `service_id/service_duration` для спанов гранул) |
 | `PATCH` | `/admin/appointments/{id}/confirm` | Подтвердить запись (клиенту падает в колокольчик) |
-| `PATCH` | `/admin/appointments/{id}/cancel` | Отменить запись |
+| `PATCH` | `/admin/appointments/{id}/cancel` | Отменить запись (клиенту падает в колокольчик с причиной) |
 | `PATCH` | `/admin/appointments/{id}/complete` | Завершить запись |
 | `DELETE` | `/admin/appointments/{id}` | Удалить запись |
 | `GET` | `/admin/services` | Список активных услуг |

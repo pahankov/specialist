@@ -21,6 +21,46 @@ logger = get_logger(__name__)
 router = APIRouter()
 
 
+async def _bell_client(
+    db: AsyncSession, appointment: Appointment, master: User, verb: str,
+    extra: str = "",
+) -> None:
+    """Notify the appointment's client (profile id; legacy rows may hold one).
+
+    Best-effort: never breaks the status change itself.
+    """
+    try:
+        full = (await db.execute(
+            select(Appointment)
+            .options(
+                selectinload(Appointment.client_profile).joinedload(ClientProfile.user),
+                selectinload(Appointment.service),
+            )
+            .where(Appointment.id == appointment.id)
+        )).scalar_one_or_none()
+        if full is None:
+            return
+        cp = full.client_profile
+        if cp is None:
+            legacy = (await db.execute(
+                select(ClientProfile).where(ClientProfile.user_id == appointment.client_id)
+            )).scalar_one_or_none()
+            cp = legacy
+        if cp is None:
+            return
+        service_name = full.service.name if full.service else "услуга"
+        text = (f"{master.name}: {verb} запись: "
+                f"{service_name}, {format_slot(appointment.appointment_date)}")
+        if extra:
+            text += f" ({extra})"
+        await notify_user(
+            db, recipient_id=cp.user_id, text=text,
+            sender_id=master.id, audience="booking", link="appointments",
+        )
+    except Exception as e:
+        logger.warning("Bell to client failed (non-fatal): %s", e)
+
+
 @router.patch("/appointments/{appointment_id}/confirm")
 async def confirm_appointment(
     appointment_id: int,
@@ -32,30 +72,7 @@ async def confirm_appointment(
     appointment = await get_appointment_for_master(db, appointment_id, master)
     appointment.status = "confirmed"
     await log_action(db, master.id, "confirm", "appointment", appointment.id, "Статус изменён на confirmed", level="info")
-    # Bell the client (profile id; legacy rows may hold a user id).
-    full = (await db.execute(
-        select(Appointment)
-        .options(
-            selectinload(Appointment.client_profile).joinedload(ClientProfile.user),
-            selectinload(Appointment.service),
-        )
-        .where(Appointment.id == appointment.id)
-    )).scalar_one_or_none()
-    if full is not None:
-        cp = full.client_profile
-        if cp is None:
-            legacy = (await db.execute(
-                select(ClientProfile).where(ClientProfile.user_id == appointment.client_id)
-            )).scalar_one_or_none()
-            cp = legacy
-        if cp is not None:
-            service_name = full.service.name if full.service else "услуга"
-            await notify_user(
-                db, recipient_id=cp.user_id,
-                text=f"{master.name} подтвердил(а) запись: "
-                     f"{service_name}, {format_slot(appointment.appointment_date)}",
-                sender_id=master.id, audience="booking", link="appointments",
-            )
+    await _bell_client(db, appointment, master, "подтвердил(а)")
     await db.commit()
     await db.refresh(appointment)
     return appointment
@@ -75,6 +92,8 @@ async def cancel_appointment(
     if reason:
         appointment.notes = f"{appointment.notes}\nОтмена: {reason}" if appointment.notes else f"Отмена: {reason}"
     await log_action(db, master.id, "cancel", "appointment", appointment.id, f"Причина: {reason}", level="warning")
+    await _bell_client(db, appointment, master, "отменил(а)",
+                       extra=f"причина: {reason}" if reason else "")
     await db.commit()
     await db.refresh(appointment)
     return appointment

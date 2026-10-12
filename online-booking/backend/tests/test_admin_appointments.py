@@ -529,3 +529,34 @@ class TestExactOverlapAndBells:
         assert len(notes) == 1
         assert "подтвердил" in notes[0].text
         assert notes[0].link == "appointments"
+
+    async def test_cancel_bells_the_client(self, client, session, auth_headers):
+        """Master cancel lands in the client's bell, with the reason."""
+        from sqlalchemy import select
+        from app.models.notification import Notification
+
+        long_id, _, day = await self._setup(client, session, auth_headers)
+        created = await client.post(
+            "/api/v1/admin/clients",
+            json={"name": "CancelBell", "phone": "+79990006688"},
+            headers=auth_headers,
+        )
+        cid = created.json()["id"]
+        booked = await client.post("/api/v1/admin/appointments/book", json={
+            "client_id": cid, "service_id": long_id,
+            "appointment_date": day.isoformat(), "status": "pending",
+        }, headers=auth_headers)
+        appt_id = booked.json()["id"]
+
+        r = await client.patch(
+            f"/api/v1/admin/appointments/{appt_id}/cancel?reason=Заболел",
+            headers=auth_headers)
+        assert r.status_code == 200, r.text
+
+        notes = (await session.execute(
+            select(Notification).where(Notification.recipient_id == cid)
+        )).scalars().all()
+        assert len(notes) == 1
+        assert "отменил" in notes[0].text
+        assert "Заболел" in notes[0].text
+        assert notes[0].link == "appointments"
