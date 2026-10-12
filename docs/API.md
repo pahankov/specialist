@@ -85,10 +85,12 @@
 ### Cabinet (JWT CLIENT required — личный кабинет)
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
-| `GET` | `/api/v1/client/me` | Свой профиль (имя/телефон/город для шапки) |
-| `PATCH` | `/api/v1/client/me` | Имя/город (`city_id` проверяется, 404) |
+| `GET` | `/api/v1/client/me` | Свой профиль (имя/фамилия/телефон/город/адрес) |
+| `PATCH` | `/api/v1/client/me` | Имя/фамилия/город/адрес (`city_id` проверяется, 404) |
 | `GET` | `/api/v1/client/stats` | Дашборд: траты, визиты, предстоящие, любимые мастер/услуга |
 | `GET` | `/api/v1/client/appointments` | Свои записи (все, новые сверху; фронт делит на будущие/историю) |
+| `POST` | `/api/v1/client/appointments` | Своя запись из визарда (`master_id/service_id/date`, проверка конфликтов по длительностям, статус pending) |
+| `GET` | `/api/v1/client/booking/schedule` | Активное расписание мастера на месяц (окно + рабочие дни + занятые гранулы, без персональных данных) |
 | `POST` | `/api/v1/client/appointments/{id}/cancel` | Отмена своей pending/confirmed записи (чужая — 404, финальная — 400; пишется в аудит) |
 
 ### Working Hours

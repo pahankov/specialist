@@ -1,9 +1,11 @@
 """Client cabinet endpoints — own profile, own appointments, own cancel."""
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import datetime
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
-from typing import List
+from typing import List, Optional
+from pydantic import BaseModel, Field
 
 from app.database import get_db
 from app.dependencies.auth import require_client
@@ -14,6 +16,7 @@ from app.models.client_profile import ClientProfile
 from app.models.master_profile import MasterProfile
 from app.models.service import Service
 from app.models.user import User
+from app.models.working_hour import WorkingHour
 from app.modules.client.schemas import (
     ClientMeResponse, ClientMeUpdate, ClientStatsResponse,
 )
@@ -67,7 +70,8 @@ async def get_me(
     user: User = Depends(require_client),
     db: AsyncSession = Depends(get_db),
 ):
-    """Own profile (name/phone/city for the cabinet header)."""
+    """Own profile (name/phone/city/address for the cabinet header)."""
+    profile = await _get_or_create_profile(db, user)
     city_name = None
     if user.city_id:
         city_name = (await db.execute(
@@ -76,11 +80,13 @@ async def get_me(
     return {
         "id": user.id,
         "name": user.name,
+        "last_name": user.last_name,
         "phone": user.phone,
         "email": user.email,
         "is_verified": bool(user.is_verified),
         "city_id": user.city_id,
         "city_name": city_name,
+        "address": profile.address,
     }
 
 
@@ -90,9 +96,21 @@ async def update_me(
     user: User = Depends(require_client),
     db: AsyncSession = Depends(get_db),
 ):
-    """Update own name/city (progressive profiling, no verification resend)."""
+    """Update own name/city/address (progressive profiling).
+
+    Names recompose the display `name` ("Имя Фамилия") like master profile.
+    """
     if data.name is not None:
-        user.name = data.name
+        first = data.name.strip()
+        last = (data.last_name.strip() if data.last_name is not None
+                else (user.last_name or ""))
+        user.name = f"{first} {last}".strip() if last else first
+        user.last_name = last or None
+    elif data.last_name is not None:
+        last = data.last_name.strip()
+        first = user.name.split(" ")[0] if user.name else ""
+        user.name = f"{first} {last}".strip() if last else first
+        user.last_name = last or None
     if data.city_id is not None:
         city_exists = (await db.execute(
             select(City.id).where(City.id == data.city_id)
@@ -100,6 +118,9 @@ async def update_me(
         if city_exists is None:
             raise HTTPException(status_code=404, detail="Город не найден")
         user.city_id = data.city_id
+    if data.address is not None:
+        profile = await _get_or_create_profile(db, user)
+        profile.address = data.address.strip() or None
     await db.commit()
     await db.refresh(user)
     return await get_me(user, db)
@@ -214,6 +235,158 @@ async def cancel_my_appointment(
     await db.commit()
     logger.info("Client user_id=%s cancelled appointment %s", user.id, appointment.id)
     return _to_details(appointment)
+
+
+class ClientBookingCreate(BaseModel):
+    master_id: int = Field(description="MasterProfile.id")
+    service_id: int
+    appointment_date: datetime
+    notes: Optional[str] = Field(default=None, max_length=500)
+
+
+@router.get("/booking/schedule")
+async def get_booking_schedule(
+    master_id: int = Query(..., description="MasterProfile.id"),
+    month: str = Query(..., description="YYYY-MM"),
+    user: User = Depends(require_client),
+    db: AsyncSession = Depends(get_db),
+):
+    """Active schedule of a master for the cabinet booking wizard.
+
+    No personal data: working days + work window + busy granules
+    (date/time/duration only) for the requested month.
+    """
+    try:
+        year, mon = [int(x) for x in month.split("-")]
+        assert 1 <= mon <= 12
+    except (ValueError, AssertionError):
+        raise HTTPException(status_code=400, detail="month: ГГГГ-ММ")
+
+    mp = (await db.execute(
+        select(MasterProfile).where(MasterProfile.id == master_id)
+    )).scalar_one_or_none()
+    if mp is None:
+        raise HTTPException(status_code=404, detail="Мастер не найден")
+    mp_user = (await db.execute(
+        select(User).where(User.id == mp.user_id)
+    )).scalar_one_or_none()
+    if mp_user is None or mp_user.is_active is False or mp.status != "active":
+        raise HTTPException(status_code=404, detail="Мастер недоступен")
+
+    month_prefix = f"{year:04d}-{mon:02d}"
+    hours = (await db.execute(
+        select(WorkingHour).where(
+            WorkingHour.master_id == mp.id,
+            WorkingHour.is_active == True,  # noqa: E712
+        )
+    )).scalars().all()
+    working = [
+        {"date": h.schedule_date.isoformat(),
+         "start": h.start_time.strftime("%H:%M"),
+         "end": h.end_time.strftime("%H:%M")}
+        for h in hours
+        if h.schedule_date.isoformat().startswith(month_prefix)
+    ]
+
+    appts = (await db.execute(
+        select(Appointment, Service.duration_minutes)
+        .join(Service, Appointment.service_id == Service.id)
+        .where(
+            Appointment.master_id == mp.id,
+            Appointment.status != "cancelled",
+        )
+    )).all()
+    busy = [
+        {"appointment_date": a.appointment_date.isoformat(),
+         "status": a.status, "service_duration": dur}
+        for a, dur in appts
+        if a.appointment_date.isoformat().startswith(month_prefix)
+    ]
+
+    return {
+        "master_id": mp.id,
+        "window": {
+            "start_hour": mp.work_start_hour if mp.work_start_hour is not None else 8,
+            "end_hour": mp.work_end_hour if mp.work_end_hour is not None else 22,
+        },
+        "working_hours": working,
+        "busy": busy,
+    }
+
+
+@router.post("/appointments", response_model=AppointmentWithDetails, status_code=201)
+async def book_my_appointment(
+    data: ClientBookingCreate,
+    user: User = Depends(require_client),
+    db: AsyncSession = Depends(get_db),
+):
+    """Book an appointment for oneself (cabinet wizard)."""
+    from datetime import timedelta
+
+    profile = await _get_or_create_profile(db, user)
+
+    mp = (await db.execute(
+        select(MasterProfile).where(MasterProfile.id == data.master_id)
+    )).scalar_one_or_none()
+    if mp is None:
+        raise HTTPException(status_code=404, detail="Мастер не найден")
+    mp_user = (await db.execute(
+        select(User).where(User.id == mp.user_id)
+    )).scalar_one_or_none()
+    if mp_user is None or mp_user.is_active is False or mp.status != "active":
+        raise HTTPException(status_code=404, detail="Мастер недоступен")
+
+    service = (await db.execute(
+        select(Service).where(Service.id == data.service_id,
+                              Service.master_id == mp.id)
+    )).scalar_one_or_none()
+    if service is None or service.is_active is False:
+        raise HTTPException(status_code=404, detail="Услуга не найдена")
+
+    appt_dt = data.appointment_date.replace(tzinfo=None)
+    if appt_dt <= utcnow_naive():
+        raise HTTPException(status_code=400, detail="Нельзя записаться в прошлое")
+    # Overlap check with each side's own duration: existing rows carry their
+    # service length, so compare in Python (exact for any durations).
+    service_end = appt_dt + timedelta(minutes=service.duration_minutes)
+    candidates = (await db.execute(
+        select(Appointment, Service.duration_minutes)
+        .join(Service, Appointment.service_id == Service.id)
+        .where(
+            Appointment.master_id == mp.id,
+            Appointment.status != "cancelled",
+            Appointment.appointment_date < service_end,
+        )
+    )).all()
+    for existing, dur in candidates:
+        existing_start = existing.appointment_date.replace(tzinfo=None)
+        if existing_start + timedelta(minutes=dur or 0) > appt_dt:
+            raise HTTPException(status_code=409, detail="Это время уже занято")
+
+    appointment = Appointment(
+        master_id=mp.id, service_id=service.id, client_id=profile.id,
+        appointment_date=appt_dt, status="pending",
+        notes=(data.notes or "").strip() or None,
+    )
+    db.add(appointment)
+    await log_action(
+        db, user.id, "create", "appointment", None,
+        f"Клиент записался к мастеру {mp.id} на {appt_dt.isoformat()}", level="info",
+    )
+    await db.commit()
+    await db.refresh(appointment)
+    logger.info("Client user_id=%s booked appointment %s", user.id, appointment.id)
+
+    full = (await db.execute(
+        select(Appointment)
+        .options(
+            selectinload(Appointment.client_profile).joinedload(ClientProfile.user),
+            selectinload(Appointment.service),
+            selectinload(Appointment.master_profile).joinedload(MasterProfile.user),
+        )
+        .where(Appointment.id == appointment.id)
+    )).scalar_one()
+    return _to_details(full)
 
 
 @router.get("/notifications/inbox")

@@ -20,6 +20,8 @@ interface CalendarProps {
   onNextMonth: () => void;
   onSelectDate: (date: Date) => void;
   onToggleDay: (date: Date) => void;
+  /** Client booking view: no day toggling, click only selects a date. */
+  interactive?: boolean;
 }
 
 const LONG_PRESS_MS = 500;
@@ -33,6 +35,7 @@ export function Calendar({
   onNextMonth,
   onSelectDate,
   onToggleDay,
+  interactive = true,
 }: CalendarProps) {
   const monthDays = getMonthDays(currentMonth);
   const monthName = currentMonth.toLocaleString('ru-RU', { month: 'long', year: 'numeric' });
@@ -45,6 +48,7 @@ export function Calendar({
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLElement>, date: Date) => {
+      if (!interactive) return;
       const tile = (e.target as HTMLElement).closest('.calendar-day');
       if (!tile || isPast(date)) return;
 
@@ -62,7 +66,7 @@ export function Calendar({
         }
       }, LONG_PRESS_MS);
     },
-    [onToggleDay],
+    [onToggleDay, interactive],
   );
 
   const handlePointerUp = useCallback(() => {
@@ -96,7 +100,11 @@ export function Calendar({
         </button>
       </div>
 
-      <div className="calendar-hint">👆 Удерживайте день, чтобы включить/выключить рабочий день</div>
+      <div className="calendar-hint">
+        {interactive
+          ? '👆 Удерживайте день, чтобы включить/выключить рабочий день'
+          : '👆 Нажмите на день, чтобы увидеть свободные часы'}
+      </div>
 
       <div className="calendar-grid">
         {['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map((name, i) => (

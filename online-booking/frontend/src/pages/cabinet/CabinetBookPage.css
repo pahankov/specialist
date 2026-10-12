@@ -1,0 +1,169 @@
+.cabinet-book-page .page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.cabinet-book-page .page-header h1 {
+  margin: 0;
+  font-size: 24px;
+  color: #1a1a2e;
+}
+
+.cabinet-book-page .page-header p {
+  margin: 4px 0 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.book-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.master-pick-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.master-pick {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border: 2px solid #eef0f6;
+  border-radius: 12px;
+  cursor: pointer;
+  background: #fff;
+}
+
+.master-pick.selected {
+  border-color: #0f766e;
+  background: #f0fdfa;
+}
+
+.master-pick input[type='radio'] {
+  margin-top: 4px;
+  width: 18px;
+  height: 18px;
+  accent-color: #0f766e;
+  flex-shrink: 0;
+}
+
+.master-pick-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.master-pick-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+  color: #555;
+}
+
+.master-pick-main strong {
+  font-size: 15px;
+  color: #1a1a2e;
+}
+
+.master-pick-desc {
+  color: #888;
+  font-size: 12px;
+}
+
+.slot-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.slot-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 2px solid #4caf50;
+  background: #e8f5e9;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  text-align: left;
+  width: 100%;
+}
+
+.slot-row:hover:not(:disabled) {
+  background: #d6efdb;
+  transform: translateY(-1px);
+}
+
+.slot-row:disabled {
+  cursor: default;
+  opacity: 0.75;
+}
+
+.slot-row.slot-pending,
+.slot-row.slot-confirmed,
+.slot-row.slot-completed {
+  border-style: solid;
+  cursor: default;
+}
+
+.slot-row.slot-pending {
+  border-color: #f9a825;
+  background: #fff8e1;
+}
+
+.slot-row.slot-confirmed {
+  border-color: #1565c0;
+  background: #e3f2fd;
+}
+
+.slot-row.slot-completed {
+  border-color: #2e7d32;
+  background: #e8f5e9;
+}
+
+.slot-row.slot-off,
+.slot-row.slot-past {
+  border-color: #e0e0e0;
+  background: #f5f5f5;
+}
+
+.slot-time {
+  font-weight: 700;
+  min-width: 52px;
+}
+
+.slot-free {
+  margin-left: auto;
+  color: #2e7d32;
+  font-weight: 600;
+}
+
+.slot-who {
+  margin-left: auto;
+  color: #666;
+  font-size: 13px;
+}
+
+.book-confirm p {
+  font-size: 15px;
+  margin-bottom: 12px;
+}
+
+.book-confirm .hint {
+  font-size: 12px;
+  color: #666;
+  margin-top: 6px;
+}

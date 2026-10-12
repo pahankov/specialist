@@ -238,7 +238,7 @@ function CabinetPage() {
           title="Нет предстоящих записей"
           description="Выберите мастера и время — это займёт минуту"
           actionLabel="Записаться"
-          onAction={() => navigate('/booking')}
+          onAction={() => navigate('/cabinet/book')}
         />
       ) : (
         <div className="cabinet-list">{upcoming.map(renderCard)}</div>

@@ -3,7 +3,8 @@ import './ClientLayout.css';
 
 const CLIENT_NAV = [
   { path: '/cabinet', label: '📅 Мои записи' },
-  { path: '/booking', label: '💅 Записаться' },
+  { path: '/cabinet/book', label: '💅 Записаться' },
+  { path: '/cabinet/profile', label: '👤 Профиль' },
 ];
 
 /**

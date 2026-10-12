@@ -263,6 +263,8 @@ def _master_profile_to_dict(mp):
         "telegram_username": mp.telegram_username,
         "description": mp.description,
         "avatar_url": mp.avatar_url,
+        "cabinet_address": mp.cabinet_address,
+        "experience_years": mp.experience_years,
         "status": mp.status if mp.status else "active",
         "is_active": mp.is_active,
         "is_admin": mp.user.is_admin,

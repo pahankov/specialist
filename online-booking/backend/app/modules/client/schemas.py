@@ -6,18 +6,22 @@ from typing import Optional
 class ClientMeResponse(BaseModel):
     id: int
     name: str
+    last_name: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[str] = None
     is_verified: bool = False
     city_id: Optional[int] = None
     city_name: Optional[str] = None
+    address: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class ClientMeUpdate(BaseModel):
     name: Optional[str] = None
+    last_name: Optional[str] = None
     city_id: Optional[int] = None
+    address: Optional[str] = None
 
     @field_validator('name')
     @classmethod
@@ -30,6 +34,16 @@ class ClientMeUpdate(BaseModel):
         if len(v) > 100:
             raise ValueError('Имя слишком длинное')
         return v
+
+    @field_validator('address')
+    @classmethod
+    def validate_address(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        v = v.strip()
+        if len(v) > 500:
+            raise ValueError('Адрес слишком длинный')
+        return v or None
 
 
 class FavoriteEntry(BaseModel):

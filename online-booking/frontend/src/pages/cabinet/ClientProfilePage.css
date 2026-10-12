@@ -1,0 +1,26 @@
+.client-profile-page .page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.client-profile-page .page-header h1 {
+  margin: 0;
+  font-size: 24px;
+  color: #1a1a2e;
+}
+
+.client-profile-page .page-header p {
+  margin: 4px 0 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.client-profile-page .input-disabled {
+  background: #f5f5f5;
+  color: #999;
+  cursor: not-allowed;
+}

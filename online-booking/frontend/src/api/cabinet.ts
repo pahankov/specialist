@@ -4,11 +4,13 @@ import type { Appointment } from './types';
 export interface ClientMe {
   id: number;
   name: string;
+  last_name?: string | null;
   phone?: string | null;
   email?: string | null;
   is_verified: boolean;
   city_id?: number | null;
   city_name?: string | null;
+  address?: string | null;
 }
 
 export interface ClientStats {
@@ -26,7 +28,7 @@ export const cabinetApi = {
   me() {
     return apiClient.get<ClientMe>('/api/v1/client/me');
   },
-  updateMe(data: { name?: string; city_id?: number }) {
+  updateMe(data: { name?: string; last_name?: string | null; city_id?: number; address?: string | null }) {
     return apiClient.patch<ClientMe>('/api/v1/client/me', data);
   },
   stats() {
@@ -37,6 +39,22 @@ export const cabinetApi = {
   },
   cancelAppointment(id: number) {
     return apiClient.post<Appointment>(`/api/v1/client/appointments/${id}/cancel`);
+  },
+  bookAppointment(data: {
+    master_id: number;
+    service_id: number;
+    appointment_date: string;
+    notes?: string;
+  }) {
+    return apiClient.post<Appointment>('/api/v1/client/appointments', data);
+  },
+  getBookSchedule(masterId: number, month: string) {
+    return apiClient.get<{
+      master_id: number;
+      window: { start_hour: number; end_hour: number };
+      working_hours: { date: string; start: string; end: string }[];
+      busy: { appointment_date: string; status: string; service_duration?: number | null }[];
+    }>('/api/v1/client/booking/schedule', { params: { master_id: masterId, month } });
   },
   notificationsInbox(params?: { unread_only?: boolean; page?: number; page_size?: number }) {
     return apiClient.get<{

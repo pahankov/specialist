@@ -47,6 +47,8 @@ export interface Master {
   telegram_username?: string;
   description?: string;
   avatar_url?: string;
+  cabinet_address?: string | null;
+  experience_years?: number | null;
   is_active: boolean;
   is_admin: boolean;
   status?: string;

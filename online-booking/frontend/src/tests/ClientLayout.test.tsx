@@ -31,7 +31,9 @@ describe('ClientLayout', () => {
     const cabinetLink = screen.getByText('Мои записи').closest('a');
     expect(cabinetLink?.getAttribute('href')).toBe('/cabinet');
     const bookingLink = screen.getByText('Записаться').closest('a');
-    expect(bookingLink?.getAttribute('href')).toBe('/booking');
+    expect(bookingLink?.getAttribute('href')).toBe('/cabinet/book');
+    const profileLink = screen.getByText('Профиль').closest('a');
+    expect(profileLink?.getAttribute('href')).toBe('/cabinet/profile');
     expect(screen.queryByText('Мои услуги')).not.toBeInTheDocument();
     expect(screen.getByText('Клиент')).toBeInTheDocument();
   });
