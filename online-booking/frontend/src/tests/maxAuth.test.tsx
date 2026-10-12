@@ -134,3 +134,90 @@ describe('MAX chat-bot login (SMS-style)', () => {
     });
   });
 });
+
+describe('Login identifier validation (regression)', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  function openLogin() {
+    render(
+      <MemoryRouter>
+        <LoginModal isOpen onClose={vi.fn()} />
+      </MemoryRouter>,
+    );
+  }
+
+  function fillLogin(identifier: string) {
+    fireEvent.change(screen.getByPlaceholderText(/email@example.com/), {
+      target: { value: identifier },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Введите пароль'), {
+      target: { value: 'Secret123!' },
+    });
+  }
+
+  function submitLogin() {
+    fireEvent.click(screen.getByRole('button', { name: 'Войти' }));
+  }
+
+  it('blocks phone garbage locally without any request', async () => {
+    openLogin();
+    fillLogin('+7 (923) 521-12-321ghghghghghghgh');
+    submitLogin();
+    await vi.waitFor(() => {
+      expect(vi.mocked(toast.error)).toHaveBeenCalled();
+    });
+    expect(vi.mocked(mocked.loginUnified)).not.toHaveBeenCalled();
+  });
+
+  it('blocks an incomplete phone locally', async () => {
+    openLogin();
+    fillLogin('+7 (923) 521-12-3');
+    submitLogin();
+    await vi.waitFor(() => {
+      expect(vi.mocked(toast.error)).toHaveBeenCalled();
+    });
+    expect(vi.mocked(mocked.loginUnified)).not.toHaveBeenCalled();
+  });
+
+  it('blocks a malformed email locally', async () => {
+    openLogin();
+    fillLogin('not-an-email@');
+    submitLogin();
+    await vi.waitFor(() => {
+      expect(vi.mocked(toast.error)).toHaveBeenCalled();
+    });
+    expect(vi.mocked(mocked.loginUnified)).not.toHaveBeenCalled();
+  });
+
+  it('sends a valid email through', async () => {
+    openLogin();
+    fillLogin('user@example.com');
+    vi.mocked(mocked.loginUnified).mockResolvedValue({
+      data: { access_token: 'tok', token_type: 'bearer' },
+    } as never);
+    submitLogin();
+    await vi.waitFor(() => {
+      expect(vi.mocked(mocked.loginUnified)).toHaveBeenCalledWith(
+        'user@example.com',
+        'Secret123!',
+      );
+    });
+  });
+
+  it('normalizes raw digits to the masked phone before sending', async () => {
+    openLogin();
+    fillLogin('+79235211232');
+    vi.mocked(mocked.loginUnified).mockResolvedValue({
+      data: { access_token: 'tok', token_type: 'bearer' },
+    } as never);
+    submitLogin();
+    await vi.waitFor(() => {
+      expect(vi.mocked(mocked.loginUnified)).toHaveBeenCalledWith(
+        '+7 (923) 521-12-32',
+        'Secret123!',
+      );
+    });
+  });
+});

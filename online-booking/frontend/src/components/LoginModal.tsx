@@ -6,7 +6,7 @@ import { PASSWORD_PLACEHOLDER } from '../constants';
 import { capitalizeWords } from '../utils/names';
 import AddressSelect from './common/AddressSelect';
 import type { MaxStartResponse } from '../api/auth';
-import PhoneInput, { isCompletePhone } from './common/PhoneInput';
+import PhoneInput, { maskPhone, isCompletePhone } from './common/PhoneInput';
 import { getCookie, decodeJwtPayload, getUserRole } from '../utils/cookies';
 import { ADMIN_PREFIX, SUPER_PREFIX } from '../utils/section';
 import Modal from './common/Modal';
@@ -90,9 +90,34 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    // The field accepts email OR phone (so no mask): validate locally so
+    // garbage like "+7 (923) 521-12-321ghgh" never reaches the server.
+    const raw = loginForm.identifier.trim();
+    if (!raw) {
+      toast.error('Введите email или телефон');
+      return;
+    }
+    let identifier = raw;
+    if (raw.includes('@')) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) {
+        toast.error('Введите корректный email или телефон');
+        return;
+      }
+    } else {
+      if (!/^\+?[\d\s()\-]+$/.test(raw)) {
+        toast.error('Введите корректный телефон (11 цифр) или email');
+        return;
+      }
+      const masked = maskPhone(raw);
+      if (!isCompletePhone(masked)) {
+        toast.error('Введите корректный телефон (11 цифр) или email');
+        return;
+      }
+      identifier = masked;
+    }
     setLoading(true);
     try {
-      await authApi.loginUnified(loginForm.identifier, loginForm.password);
+      await authApi.loginUnified(identifier, loginForm.password);
       toast.success('Вход выполнен!');
       landByRole();
     } catch (err: any) {
