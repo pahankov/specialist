@@ -16,3 +16,4 @@ export { default as StatusBadge } from './StatusBadge';
 export { default as KeyboardShortcutsHint } from './KeyboardShortcutsHint';
 export { default as NotificationBell } from './NotificationBell';
 export { default as BackendImg } from './BackendImg';
+export { default as PublicFooter } from './PublicFooter';

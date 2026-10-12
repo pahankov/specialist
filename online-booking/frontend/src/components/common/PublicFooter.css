@@ -1,0 +1,16 @@
+.public-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 1200px;
+  margin: 32px auto 0;
+  padding: 16px;
+  font-size: 12px;
+  color: #888;
+}
+
+.public-footer a {
+  color: #666;
+}

@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { mastersApi, servicesApi, authApi } from '../../api/client';
 import type { Master, Service } from '../../api/types';
 import LoginModal from '../../components/LoginModal';
+import { PublicFooter } from '../../components/common';
 import { ReviewsSection } from '../../components/reviews';
 import { getCookie, decodeJwtPayload, clearAuthCookies } from '../../utils/cookies';
 import { ADMIN_PREFIX, SUPER_PREFIX } from '../../utils/section';
@@ -232,6 +233,8 @@ function HomePage() {
 
       {/* Login Modal */}
       <LoginModal isOpen={showLogin} onClose={() => setShowLogin(false)} />
+
+      <PublicFooter />
     </div>
   );
 }

@@ -288,7 +288,7 @@ describe('Registration consent (152-FZ)', () => {
   it('submits once consent is checked', async () => {
     openRegister();
     vi.mocked(mocked.registerUnified).mockResolvedValue({ data: {} } as never);
-    fireEvent.click(screen.getByText(/Соглашаюсь на обработку/));
+    fireEvent.click(screen.getByText(/Соглашаюсь с/));
     const btn = screen.getByText('Зарегистрироваться', { selector: '.btn-submit' });
     fireEvent.submit(btn.closest('form') as HTMLFormElement);
     expect(await screen.findByText('Зарегистрироваться')).toBeInTheDocument();

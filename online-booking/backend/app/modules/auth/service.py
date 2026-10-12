@@ -294,6 +294,11 @@ async def login_unified(identifier: str, password: str, db: AsyncSession) -> tup
 
 # ─── Unified Registration ────────────────────────────────────────────
 
+# Legal document versions accepted at registration (consent checkbox).
+# Bump together with the frontend /privacy and /offer pages.
+POLICY_VERSION = "2026-10-12"
+OFFER_VERSION = "2026-10-12"
+
 async def register_unified(
     name: str,
     email: str,
@@ -343,7 +348,9 @@ async def register_unified(
         )
         city_id = result.scalar_one_or_none()
 
-    # Create user (display name keeps "Имя Фамилия" for all existing views)
+    # Create user (display name keeps "Имя Фамилия" for all existing views).
+    # The registration form carries a mandatory consent checkbox (offer +
+    # privacy policy), so consent is stamped here as legal proof.
     first = name.strip()
     last = (last_name or "").strip()
     new_user = User(
@@ -355,6 +362,9 @@ async def register_unified(
         role=role,
         city_id=city_id,
         is_verified=True,
+        consent_at=datetime.now(dt_timezone.utc),
+        consent_policy_version=POLICY_VERSION,
+        consent_offer_version=OFFER_VERSION,
     )
     db.add(new_user)
     await db.flush()

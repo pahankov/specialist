@@ -48,6 +48,12 @@ class User(Base):
     # dialog (no contact share needed anymore). NULLs are distinct in PG/SQLite
     # unique indexes, so unbound users never collide.
     max_user_id = Column(BigInteger, nullable=True)
+    # Legal consent proof (152-ФЗ + offer): stamped at registration when the
+    # user checks the consent box. NULL = registered before consent tracking
+    # (e.g. OTP/MAX auto-created accounts) — consent unknown.
+    consent_at = Column(DateTime(timezone=True), nullable=True)
+    consent_policy_version = Column(String(20), nullable=True)
+    consent_offer_version = Column(String(20), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc))

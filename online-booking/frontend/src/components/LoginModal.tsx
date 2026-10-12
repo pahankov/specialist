@@ -588,7 +588,7 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
             </label>
           </div>
 
-          {/* 152-ФЗ: explicit consent, blocks submit */}
+          {/* 152-ФЗ + оферта: explicit consent, blocks submit */}
           <div className="checkbox-group">
             <label className="checkbox-label">
               <input
@@ -599,7 +599,11 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
                 }
               />
               <span>
-                Соглашаюсь на обработку персональных данных в соответствии с{' '}
+                Соглашаюсь с{' '}
+                <Link to="/offer" target="_blank" rel="noreferrer">
+                  Офертой
+                </Link>{' '}
+                и{' '}
                 <Link to="/privacy" target="_blank" rel="noreferrer">
                   Политикой обработки ПДн
                 </Link>

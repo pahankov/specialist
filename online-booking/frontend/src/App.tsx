@@ -1,6 +1,6 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'sonner';
-import { HomePage, BookingPage, PrivacyPolicyPage } from './pages/public';
+import { HomePage, BookingPage, PrivacyPolicyPage, OfferPage } from './pages/public';
 import {
   AdminLayout,
   DashboardPage,
@@ -103,6 +103,7 @@ function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/booking" element={<BookingPage />} />
           <Route path="/privacy" element={<PrivacyPolicyPage />} />
+          <Route path="/offer" element={<OfferPage />} />
           <Route
             path="/cabinet"
             element={

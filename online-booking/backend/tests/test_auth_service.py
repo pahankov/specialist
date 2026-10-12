@@ -29,6 +29,27 @@ class TestRegisterUnified:
         assert "access_token" in data
         assert data["token_type"] == "bearer"
 
+    async def test_register_stamps_consent(self, client, session):
+        """Registration records legal consent proof (152-FZ + offer)."""
+        from sqlalchemy import select
+        from app.models.user import User
+        from app.modules.auth.service import POLICY_VERSION, OFFER_VERSION
+
+        resp = await client.post("/api/v1/auth/register-unified", json={
+            "name": "Consent",
+            "email": "consent_test@example.com",
+            "phone": "+79993334455",
+            "password": "SecurePass123!",
+            "is_master": False
+        })
+        assert resp.status_code == 201, resp.text
+        user = (await session.execute(
+            select(User).where(User.email == "consent_test@example.com")
+        )).scalar_one()
+        assert user.consent_at is not None
+        assert user.consent_policy_version == POLICY_VERSION
+        assert user.consent_offer_version == OFFER_VERSION
+
     async def test_register_master(self, client):
         """Master registration creates MASTER user with MasterProfile + logs in."""
         resp = await client.post("/api/v1/auth/register-unified", json={
