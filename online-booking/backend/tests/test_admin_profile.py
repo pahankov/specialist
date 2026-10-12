@@ -193,3 +193,42 @@ class TestAvatarPreset:
         r = await client.get("/api/v1/masters/")
         assert r.status_code == 200, r.text
         assert any(m.get("avatar_preset") == "🦅" for m in r.json())
+
+    async def test_cert_upload_keeps_avatar(self, client, auth_headers):
+        """kind=cert must not touch avatar_url (shared endpoint used to
+        overwrite it and delete the previous file — saved certs 404'd)."""
+        import os as _os
+
+        up = await client.post(
+            "/api/v1/admin/profile/avatar",
+            files={"file": ("ava.png", b"\x89PNG\r\n\x1a\n" + b"0" * 100, "image/png")},
+            headers=auth_headers,
+        )
+        assert up.status_code == 200, up.text
+        avatar_url = up.json()["avatar_url"]
+
+        cert = await client.post(
+            "/api/v1/admin/profile/avatar?kind=cert",
+            files={"file": ("cert.png", b"\x89PNG\r\n\x1a\n" + b"1" * 100, "image/png")},
+            headers=auth_headers,
+        )
+        assert cert.status_code == 200, cert.text
+        cert_url = cert.json()["avatar_url"]
+        assert cert_url != avatar_url
+
+        me = await client.get("/api/v1/admin/profile", headers=auth_headers)
+        assert me.json()["avatar_url"] == avatar_url
+        # Both files survive on disk.
+        for url in (avatar_url, cert_url):
+            assert _os.path.exists(_os.path.join(
+                "app", "static", "avatars", _os.path.basename(url)))
+            _os.remove(_os.path.join(
+                "app", "static", "avatars", _os.path.basename(url)))
+
+    async def test_upload_rejects_bad_kind(self, client, auth_headers):
+        r = await client.post(
+            "/api/v1/admin/profile/avatar?kind=passport",
+            files={"file": ("a.png", b"\x89PNG\r\n\x1a\n" + b"0" * 10, "image/png")},
+            headers=auth_headers,
+        )
+        assert r.status_code in (400, 422)

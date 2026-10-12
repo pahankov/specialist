@@ -136,7 +136,7 @@
 | `PATCH` | `/admin/work-window` | Задать окно (`start_hour`/`end_hour`, 0–24) |
 | `GET` | `/admin/profile` | Свой профиль (имя/фамилия/город/контакты/фото или пресет/адрес/сертификаты) |
 | `PATCH` | `/admin/profile` | Свои данные: имя, фамилия, город, telegram, описание, опыт, адрес кабинета, сертификаты, `avatar_preset` (эмодзи из 8 стандартных; null — снять; заменяет загруженное фото) |
-| `POST` | `/admin/profile/avatar` | Своё фото (JPEG/PNG/WebP ≤5МБ) → `avatar_url` на `/static` (снимает пресет). Файлы лежат на бэкенде — фронт резолвит через `assetUrl` |
+| `POST` | `/admin/profile/avatar` | Своё фото (JPEG/PNG/WebP ≤5МБ) → `avatar_url` на `/static` (снимает пресет). Файлы лежат на бэкенде — фронт резолвит через `assetUrl`. `?kind=cert` — отдельный файл (фото сертификата): не трогает аватар и ничего не удаляет |
 | `GET` | `/admin/audit-logs` | Журнал действий (пагинация, фильтрация; есть сущность `auth` — входы/выходы) |
 | `GET` | `/admin/export/appointments` | Экспорт записей в CSV (`status`, `master_id`, `ids`, `include_master`) |
 | `GET` | `/admin/export/clients` | Экспорт клиентов в CSV (`ids`, `search`, `master_id`; есть колонка Город) |

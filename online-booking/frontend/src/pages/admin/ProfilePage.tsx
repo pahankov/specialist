@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { adminApi, assetUrl } from '../../api/client';
 import {
   AddressSelect,
+  BackendImg,
   CitySelect,
   EmptyState,
   Skeleton,
@@ -68,7 +69,7 @@ function ProfilePage() {
     })();
   }, []);
 
-  const uploadFile = async (file: File): Promise<string | null> => {
+  const uploadFile = async (file: File, kind: 'avatar' | 'cert'): Promise<string | null> => {
     if (!/^image\/(jpeg|png|webp)$/.test(file.type)) {
       toast.error('Только JPEG, PNG или WebP');
       return null;
@@ -77,7 +78,7 @@ function ProfilePage() {
       toast.error('Файл больше 5 МБ');
       return null;
     }
-    const { data } = await adminApi.uploadAvatar(file);
+    const { data } = await adminApi.uploadAvatar(file, kind);
     return data.avatar_url;
   };
 
@@ -85,7 +86,7 @@ function ProfilePage() {
     if (!file) return;
     setUploading(true);
     try {
-      const url = await uploadFile(file);
+      const url = await uploadFile(file, 'avatar');
       if (url) {
         setAvatar(url);
         setPreset(null);
@@ -108,7 +109,8 @@ function ProfilePage() {
     if (!file) return;
     setUploadingCert(true);
     try {
-      const url = await uploadFile(file);
+      // kind=cert: standalone file, never touches the profile photo.
+      const url = await uploadFile(file, 'cert');
       if (url) setNewCertUrl(url);
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'Не удалось загрузить фото'));
@@ -192,7 +194,12 @@ function ProfilePage() {
                 {preset}
               </div>
             ) : avatar ? (
-              <img src={assetUrl(avatar) || ''} alt="Фото мастера" className="profile-photo" />
+              <BackendImg
+                src={assetUrl(avatar)}
+                alt="Фото мастера"
+                className="profile-photo"
+                fallbackEmoji="📷"
+              />
             ) : (
               <div className="profile-photo profile-photo-empty">📷</div>
             )}
@@ -318,7 +325,11 @@ function ProfilePage() {
                 <div key={`${c.name}-${i}`} className="cert-item">
                   {c.url && (
                     <a href={assetUrl(c.url) || ''} target="_blank" rel="noreferrer" title="Открыть фото">
-                      <img src={assetUrl(c.url) || ''} alt={c.name} className="cert-thumb" />
+                      <BackendImg
+                        src={assetUrl(c.url)}
+                        alt={c.name}
+                        className="cert-thumb"
+                      />
                     </a>
                   )}
                   <span className="cert-name">{c.name}</span>
@@ -334,6 +345,18 @@ function ProfilePage() {
               ))}
             </div>
           )}
+          {newCertUrl ? (
+            <div className="cert-draft">
+              <BackendImg
+                src={assetUrl(newCertUrl)}
+                alt="Новое фото сертификата"
+                className="cert-thumb"
+              />
+              <span className="cert-name">
+                {newCertName.trim() || 'Без названия'} — добавится при сохранении
+              </span>
+            </div>
+          ) : null}
           <div className="cert-add">
             <input
               value={newCertName}

@@ -71,6 +71,23 @@
   background: #fdf2f8;
 }
 
+/* BackendImg fallbacks keep the avatar geometry. */
+span.master-pick-avatar,
+span.master-about-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #f3f4f6;
+}
+
+span.master-pick-avatar {
+  font-size: 28px;
+}
+
+span.master-about-avatar {
+  font-size: 36px;
+}
+
 .master-pick-main {
   display: flex;
   flex-direction: column;
@@ -312,4 +329,17 @@
   height: 56px;
   border-radius: 8px;
   object-fit: cover;
+}
+
+/* BackendImg fallback placeholder keeps the thumbnail geometry. */
+.master-about-cert span[role='img'] {
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  background: #f3f4f6;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  flex-shrink: 0;
 }

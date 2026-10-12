@@ -6,6 +6,7 @@ import type { Bundle } from '../../api/cabinet';
 import type { Master, Service, Appointment } from '../../api/types';
 import {
   ConfirmDialog,
+  BackendImg,
   EmptyState,
   Modal,
   Skeleton,
@@ -388,7 +389,12 @@ function CabinetBookPage() {
                   {m.avatar_preset}
                 </span>
               ) : m.avatar_url ? (
-                <img src={assetUrl(m.avatar_url) || ''} alt={m.name} className="master-pick-avatar" />
+                <BackendImg
+                  src={assetUrl(m.avatar_url)}
+                  alt={m.name}
+                  className="master-pick-avatar"
+                  fallbackEmoji="📷"
+                />
               ) : null}
               <span className="master-pick-main">
                 <strong>
@@ -604,10 +610,11 @@ function CabinetBookPage() {
                   {aboutMaster.avatar_preset}
                 </span>
               ) : aboutMaster.avatar_url ? (
-                <img
-                  src={assetUrl(aboutMaster.avatar_url) || ''}
+                <BackendImg
+                  src={assetUrl(aboutMaster.avatar_url)}
                   alt={aboutMaster.name}
                   className="master-about-avatar"
+                  fallbackEmoji="📷"
                 />
               ) : (
                 <span className="master-about-avatar master-about-empty">📷</span>
@@ -642,7 +649,7 @@ function CabinetBookPage() {
                   <div key={`${c.name}-${i}`} className="master-about-cert">
                     {c.url && (
                       <a href={assetUrl(c.url) || ''} target="_blank" rel="noreferrer">
-                        <img src={assetUrl(c.url) || ''} alt={c.name} />
+                        <BackendImg src={assetUrl(c.url)} alt={c.name} />
                       </a>
                     )}
                     <span>{c.name}</span>

@@ -3,7 +3,7 @@ import os
 import uuid
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -164,14 +164,20 @@ async def update_my_profile(
 @router.post("/profile/avatar")
 async def upload_avatar(
     file: UploadFile = File(...),
+    kind: str = Query("avatar", description="avatar|cert"),
     master: User = Depends(require_master),
     db: AsyncSession = Depends(get_db),
 ):
     """Upload own photo (JPEG/PNG/WebP, ≤5MB). Returns public url.
 
     Stored under backend/static/avatars, served same-origin at /static.
-    Old file is removed best-effort on replace.
+    kind=avatar replaces the profile photo (old file removed best-effort).
+    kind=cert is a standalone file (e.g. certificate photo): it never
+    touches avatar_url and never deletes anything — sharing one endpoint
+    used to wipe previously saved files on every new upload.
     """
+    if kind not in ("avatar", "cert"):
+        raise HTTPException(status_code=400, detail="kind: avatar|cert")
     if file.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(
             status_code=400, detail="Только JPEG, PNG или WebP")
@@ -187,7 +193,7 @@ async def upload_avatar(
         f.write(data)
     url = f"{AVATAR_URL_PREFIX}/{filename}"
 
-    if master.role == UserRole.MASTER:
+    if master.role == UserRole.MASTER and kind == "avatar":
         mp_id = await get_master_profile_id(db, master)
         mp = (await db.execute(
             select(MasterProfile).where(MasterProfile.id == mp_id)

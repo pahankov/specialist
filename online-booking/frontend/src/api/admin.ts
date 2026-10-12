@@ -40,12 +40,16 @@ export const adminApi = {
   }) {
     return apiClient.patch('/api/v1/admin/profile', data);
   },
-  uploadAvatar(file: File) {
+  uploadAvatar(file: File, kind: 'avatar' | 'cert' = 'avatar') {
     const form = new FormData();
     form.append('file', file);
-    return apiClient.post<{ avatar_url: string }>('/api/v1/admin/profile/avatar', form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
+    return apiClient.post<{ avatar_url: string }>(
+      `/api/v1/admin/profile/avatar?kind=${kind}`,
+      form,
+      {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      },
+    );
   },
   // Dashboard
   getDashboard() {
