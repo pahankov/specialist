@@ -1,6 +1,7 @@
 {
   "name": "online-booking-frontend",
   "private": true,
+  "license": "UNLICENSED",
   "version": "1.34.0",
   "type": "module",
   "scripts": {

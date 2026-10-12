@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { authApi } from '../api/client';
 import { PASSWORD_PLACEHOLDER } from '../constants';
@@ -36,6 +36,7 @@ interface RegisterFormState {
   addressCity: string;
   telegramUsername: string;
   isMaster: boolean;
+  consent: boolean;
 }
 
 function LoginModal({ isOpen, onClose }: LoginModalProps) {
@@ -58,6 +59,7 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
     addressCity: '',
     telegramUsername: '',
     isMaster: false,
+    consent: false,
   });
   const [loading, setLoading] = useState(false);
   const [showLoginPassword, setShowLoginPassword] = useState(false);
@@ -203,6 +205,10 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!registerForm.consent) {
+      toast.error('Подтвердите согласие на обработку персональных данных');
+      return;
+    }
     setLoading(true);
     try {
       await authApi.registerUnified({
@@ -247,6 +253,7 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
       addressCity: '',
       telegramUsername: '',
       isMaster: false,
+      consent: false,
     });
     setShowLoginPassword(false);
     setShowRegisterPassword(false);
@@ -578,6 +585,25 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
                 }
               />
               <span>Зарегистрироваться как мастер</span>
+            </label>
+          </div>
+
+          {/* 152-ФЗ: explicit consent, blocks submit */}
+          <div className="checkbox-group">
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={registerForm.consent}
+                onChange={(e) =>
+                  setRegisterForm((prev) => ({ ...prev, consent: e.target.checked }))
+                }
+              />
+              <span>
+                Соглашаюсь на обработку персональных данных в соответствии с{' '}
+                <Link to="/privacy" target="_blank" rel="noreferrer">
+                  Политикой обработки ПДн
+                </Link>
+              </span>
             </label>
           </div>
 

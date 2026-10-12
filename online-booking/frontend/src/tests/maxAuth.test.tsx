@@ -259,3 +259,39 @@ describe('Login identifier validation (regression)', () => {
     expect(box).toHaveValue('7923u');
   });
 });
+
+describe('Registration consent (152-FZ)', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  function openRegister() {
+    render(
+      <MemoryRouter>
+        <LoginModal isOpen onClose={vi.fn()} />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByText('Зарегистрироваться'));
+  }
+
+  it('blocks submit without consent', () => {
+    openRegister();
+    const btn = screen.getByText('Зарегистрироваться', { selector: '.btn-submit' });
+    // jsdom doesn't submit forms on button click — submit the form directly.
+    fireEvent.submit(btn.closest('form') as HTMLFormElement);
+    expect(vi.mocked(mocked.registerUnified)).not.toHaveBeenCalled();
+    expect(vi.mocked(toast.error)).toHaveBeenCalledWith(
+      'Подтвердите согласие на обработку персональных данных',
+    );
+  });
+
+  it('submits once consent is checked', async () => {
+    openRegister();
+    vi.mocked(mocked.registerUnified).mockResolvedValue({ data: {} } as never);
+    fireEvent.click(screen.getByText(/Соглашаюсь на обработку/));
+    const btn = screen.getByText('Зарегистрироваться', { selector: '.btn-submit' });
+    fireEvent.submit(btn.closest('form') as HTMLFormElement);
+    expect(await screen.findByText('Зарегистрироваться')).toBeInTheDocument();
+    expect(vi.mocked(mocked.registerUnified)).toHaveBeenCalledTimes(1);
+  });
+});
