@@ -9,6 +9,7 @@ router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
 from app.modules.admin.dashboard import router as dashboard_router
 from app.modules.admin.appointments import router as appointments_router
 from app.modules.admin.services import router as services_router
+from app.modules.admin.bundles import router as bundles_router
 from app.modules.admin.clients import router as clients_router
 from app.modules.admin.working_hours import router as working_hours_router
 from app.modules.admin.audit import router as audit_router
@@ -25,6 +26,7 @@ from app.modules.admin.profile import router as profile_router
 router.include_router(dashboard_router)
 router.include_router(appointments_router)
 router.include_router(services_router)
+router.include_router(bundles_router)
 router.include_router(clients_router)
 router.include_router(working_hours_router)
 router.include_router(blocked_slots_router)

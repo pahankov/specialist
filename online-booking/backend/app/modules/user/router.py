@@ -264,6 +264,7 @@ def _master_profile_to_dict(mp):
         "description": mp.description,
         "avatar_url": mp.avatar_url,
         "avatar_preset": mp.avatar_preset,
+        "certificates": mp.certificates or [],
         "cabinet_address": mp.cabinet_address,
         "experience_years": mp.experience_years,
         "status": mp.status if mp.status else "active",

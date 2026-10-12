@@ -144,9 +144,13 @@ async def get_admin_appointments(
         appt = row[0]
         items.append(AppointmentWithDetails(
             id=appt.id, master_id=appt.master_id, service_id=appt.service_id,
+            bundle_id=appt.bundle_id, bundle_name=appt.bundle_name,
             client_id=appt.client_id, appointment_date=appt.appointment_date,
             status=appt.status, notes=appt.notes,
-            client_name=row[1], client_phone=row[2], service_name=row[3], service_price=row[4],
+            client_name=row[1], client_phone=row[2],
+            # Bundle bookings: snapshots win over the (absent) service join.
+            service_name=(appt.bundle_name or row[3]),
+            service_price=(appt.price if appt.price is not None else row[4]),
             # Admin branch selects master_name as 6th column; master branch has none
             master_name=row[5] if is_admin and len(row) > 5 else None
         ))
@@ -200,8 +204,10 @@ async def get_appointments_by_date(
         {"id": a.id, "client_name": a.client_profile.user.name if a.client_profile else "Unknown",
          "client_phone": a.client_profile.user.phone if a.client_profile else "",
          "service_id": a.service_id,
-         "service_name": a.service.name if a.service else "",
-         "service_duration": a.service.duration_minutes if a.service else None,
+         "bundle_id": a.bundle_id,
+         "service_name": a.bundle_name or (a.service.name if a.service else ""),
+         "service_duration": (a.duration_minutes if a.duration_minutes is not None
+                              else (a.service.duration_minutes if a.service else None)),
          "appointment_date": a.appointment_date.isoformat(), "status": a.status}
         for a in appointments
     ]

@@ -11,6 +11,7 @@ import {
 } from '../../components/common';
 import { usePersistentState } from '../../utils/persistentState';
 import type { Service } from '../../api/types';
+import type { Bundle } from '../../api/cabinet';
 import { formatPrice } from '../../components/schedule/helpers';
 import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError';
 import '../../styles/tables.css';
@@ -43,6 +44,16 @@ function ServicesPage() {
   const [category, setCategory] = useState('');
   const [categoryCustom, setCategoryCustom] = useState(false);
 
+  // ─── Bundles (complexes): separate feature, assembled from services ───
+  const [bundles, setBundles] = useState<Bundle[]>([]);
+  const [allServices, setAllServices] = useState<Service[]>([]);
+  const [showBundleForm, setShowBundleForm] = useState(false);
+  const [editingBundleId, setEditingBundleId] = useState<number | null>(null);
+  const [deletingBundleId, setDeletingBundleId] = useState<number | null>(null);
+  const [bundleName, setBundleName] = useState('');
+  const [bundlePrice, setBundlePrice] = useState('');
+  const [picked, setPicked] = useState<Set<number>>(new Set());
+
   const existingCategories = [...new Set(services.map((s) => s.category).filter(Boolean))] as string[];
 
   const fetchData = async () => {
@@ -57,6 +68,12 @@ function ServicesPage() {
       } else setError('Ошибка загрузки');
     } finally {
       setLoading(false);
+    }
+    try {
+      const b = await adminApi.getBundles();
+      setBundles(b.data || []);
+    } catch {
+      /* bundles are secondary — services error above already surfaces */
     }
   };
 
@@ -152,6 +169,102 @@ function ServicesPage() {
       showError(err);
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  // ─── Bundle form ───
+  const openBundleForm = async (b?: Bundle) => {
+    setError('');
+    try {
+      const all = await adminApi.getServices({ page: 1, page_size: 500 });
+      setAllServices(all.data.items || []);
+    } catch (err: unknown) {
+      showError(err);
+      return;
+    }
+    if (b) {
+      setEditingBundleId(b.id);
+      setBundleName(b.name);
+      setBundlePrice(b.price != null ? String(b.price) : '');
+      setPicked(new Set(b.service_ids));
+    } else {
+      setEditingBundleId(null);
+      setBundleName('');
+      setBundlePrice('');
+      setPicked(new Set());
+    }
+    setShowBundleForm(true);
+  };
+
+  const pickedServices = allServices.filter((s) => picked.has(s.id));
+  const pickedDuration = pickedServices.reduce((t, s) => t + (s.duration_minutes || 0), 0);
+  const pickedSum = pickedServices.reduce((t, s) => t + Number(s.price || 0), 0);
+
+  const togglePicked = (id: number) => {
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleBundleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const name = bundleName.trim();
+    if (!name) {
+      setError('Введите название комплекса');
+      return;
+    }
+    if (picked.size < 2) {
+      setError('Выберите минимум 2 услуги');
+      return;
+    }
+    const price = bundlePrice.trim() === '' ? undefined : Number(bundlePrice);
+    if (price !== undefined && !(price >= 0)) {
+      setError('Некорректная цена');
+      return;
+    }
+    setError('');
+    try {
+      if (editingBundleId) {
+        await adminApi.updateBundle(editingBundleId, {
+          name,
+          service_ids: [...picked],
+          price: bundlePrice.trim() === '' ? null : Number(bundlePrice),
+        });
+        toast.success('Комплекс обновлён');
+      } else {
+        await adminApi.createBundle({ name, service_ids: [...picked], price });
+        toast.success('Комплекс собран');
+      }
+      setShowBundleForm(false);
+      setEditingBundleId(null);
+      fetchData();
+    } catch (err: unknown) {
+      showError(err);
+    }
+  };
+
+  const handleBundleDelete = async (id: number) => {
+    try {
+      await adminApi.deleteBundle(id);
+      toast.success('Комплекс удалён');
+      fetchData();
+    } catch (err: unknown) {
+      showError(err);
+    } finally {
+      setDeletingBundleId(null);
+    }
+  };
+
+  const toggleBundleActive = async (b: Bundle) => {
+    try {
+      await adminApi.updateBundle(b.id, { is_active: !b.is_active });
+      toast.success(b.is_active ? 'Комплекс скрыт' : 'Комплекс активен');
+      fetchData();
+    } catch (err: unknown) {
+      showError(err);
     }
   };
 
@@ -380,6 +493,135 @@ function ServicesPage() {
         label={`Страница ${page} из ${totalPages} (${total} услуг)`}
       />
 
+      {/* ─── Complexes: separate list, never mixed with services ─── */}
+      <div className="card" style={{ marginTop: 16 }}>
+        <div className="card-header">
+          <h3>🎁 Комплексы ({bundles.length})</h3>
+          <button className="btn btn-primary" onClick={() => openBundleForm()}>
+            ＋ Собрать комплекс
+          </button>
+        </div>
+        <p className="hint" style={{ margin: '0 0 12px' }}>
+          Набор из созданных услуг: записываются одним слотом, время суммируется.
+        </p>
+        {showBundleForm && (
+          <div className="card form-card" style={{ marginBottom: 12 }}>
+            <h3>{editingBundleId ? 'Редактировать комплекс' : 'Новый комплекс'}</h3>
+            <form onSubmit={handleBundleSubmit}>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Название</label>
+                  <input
+                    value={bundleName}
+                    onChange={(e) => setBundleName(e.target.value)}
+                    required
+                    placeholder="Например: Бикини + ноги"
+                    autoFocus={!editingBundleId}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Своя цена (₽, пусто = сумма)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={bundlePrice}
+                    onChange={(e) => setBundlePrice(e.target.value)}
+                    placeholder={`Сумма: ${formatPrice(pickedSum)} ₽`}
+                  />
+                </div>
+              </div>
+              <div className="form-group">
+                <label>Услуги в комплексе (минимум 2)</label>
+                <div className="bundle-pick-list">
+                  {allServices.map((s) => (
+                    <label key={s.id} className="bundle-pick">
+                      <input
+                        type="checkbox"
+                        checked={picked.has(s.id)}
+                        onChange={() => togglePicked(s.id)}
+                      />
+                      <span>
+                        <strong>{s.name}</strong> · {s.duration_minutes} мин ·{' '}
+                        {formatPrice(s.price)} ₽
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                <span style={{ fontSize: 12, color: '#666' }}>
+                  Выбрано: {picked.size} · ⏱ {pickedDuration} мин · Σ{' '}
+                  {formatPrice(pickedSum)} ₽
+                </span>
+              </div>
+              <div className="form-actions">
+                <button type="submit" className="btn btn-primary">
+                  {editingBundleId ? 'Сохранить' : 'Собрать'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => setShowBundleForm(false)}
+                >
+                  Отмена
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+        {bundles.length === 0 && !showBundleForm ? (
+          <EmptyState
+            title="Нет комплексов"
+            actionLabel="Собрать комплекс"
+            onAction={() => openBundleForm()}
+          />
+        ) : (
+          <div className="bundle-list">
+            {bundles.map((b) => (
+              <div key={b.id} className={`bundle-card${b.is_active ? '' : ' bundle-off'}`}>
+                <div className="bundle-head">
+                  <strong>{b.name}</strong>
+                  {!b.is_active && <span className="bundle-badge">скрыт</span>}
+                </div>
+                <div className="bundle-comp">
+                  {b.services.map((s) => (
+                    <span key={s.id} className="bundle-chip">
+                      {s.name} · {s.duration_minutes} мин
+                    </span>
+                  ))}
+                </div>
+                <div className="bundle-totals">
+                  ⏱ {b.duration_total} мин ·{' '}
+                  {b.price != null ? (
+                    <>
+                      <s>{formatPrice(b.price_total)} ₽</s> <strong>{formatPrice(b.effective_price)} ₽</strong>
+                    </>
+                  ) : (
+                    <strong>{formatPrice(b.effective_price)} ₽</strong>
+                  )}
+                </div>
+                <div className="bundle-actions">
+                  <button
+                    className="btn btn-sm btn-ghost"
+                    onClick={() => toggleBundleActive(b)}
+                    title={b.is_active ? 'Скрыть от клиентов' : 'Показать клиентам'}
+                  >
+                    {b.is_active ? '👁️' : '🚫'}
+                  </button>
+                  <button className="btn btn-sm btn-edit" onClick={() => openBundleForm(b)}>
+                    ✏️
+                  </button>
+                  <button
+                    className="btn btn-sm btn-delete"
+                    onClick={() => setDeletingBundleId(b.id)}
+                  >
+                    🗑️
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       <ConfirmDialog
         open={!!deletingId}
         onClose={() => setDeletingId(null)}
@@ -388,6 +630,16 @@ function ServicesPage() {
         confirmLabel="Удалить"
         danger
         onConfirm={() => deletingId !== null && handleDelete(deletingId)}
+      />
+
+      <ConfirmDialog
+        open={deletingBundleId !== null}
+        onClose={() => setDeletingBundleId(null)}
+        title="🗑️ Удалить комплекс?"
+        message="Прошлые записи сохранят название комплекса."
+        confirmLabel="Удалить"
+        danger
+        onConfirm={() => deletingBundleId !== null && handleBundleDelete(deletingBundleId)}
       />
     </div>
   );

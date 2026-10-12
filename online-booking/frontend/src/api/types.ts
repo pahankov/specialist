@@ -49,6 +49,7 @@ export interface Master {
   description?: string;
   avatar_url?: string;
   avatar_preset?: string | null;
+  certificates?: { name: string; url?: string }[];
   cabinet_address?: string | null;
   experience_years?: number | null;
   is_active: boolean;
@@ -89,7 +90,9 @@ export interface Client {
 export interface Appointment {
   id: number;
   master_id: number;
-  service_id: number;
+  service_id?: number | null;
+  bundle_id?: number | null;
+  bundle_name?: string | null;
   client_id?: number;
   appointment_date: string;
   status: 'confirmed' | 'cancelled' | 'completed' | 'pending';

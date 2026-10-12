@@ -83,9 +83,9 @@ async def get_master_stats(
     total_services = service_result.scalar() or 0
 
     revenue_result = await db.execute(
-        select(func.sum(Service.price))
+        select(func.sum(func.coalesce(Appointment.price, Service.price)))
         .select_from(Appointment)
-        .join(Service, Appointment.service_id == Service.id)
+        .outerjoin(Service, Appointment.service_id == Service.id)
         .where(Appointment.master_id == master_id, Appointment.status == "completed",
                *in_range(Appointment.appointment_date))
     )
@@ -120,8 +120,9 @@ async def get_master_stats(
                 "client_name": a.client_profile.user.name if a.client_profile else None,
                 "appointment_date": a.appointment_date.isoformat() if a.appointment_date else None,
                 "status": a.status,
-                "service_name": a.service.name if a.service else None,
-                "service_price": float(a.service.price) if a.service else 0
+                "service_name": a.bundle_name or (a.service.name if a.service else None),
+                "service_price": float(a.price) if a.price is not None
+                else (float(a.service.price) if a.service else 0)
             } for a in recent_appointments
         ]
     }
@@ -176,9 +177,9 @@ async def get_master_full(
 
     # --- Revenue ---
     revenue_result = await db.execute(
-        select(func.sum(Service.price))
+        select(func.sum(func.coalesce(Appointment.price, Service.price)))
         .select_from(Appointment)
-        .join(Service, Appointment.service_id == Service.id)
+        .outerjoin(Service, Appointment.service_id == Service.id)
         .where(Appointment.master_id == master_id, Appointment.status == "completed")
     )
     total_revenue = float(revenue_result.scalar() or 0)
@@ -233,8 +234,9 @@ async def get_master_full(
             "client_name": a.client_profile.user.name if a.client_profile else None,
             "appointment_date": a.appointment_date.isoformat() if a.appointment_date else None,
             "status": a.status,
-            "service_name": a.service.name if a.service else None,
-            "service_price": float(a.service.price) if a.service else 0
+            "service_name": a.bundle_name or (a.service.name if a.service else None),
+            "service_price": float(a.price) if a.price is not None
+            else (float(a.service.price) if a.service else 0)
         } for a in recent_appts
     ]
 

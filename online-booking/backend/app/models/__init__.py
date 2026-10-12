@@ -13,3 +13,4 @@ from app.models.client_profile import ClientProfile
 from app.models.otp_code import OtpCode
 from app.models.notification import Notification
 from app.models.notification_broadcast import NotificationBroadcast
+from app.models.service_bundle import ServiceBundle

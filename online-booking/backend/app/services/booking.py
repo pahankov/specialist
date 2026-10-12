@@ -5,11 +5,13 @@ which missed overlaps when the existing booking was longer than the new one.
 """
 from datetime import datetime, timedelta
 
-from sqlalchemy import select
+from fastapi import HTTPException
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appointment import Appointment
 from app.models.service import Service
+from app.models.service_bundle import ServiceBundle
 
 
 async def find_conflict(
@@ -20,9 +22,12 @@ async def find_conflict(
 ) -> Appointment | None:
     """First live appointment overlapping [start, start+duration), if any."""
     end = start_naive + timedelta(minutes=duration_minutes)
+    # Bundle rows have service_id=NULL: outer join + duration snapshot.
     candidates = (await db.execute(
-        select(Appointment, Service.duration_minutes)
-        .join(Service, Appointment.service_id == Service.id)
+        select(Appointment,
+               func.coalesce(Service.duration_minutes,
+                             Appointment.duration_minutes))
+        .outerjoin(Service, Appointment.service_id == Service.id)
         .where(
             Appointment.master_id == master_profile_id,
             Appointment.status != "cancelled",
@@ -34,6 +39,60 @@ async def find_conflict(
         if existing_start + timedelta(minutes=dur or 0) > start_naive:
             return existing
     return None
+
+
+async def resolve_booking_item(
+    db: AsyncSession,
+    master_profile_id: int,
+    service_id: int | None = None,
+    bundle_id: int | None = None,
+) -> dict:
+    """Exactly one of service_id / bundle_id. Returns booking facts.
+
+    Service: live service row. Bundle: active own complex; duration = sum,
+    price = custom or sum; every member must exist + be active right now.
+    Snapshots (bundle_name/duration/price) are returned for the appointment.
+    """
+    if (service_id is None) == (bundle_id is None):
+        raise HTTPException(
+            status_code=400,
+            detail="Укажите услугу или комплекс (ровно один)",
+        )
+    if bundle_id is not None:
+        b = (await db.execute(
+            select(ServiceBundle).where(ServiceBundle.id == bundle_id,
+                                        ServiceBundle.master_id == master_profile_id)
+        )).scalar_one_or_none()
+        if b is None or b.is_active is False:
+            raise HTTPException(status_code=404, detail="Комплекс не найден")
+        members = (await db.execute(
+            select(Service).where(Service.id.in_(b.service_ids or []),
+                                  Service.master_id == master_profile_id)
+        )).scalars().all()
+        if len(members) != len(b.service_ids or []) or \
+                any(s.is_active is False for s in members):
+            raise HTTPException(
+                status_code=400,
+                detail="Комплекс изменился — попросите мастера обновить его",
+            )
+        duration = sum(s.duration_minutes or 0 for s in members)
+        price = float(b.price) if b.price is not None else \
+            round(sum(float(s.price or 0) for s in members), 2)
+        return {
+            "service_id": None, "bundle_id": b.id, "bundle_name": b.name,
+            "name": b.name, "duration_minutes": duration, "price": price,
+        }
+    service = (await db.execute(
+        select(Service).where(Service.id == service_id,
+                              Service.master_id == master_profile_id)
+    )).scalar_one_or_none()
+    if service is None or service.is_active is False:
+        raise HTTPException(status_code=404, detail="Услуга не найдена")
+    return {
+        "service_id": service.id, "bundle_id": None, "bundle_name": None,
+        "name": service.name, "duration_minutes": service.duration_minutes,
+        "price": float(service.price or 0),
+    }
 
 
 def format_slot(dt) -> str:

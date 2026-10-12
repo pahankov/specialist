@@ -114,8 +114,12 @@
 |---------|-----|-------------|----------|
 | id | INTEGER | PK | Автоинкремент |
 | master_id | INTEGER | NOT NULL, FK -> master_profiles.id ON DELETE CASCADE | ID мастера |
-| service_id | INTEGER | NOT NULL, FK -> services.id ON DELETE CASCADE | ID услуги |
+| service_id | INTEGER | NULLABLE, FK -> services.id ON DELETE CASCADE | ID услуги (NULL у записей на комплекс) |
 | client_id | INTEGER | NOT NULL, FK -> client_profiles.id ON DELETE CASCADE | ID клиента |
+| bundle_id | INTEGER | NULLABLE, FK -> service_bundles.id ON DELETE SET NULL | ID комплекса (только у записей на комплекс) |
+| bundle_name | VARCHAR(200) | NULLABLE | Снапшот названия комплекса |
+| duration_minutes | INTEGER | NULLABLE | Снапшот длительности (комплексы; у услуг — живой join) |
+| price | NUMERIC(10,2) | NULLABLE | Снапшот цены (комплексы; у услуг — живой join) |
 | appointment_date | TIMESTAMP WITH TIME ZONE | NOT NULL | Дата и время записи |
 | status | VARCHAR(20) | DEFAULT pending | pending, confirmed, completed, cancelled, no_show |
 | notes | TEXT | NULLABLE | Примечания |
@@ -267,6 +271,21 @@
 | max_user_name | VARCHAR(200) | NULLABLE | Имя из MAX (дефолт имени нового клиента) |
 | max_verified_phone | BOOLEAN | NOT NULL, DEFAULT FALSE | TRUE, если номер пришёл через `request_contact` с верным HMAC (доказанно привязан к MAX-аккаунту → `is_verified=True`) |
 
+### 14. service_bundles
+
+**Назначение:** Комплексы услуг мастера (наборы из созданных услуг; в список услуг не смешиваются)
+
+| Колонка | Тип | Ограничения | Описание |
+|---------|-----|-------------|----------|
+| id | INTEGER | PK | Автоинкремент |
+| master_id | INTEGER | NOT NULL, FK -> master_profiles.id ON DELETE CASCADE | ID мастера |
+| name | VARCHAR(200) | NOT NULL | Название комплекса |
+| service_ids | JSON | NOT NULL | Упорядоченные ID услуг (свои, ≥2) |
+| price | NUMERIC(10,2) | NULLABLE | Своя цена; NULL = сумма услуг на момент записи |
+| is_active | BOOLEAN | DEFAULT TRUE | Видимость клиентам |
+| created_at | TIMESTAMP WITH TIME ZONE | | Дата создания |
+| updated_at | TIMESTAMP WITH TIME ZONE | | Дата обновления |
+
 ---
 
 ## Связи (Relationships)
@@ -278,6 +297,8 @@
 | users | client_profiles | 1:1 (unique) | CASCADE |
 | users | master_profiles | 1:1 (unique) | CASCADE |
 | master_profiles | services | 1:N | CASCADE |
+| master_profiles | service_bundles | 1:N | CASCADE |
+| service_bundles | appointments | 1:N | SET NULL |
 | master_profiles | working_hours | 1:N | CASCADE |
 | master_profiles | blocked_slots | 1:N | CASCADE |
 | master_profiles | reviews | 1:N | CASCADE |
@@ -293,6 +314,8 @@
 | client_profiles | users | user_id |
 | master_profiles | users | user_id |
 | services | master_profiles | master_id |
+| service_bundles | master_profiles | master_id |
+| appointments | service_bundles | bundle_id |
 | appointments | master_profiles | master_id |
 | appointments | services | service_id |
 | appointments | client_profiles | client_id |
@@ -332,8 +355,9 @@
 | 10 | f6a7b8c9d0e1 | e5f6a7b8c9d0 | `client_profiles.address` (локация клиента; ключ подбора — `users.city_id`) | 2026-10-12 |
 | 11 | 07b8c9d0e1f2 | f6a7b8c9d0e1 | `notifications.link` (диплинк в записи) | 2026-10-12 |
 | 12 | 08c9d0e1f2a3 | 07b8c9d0e1f2 | `master_profiles.avatar_preset` (стандартный аватар-эмодзи) | 2026-10-12 |
+| 13 | 09e0f1a2b3c4 | 08c9d0e1f2a3 | `service_bundles` + `appointments.bundle_id/bundle_name/duration_minutes/price`, `service_id` NULLABLE | 2026-10-12 |
 
-**Head:** `08c9d0e1f2a3`
+**Head:** `09e0f1a2b3c4`
 
 > Старая цепочка из 12 миграций (`9a9c2edb` → `b2c3d4e5f6a7`) удалена после squash —
 > история сохранена в git (`git log -- alembic/versions/`). Прод-БД со старым head

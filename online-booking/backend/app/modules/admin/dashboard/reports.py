@@ -58,16 +58,17 @@ async def get_monthly_stats(
     confirmed_count = confirmed_result.scalar() or 0
 
     duration_result = await db.execute(
-        select(func.sum(Service.duration_minutes))
-        .select_from(Appointment).join(Service, Appointment.service_id == Service.id)
+        select(func.sum(func.coalesce(Appointment.duration_minutes,
+                                      Service.duration_minutes)))
+        .select_from(Appointment).outerjoin(Service, Appointment.service_id == Service.id)
         .where(Appointment.master_id == mp_id, Appointment.appointment_date >= start_dt,
                Appointment.appointment_date < end_dt, Appointment.status.in_(["confirmed", "completed"]))
     )
     total_minutes = duration_result.scalar() or 0
 
     revenue_result = await db.execute(
-        select(func.sum(Service.price))
-        .select_from(Appointment).join(Service, Appointment.service_id == Service.id)
+        select(func.sum(func.coalesce(Appointment.price, Service.price)))
+        .select_from(Appointment).outerjoin(Service, Appointment.service_id == Service.id)
         .where(Appointment.master_id == mp_id, Appointment.appointment_date >= start_dt,
                Appointment.appointment_date < end_dt, Appointment.status == "completed")
     )

@@ -86,8 +86,8 @@ async def export_appointments_csv(
         a = row[0]
         line = (
             f"{a.id},{a.appointment_date.strftime('%Y-%m-%d %H:%M') if a.appointment_date else ''},"
-            f"{row[1] or ''},{row[2] or ''},{row[3] or ''},"
-            f"{float(row[4]) if row[4] else 0},{a.status},{a.notes or ''}"
+            f"{row[1] or ''},{row[2] or ''},{a.bundle_name or row[3] or ''},"
+            f"{float(a.price if a.price is not None else (row[4] or 0))},{a.status},{a.notes or ''}"
         )
         if include_master:
             line += f",{row[5] or ''}"

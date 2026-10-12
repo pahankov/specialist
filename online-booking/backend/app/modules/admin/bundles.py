@@ -1,0 +1,160 @@
+"""Master service bundles (complexes): named sets of own services.
+
+Separate feature from services: bundles never mix into the services list;
+they are assembled from created services and booked as ONE appointment
+(durations sum up, price is custom or the sum).
+"""
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.database import get_db
+from app.dependencies.auth import require_master
+from app.models.master_profile import MasterProfile
+from app.models.service import Service
+from app.models.service_bundle import ServiceBundle
+from app.models.user import User
+from app.modules.admin.helpers import get_master_profile_id
+from app.services.audit import log_action
+from app.logging_config import get_logger
+
+logger = get_logger(__name__)
+
+router = APIRouter()
+
+
+class BundleCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    service_ids: List[int] = Field(min_length=2, max_length=20)
+    price: Optional[float] = Field(default=None, ge=0)
+
+
+class BundleUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    service_ids: Optional[List[int]] = Field(default=None, min_length=2, max_length=20)
+    price: Optional[float] = Field(default=None, ge=0)
+    is_active: Optional[bool] = None
+
+
+async def _own_services(db: AsyncSession, mp_id: int, service_ids: list[int]) -> list[Service]:
+    """Validate ids: own + existing (order preserved, dupes dropped)."""
+    ordered = list(dict.fromkeys(service_ids))
+    rows = (await db.execute(
+        select(Service).where(Service.id.in_(ordered), Service.master_id == mp_id)
+    )).scalars().all()
+    if len(rows) != len(ordered):
+        raise HTTPException(status_code=404, detail="Услуга не найдена")
+    by_id = {s.id: s for s in rows}
+    return [by_id[i] for i in ordered]
+
+
+async def _bundle_to_dict(db: AsyncSession, b: ServiceBundle) -> dict:
+    services = await _own_services(db, b.master_id, b.service_ids or [])
+    duration_total = sum(s.duration_minutes or 0 for s in services)
+    price_total = sum(float(s.price or 0) for s in services)
+    return {
+        "id": b.id,
+        "master_id": b.master_id,
+        "name": b.name,
+        "service_ids": b.service_ids or [],
+        "services": [
+            {"id": s.id, "name": s.name,
+             "duration_minutes": s.duration_minutes, "price": float(s.price or 0)}
+            for s in services
+        ],
+        "duration_total": duration_total,
+        "price_total": round(price_total, 2),
+        # Custom price wins; NULL = sum at booking time.
+        "price": float(b.price) if b.price is not None else None,
+        "effective_price": float(b.price) if b.price is not None else round(price_total, 2),
+        "is_active": bool(b.is_active),
+        "created_at": b.created_at.isoformat() if b.created_at else None,
+    }
+
+
+async def _get_owned(db: AsyncSession, mp_id: int, bundle_id: int) -> ServiceBundle:
+    b = (await db.execute(
+        select(ServiceBundle).where(ServiceBundle.id == bundle_id,
+                                    ServiceBundle.master_id == mp_id)
+    )).scalar_one_or_none()
+    if b is None:
+        raise HTTPException(status_code=404, detail="Комплекс не найден")
+    return b
+
+
+@router.post("/bundles", status_code=201)
+async def create_bundle(
+    data: BundleCreate,
+    master: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db),
+):
+    """Assemble a complex from own services (min 2)."""
+    mp_id = await get_master_profile_id(db, master)
+    services = await _own_services(db, mp_id, data.service_ids)
+    b = ServiceBundle(
+        master_id=mp_id, name=data.name.strip(),
+        service_ids=[s.id for s in services],
+        price=data.price, is_active=True,
+    )
+    db.add(b)
+    await db.flush()
+    await log_action(db, master.id, "create", "bundle", b.id, b.name, level="info")
+    await db.commit()
+    await db.refresh(b)
+    return await _bundle_to_dict(db, b)
+
+
+@router.get("/bundles")
+async def list_bundles(
+    master: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db),
+):
+    """Own complexes (active and inactive), with computed totals."""
+    mp_id = await get_master_profile_id(db, master)
+    rows = (await db.execute(
+        select(ServiceBundle).where(ServiceBundle.master_id == mp_id)
+        .order_by(ServiceBundle.name)
+    )).scalars().all()
+    return [await _bundle_to_dict(db, b) for b in rows]
+
+
+@router.patch("/bundles/{bundle_id}")
+async def update_bundle(
+    bundle_id: int,
+    data: BundleUpdate,
+    master: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db),
+):
+    mp_id = await get_master_profile_id(db, master)
+    b = await _get_owned(db, mp_id, bundle_id)
+    if data.name is not None:
+        b.name = data.name.strip()
+    if data.service_ids is not None:
+        services = await _own_services(db, mp_id, data.service_ids)
+        b.service_ids = [s.id for s in services]
+    if "price" in data.model_fields_set:
+        b.price = data.price
+    if data.is_active is not None:
+        b.is_active = data.is_active
+    await log_action(db, master.id, "update", "bundle", b.id, b.name, level="info")
+    await db.commit()
+    await db.refresh(b)
+    return await _bundle_to_dict(db, b)
+
+
+@router.delete("/bundles/{bundle_id}", status_code=204)
+async def delete_bundle(
+    bundle_id: int,
+    master: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db),
+):
+    """Hard delete; past appointments keep bundle_name snapshot + NULL link."""
+    mp_id = await get_master_profile_id(db, master)
+    b = await _get_owned(db, mp_id, bundle_id)
+    await log_action(db, master.id, "delete", "bundle", b.id, b.name, level="warning")
+    await db.delete(b)
+    await db.commit()
+    return None

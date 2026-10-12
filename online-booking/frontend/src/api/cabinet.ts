@@ -22,6 +22,26 @@ export interface ClientStats {
   favorite_service?: { id: number; name?: string | null; visits: number } | null;
 }
 
+export interface BundleService {
+  id: number;
+  name: string;
+  duration_minutes: number;
+  price: number;
+}
+
+export interface Bundle {
+  id: number;
+  master_id: number;
+  name: string;
+  service_ids: number[];
+  services: BundleService[];
+  duration_total: number;
+  price_total: number;
+  price: number | null;
+  effective_price: number;
+  is_active: boolean;
+}
+
 // ─── Client cabinet API ────────────────────────────────────────────
 
 export const cabinetApi = {
@@ -42,11 +62,17 @@ export const cabinetApi = {
   },
   bookAppointment(data: {
     master_id: number;
-    service_id: number;
+    service_id?: number;
+    bundle_id?: number;
     appointment_date: string;
     notes?: string;
   }) {
     return apiClient.post<Appointment>('/api/v1/client/appointments', data);
+  },
+  bundles(masterId: number) {
+    return apiClient.get<Bundle[]>('/api/v1/client/bundles', {
+      params: { master_id: masterId },
+    });
   },
   getBookSchedule(masterId: number, month: string) {
     return apiClient.get<{

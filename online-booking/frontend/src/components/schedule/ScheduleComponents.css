@@ -340,6 +340,22 @@
   font-weight: 600;
 }
 
+/* Month bookings failed to load: visible retry instead of a silent gap. */
+.schedule-load-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+  color: #92400e;
+  font-size: 14px;
+  font-weight: 600;
+}
+
 /* Row actions on a booked granule: confirm (pending only) + cancel. */
 .slot-actions {
   display: flex;

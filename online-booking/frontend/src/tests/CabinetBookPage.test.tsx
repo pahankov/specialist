@@ -3,18 +3,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 
-const { me, getBookSchedule, bookAppointment, getAllMasters, getAllServices } = vi.hoisted(
+const { me, getBookSchedule, bookAppointment, getAllMasters, getAllServices, getBundles } = vi.hoisted(
   () => ({
     me: vi.fn(),
     getBookSchedule: vi.fn(),
     bookAppointment: vi.fn(),
     getAllMasters: vi.fn(),
     getAllServices: vi.fn(),
+    getBundles: vi.fn(),
   }),
 );
 
 vi.mock('../api/client', () => ({
-  cabinetApi: { me, getBookSchedule, bookAppointment },
+  cabinetApi: { me, getBookSchedule, bookAppointment, bundles: getBundles },
   mastersApi: { getAll: getAllMasters },
   servicesApi: { getAll: getAllServices },
 }));
@@ -34,6 +35,18 @@ const MASTERS = [
 const SERVICES: Record<number, { id: number; master_id: number; name: string; duration_minutes: number; price: number }[]> = {
   1: [{ id: 10, master_id: 1, name: 'Стрижка', duration_minutes: 60, price: 1500 }],
   2: [{ id: 20, master_id: 2, name: 'Маникюр', duration_minutes: 90, price: 1200 }],
+};
+
+const BUNDLES: Record<number, object[]> = {
+  1: [
+    {
+      id: 100, master_id: 1, name: 'Сет', service_ids: [10],
+      services: [{ id: 10, name: 'Стрижка', duration_minutes: 60, price: 1500 }],
+      duration_total: 60, price_total: 1500, price: null, effective_price: 1500,
+      is_active: true,
+    },
+  ],
+  2: [],
 };
 
 function renderPage() {
@@ -56,6 +69,9 @@ beforeEach(() => {
   getAllServices.mockImplementation((masterId: number) =>
     Promise.resolve({ data: SERVICES[masterId] || [] }),
   );
+  getBundles.mockImplementation((masterId: number) =>
+    Promise.resolve({ data: BUNDLES[masterId] || [] }),
+  );
 });
 
 describe('CabinetBookPage', () => {
@@ -67,14 +83,14 @@ describe('CabinetBookPage', () => {
       expect(getAllMasters).toHaveBeenCalledWith(5);
     });
     await waitFor(() => {
-      expect(screen.getByText(/Елена/)).toBeInTheDocument();
+      expect(screen.getAllByText(/Елена/).length).toBeGreaterThan(0);
       expect(screen.getByText(/Мария/)).toBeInTheDocument();
     });
 
     fireEvent.change(screen.getByDisplayValue('Все услуги'), {
       target: { value: 'Маникюр' },
     });
-    expect(screen.queryByText(/Елена/)).not.toBeInTheDocument();
+    expect(screen.queryAllByText(/Елена/)).toHaveLength(0);
     expect(screen.getByText(/Мария/)).toBeInTheDocument();
   });
 
@@ -96,9 +112,9 @@ describe('CabinetBookPage', () => {
     bookAppointment.mockResolvedValue({ data: { id: 100 } });
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText(/Елена/)).toBeInTheDocument();
+      expect(screen.getAllByText(/Елена/).length).toBeGreaterThan(0);
     });
-    fireEvent.click(screen.getByText(/Елена/));
+    fireEvent.click(screen.getByText(/Елена/, { selector: 'strong' }));
     expect(await screen.findByText(/активное расписание/)).toBeInTheDocument();
 
     // If the future day spilled into the next month, flip the calendar once.
@@ -120,6 +136,52 @@ describe('CabinetBookPage', () => {
     await waitFor(() => {
       expect(bookAppointment).toHaveBeenCalledWith(
         expect.objectContaining({ master_id: 1, service_id: 10 }),
+      );
+    });
+    expect(await screen.findByText('cabinet home')).toBeInTheDocument();
+  });
+
+  it('lists complexes separately and books a locked bundle', async () => {
+    const future = new Date();
+    future.setDate(future.getDate() + 5);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const dateStr = `${future.getFullYear()}-${pad(future.getMonth() + 1)}-${pad(future.getDate())}`;
+    const monthStr = dateStr.slice(0, 7);
+    getBookSchedule.mockResolvedValue({
+      data: {
+        master_id: 1,
+        window: { start_hour: 9, end_hour: 12 },
+        working_hours: [{ date: dateStr, start: '09:00', end: '12:00' }],
+        busy: [],
+      },
+    });
+    bookAppointment.mockResolvedValue({ data: { id: 101 } });
+    renderPage();
+    // Complexes section is separate from services.
+    expect(await screen.findByText('🎁 Комплексы')).toBeInTheDocument();
+    expect(screen.getByText('Сет')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Выбрать'));
+    expect(await screen.findByText(/активное расписание/)).toBeInTheDocument();
+    if (monthStr !== new Date().toISOString().slice(0, 7)) {
+      fireEvent.click(screen.getByText('→'));
+    }
+    fireEvent.click(
+      await screen.findByText(String(future.getDate()), {
+        selector: '.calendar-day-number',
+      }),
+    );
+    const bookButtons = await screen.findAllByText('+ Записаться');
+    fireEvent.click(bookButtons[0]);
+    // Bundle is locked in the modal instead of the service select.
+    expect(await screen.findByText('🎁 Сет')).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByText('Записаться', { selector: '.modal-actions .btn-primary' }),
+    );
+    await waitFor(() => {
+      expect(bookAppointment).toHaveBeenCalledWith(
+        expect.objectContaining({ master_id: 1, bundle_id: 100 }),
       );
     });
     expect(await screen.findByText('cabinet home')).toBeInTheDocument();

@@ -43,6 +43,9 @@ function SchedulePage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  // Month bookings failed to load (backend down/flapping): stale days must
+  // say so instead of silently showing an empty month.
+  const [monthError, setMonthError] = useState('');
   const [bookingClients, setBookingClients] = useState<Client[]>([]);
   const [bookingServices, setBookingServices] = useState<Service[]>([]);
   const [bookingLoading, setBookingLoading] = useState(false);
@@ -129,6 +132,13 @@ function SchedulePage() {
         }
       } catch (err: any) {
         console.error('[SchedulePage] Init error:', err);
+        if (!cancelled) {
+          setMonthError(
+            getApiErrorStatus(err) === undefined
+              ? 'Нет связи с сервером — записи месяца не загружены'
+              : getApiErrorMessage(err, 'Не удалось загрузить записи месяца'),
+          );
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -315,36 +325,6 @@ function SchedulePage() {
     closeBookingForm(setBookingForm, setBookingClients);
   }, []);
 
-  const handleBook = useCallback(async () => {
-    const success = await handleBookAppointment(
-      bookingForm,
-      setBookingLoading,
-      setError,
-      adminApi,
-      handleCloseBooking,
-      selectedMasterId,
-    );
-    if (success) {
-      const from = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth()).padStart(2, '0')}-01`;
-      const lastDay = new Date(
-        currentMonth.getFullYear(),
-        currentMonth.getMonth() + 1,
-        0,
-      ).getDate();
-      const to = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-      try {
-        const resp = await adminApi.getAppointmentsByDate(
-          from,
-          to,
-          selectedMasterId !== '' ? selectedMasterId : undefined,
-        );
-        setAppointments(resp.data || []);
-      } catch {
-        /* ignore */
-      }
-    }
-  }, [bookingForm, currentMonthISO, handleCloseBooking, selectedMasterId]);
-
   const refreshMonthAppointments = useCallback(async () => {
     const from = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth()).padStart(2, '0')}-01`;
     const lastDay = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0).getDate();
@@ -356,10 +336,29 @@ function SchedulePage() {
         selectedMasterId !== '' ? selectedMasterId : undefined,
       );
       setAppointments(resp.data || []);
-    } catch {
-      /* ignore */
+      setMonthError('');
+    } catch (err: unknown) {
+      setMonthError(
+        getApiErrorStatus(err) === undefined
+          ? 'Нет связи с сервером — записи месяца не загружены'
+          : getApiErrorMessage(err, 'Не удалось загрузить записи месяца'),
+      );
     }
   }, [currentMonthISO, selectedMasterId]);
+
+  const handleBook = useCallback(async () => {
+    const success = await handleBookAppointment(
+      bookingForm,
+      setBookingLoading,
+      setError,
+      adminApi,
+      handleCloseBooking,
+      selectedMasterId,
+    );
+    if (success) {
+      await refreshMonthAppointments();
+    }
+  }, [bookingForm, currentMonthISO, handleCloseBooking, selectedMasterId, refreshMonthAppointments]);
 
   const handleCancelSlotAppointment = useCallback(
     async (id: number) => {
@@ -692,6 +691,19 @@ function SchedulePage() {
             onSelectDate={handleSelectDate}
             onToggleDay={handleToggleDay}
           />
+
+          {monthError && (
+            <div className="schedule-load-error" role="alert">
+              <span>⚠️ {monthError}</span>
+              <button
+                type="button"
+                className="btn btn-sm btn-secondary"
+                onClick={refreshMonthAppointments}
+              >
+                Повторить
+              </button>
+            </div>
+          )}
 
           {selectedDate && (
             <TimeSlots

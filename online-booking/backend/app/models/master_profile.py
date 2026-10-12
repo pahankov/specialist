@@ -48,6 +48,8 @@ class MasterProfile(Base):
     # Relationships
     user = relationship("User", back_populates="master_profile")
     services = relationship("Service", back_populates="master_profile")
+    bundles = relationship("ServiceBundle", back_populates="master_profile",
+                           cascade="all, delete-orphan")
     appointments = relationship("Appointment", back_populates="master_profile")
     working_hours = relationship("WorkingHour", back_populates="master_profile")
     blocked_slots = relationship("BlockedSlot", back_populates="master_profile")

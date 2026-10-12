@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cabinetApi, mastersApi, servicesApi, assetUrl } from '../../api/client';
+import type { Bundle } from '../../api/cabinet';
 import type { Master, Service, Appointment } from '../../api/types';
 import {
   ConfirmDialog,
@@ -109,9 +110,11 @@ function CabinetBookPage() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [slotHour, setSlotHour] = useState<number | null>(null);
   const [modalServiceId, setModalServiceId] = useState<number | ''>('');
+  const [modalBundle, setModalBundle] = useState<Bundle | null>(null);
   const [notes, setNotes] = useState('');
   const [bookingLoading, setBookingLoading] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [aboutMaster, setAboutMaster] = useState<Master | null>(null);
 
   // Own city first (trip? pick another — masters reload).
   useEffect(() => {
@@ -178,6 +181,51 @@ function CabinetBookPage() {
     });
   }, [masters, masterQuery, serviceFilter, servicesByMaster]);
 
+  // Complexes of visible masters (separate list, never mixed with services).
+  const [bundlesByMaster, setBundlesByMaster] = useState<Record<number, Bundle[]>>({});
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const missing = masters.map((m) => m.id).filter((id) => !(id in bundlesByMaster));
+      if (missing.length === 0) return;
+      const entries = await Promise.all(
+        missing.map(async (id) => {
+          try {
+            const r = await cabinetApi.bundles(id);
+            return [id, r.data || []] as const;
+          } catch {
+            return [id, []] as const;
+          }
+        }),
+      );
+      if (!cancelled) {
+        setBundlesByMaster((prev) => ({ ...prev, ...Object.fromEntries(entries) }));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [masters]);
+
+  const visibleBundles = useMemo(
+    () =>
+      visibleMasters.flatMap((m) =>
+        (bundlesByMaster[m.id] || []).map((b) => ({ bundle: b, master: m })),
+      ),
+    [visibleMasters, bundlesByMaster],
+  );
+
+  const pickBundle = (master: Master, bundle: Bundle) => {
+    setSelectedMaster(master);
+    setModalBundle(bundle);
+    setModalServiceId('');
+    requestAnimationFrame(() => {
+      // jsdom (tests) has no scrollIntoView — optional call.
+      document.getElementById('cabinet-schedule')?.scrollIntoView?.({ behavior: 'smooth' });
+    });
+  };
+
   // Active schedule of the chosen master.
   useEffect(() => {
     if (!selectedMaster) return;
@@ -223,7 +271,13 @@ function CabinetBookPage() {
 
   const openSlot = (hour: number) => {
     const list = selectedMaster ? servicesByMaster[selectedMaster.id] || [] : [];
-    setModalServiceId(list.length > 0 ? list[0].id : '');
+    // A pre-picked complex stays locked; otherwise default to first service.
+    if (!(modalBundle && selectedMaster && modalBundle.master_id === selectedMaster.id)) {
+      setModalBundle(null);
+      setModalServiceId(list.length > 0 ? list[0].id : '');
+    } else {
+      setModalServiceId('');
+    }
     setNotes('');
     setSlotHour(hour);
   };
@@ -232,7 +286,8 @@ function CabinetBookPage() {
   const modalService = modalServices.find((s) => s.id === modalServiceId) ?? null;
 
   const handleBook = async () => {
-    if (!selectedMaster || !selectedDate || slotHour === null || modalServiceId === '') return;
+    if (!selectedMaster || !selectedDate || slotHour === null) return;
+    if (!modalBundle && modalServiceId === '') return;
     const y = selectedDate.getFullYear();
     const m = String(selectedDate.getMonth() + 1).padStart(2, '0');
     const d = String(selectedDate.getDate()).padStart(2, '0');
@@ -240,12 +295,15 @@ function CabinetBookPage() {
     try {
       await cabinetApi.bookAppointment({
         master_id: selectedMaster.id,
-        service_id: Number(modalServiceId),
+        ...(modalBundle
+          ? { bundle_id: modalBundle.id }
+          : { service_id: Number(modalServiceId) }),
         appointment_date: `${y}-${m}-${d}T${String(slotHour).padStart(2, '0')}:00:00`,
         notes: notes.trim() || undefined,
       });
-      toast.success('Вы записаны! Ждём вас 🎉');
+      toast.success('Заявка отправлена! Мастер подтвердит запись 🔔');
       setSlotHour(null);
+      setModalBundle(null);
       navigate('/cabinet');
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'Не удалось записаться'));
@@ -343,14 +401,71 @@ function CabinetBookPage() {
                   'Адрес уточняйте'}
                 {m.experience_years != null && <span> · опыт {m.experience_years} лет</span>}
                 {m.description && <span className="master-pick-desc">{m.description}</span>}
+                <span>
+                  <button
+                    type="button"
+                    className="master-about-btn"
+                    onClick={(e) => {
+                      // Inside a <label>: block the radio toggle, open profile.
+                      e.preventDefault();
+                      setAboutMaster(m);
+                    }}
+                  >
+                    О мастере →
+                  </button>
+                </span>
               </span>
             </label>
           ))}
         </div>
       )}
 
-      {selectedMaster && (
+      {visibleBundles.length > 0 && (
         <div className="card" style={{ marginTop: 16 }}>
+          <div className="card-header">
+            <h3>🎁 Комплексы</h3>
+          </div>
+          <p className="hint" style={{ margin: '0 0 12px' }}>
+            Набор услуг одним слотом — выберите, затем день и время ниже.
+          </p>
+          <div className="bundle-pick-list">
+            {visibleBundles.map(({ bundle: b, master: m }) => (
+              <div
+                key={`${m.id}-${b.id}`}
+                className={`bundle-pick-row${modalBundle?.id === b.id && selectedMaster?.id === m.id ? ' selected' : ''}`}
+              >
+                <span className="bundle-pick-main">
+                  <strong>{b.name}</strong>
+                  <span className="bundle-pick-master">{m.name}</span>
+                  <span className="bundle-pick-comp">
+                    {b.services.map((s) => s.name).join(' + ')}
+                  </span>
+                  <span className="bundle-pick-totals">
+                    ⏱ {b.duration_total} мин ·{' '}
+                    {b.price != null ? (
+                      <>
+                        <s>{b.price_total} ₽</s> <strong>{b.effective_price} ₽</strong>
+                      </>
+                    ) : (
+                      <strong>{b.effective_price} ₽</strong>
+                    )}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-primary"
+                  onClick={() => pickBundle(m, b)}
+                >
+                  Выбрать
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {selectedMaster && (
+        <div className="card" id="cabinet-schedule" style={{ marginTop: 16 }}>
           <div className="card-header">
             <h3>📅 {selectedMaster.name} — активное расписание</h3>
           </div>
@@ -403,7 +518,7 @@ function CabinetBookPage() {
         open={slotHour !== null}
         onClose={() => {
           // Don't lose a half-filled booking on an accidental X.
-          if (slotHour !== null && modalServiceId !== '') setConfirmCancel(true);
+          if (slotHour !== null && (modalServiceId !== '' || modalBundle)) setConfirmCancel(true);
           else setSlotHour(null);
         }}
         title="📅 Подтвердите запись"
@@ -422,6 +537,28 @@ function CabinetBookPage() {
             </p>
             <div className="form-group">
               <label>Услуга</label>
+              {modalBundle && selectedMaster && modalBundle.master_id === selectedMaster.id ? (
+                <div className="book-bundle-lock">
+                  <div>
+                    <strong>🎁 {modalBundle.name}</strong>
+                    <div className="hint">
+                      {modalBundle.services.map((s) => s.name).join(' + ')} · ⏱{' '}
+                      {modalBundle.duration_total} мин · {modalBundle.effective_price} ₽
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-ghost"
+                    onClick={() => {
+                      setModalBundle(null);
+                      const list = servicesByMaster[selectedMaster.id] || [];
+                      setModalServiceId(list.length > 0 ? list[0].id : '');
+                    }}
+                  >
+                    Сменить
+                  </button>
+                </div>
+              ) : (
               <select
                 value={modalServiceId}
                 onChange={(e) =>
@@ -437,11 +574,23 @@ function CabinetBookPage() {
                   </option>
                 ))}
               </select>
+              )}
               {modalService && (
                 <span className="hint">
                   Займёт {formatHour(slotHour)}–
                   {(() => {
                     const dur = Number(modalService.duration_minutes) || 60;
+                    const endH = slotHour + Math.floor(dur / 60);
+                    const endM = dur % 60;
+                    return `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+                  })()}
+                </span>
+              )}
+              {modalBundle && selectedMaster && modalBundle.master_id === selectedMaster.id && (
+                <span className="hint">
+                  Займёт {formatHour(slotHour)}–
+                  {(() => {
+                    const dur = modalBundle.duration_total || 60;
                     const endH = slotHour + Math.floor(dur / 60);
                     const endM = dur % 60;
                     return `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
@@ -469,10 +618,81 @@ function CabinetBookPage() {
               <button
                 type="button"
                 className="btn btn-primary"
-                disabled={modalServiceId === '' || bookingLoading}
+                disabled={(!modalBundle && modalServiceId === '') || bookingLoading}
                 onClick={handleBook}
               >
                 {bookingLoading ? 'Записываем…' : 'Записаться'}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={aboutMaster !== null}
+        onClose={() => setAboutMaster(null)}
+        title={`👤 ${aboutMaster?.name || ''}`}
+      >
+        {aboutMaster && (
+          <div className="master-about">
+            <div className="master-about-head">
+              {aboutMaster.avatar_preset ? (
+                <span className="master-about-avatar" role="img" aria-label={aboutMaster.name}>
+                  {aboutMaster.avatar_preset}
+                </span>
+              ) : aboutMaster.avatar_url ? (
+                <img
+                  src={assetUrl(aboutMaster.avatar_url) || ''}
+                  alt={aboutMaster.name}
+                  className="master-about-avatar"
+                />
+              ) : (
+                <span className="master-about-avatar master-about-empty">📷</span>
+              )}
+              <div>
+                <strong>
+                  {aboutMaster.name} {formatRating(aboutMaster.avg_rating)}
+                </strong>
+                <div className="master-about-sub">
+                  {[aboutMaster.city_name, aboutMaster.cabinet_address]
+                    .filter(Boolean)
+                    .join(' • ') || 'Адрес уточняйте'}
+                </div>
+                {aboutMaster.experience_years != null && (
+                  <div className="master-about-sub">Опыт: {aboutMaster.experience_years} лет</div>
+                )}
+              </div>
+            </div>
+            {aboutMaster.description && (
+              <p className="master-about-desc">{aboutMaster.description}</p>
+            )}
+            <h4>Сертификаты</h4>
+            {!aboutMaster.certificates || aboutMaster.certificates.length === 0 ? (
+              <p className="master-about-sub">Пока нет</p>
+            ) : (
+              <div className="master-about-certs">
+                {aboutMaster.certificates.map((c, i) => (
+                  <div key={`${c.name}-${i}`} className="master-about-cert">
+                    {c.url && (
+                      <a href={assetUrl(c.url) || ''} target="_blank" rel="noreferrer">
+                        <img src={assetUrl(c.url) || ''} alt={c.name} />
+                      </a>
+                    )}
+                    <span>{c.name}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  setSelectedMaster(aboutMaster);
+                  setAboutMaster(null);
+                }}
+              >
+                Выбрать
               </button>
             </div>
           </div>

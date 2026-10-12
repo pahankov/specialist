@@ -7,6 +7,7 @@ import type {
   HealthCheck,
   Changelog,
 } from './types';
+import type { Bundle } from './cabinet';
 
 export const adminApi = {
   // Own panel profile (id/name/city — form defaults)
@@ -181,6 +182,23 @@ export const adminApi = {
   },
   deleteService(id: number) {
     return apiClient.delete(`/api/v1/admin/services/${id}`);
+  },
+
+  // Service bundles (complexes) — separate list, assembled from services.
+  getBundles() {
+    return apiClient.get<Bundle[]>('/api/v1/admin/bundles');
+  },
+  createBundle(data: { name: string; service_ids: number[]; price?: number }) {
+    return apiClient.post<Bundle>('/api/v1/admin/bundles', data);
+  },
+  updateBundle(
+    id: number,
+    data: { name?: string; service_ids?: number[]; price?: number | null; is_active?: boolean },
+  ) {
+    return apiClient.patch<Bundle>(`/api/v1/admin/bundles/${id}`, data);
+  },
+  deleteBundle(id: number) {
+    return apiClient.delete(`/api/v1/admin/bundles/${id}`);
   },
 
   // Working Hours

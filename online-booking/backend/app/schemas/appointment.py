@@ -24,7 +24,9 @@ class AppointmentResponse(BaseModel):
 class AppointmentWithDetails(BaseModel):
     id: int
     master_id: int
-    service_id: int
+    service_id: Optional[int] = None
+    bundle_id: Optional[int] = None
+    bundle_name: Optional[str] = None
     client_id: Optional[int]
     appointment_date: datetime
     status: str
