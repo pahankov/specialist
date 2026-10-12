@@ -220,4 +220,45 @@ describe('Login identifier validation (regression)', () => {
       );
     });
   });
+
+  it('accepts a 10-digit phone without country code', async () => {
+    openLogin();
+    fillLogin('9235211232');
+    vi.mocked(mocked.loginUnified).mockResolvedValue({
+      data: { access_token: 'tok', token_type: 'bearer' },
+    } as never);
+    submitLogin();
+    await vi.waitFor(() => {
+      expect(vi.mocked(mocked.loginUnified)).toHaveBeenCalledWith(
+        '+7 (923) 521-12-32',
+        'Secret123!',
+      );
+    });
+  });
+
+  it('masks live while the input starts with +/7/8', () => {
+    openLogin();
+    fireEvent.change(screen.getByPlaceholderText(/email@example.com/), {
+      target: { value: '+7923' },
+    });
+    expect(screen.getByPlaceholderText(/email@example.com/)).toHaveValue('+7 (923');
+  });
+
+  it('leaves digit-led input unmasked until a letter proves email', () => {
+    openLogin();
+    const box = screen.getByPlaceholderText(/email@example.com/);
+    fireEvent.change(box, { target: { value: '123' } });
+    expect(box).toHaveValue('123');
+    fireEvent.change(box, { target: { value: '123u' } });
+    expect(box).toHaveValue('123u');
+  });
+
+  it('cleans mask artifacts when switching to email mode', () => {
+    openLogin();
+    const box = screen.getByPlaceholderText(/email@example.com/);
+    fireEvent.change(box, { target: { value: '+7 (923' } });
+    expect(box).toHaveValue('+7 (923');
+    fireEvent.change(box, { target: { value: '+7 (923u' } });
+    expect(box).toHaveValue('7923u');
+  });
 });

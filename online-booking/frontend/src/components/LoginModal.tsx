@@ -6,7 +6,7 @@ import { PASSWORD_PLACEHOLDER } from '../constants';
 import { capitalizeWords } from '../utils/names';
 import AddressSelect from './common/AddressSelect';
 import type { MaxStartResponse } from '../api/auth';
-import PhoneInput, { maskPhone, isCompletePhone } from './common/PhoneInput';
+import PhoneInput, { maskPhone, isCompletePhone, PHONE_MAX_DIGITS } from './common/PhoneInput';
 import { getCookie, decodeJwtPayload, getUserRole } from '../utils/cookies';
 import { ADMIN_PREFIX, SUPER_PREFIX } from '../utils/section';
 import Modal from './common/Modal';
@@ -88,9 +88,33 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
     }, 800);
   };
 
+  // Live identifier mode: mask while the input is unambiguously a phone
+  // (starts with +/7/8, digits only); free text otherwise. Emails may start
+  // with digits too ("123user@mail.ru"), so digit-led input stays unmasked
+  // until '@'/letters prove it an email — and is normalized on submit.
+  const handleIdentifierChange = (value: string) => {
+    if (value === '') {
+      setLoginForm((prev) => ({ ...prev, identifier: '' }));
+      return;
+    }
+    if (value.includes('@') || /[a-zа-яё]/i.test(value)) {
+      // Email mode: drop mask artifacts (spaces/parens, leading +) so a
+      // digit-led email survives the switch ("+7 (123u" -> "7123u" worst
+      // case stays visible and editable — never a dead end).
+      const cleaned = value.replace(/[\s()]/g, '').replace(/^\+/, '');
+      setLoginForm((prev) => ({ ...prev, identifier: cleaned }));
+      return;
+    }
+    if (/^[+78]/.test(value)) {
+      setLoginForm((prev) => ({ ...prev, identifier: maskPhone(value) }));
+      return;
+    }
+    setLoginForm((prev) => ({ ...prev, identifier: value }));
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    // The field accepts email OR phone (so no mask): validate locally so
+    // The field accepts email OR phone (so no fixed mask): validate locally so
     // garbage like "+7 (923) 521-12-321ghgh" never reaches the server.
     const raw = loginForm.identifier.trim();
     if (!raw) {
@@ -103,17 +127,22 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
         toast.error('Введите корректный email или телефон');
         return;
       }
+    } else if (/[a-zа-яё]/i.test(raw)) {
+      // Letters but no @ — neither a phone nor an email.
+      toast.error('Введите корректный телефон (11 цифр) или email');
+      return;
     } else {
-      if (!/^\+?[\d\s()\-]+$/.test(raw)) {
+      // Pure digits: 11 total, or 10 with no country code (mask adds +7).
+      // 10 digits starting with 7/8 are a truncated number, not a full one.
+      const digits = raw.replace(/\D/g, '');
+      const complete =
+        digits.length === PHONE_MAX_DIGITS ||
+        (digits.length === PHONE_MAX_DIGITS - 1 && !/^[78]/.test(digits));
+      if (!complete) {
         toast.error('Введите корректный телефон (11 цифр) или email');
         return;
       }
-      const masked = maskPhone(raw);
-      if (!isCompletePhone(masked)) {
-        toast.error('Введите корректный телефон (11 цифр) или email');
-        return;
-      }
-      identifier = masked;
+      identifier = maskPhone(raw);
     }
     setLoading(true);
     try {
@@ -331,7 +360,7 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
             <input
               type="text"
               value={loginForm.identifier}
-              onChange={(e) => setLoginForm((prev) => ({ ...prev, identifier: e.target.value }))}
+              onChange={(e) => handleIdentifierChange(e.target.value)}
               placeholder="email@example.com или +7 (999) 123-45-67"
               required
             />
