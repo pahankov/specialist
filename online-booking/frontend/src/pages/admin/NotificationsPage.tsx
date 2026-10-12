@@ -9,7 +9,7 @@ import {
   Skeleton,
   type RecipientOption,
 } from '../../components/common';
-import { getApiErrorMessage } from '../../utils/apiError';
+import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError';
 import { useSectionPrefix, SUPER_PREFIX } from '../../utils/section';
 import './NotificationsPage.css';
 
@@ -130,6 +130,13 @@ function NotificationsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [audience, picked]);
 
+  /** No HTTP response at all (backend down/reloading/CORS-blocked request)
+   * reads as "no connection" instead of a cryptic "Network Error". */
+  const offlineOr = (err: unknown, fallback: string) =>
+    getApiErrorStatus(err) === undefined
+      ? 'Нет связи с сервером — подождите, пока бэкенд перезапустится, и повторите'
+      : getApiErrorMessage(err, fallback);
+
   const fetchInbox = async () => {
     setInboxLoading(true);
     try {
@@ -137,7 +144,7 @@ function NotificationsPage() {
       setInbox(data.items);
       setUnread(data.unread);
     } catch (err: unknown) {
-      toast.error(getApiErrorMessage(err, 'Не удалось загрузить входящие'));
+      toast.error(offlineOr(err, 'Не удалось загрузить входящие'));
     } finally {
       setInboxLoading(false);
     }
@@ -167,7 +174,7 @@ function NotificationsPage() {
       setSent(data.items);
       setSentTotal(data.total);
     } catch (err: unknown) {
-      toast.error(getApiErrorMessage(err, 'Не удалось загрузить отправленные'));
+      toast.error(offlineOr(err, 'Не удалось загрузить отправленные'));
     } finally {
       setSentLoading(false);
     }

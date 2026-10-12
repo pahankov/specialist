@@ -20,6 +20,7 @@ export const adminApi = {
       telegram_username?: string | null;
       description?: string | null;
       avatar_url?: string | null;
+      avatar_preset?: string | null;
       experience_years?: number | null;
       cabinet_address?: string | null;
       certificates?: { name: string; url?: string }[];
@@ -34,6 +35,7 @@ export const adminApi = {
     experience_years?: number | null;
     cabinet_address?: string | null;
     certificates?: { name: string; url?: string }[];
+    avatar_preset?: string | null;
   }) {
     return apiClient.patch('/api/v1/admin/profile', data);
   },

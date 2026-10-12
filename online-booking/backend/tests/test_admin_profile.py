@@ -145,3 +145,51 @@ class TestAvatarUpload:
             headers=auth_headers,
         )
         assert r.status_code == 400
+
+
+class TestAvatarPreset:
+    async def test_set_preset_clears_upload(self, client, auth_headers):
+        up = await client.post(
+            "/api/v1/admin/profile/avatar",
+            files={"file": ("ava.png", b"\x89PNG\r\n\x1a\n" + b"0" * 100, "image/png")},
+            headers=auth_headers,
+        )
+        assert up.status_code == 200, up.text
+        old_url = up.json()["avatar_url"]
+
+        r = await client.patch(
+            "/api/v1/admin/profile", json={"avatar_preset": "🐱"},
+            headers=auth_headers)
+        assert r.status_code == 200, r.text
+        me = r.json()
+        assert me["avatar_preset"] == "🐱"
+        assert me["avatar_url"] is None
+
+        # Old uploaded file is removed (mutually exclusive).
+        import os as _os
+        assert not _os.path.exists(_os.path.join(
+            "app", "static", "avatars", _os.path.basename(old_url)))
+
+    async def test_reject_unknown_preset(self, client, auth_headers):
+        r = await client.patch(
+            "/api/v1/admin/profile", json={"avatar_preset": "🚀"},
+            headers=auth_headers)
+        assert r.status_code == 400
+
+    async def test_clear_preset(self, client, auth_headers):
+        await client.patch(
+            "/api/v1/admin/profile", json={"avatar_preset": "🐶"},
+            headers=auth_headers)
+        r = await client.patch(
+            "/api/v1/admin/profile", json={"avatar_preset": None},
+            headers=auth_headers)
+        assert r.status_code == 200, r.text
+        assert r.json()["avatar_preset"] is None
+
+    async def test_preset_in_public_masters(self, client, auth_headers):
+        await client.patch(
+            "/api/v1/admin/profile", json={"avatar_preset": "🦅"},
+            headers=auth_headers)
+        r = await client.get("/api/v1/masters/")
+        assert r.status_code == 200, r.text
+        assert any(m.get("avatar_preset") == "🦅" for m in r.json())

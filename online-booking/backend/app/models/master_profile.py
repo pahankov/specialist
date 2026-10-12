@@ -20,6 +20,8 @@ class MasterProfile(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True)
     description = Column(Text)
     avatar_url = Column(String(500))
+    # Preset avatar (emoji id like "cat"): mutually exclusive with avatar_url.
+    avatar_preset = Column(String(12), nullable=True)
     telegram_username = Column(String(100))
     experience_years = Column(Integer, nullable=True)
     status = Column(String(20), default="active", nullable=False)  # 'active', 'inactive', 'suspended'

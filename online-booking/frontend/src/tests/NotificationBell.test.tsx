@@ -82,7 +82,7 @@ describe('NotificationBell', () => {
     vi.mocked(mocked.getNotificationsInbox).mockRejectedValueOnce(new Error('down'));
     renderBell(0);
     fireEvent.click(screen.getByRole('button', { name: /Уведомления/ }));
-    expect(await screen.findByText(/Не удалось загрузить/)).toBeInTheDocument();
+    expect(await screen.findByText(/Нет связи с сервером/)).toBeInTheDocument();
     vi.mocked(mocked.getNotificationsInbox).mockResolvedValue({
       data: { items: [], total: 0, unread: 0 },
     } as never);

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { cabinetApi, mastersApi, servicesApi } from '../../api/client';
+import { cabinetApi, mastersApi, servicesApi, assetUrl } from '../../api/client';
 import type { Master, Service, Appointment } from '../../api/types';
 import {
   ConfirmDialog,
@@ -328,7 +328,13 @@ function CabinetBookPage() {
                 checked={selectedMaster?.id === m.id}
                 onChange={() => setSelectedMaster(m)}
               />
-              {m.avatar_url && <img src={m.avatar_url} alt={m.name} className="master-pick-avatar" />}
+              {m.avatar_preset ? (
+                <span className="master-pick-avatar master-pick-emoji" role="img" aria-label={m.name}>
+                  {m.avatar_preset}
+                </span>
+              ) : m.avatar_url ? (
+                <img src={assetUrl(m.avatar_url) || ''} alt={m.name} className="master-pick-avatar" />
+              ) : null}
               <span className="master-pick-main">
                 <strong>
                   {m.name} {formatRating(m.avg_rating)}

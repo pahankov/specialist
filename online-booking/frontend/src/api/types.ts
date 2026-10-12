@@ -22,6 +22,7 @@ export interface MasterProfile {
   user_id: number;
   description?: string;
   avatar_url?: string;
+  avatar_preset?: string | null;
   telegram_username?: string;
   experience_years?: number;
   is_active: boolean;
@@ -47,6 +48,7 @@ export interface Master {
   telegram_username?: string;
   description?: string;
   avatar_url?: string;
+  avatar_preset?: string | null;
   cabinet_address?: string | null;
   experience_years?: number | null;
   is_active: boolean;

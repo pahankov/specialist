@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { adminApi } from '../../api/client';
+import { adminApi, assetUrl } from '../../api/client';
 import {
   AddressSelect,
   CitySelect,
@@ -17,6 +17,9 @@ interface Cert {
   url?: string;
 }
 
+/** Built-in avatars (mirror of backend AVATAR_PRESETS): photo or preset. */
+const AVATAR_PRESETS = ['🐱', '🐶', '🐥', '🦅', '🦊', '🐼', '🐸', '🦁'];
+
 /** Master personal data: photo, names, contacts, city, cabinet, certificates. */
 function ProfilePage() {
   const [loading, setLoading] = useState(true);
@@ -30,6 +33,7 @@ function ProfilePage() {
   const [city, setCity] = useState<CityOption | null>(null);
   const [address, setAddress] = useState('');
   const [avatar, setAvatar] = useState<string | null>(null);
+  const [preset, setPreset] = useState<string | null>(null);
   const [certs, setCerts] = useState<Cert[]>([]);
   const [newCertName, setNewCertName] = useState('');
   const [newCertUrl, setNewCertUrl] = useState<string | undefined>(undefined);
@@ -54,6 +58,7 @@ function ProfilePage() {
         );
         setAddress(data.cabinet_address || '');
         setAvatar(data.avatar_url || null);
+        setPreset(data.avatar_preset || null);
         setCerts(data.certificates || []);
       } catch (err: unknown) {
         toast.error(getApiErrorMessage(err, 'Не удалось загрузить профиль'));
@@ -83,6 +88,7 @@ function ProfilePage() {
       const url = await uploadFile(file);
       if (url) {
         setAvatar(url);
+        setPreset(null);
         toast.success('Фото обновлено');
       }
     } catch (err: unknown) {
@@ -90,6 +96,12 @@ function ProfilePage() {
     } finally {
       setUploading(false);
     }
+  };
+
+  const pickPreset = (emoji: string) => {
+    // Preset replaces the uploaded photo (backend enforces the same).
+    setPreset(emoji);
+    setAvatar(null);
   };
 
   const handleCertPhoto = async (file: File | undefined) => {
@@ -133,6 +145,7 @@ function ProfilePage() {
         city_id: city?.id ?? null,
         cabinet_address: address.trim() || null,
         certificates: certs,
+        avatar_preset: preset,
       });
       toast.success('Профиль сохранён');
     } catch (err: unknown) {
@@ -163,8 +176,12 @@ function ProfilePage() {
         <div className="card" style={{ marginBottom: 16 }}>
           <h3>Фото и имя</h3>
           <div className="profile-photo-row">
-            {avatar ? (
-              <img src={avatar} alt="Фото мастера" className="profile-photo" />
+            {preset ? (
+              <div className="profile-photo profile-photo-emoji" role="img" aria-label="Аватар">
+                {preset}
+              </div>
+            ) : avatar ? (
+              <img src={assetUrl(avatar) || ''} alt="Фото мастера" className="profile-photo" />
             ) : (
               <div className="profile-photo profile-photo-empty">📷</div>
             )}
@@ -187,7 +204,34 @@ function ProfilePage() {
               >
                 {uploading ? 'Загрузка…' : avatar ? 'Сменить фото' : 'Добавить фото'}
               </button>
-              <div className="hint">JPEG, PNG или WebP до 5 МБ</div>
+              {(avatar || preset) && (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  style={{ marginLeft: 8 }}
+                  onClick={() => {
+                    setAvatar(null);
+                    setPreset(null);
+                  }}
+                  title="Убрать фото и пресет"
+                >
+                  ✕
+                </button>
+              )}
+              <div className="hint">JPEG, PNG или WebP до 5 МБ — или выберите зверя ниже</div>
+              <div className="preset-grid" role="group" aria-label="Стандартные аватары">
+                {AVATAR_PRESETS.map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    className={`preset-btn${preset === emoji ? ' picked' : ''}`}
+                    onClick={() => pickPreset(emoji)}
+                    title="Выбрать этот аватар"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
           <div className="form-row">
@@ -261,7 +305,11 @@ function ProfilePage() {
             <div className="cert-list">
               {certs.map((c, i) => (
                 <div key={`${c.name}-${i}`} className="cert-item">
-                  {c.url && <img src={c.url} alt={c.name} className="cert-thumb" />}
+                  {c.url && (
+                    <a href={assetUrl(c.url) || ''} target="_blank" rel="noreferrer" title="Открыть фото">
+                      <img src={assetUrl(c.url) || ''} alt={c.name} className="cert-thumb" />
+                    </a>
+                  )}
                   <span className="cert-name">{c.name}</span>
                   <button
                     type="button"

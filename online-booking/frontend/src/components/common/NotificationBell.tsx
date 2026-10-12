@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { adminApi, cabinetApi } from '../../api/client';
 import './NotificationBell.css';
@@ -45,6 +45,10 @@ function NotificationBell({ unread, bellLink, scope, onRead }: NotificationBellP
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
+  // Fixed-anchored popover (the sidebar has overflow:hidden, which would
+  // clip an absolutely-positioned child — incl. the collapsed 64px rail).
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
 
   const api =
     scope === 'cabinet'
@@ -77,6 +81,23 @@ function NotificationBell({ unread, bellLink, scope, onRead }: NotificationBellP
   useEffect(() => {
     if (open) fetchRecent();
   }, [open, fetchRecent]);
+
+  // Anchor the fixed popover under the bell, clamped to the viewport.
+  useEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const r = btnRef.current?.getBoundingClientRect();
+      if (!r) return;
+      const w = 340;
+      setPos({
+        top: r.bottom + 8,
+        left: Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8)),
+      });
+    };
+    place();
+    window.addEventListener('resize', place);
+    return () => window.removeEventListener('resize', place);
+  }, [open]);
 
   // Close on Escape.
   useEffect(() => {
@@ -120,6 +141,7 @@ function NotificationBell({ unread, bellLink, scope, onRead }: NotificationBellP
     <div className="bell-wrap">
       <button
         type="button"
+        ref={btnRef}
         className="bell-btn"
         title={unread > 0 ? `Уведомления (${unread} новых)` : 'Уведомления'}
         aria-label="Уведомления"
@@ -134,7 +156,12 @@ function NotificationBell({ unread, bellLink, scope, onRead }: NotificationBellP
       {open && (
         <>
           <div className="bell-backdrop" onClick={() => setOpen(false)} aria-hidden="true" />
-          <div className="bell-pop" role="menu" aria-label="Уведомления">
+          <div
+            className="bell-pop"
+            role="menu"
+            aria-label="Уведомления"
+            style={{ top: pos.top, left: pos.left }}
+          >
             <div className="bell-pop-head">
               <span>Уведомления{unread > 0 ? ` · ${unread} новых` : ''}</span>
               {unread > 0 && (
@@ -148,7 +175,7 @@ function NotificationBell({ unread, bellLink, scope, onRead }: NotificationBellP
                 <div className="bell-empty">Загрузка…</div>
               ) : failed ? (
                 <div className="bell-empty">
-                  Не удалось загрузить.
+                  Нет связи с сервером — он перезапускается или недоступен.
                   <button type="button" className="bell-retry" onClick={fetchRecent}>
                     Повторить
                   </button>

@@ -28,6 +28,17 @@ AVATAR_URL_PREFIX = "/static/avatars"
 MAX_AVATAR_BYTES = 5 * 1024 * 1024
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 EXT_BY_TYPE = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
+# Built-in avatars (stored as-is in master_profiles.avatar_preset,
+# mutually exclusive with an uploaded photo).
+AVATAR_PRESETS = ["🐱", "🐶", "🐥", "🦅", "🦊", "🐼", "🐸", "🦁"]
+
+
+def _delete_avatar_file(url: Optional[str]) -> None:
+    if url and url.startswith(AVATAR_URL_PREFIX + "/"):
+        try:
+            os.remove(os.path.join(AVATAR_DIR, os.path.basename(url)))
+        except OSError:
+            pass
 
 
 class Certificate(BaseModel):
@@ -63,6 +74,7 @@ async def get_my_profile(
                 "telegram_username": mp.telegram_username,
                 "description": mp.description,
                 "avatar_url": mp.avatar_url,
+                "avatar_preset": mp.avatar_preset,
                 "experience_years": mp.experience_years,
                 "cabinet_address": mp.cabinet_address,
                 "certificates": mp.certificates or [],
@@ -79,6 +91,9 @@ class ProfileUpdate(BaseModel):
     experience_years: Optional[int] = Field(default=None, ge=0, le=80)
     cabinet_address: Optional[str] = Field(default=None, max_length=500)
     certificates: Optional[List[Certificate]] = Field(default=None, max_length=20)
+    # Built-in avatar emoji (validated against AVATAR_PRESETS). Explicit null
+    # clears it; absent key = no change (checked via model_fields_set).
+    avatar_preset: Optional[str] = Field(default=None, max_length=12)
 
 
 @router.patch("/profile")
@@ -130,6 +145,14 @@ async def update_my_profile(
             mp.cabinet_address = data.cabinet_address.strip() or None
         if data.certificates is not None:
             mp.certificates = [c.model_dump(exclude_none=True) for c in data.certificates]
+        if "avatar_preset" in data.model_fields_set:
+            if data.avatar_preset is not None and data.avatar_preset not in AVATAR_PRESETS:
+                raise HTTPException(status_code=400, detail="Неизвестный стандартный аватар")
+            mp.avatar_preset = data.avatar_preset
+            if data.avatar_preset is not None:
+                # Preset replaces the uploaded photo (mutually exclusive).
+                _delete_avatar_file(mp.avatar_url)
+                mp.avatar_url = None
 
     await log_action(db, master.id, "update", "profile", master.id,
                      "Личные данные обновлены", level="info")
@@ -173,12 +196,8 @@ async def upload_avatar(
             raise HTTPException(status_code=404, detail="Профиль мастера не найден")
         old = mp.avatar_url
         mp.avatar_url = url
-        if old and old.startswith(AVATAR_URL_PREFIX + "/"):
-            try:
-                os.remove(os.path.join(
-                    AVATAR_DIR, os.path.basename(old)))
-            except OSError:
-                pass
+        mp.avatar_preset = None  # uploaded photo replaces the preset
+        _delete_avatar_file(old)
     await log_action(db, master.id, "update", "profile", master.id,
                      "Фото обновлено", level="info")
     await db.commit()

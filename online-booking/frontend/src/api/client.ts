@@ -8,7 +8,7 @@
  * - ./superadmin — superAdminAuthApi, superAdminApi
  * - ./cabinet — cabinetApi (client self-service)
  */
-export { default, refreshClient } from './http';
+export { default, refreshClient, assetUrl, API_BASE_URL } from './http';
 export * from './public';
 export * from './auth';
 export * from './admin';

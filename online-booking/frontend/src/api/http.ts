@@ -3,6 +3,20 @@ import { getCookie, clearAuthCookies } from '../utils/cookies';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
+export const API_BASE_URL = API_BASE;
+
+/**
+ * Backend-served file reference → absolute URL for <img src>.
+ * Upload endpoints return same-origin paths ("/static/avatars/…"); used raw
+ * they resolve against the FRONTEND origin and 404. Absolute http(s) URLs
+ * (and non-path values like emoji presets) pass through untouched.
+ */
+export function assetUrl(path?: string | null): string | null {
+  if (!path) return null;
+  if (/^https?:\/\//i.test(path) || !path.startsWith('/')) return path;
+  return `${API_BASE}${path}`;
+}
+
 // ─── Unified axios instance ────────────────────────────────────────
 
 const apiClient: AxiosInstance = axios.create({

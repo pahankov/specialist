@@ -247,6 +247,7 @@ async def get_master_full(
         "telegram_username": master_profile.telegram_username,
         "description": master_profile.description,
         "avatar_url": master_profile.avatar_url,
+        "avatar_preset": master_profile.avatar_preset,
         "experience_years": master_profile.experience_years,
         "status": master_profile.status if master_profile.status else "active",
         "is_active": master_profile.is_active,

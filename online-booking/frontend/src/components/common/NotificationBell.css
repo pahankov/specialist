@@ -23,9 +23,8 @@
 }
 
 .bell-pop {
-  position: absolute;
-  top: calc(100% + 10px);
-  right: 0;
+  position: fixed;
+  /* top/left come from the bell button rect (JS), clamped to viewport */
   width: 340px;
   max-width: min(340px, calc(100vw - 32px));
   max-height: 440px;
