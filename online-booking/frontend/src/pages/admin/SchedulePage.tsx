@@ -374,6 +374,19 @@ function SchedulePage() {
     [refreshMonthAppointments],
   );
 
+  const handleConfirmSlotAppointment = useCallback(
+    async (id: number) => {
+      try {
+        await adminApi.confirmAppointment(id);
+        toast.success('Запись подтверждена');
+        await refreshMonthAppointments();
+      } catch (err: unknown) {
+        setError(getApiErrorMessage(err, 'Не удалось подтвердить запись'));
+      }
+    },
+    [refreshMonthAppointments],
+  );
+
   // Bulk-apply the saved window to every working day of the viewed month.
   // Days holding live bookings are skipped (shrinking hours under a booking
   // would strand it) and reported.
@@ -688,6 +701,7 @@ function SchedulePage() {
               onToggleHour={handleToggleHour}
               onOpenBooking={handleOpenBooking}
               onCancelAppointment={handleCancelSlotAppointment}
+              onConfirmAppointment={handleConfirmSlotAppointment}
               windowStart={windowStart}
               windowEnd={windowEnd}
             />

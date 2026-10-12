@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { adminApi, authApi, cabinetApi } from '../../api/client';
-import { Breadcrumb, KeyboardShortcutsHint } from '../../components/common';
+import { Breadcrumb, KeyboardShortcutsHint, NotificationBell } from '../../components/common';
 import { getCookie, decodeJwtPayload, clearAuthCookies } from '../../utils/cookies';
 import { getImpersonation, stopImpersonation } from '../../utils/impersonation';
 import { SUPER_PREFIX } from '../../utils/section';
@@ -64,30 +64,59 @@ function BaseLayout({
       : '/cabinet';
 
   // Bell badge: panels hit the admin counter, cabinet the client one.
+  // No token → skip quietly. After 3 straight failures the interval stops
+  // (dead backend / dead session must not spam the console); the next route
+  // change restarts it.
+  const failStreak = useRef(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const mountedRef = useRef(true);
   useEffect(() => {
-    let cancelled = false;
-    const fetchUnread = async () => {
-      try {
-        const { data } = await adminApi.getNotificationsUnread();
-        if (!cancelled) setUnread(data.unread || 0);
-        return;
-      } catch {
-        /* not a panel token — try the cabinet counter */
-      }
-      try {
-        const { data } = await cabinetApi.notificationsUnread();
-        if (!cancelled) setUnread(data.unread || 0);
-      } catch {
-        /* logged out or cabinet without notifications — hide badge */
-      }
-    };
-    fetchUnread();
-    const t = setInterval(fetchUnread, 30000);
+    mountedRef.current = true;
     return () => {
-      cancelled = true;
-      clearInterval(t);
+      mountedRef.current = false;
     };
-  }, [location.pathname]);
+  }, []);
+
+  const refreshUnread = useCallback(async () => {
+    if (!getCookie('access_token')) {
+      if (mountedRef.current) setUnread(0);
+      return;
+    }
+    try {
+      const { data } = await adminApi.getNotificationsUnread();
+      failStreak.current = 0;
+      if (mountedRef.current) setUnread(data.unread || 0);
+      return;
+    } catch {
+      /* not a panel token — try the cabinet counter */
+    }
+    try {
+      const { data } = await cabinetApi.notificationsUnread();
+      failStreak.current = 0;
+      if (mountedRef.current) setUnread(data.unread || 0);
+    } catch {
+      /* logged out, dead token or dead backend — hide badge */
+      if (mountedRef.current) setUnread(0);
+      failStreak.current += 1;
+      if (failStreak.current >= 3 && timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    failStreak.current = 0;
+    refreshUnread();
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(refreshUnread, 30000);
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [location.pathname, refreshUnread]);
 
   const exitImpersonation = () => {
     stopImpersonation();
@@ -177,15 +206,12 @@ function BaseLayout({
               <h2>{layoutTitle}</h2>
               {!sidebarCollapsed && <p className="sidebar-subtitle">{userRole}</p>}
             </div>
-            <Link
-              to={bellLink}
-              className="bell-btn"
-              title={unread > 0 ? `Уведомления (${unread} новых)` : 'Уведомления'}
-              aria-label="Уведомления"
-            >
-              🔔
-              {unread > 0 && <span className="bell-badge">{unread > 99 ? '99+' : unread}</span>}
-            </Link>
+            <NotificationBell
+              unread={unread}
+              bellLink={bellLink}
+              scope={bellLink === '/cabinet' ? 'cabinet' : 'panel'}
+              onRead={refreshUnread}
+            />
           </div>
           {user && !sidebarCollapsed && <p className="sidebar-user">👤 {user.name}</p>}
         </div>

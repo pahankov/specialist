@@ -19,6 +19,7 @@ interface TimeSlotsProps {
   onToggleHour: (dateStr: string, hour: number) => void;
   onOpenBooking: (date: Date, hour: number) => void;
   onCancelAppointment: (id: number) => Promise<void>;
+  onConfirmAppointment?: (id: number) => Promise<void>;
   /** Daily work window: granules render for [windowStart, windowEnd) regardless
    * of the stored day range (the range is derived from active granules). */
   windowStart?: number;
@@ -32,6 +33,7 @@ export function TimeSlots({
   onToggleHour,
   onOpenBooking,
   onCancelAppointment,
+  onConfirmAppointment,
   windowStart = 8,
   windowEnd = 22,
 }: TimeSlotsProps) {
@@ -79,6 +81,7 @@ export function TimeSlots({
           onToggleHour,
           onOpenBooking,
           onCancelAppointment,
+          onConfirmAppointment,
         )}
       </div>
     </div>
@@ -119,6 +122,7 @@ function generateHourSlots(
   onToggle: (dateStr: string, hour: number) => void,
   onOpenBooking: (date: Date, hour: number) => void,
   onCancelAppointment: (id: number) => Promise<void>,
+  onConfirmAppointment?: (id: number) => Promise<void>,
 ): React.ReactNode[] {
   const slots: React.ReactNode[] = [];
   const dateStr = formatDate(date);
@@ -201,21 +205,40 @@ function generateHourSlots(
           </button>
         )}
         {!past && latestLive !== null && (
-          <button
-            className="btn btn-sm btn-cancel"
-            title={`Отменить запись: ${latestLive.client_name || 'клиент'}${spanNote}`}
-            onClick={async (e) => {
-              const btn = e.currentTarget;
-              btn.disabled = true;
-              try {
-                await onCancelAppointment(latestLive.id);
-              } finally {
-                btn.disabled = false;
-              }
-            }}
-          >
-            ✕ Отменить
-          </button>
+          <span className="slot-actions">
+            {latestLive.status === 'pending' && onConfirmAppointment && (
+              <button
+                className="btn btn-sm btn-confirm"
+                title={`Подтвердить запись: ${latestLive.client_name || 'клиент'}${spanNote}`}
+                onClick={async (e) => {
+                  const btn = e.currentTarget;
+                  btn.disabled = true;
+                  try {
+                    await onConfirmAppointment(latestLive.id);
+                  } finally {
+                    btn.disabled = false;
+                  }
+                }}
+              >
+                ✓ Подтвердить
+              </button>
+            )}
+            <button
+              className="btn btn-sm btn-cancel"
+              title={`Отменить запись: ${latestLive.client_name || 'клиент'}${spanNote}`}
+              onClick={async (e) => {
+                const btn = e.currentTarget;
+                btn.disabled = true;
+                try {
+                  await onCancelAppointment(latestLive.id);
+                } finally {
+                  btn.disabled = false;
+                }
+              }}
+            >
+              ✕ Отменить
+            </button>
+          </span>
         )}
       </div>,
     );

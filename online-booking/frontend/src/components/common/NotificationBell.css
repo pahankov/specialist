@@ -1,0 +1,173 @@
+/* Header bell popover: light card over the dark sidebar. */
+
+.bell-wrap {
+  position: relative;
+  margin-left: auto;
+}
+
+/* Bell button keeps the shared .bell-btn look (AdminLayout.css); reset the
+ * <button> chrome since it is no longer a <Link>. */
+.bell-wrap .bell-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  margin-left: 0;
+}
+
+.bell-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 190;
+  background: transparent;
+}
+
+.bell-pop {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 340px;
+  max-width: min(340px, calc(100vw - 32px));
+  max-height: 440px;
+  display: flex;
+  flex-direction: column;
+  z-index: 200;
+  background: #fff;
+  color: #1f2937;
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.bell-pop-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px;
+  font-weight: 700;
+  font-size: 14px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.bell-read-all {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #d6336c;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 4px;
+}
+
+.bell-read-all:hover {
+  text-decoration: underline;
+}
+
+.bell-pop-list {
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.bell-empty {
+  padding: 24px 12px;
+  text-align: center;
+  color: #6b7280;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+
+.bell-retry {
+  background: #fdf2f8;
+  border: 1px solid #f9a8d4;
+  color: #be185d;
+  border-radius: 8px;
+  padding: 4px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.bell-item {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: default;
+  font-size: 13px;
+  color: inherit;
+}
+
+.bell-item.linked {
+  cursor: pointer;
+}
+
+.bell-item.linked:hover {
+  background: #fdf2f8;
+}
+
+.bell-item.unread {
+  background: #fdf2f8;
+}
+
+.bell-item.unread.linked:hover {
+  background: #fce7f3;
+}
+
+.bell-item-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: #e5e7eb;
+}
+
+.bell-item.unread .bell-item-dot {
+  background: #d6336c;
+}
+
+.bell-item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.bell-item-text {
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.bell-item-meta {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.bell-pop-foot {
+  border-top: 1px solid #f3f4f6;
+  padding: 6px;
+}
+
+.bell-all {
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #d6336c;
+}
+
+.bell-all:hover {
+  background: #fdf2f8;
+}
