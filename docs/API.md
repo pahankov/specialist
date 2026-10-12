@@ -50,7 +50,7 @@
 ### Masters
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
-| `GET` | `/api/v1/masters/?city_id=` | Активные мастера (+`city_id/city_name/avg_rating` в ответе; фильтр по городу) |
+| `GET` | `/api/v1/masters/?city_id=` | Активные мастера (+`city_id/city_name/avg_rating/avatar_preset` в ответе; фильтр по городу) |
 | `GET` | `/api/v1/masters/{id}` | Мастер по ID |
 | `POST` | `/api/v1/masters/` | Создать мастера |
 | `PATCH` | `/api/v1/masters/{id}` | Обновить мастера |
@@ -129,9 +129,9 @@
 | `DELETE` | `/admin/working-hours/{id}` | Удалить рабочий день |
 | `GET` | `/admin/work-window` | Окно рабочего времени мастера (`?master_id=` для суперадмина) |
 | `PATCH` | `/admin/work-window` | Задать окно (`start_hour`/`end_hour`, 0–24) |
-| `GET` | `/admin/profile` | Свой профиль (имя/фамилия/город/контакты/фото/адрес/сертификаты) |
-| `PATCH` | `/admin/profile` | Свои данные: имя, фамилия, город, telegram, описание, опыт, адрес кабинета, сертификаты |
-| `POST` | `/admin/profile/avatar` | Своё фото (JPEG/PNG/WebP ≤5МБ) → `avatar_url` на `/static` |
+| `GET` | `/admin/profile` | Свой профиль (имя/фамилия/город/контакты/фото или пресет/адрес/сертификаты) |
+| `PATCH` | `/admin/profile` | Свои данные: имя, фамилия, город, telegram, описание, опыт, адрес кабинета, сертификаты, `avatar_preset` (эмодзи из 8 стандартных; null — снять; заменяет загруженное фото) |
+| `POST` | `/admin/profile/avatar` | Своё фото (JPEG/PNG/WebP ≤5МБ) → `avatar_url` на `/static` (снимает пресет). Файлы лежат на бэкенде — фронт резолвит через `assetUrl` |
 | `GET` | `/admin/audit-logs` | Журнал действий (пагинация, фильтрация; есть сущность `auth` — входы/выходы) |
 | `GET` | `/admin/export/appointments` | Экспорт записей в CSV (`status`, `master_id`, `ids`, `include_master`) |
 | `GET` | `/admin/export/clients` | Экспорт клиентов в CSV (`ids`, `search`, `master_id`; есть колонка Город) |

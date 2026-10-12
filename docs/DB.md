@@ -85,7 +85,8 @@
 | id | INTEGER | PK | Автоинкремент |
 | user_id | INTEGER | UNIQUE, NOT NULL, FK -> users.id ON DELETE CASCADE | Ссылка на users.id |
 | description | TEXT | NULLABLE | Описание мастера |
-| avatar_url | VARCHAR(500) | NULLABLE | URL аватара |
+| avatar_url | VARCHAR(500) | NULLABLE | URL аватара (путь `/static/...` на бэкенде; взаимоисключающе с пресетом) |
+| avatar_preset | VARCHAR(12) | NULLABLE | Стандартный аватар-эмодзи (🐱🐶🐥🦅🦊🐼🐸🦁) |
 | telegram_username | VARCHAR(100) | NULLABLE | Telegram username |
 | experience_years | INTEGER | NULLABLE | Опыт работы (лет) |
 | status | VARCHAR(20) | NOT NULL, DEFAULT active | active, inactive, suspended |
