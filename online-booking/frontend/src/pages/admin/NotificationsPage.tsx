@@ -91,7 +91,8 @@ function NotificationsPage() {
           setPicked((prev) => new Set([...prev].filter((id) => ids.has(id))));
           setRecipients(list);
         }
-      } catch {
+      } catch (err) {
+        console.warn('[Notifications] recipients failed', err);
         if (!cancelled) setRecipients([]);
       } finally {
         if (!cancelled) setRecipientsLoading(false);
@@ -117,7 +118,8 @@ function NotificationsPage() {
           audience === 'selected' ? parsedIds.join(',') : undefined,
         );
         if (!cancelled) setCount(data.total);
-      } catch {
+      } catch (err) {
+        console.warn('[Notifications] audience counts failed', err);
         if (!cancelled) setCount(null);
       } finally {
         if (!cancelled) setCountsLoading(false);
@@ -164,8 +166,7 @@ function NotificationsPage() {
   const [sentLoading, setSentLoading] = useState(false);
   const [expandedSent, setExpandedSent] = useState<Set<number>>(new Set());
 
-  const audienceLabel = (value: string) =>
-    audiences.find((a) => a.value === value)?.label ?? value;
+  const audienceLabel = (value: string) => audiences.find((a) => a.value === value)?.label ?? value;
 
   const fetchSent = async () => {
     setSentLoading(true);
@@ -231,8 +232,9 @@ function NotificationsPage() {
       await adminApi.readNotification(id);
       setInbox((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)));
       setUnread((u) => Math.max(0, u - 1));
-    } catch {
-      /* ignore */
+    } catch (err) {
+      // Optimistic update already applied; badge refresh converges later.
+      console.warn('[Notifications] mark-read failed', id, err);
     }
   };
 
@@ -361,9 +363,7 @@ function NotificationsPage() {
       ) : tab === 'inbox' ? (
         <div className="card">
           <div className="card-header">
-            <h3>
-              Входящие {unread > 0 && <span className="client-count">({unread} новых)</span>}
-            </h3>
+            <h3>Входящие {unread > 0 && <span className="client-count">({unread} новых)</span>}</h3>
             {unread > 0 && (
               <button className="btn btn-ghost" onClick={handleReadAll}>
                 ✓ Прочитать все
@@ -395,9 +395,7 @@ function NotificationsPage() {
                   <div className="inbox-text">{n.text}</div>
                   <div className="inbox-meta">
                     {n.sender_name && <span>от {n.sender_name}</span>}
-                    {n.created_at && (
-                      <span>{new Date(n.created_at).toLocaleString('ru-RU')}</span>
-                    )}
+                    {n.created_at && <span>{new Date(n.created_at).toLocaleString('ru-RU')}</span>}
                     {!n.is_read && (
                       <button
                         className="btn btn-sm btn-ghost"
@@ -419,8 +417,7 @@ function NotificationsPage() {
         <div className="card">
           <div className="card-header">
             <h3>
-              Отправленные{' '}
-              {sentTotal > 0 && <span className="client-count">({sentTotal})</span>}
+              Отправленные {sentTotal > 0 && <span className="client-count">({sentTotal})</span>}
             </h3>
           </div>
           {sentLoading ? (
@@ -442,9 +439,7 @@ function NotificationsPage() {
                     <div className="inbox-meta">
                       <span>{audienceLabel(s.audience)}</span>
                       <span>
-                        {s.created_at
-                          ? new Date(s.created_at).toLocaleString('ru-RU')
-                          : ''}
+                        {s.created_at ? new Date(s.created_at).toLocaleString('ru-RU') : ''}
                       </span>
                       <span>
                         Получателей: {s.recipient_count}

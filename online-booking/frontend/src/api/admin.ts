@@ -192,12 +192,23 @@ export const adminApi = {
   getBundles() {
     return apiClient.get<Bundle[]>('/api/v1/admin/bundles');
   },
-  createBundle(data: { name: string; service_ids: number[]; durations?: Record<number, number>; price?: number }) {
+  createBundle(data: {
+    name: string;
+    service_ids: number[];
+    durations?: Record<number, number>;
+    price?: number;
+  }) {
     return apiClient.post<Bundle>('/api/v1/admin/bundles', data);
   },
   updateBundle(
     id: number,
-    data: { name?: string; service_ids?: number[]; durations?: Record<number, number>; price?: number | null; is_active?: boolean },
+    data: {
+      name?: string;
+      service_ids?: number[];
+      durations?: Record<number, number>;
+      price?: number | null;
+      is_active?: boolean;
+    },
   ) {
     return apiClient.patch<Bundle>(`/api/v1/admin/bundles/${id}`, data);
   },
@@ -256,7 +267,8 @@ export const adminApi = {
       skipped_not_allowed: number;
     }>('/api/v1/admin/notifications/broadcast', data);
   },
-  getNotificationsInbox(params?: { unread_only?: boolean; page?: number; page_size?: number }) {    return apiClient.get<{
+  getNotificationsInbox(params?: { unread_only?: boolean; page?: number; page_size?: number }) {
+    return apiClient.get<{
       items: {
         id: number;
         text: string;

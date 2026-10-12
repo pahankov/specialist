@@ -306,11 +306,7 @@ function ProfilePage() {
         <div className="card" style={{ marginBottom: 16 }}>
           <h3>Город и кабинет</h3>
           <div className="form-row">
-            <CitySelect
-              value={city?.id ?? null}
-              valueName={city?.name ?? ''}
-              onChange={setCity}
-            />
+            <CitySelect value={city?.id ?? null} valueName={city?.name ?? ''} onChange={setCity} />
             <AddressSelect value={address} onChange={setAddress} />
           </div>
         </div>
@@ -324,12 +320,13 @@ function ProfilePage() {
               {certs.map((c, i) => (
                 <div key={`${c.name}-${i}`} className="cert-item">
                   {c.url && (
-                    <a href={assetUrl(c.url) || ''} target="_blank" rel="noreferrer" title="Открыть фото">
-                      <BackendImg
-                        src={assetUrl(c.url)}
-                        alt={c.name}
-                        className="cert-thumb"
-                      />
+                    <a
+                      href={assetUrl(c.url) || ''}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="Открыть фото"
+                    >
+                      <BackendImg src={assetUrl(c.url)} alt={c.name} className="cert-thumb" />
                     </a>
                   )}
                   <span className="cert-name">{c.name}</span>

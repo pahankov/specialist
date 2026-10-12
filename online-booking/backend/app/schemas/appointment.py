@@ -1,7 +1,6 @@
 from pydantic import BaseModel, ConfigDict
 from typing import Optional
 from datetime import datetime
-from decimal import Decimal
 
 class AppointmentCreate(BaseModel):
     master_id: int
@@ -34,7 +33,8 @@ class AppointmentWithDetails(BaseModel):
     client_name: Optional[str]
     client_phone: Optional[str]
     service_name: Optional[str]
-    service_price: Optional[Decimal]
+    # float on the wire (Decimal serializes as a string in JSON).
+    service_price: Optional[float]
     master_name: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 

@@ -32,13 +32,7 @@ function BackendImg({ src, alt, className, fallbackEmoji = '🖼️', title }: B
     );
   }
   return (
-    <img
-      src={src}
-      alt={alt}
-      className={className}
-      title={title}
-      onError={() => setFailed(true)}
-    />
+    <img src={src} alt={alt} className={className} title={title} onError={() => setFailed(true)} />
   );
 }
 

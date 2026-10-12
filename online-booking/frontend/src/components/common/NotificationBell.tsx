@@ -107,7 +107,7 @@ function NotificationBell({ unread, bellLink, scope, onRead }: NotificationBellP
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open ]);
+  }, [open]);
 
   const closeAndGo = (to: string) => {
     setOpen(false);
@@ -119,8 +119,9 @@ function NotificationBell({ unread, bellLink, scope, onRead }: NotificationBellP
       setItems((prev) => prev.map((n) => (n.id === item.id ? { ...n, is_read: true } : n)));
       try {
         await api.read(item.id);
-      } catch {
-        /* badge refresh below still converges */
+      } catch (err) {
+        // Badge refresh below still converges.
+        console.warn('[Bell] mark-read failed', item.id, err);
       }
       onRead?.();
     }
@@ -130,8 +131,9 @@ function NotificationBell({ unread, bellLink, scope, onRead }: NotificationBellP
   const handleReadAll = async () => {
     try {
       await api.readAll();
-    } catch {
-      /* ignore: refresh below still converges */
+    } catch (err) {
+      // Refresh below still converges.
+      console.warn('[Bell] read-all failed', err);
     }
     setItems((prev) => prev.map((n) => ({ ...n, is_read: true })));
     onRead?.();
@@ -204,11 +206,7 @@ function NotificationBell({ unread, bellLink, scope, onRead }: NotificationBellP
               )}
             </div>
             <div className="bell-pop-foot">
-              <button
-                type="button"
-                className="bell-all"
-                onClick={() => closeAndGo(bellLink)}
-              >
+              <button type="button" className="bell-all" onClick={() => closeAndGo(bellLink)}>
                 Все уведомления{total > PAGE_SIZE ? ` (${total})` : ''} →
               </button>
             </div>

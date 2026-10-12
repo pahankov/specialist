@@ -205,50 +205,6 @@ span.master-about-avatar {
   padding: 8px 12px;
 }
 
-/* Client-side complexes list (flat across visible masters). */
-.bundle-pick-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.bundle-pick-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  border: 2px solid #f3e8ff;
-  background: #faf5ff;
-  border-radius: 10px;
-  padding: 8px 12px;
-}
-
-.bundle-pick-row.selected {
-  border-color: #d6336c;
-}
-
-.bundle-pick-main {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  font-size: 13px;
-  color: #444;
-}
-
-.bundle-pick-master {
-  font-size: 12px;
-  color: #888;
-}
-
-.bundle-pick-comp {
-  font-size: 12px;
-  color: #6b21a8;
-}
-
-.bundle-pick-totals {
-  font-size: 13px;
-}
-
 /* Booking modal: equal halves, text never overflows the pink button. */
 .book-confirm .modal-actions .btn {
   flex: 1 1 0;

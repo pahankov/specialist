@@ -107,8 +107,8 @@ function MasterDetailPage() {
     try {
       const auditResp = await superAdminApi.getMastersAudit(parseInt(id), 1, 50);
       setAuditLogs(auditResp.data.logs || []);
-    } catch {
-      // Ignore audit errors
+    } catch (err) {
+      console.warn('[MasterDetail] audit log failed', err);
     } finally {
       setAuditLoading(false);
     }

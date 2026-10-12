@@ -8,6 +8,7 @@ from app.database import engine, Base
 from app.logging_config import setup_logging, get_logger
 from app.middleware.rate_limit import limiter, wire_rate_limit
 from app.middleware.request_logging import RequestLoggingMiddleware
+from app.middleware.security_headers import SecurityHeadersMiddleware
 import asyncio
 import traceback
 
@@ -58,7 +59,7 @@ app = FastAPI(
         "Все API-эндпоинты версионированы: `/api/v1/`. "
         "Список изменений: `GET /api/v1/admin/changelog`."
     ),
-    version="1.33.2",
+    version="1.34.0",
     contact={
         "name": "Support",
         "email": "support@beauty-specialist.ru",
@@ -108,23 +109,35 @@ async def global_exception_handler(request: Request, exc: Exception):
         "".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
         exc_info=False,  # traceback already formatted above
     )
+    # This handler runs in ServerErrorMiddleware (OUTSIDE every user
+    # middleware, CORS included), so browsers would report the 500 as a
+    # CORS failure and hide the body. Echo the origin back when allowed.
+    headers = None
+    origin = request.headers.get("origin")
+    if origin and origin in settings.allowed_origins_list:
+        headers = {
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+            "Vary": "Origin",
+        }
     return JSONResponse(
         status_code=500,
         content={
             "detail": "Внутренняя ошибка сервера",
             "request_id": request_id,
         },
+        headers=headers,
     )
 
 # ─── Middleware ────────────────────────────────────────────────
-# ORDER MATTERS (Starlette: last added = outermost):
-# 1. SlowAPI first — 2. CORS second (outside SlowAPI) — 3. logging last.
-# CORS must wrap SlowAPI so that (a) OPTIONS preflights are answered by
-# CORS and never consume rate-limit budget, and (b) 429 responses flow
-# back through CORS and carry Access-Control-Allow-Origin (without it the
-# browser hides the 429 body and axios reports a misleading Network Error).
-
-wire_rate_limit(app)
+# ORDER MATTERS (Starlette: FIRST added = outermost):
+# 1. Security headers first — every response carries them, including
+#    429s and unhandled 500s.
+# 2. CORS second — preflights are answered here and never reach the
+#    limiter (no budget consumed); 429s flow back out through CORS.
+# 3. SlowAPI third — budget enforced for real requests only.
+# 4. Request logging last (innermost) — wraps the handler closely.
+app.add_middleware(SecurityHeadersMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -134,7 +147,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Request logging — LAST middleware so it wraps everything
+wire_rate_limit(app)
+
+# Request logging — INNERMOST user middleware so it wraps the handler closely
 app.add_middleware(RequestLoggingMiddleware)
 
 # ─── Health check ──────────────────────────────────────────────

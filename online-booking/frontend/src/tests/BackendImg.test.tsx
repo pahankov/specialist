@@ -5,10 +5,7 @@ import BackendImg from '../components/common/BackendImg';
 describe('BackendImg', () => {
   it('renders the image when a src is given', () => {
     render(<BackendImg src="http://x/a.png" alt="A" className="thumb" />);
-    expect(screen.getByRole('img', { name: 'A' })).toHaveAttribute(
-      'src',
-      'http://x/a.png',
-    );
+    expect(screen.getByRole('img', { name: 'A' })).toHaveAttribute('src', 'http://x/a.png');
   });
 
   it('renders a placeholder without src', () => {

@@ -180,9 +180,7 @@ function generateHourSlots(
                 <span className={`appt-status status-${a.status}`}>
                   {STATUS_CONFIG[a.status]?.label || a.status}
                 </span>
-                {a.notes ? (
-                  <span className="appt-notes">💬 {a.notes}</span>
-                ) : null}
+                {a.notes ? <span className="appt-notes">💬 {a.notes}</span> : null}
               </div>
             ))}
           </div>

@@ -170,15 +170,18 @@ export function formatPrice(price: number | string): string {
   return num.toLocaleString('ru-RU');
 }
 
-/** Russian plural for pending holds: "1 бронь", "3 брони", "5 броней". */
-export function pluralHolds(n: number): string {
+/** Generic Russian plural: pluralize(1,'запись','записи','записей'). */
+export function pluralize(n: number, one: string, few: string, many: string): string {
   const m10 = n % 10;
   const m100 = n % 100;
   const word =
-    m10 === 1 && m100 !== 11 ? 'бронь' : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)
-      ? 'брони'
-      : 'броней';
+    m10 === 1 && m100 !== 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? few : many;
   return `${n} ${word}`;
+}
+
+/** Russian plural for pending holds: "1 бронь", "3 брони", "5 броней". */
+export function pluralHolds(n: number): string {
+  return pluralize(n, 'бронь', 'брони', 'броней');
 }
 
 /** Exact viewed-month range for by-date fetches (init once cut at the 28th). */
@@ -190,13 +193,7 @@ export function monthRangeISO(d: Date): { from: string; to: string } {
 }
 /** Russian plural for bookings: "1 запись", "3 записи", "5 записей". */
 export function pluralBookings(n: number): string {
-  const m10 = n % 10;
-  const m100 = n % 100;
-  const word =
-    m10 === 1 && m100 !== 11 ? 'запись' : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)
-      ? 'записи'
-      : 'записей';
-  return `${n} ${word}`;
+  return pluralize(n, 'запись', 'записи', 'записей');
 }
 
 export function buildMonthlyStats(

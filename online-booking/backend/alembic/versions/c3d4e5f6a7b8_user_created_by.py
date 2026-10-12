@@ -2,7 +2,9 @@
 
 `users.created_by` is NULLABLE (existing rows stay NULL = visible to
 superadmin only via global lists; masters resolve own clients through
-appointments). Idempotent (IF NOT EXISTS on PG).
+appointments). Idempotent (IF NOT EXISTS on PG; column/index checks on sqlite;
+sqlite batch mode can't take inline unnamed FKs, and FKs aren't enforced
+there anyway — PG keeps the real one).
 """
 from alembic import op
 import sqlalchemy as sa
@@ -30,10 +32,11 @@ def upgrade() -> None:
             cols = [c['name'] for c in sa.inspect(bind).get_columns('users')]
             if 'created_by' not in cols:
                 batch_op.add_column(
-                    sa.Column('created_by', sa.Integer(),
-                              sa.ForeignKey('users.id', ondelete='SET NULL'),
-                              nullable=True))
-        op.create_index('ix_users_created_by', 'users', ['created_by'], unique=False)
+                    sa.Column('created_by', sa.Integer(), nullable=True))
+        indexes = [ix['name'] for ix in sa.inspect(bind).get_indexes('users')]
+        if 'ix_users_created_by' not in indexes:
+            op.create_index('ix_users_created_by', 'users', ['created_by'],
+                            unique=False)
 
 
 def downgrade() -> None:

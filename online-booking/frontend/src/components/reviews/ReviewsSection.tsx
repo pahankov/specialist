@@ -36,8 +36,9 @@ function ReviewsSection({ masterId }: ReviewsSectionProps) {
         ]);
         setAllReviews(reviewsRes.data);
         setAvgRating(avgRes.data);
-      } catch {
-        // Silently fail — reviews are optional
+      } catch (err) {
+        // Reviews stay hidden, but the failure must be visible in console.
+        console.warn('[Reviews] load failed', err);
       } finally {
         setLoading(false);
       }

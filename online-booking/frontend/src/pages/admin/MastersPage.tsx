@@ -35,7 +35,11 @@ import './MastersPage.css';
 function MastersPage() {
   const navigate = useNavigate();
   const section = useSectionPrefix();
-  const { widths: colW, setWidth: setColW, resetWidths } = useColumnWidths('masters', {
+  const {
+    widths: colW,
+    setWidth: setColW,
+    resetWidths,
+  } = useColumnWidths('masters', {
     check: 44,
     name: 170,
     email: 200,
@@ -441,11 +445,7 @@ function MastersPage() {
                 >
                   Статус{sortArrow('status')}
                 </ResizableTh>
-                <ResizableTh
-                  width={colW.role}
-                  minWidth={130}
-                  onResize={(w) => setColW('role', w)}
-                >
+                <ResizableTh width={colW.role} minWidth={130} onResize={(w) => setColW('role', w)}>
                   Роль
                 </ResizableTh>
                 <ResizableTh

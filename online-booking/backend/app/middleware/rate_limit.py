@@ -41,9 +41,10 @@ if os.getenv("RATE_LIMIT_DISABLED") == "true":
     limiter = _NoOpLimiter()
 else:
     # Global default: 120 req/min per IP. OPTIONS preflights never reach
-    # the limiter (CORS middleware sits outside SlowAPI and answers them),
-    # but dev StrictMode double-fires every effect, so 60 was tripping on
-    # ordinary navigation. Auth endpoints override to 10/min on handlers.
+    # the limiter (CORSMiddleware is registered outside SlowAPI in main.py
+    # and answers them), but dev StrictMode double-fires every effect, so 60
+    # was tripping on ordinary navigation. Auth endpoints override to 10/min
+    # on handlers.
     limiter = Limiter(key_func=get_remote_address, default_limits=["120/minute"])
 
 

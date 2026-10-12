@@ -69,12 +69,14 @@ export default function RecipientPicker({
             disabled={visible.length === 0}
             title="Выбрать всех видимых"
           />
-          <span>
-            {selected.size > 0 ? `Выбрано: ${selected.size}` : 'Выбрать всех видимых'}
-          </span>
+          <span>{selected.size > 0 ? `Выбрано: ${selected.size}` : 'Выбрать всех видимых'}</span>
         </label>
         {selected.size > 0 && (
-          <button type="button" className="btn btn-sm btn-ghost" onClick={() => onChange(new Set())}>
+          <button
+            type="button"
+            className="btn btn-sm btn-ghost"
+            onClick={() => onChange(new Set())}
+          >
             ✕ Снять выбор
           </button>
         )}

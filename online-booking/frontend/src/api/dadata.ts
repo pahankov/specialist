@@ -55,8 +55,8 @@ export const dadataApi = {
         count: limit,
       });
       if (data.suggestions?.length) return data.suggestions;
-    } catch {
-      /* fall through to local DB */
+    } catch (err) {
+      console.warn('[DaData] cities suggest failed, local fallback', err);
     }
     return searchLocalCities(query, limit);
   },
@@ -90,7 +90,8 @@ export const dadataApi = {
         out.push({ value: v, city: s.data?.city?.trim() || undefined });
       }
       return out;
-    } catch {
+    } catch (err) {
+      console.warn('[DaData] address suggest failed', err);
       return [];
     }
   },

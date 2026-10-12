@@ -64,9 +64,7 @@ export default function ResizableTh({
 
   // Effective width: garbage from storage falls back instead of breaking layout.
   const effWidth =
-    Number.isFinite(width) && width > 0
-      ? Math.max(minWidth, width)
-      : (defaultWidth ?? minWidth);
+    Number.isFinite(width) && width > 0 ? Math.max(minWidth, width) : (defaultWidth ?? minWidth);
 
   const startDrag = (e: React.MouseEvent) => {
     e.preventDefault();

@@ -48,8 +48,9 @@ function CabinetPage() {
       const { data } = await cabinetApi.notificationsInbox({ page: 1, page_size: 10 });
       setNotes(data.items);
       setNotesUnread(data.unread);
-    } catch {
-      /* inbox is optional — cabinet works without it */
+    } catch (err) {
+      // Inbox is optional — cabinet works without it, but log for diagnosis.
+      console.warn('[Cabinet] inbox failed', err);
     }
   };
 
@@ -216,7 +217,10 @@ function CabinetPage() {
                 <div className="cabinet-card-main">
                   <span style={{ whiteSpace: 'pre-wrap' }}>{n.text}</span>
                   <span className="cabinet-card-date">
-                    {[n.sender_name ? `от ${n.sender_name}` : null, n.created_at ? new Date(n.created_at).toLocaleString('ru-RU') : null]
+                    {[
+                      n.sender_name ? `от ${n.sender_name}` : null,
+                      n.created_at ? new Date(n.created_at).toLocaleString('ru-RU') : null,
+                    ]
                       .filter(Boolean)
                       .join(' · ')}
                   </span>
@@ -233,8 +237,8 @@ function CabinetPage() {
                             prev.map((x) => (x.id === n.id ? { ...x, is_read: true } : x)),
                           );
                           setNotesUnread((u) => Math.max(0, u - 1));
-                        } catch {
-                          /* ignore */
+                        } catch (err) {
+                          console.warn('[Cabinet] mark-read failed', n.id, err);
                         }
                       }}
                     >

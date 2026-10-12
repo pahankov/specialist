@@ -32,7 +32,11 @@ function ClientsPage() {
   const navigate = useNavigate();
   const section = useSectionPrefix();
   const isSuperSection = section === SUPER_PREFIX;
-  const { widths: colW, setWidth: setColW, resetWidths } = useColumnWidths('clients2', {
+  const {
+    widths: colW,
+    setWidth: setColW,
+    resetWidths,
+  } = useColumnWidths('clients2', {
     check: 44,
     name: 180,
     phone: 140,
@@ -167,8 +171,7 @@ function ClientsPage() {
     }
     // City for matching: parsed from the address pick, else the stored one,
     // else the panel user's own city.
-    const cityName =
-      addressCity.trim() || (editingClient?.city_name || '') || myDefaults?.city || '';
+    const cityName = addressCity.trim() || editingClient?.city_name || '' || myDefaults?.city || '';
     try {
       if (editingId) {
         await adminApi.updateClient(editingId, {
@@ -227,32 +230,39 @@ function ClientsPage() {
       <div className="page-header">
         <div>
           <h1>Управление клиентами</h1>
-          <p>{isSuperSection ? 'Добавление, редактирование и удаление клиентов' : 'Ваши клиенты — создавайте новых и записывайте на услуги'}</p>
+          <p>
+            {isSuperSection
+              ? 'Добавление, редактирование и удаление клиентов'
+              : 'Ваши клиенты — создавайте новых и записывайте на услуги'}
+          </p>
         </div>
         <div className="page-header-actions">
           <button
             className="btn btn-ghost"
             onClick={async () => {
-            try {
-              const params = new URLSearchParams();
-              if (selectedClients.size > 0) {
-                params.set('ids', [...selectedClients].join(','));
-              } else {
-                if (search?.trim()) params.set('search', search.trim());
-                if (masterIdFilter !== '') params.set('master_id', String(masterIdFilter));
+              try {
+                const params = new URLSearchParams();
+                if (selectedClients.size > 0) {
+                  params.set('ids', [...selectedClients].join(','));
+                } else {
+                  if (search?.trim()) params.set('search', search.trim());
+                  if (masterIdFilter !== '') params.set('master_id', String(masterIdFilter));
+                }
+                const qs = params.toString();
+                await downloadCsv(
+                  `/api/v1/admin/export/clients${qs ? `?${qs}` : ''}`,
+                  'clients.csv',
+                );
+                toast.success(
+                  selectedClients.size > 0 ? `Выгружено: ${selectedClients.size}` : 'CSV выгружен',
+                );
+              } catch (err: unknown) {
+                toast.error(getApiErrorMessage(err, 'Не удалось выгрузить CSV'));
               }
-              const qs = params.toString();
-              await downloadCsv(`/api/v1/admin/export/clients${qs ? `?${qs}` : ''}`, 'clients.csv');
-              toast.success(
-                selectedClients.size > 0 ? `Выгружено: ${selectedClients.size}` : 'CSV выгружен',
-              );
-            } catch (err: unknown) {
-              toast.error(getApiErrorMessage(err, 'Не удалось выгрузить CSV'));
-            }
-          }}
-          title={selectedClients.size > 0 ? 'Выгрузить отмеченных' : 'Выгрузить всех по фильтру'}
-        >
-          📥 Экспорт CSV{selectedClients.size > 0 ? ` (${selectedClients.size})` : ''}
+            }}
+            title={selectedClients.size > 0 ? 'Выгрузить отмеченных' : 'Выгрузить всех по фильтру'}
+          >
+            📥 Экспорт CSV{selectedClients.size > 0 ? ` (${selectedClients.size})` : ''}
           </button>
         </div>
       </div>

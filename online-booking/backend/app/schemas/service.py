@@ -23,7 +23,9 @@ class ServiceResponse(BaseModel):
     name: str
     description: Optional[str]
     duration_minutes: int
-    price: Decimal
+    # float on the wire (Decimal serializes as a string in JSON and every
+    # consumer just wants a number).
+    price: float
     category: Optional[str] = None
     is_active: bool = True
 

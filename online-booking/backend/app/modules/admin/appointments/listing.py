@@ -150,7 +150,8 @@ async def get_admin_appointments(
             client_name=row[1], client_phone=row[2],
             # Bundle bookings: snapshots win over the (absent) service join.
             service_name=(appt.bundle_name or row[3]),
-            service_price=(appt.price if appt.price is not None else row[4]),
+            service_price=(float(appt.price) if appt.price is not None
+                           else (float(row[4]) if row[4] is not None else None)),
             # Admin branch selects master_name as 6th column; master branch has none
             master_name=row[5] if is_admin and len(row) > 5 else None
         ))

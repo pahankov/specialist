@@ -367,14 +367,24 @@ function SchedulePage() {
     if (success) {
       await refreshMonthAppointments();
     }
-  }, [bookingForm, currentMonthISO, handleCloseBooking, selectedMasterId, refreshMonthAppointments]);
+  }, [
+    bookingForm,
+    currentMonthISO,
+    handleCloseBooking,
+    selectedMasterId,
+    refreshMonthAppointments,
+  ]);
 
   const handleCancelSlotAppointment = useCallback(
     async (id: number) => {
       // Never one-click: master must confirm + give a reason (the client
       // gets it in the bell), and sees the client's comment for context.
       const found = appointments.find((a) => a.id === id) || null;
-      setCancelTarget(found ? { id, label: labelOf(found), notes: found.notes } : { id, label: '', notes: undefined });
+      setCancelTarget(
+        found
+          ? { id, label: labelOf(found), notes: found.notes }
+          : { id, label: '', notes: undefined },
+      );
       setCancelReason('');
     },
     [appointments],
@@ -608,14 +618,13 @@ function SchedulePage() {
 
                     let suffix = '';
                     if (applyToAllDays) {
-                      const applied = await applyWindowToMonth(
-                        data.start_hour,
-                        data.end_hour,
-                      );
+                      const applied = await applyWindowToMonth(data.start_hour, data.end_hour);
                       suffix =
                         applied.updated > 0
                           ? ` Обновлено дней: ${applied.updated}` +
-                            (applied.skipped > 0 ? ` (с бронями пропущено: ${applied.skipped})` : '')
+                            (applied.skipped > 0
+                              ? ` (с бронями пропущено: ${applied.skipped})`
+                              : '')
                           : applied.skipped > 0
                             ? ` Все дни с бронями — часы не тронуты (${applied.skipped})`
                             : ' Рабочих дней в месяце пока нет';

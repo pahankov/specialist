@@ -4,13 +4,7 @@ import { toast } from 'sonner';
 import { cabinetApi, mastersApi, servicesApi, assetUrl } from '../../api/client';
 import type { Bundle } from '../../api/cabinet';
 import type { Master, Service, Appointment } from '../../api/types';
-import {
-  ConfirmDialog,
-  BackendImg,
-  EmptyState,
-  Modal,
-  Skeleton,
-} from '../../components/common';
+import { ConfirmDialog, BackendImg, EmptyState, Modal, Skeleton } from '../../components/common';
 import { Calendar } from '../../components/schedule/Calendar';
 import CitySelect from '../../components/common/CitySelect';
 import {
@@ -48,11 +42,8 @@ function ClientSlots({
   const dateStr = formatDate(date);
   const rows = [];
   for (let h = windowStart; h < windowEnd; h++) {
-    const starters = getAppointmentsForSlot(busy, date, h).filter(
-      (s) => s.status !== 'cancelled',
-    );
-    const coveredBy =
-      starters.length === 0 ? getCoveringLive(busy, date, h) : null;
+    const starters = getAppointmentsForSlot(busy, date, h).filter((s) => s.status !== 'cancelled');
+    const coveredBy = starters.length === 0 ? getCoveringLive(busy, date, h) : null;
     const past = isSlotPast(date, h);
     const hourActive = !!activeHours[`${dateStr}-${h}`];
     const live = starters[0] ?? coveredBy;
@@ -147,7 +138,8 @@ function CabinetBookPage() {
             try {
               const s = await servicesApi.getAll(m.id);
               return [m.id, (s.data || []).filter((x) => x.is_active !== false)] as const;
-            } catch {
+            } catch (err) {
+              console.warn('[CabinetBook] services failed for master', m.id, err);
               return [m.id, []] as const;
             }
           }),
@@ -245,7 +237,6 @@ function CabinetBookPage() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMaster?.id, monthISO]);
 
   const openSlot = (hour: number) => {
@@ -293,9 +284,7 @@ function CabinetBookPage() {
     try {
       await cabinetApi.bookAppointment({
         master_id: selectedMaster.id,
-        ...(modalBundle
-          ? { bundle_id: modalBundle.id }
-          : { service_id: Number(modalServiceId) }),
+        ...(modalBundle ? { bundle_id: modalBundle.id } : { service_id: Number(modalServiceId) }),
         appointment_date: `${y}-${m}-${d}T${String(slotHour).padStart(2, '0')}:00:00`,
         notes: notes.trim() || undefined,
       });
@@ -385,7 +374,11 @@ function CabinetBookPage() {
                 onChange={() => setSelectedMaster(m)}
               />
               {m.avatar_preset ? (
-                <span className="master-pick-avatar master-pick-emoji" role="img" aria-label={m.name}>
+                <span
+                  className="master-pick-avatar master-pick-emoji"
+                  role="img"
+                  aria-label={m.name}
+                >
                   {m.avatar_preset}
                 </span>
               ) : m.avatar_url ? (
@@ -400,8 +393,7 @@ function CabinetBookPage() {
                 <strong>
                   {m.name} {formatRating(m.avg_rating)}
                 </strong>
-                {[m.cabinet_address, m.city_name].filter(Boolean).join(' • ') ||
-                  'Адрес уточняйте'}
+                {[m.cabinet_address, m.city_name].filter(Boolean).join(' • ') || 'Адрес уточняйте'}
                 {m.experience_years != null && <span> · опыт {m.experience_years} лет</span>}
                 {m.description && <span className="master-pick-desc">{m.description}</span>}
                 <span>
@@ -452,7 +444,7 @@ function CabinetBookPage() {
                   })
                 }
                 onSelectDate={setSelectedDate}
-                onToggleDay={() => {}}
+                onToggleDay={() => undefined}
                 interactive={false}
               />
               {selectedDate &&
@@ -501,8 +493,10 @@ function CabinetBookPage() {
                   <div>
                     <strong>🎁 {modalBundle.name}</strong>
                     <div className="hint">
-                      {modalBundle.services.map((s) => `${s.name} (${s.duration_minutes} мин)`).join(' + ')} · ⏱{' '}
-                      {modalBundle.duration_total} мин · {modalBundle.effective_price} ₽
+                      {modalBundle.services
+                        .map((s) => `${s.name} (${s.duration_minutes} мин)`)
+                        .join(' + ')}{' '}
+                      · ⏱ {modalBundle.duration_total} мин · {modalBundle.effective_price} ₽
                     </div>
                   </div>
                   <button
@@ -518,31 +512,31 @@ function CabinetBookPage() {
                   </button>
                 </div>
               ) : (
-              <select
-                value={modalPickValue}
-                aria-label="Выбор услуги или комплекса"
-                onChange={(e) => handleModalPick(e.target.value)}
-              >
-                <option value="" disabled>
-                  Выберите услугу…
-                </option>
-                {modalBundles.length > 0 && (
-                  <optgroup label="🎁 Комплексы">
-                    {modalBundles.map((b) => (
-                      <option key={b.id} value={`bundle:${b.id}`}>
-                        🎁 {b.name} — {b.duration_total} мин, {b.effective_price} ₽
+                <select
+                  value={modalPickValue}
+                  aria-label="Выбор услуги или комплекса"
+                  onChange={(e) => handleModalPick(e.target.value)}
+                >
+                  <option value="" disabled>
+                    Выберите услугу…
+                  </option>
+                  {modalBundles.length > 0 && (
+                    <optgroup label="🎁 Комплексы">
+                      {modalBundles.map((b) => (
+                        <option key={b.id} value={`bundle:${b.id}`}>
+                          🎁 {b.name} — {b.duration_total} мин, {b.effective_price} ₽
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  <optgroup label="Услуги">
+                    {modalServices.map((s) => (
+                      <option key={s.id} value={`service:${s.id}`}>
+                        {s.name} — {s.duration_minutes} мин, {s.price} ₽
                       </option>
                     ))}
                   </optgroup>
-                )}
-                <optgroup label="Услуги">
-                {modalServices.map((s) => (
-                  <option key={s.id} value={`service:${s.id}`}>
-                    {s.name} — {s.duration_minutes} мин, {s.price} ₽
-                  </option>
-                ))}
-                </optgroup>
-              </select>
+                </select>
               )}
               {modalService && (
                 <span className="hint">
@@ -577,11 +571,7 @@ function CabinetBookPage() {
               />
             </div>
             <div className="modal-actions">
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={() => setSlotHour(null)}
-              >
+              <button type="button" className="btn btn-ghost" onClick={() => setSlotHour(null)}>
                 Отмена
               </button>
               <button
@@ -623,9 +613,7 @@ function CabinetBookPage() {
                 <strong>
                   {aboutMaster.name} {formatRating(aboutMaster.avg_rating)}
                 </strong>
-                <div className="master-about-sub">
-                  {aboutMaster.city_name || 'Город уточняйте'}
-                </div>
+                <div className="master-about-sub">{aboutMaster.city_name || 'Город уточняйте'}</div>
                 <div className="master-about-sub">
                   Кабинет: {aboutMaster.cabinet_address || 'адрес уточняйте'}
                 </div>

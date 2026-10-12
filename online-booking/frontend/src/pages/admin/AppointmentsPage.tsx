@@ -30,7 +30,11 @@ type SortDirection = 'asc' | 'desc';
 function AppointmentsPage() {
   const section = useSectionPrefix();
   const isSuperSection = section === SUPER_PREFIX;
-  const { widths: colW, setWidth: setColW, resetWidths } = useColumnWidths('appointments2', {
+  const {
+    widths: colW,
+    setWidth: setColW,
+    resetWidths,
+  } = useColumnWidths('appointments2', {
     check: 44,
     date: 150,
     client: 160,
@@ -102,8 +106,8 @@ function AppointmentsPage() {
             name: c.name,
           })),
         );
-      } catch {
-        /* ignore */
+      } catch (err) {
+        console.warn('[Appointments] clients filter failed', err);
       }
 
       // Fetch services for filter dropdown
@@ -119,8 +123,8 @@ function AppointmentsPage() {
             name: s.name,
           })),
         );
-      } catch {
-        /* ignore */
+      } catch (err) {
+        console.warn('[Appointments] services filter failed', err);
       }
     } catch {
       /* ignore */
@@ -327,43 +331,47 @@ function AppointmentsPage() {
       <div className="page-header">
         <div>
           <h1>Управление записями</h1>
-          <p>{isSuperSection ? 'Подтверждение, завершение и отмена записей' : 'Мои записи — подтверждение, завершение и отмена'}</p>
+          <p>
+            {isSuperSection
+              ? 'Подтверждение, завершение и отмена записей'
+              : 'Мои записи — подтверждение, завершение и отмена'}
+          </p>
         </div>
         <div className="page-header-actions">
           <button
             className="btn btn-ghost"
             onClick={async () => {
-            const params = new URLSearchParams();
-            if (selectedAppointments.size > 0) {
-              params.set('ids', [...selectedAppointments].join(','));
-            } else {
-              if (statusFilter) params.set('status', statusFilter);
-              if (masterIdFilter !== '') params.set('master_id', String(masterIdFilter));
-              if (clientIdFilter !== '') params.set('client_id', String(clientIdFilter));
-              if (serviceIdFilter !== '') params.set('service_id', String(serviceIdFilter));
-              if (dateFrom) params.set('date_from', dateFrom);
-              if (dateTo) params.set('date_to', dateTo);
+              const params = new URLSearchParams();
+              if (selectedAppointments.size > 0) {
+                params.set('ids', [...selectedAppointments].join(','));
+              } else {
+                if (statusFilter) params.set('status', statusFilter);
+                if (masterIdFilter !== '') params.set('master_id', String(masterIdFilter));
+                if (clientIdFilter !== '') params.set('client_id', String(clientIdFilter));
+                if (serviceIdFilter !== '') params.set('service_id', String(serviceIdFilter));
+                if (dateFrom) params.set('date_from', dateFrom);
+                if (dateTo) params.set('date_to', dateTo);
+              }
+              if (isSuperSection) params.set('include_master', 'true');
+              try {
+                await downloadCsv(
+                  `/api/v1/admin/export/appointments?${params.toString()}`,
+                  'appointments.csv',
+                );
+                toast.success(
+                  selectedAppointments.size > 0
+                    ? `Выгружено: ${selectedAppointments.size}`
+                    : 'CSV выгружен',
+                );
+              } catch (err: unknown) {
+                toast.error(getApiErrorMessage(err, 'Не удалось выгрузить CSV'));
+              }
+            }}
+            title={
+              selectedAppointments.size > 0 ? 'Выгрузить отмеченные' : 'Выгрузить все по фильтру'
             }
-            if (isSuperSection) params.set('include_master', 'true');
-            try {
-              await downloadCsv(
-                `/api/v1/admin/export/appointments?${params.toString()}`,
-                'appointments.csv',
-              );
-              toast.success(
-                selectedAppointments.size > 0
-                  ? `Выгружено: ${selectedAppointments.size}`
-                  : 'CSV выгружен',
-              );
-            } catch (err: unknown) {
-              toast.error(getApiErrorMessage(err, 'Не удалось выгрузить CSV'));
-            }
-          }}
-          title={
-            selectedAppointments.size > 0 ? 'Выгрузить отмеченные' : 'Выгрузить все по фильтру'
-          }
-        >
-          📥 Экспорт CSV{selectedAppointments.size > 0 ? ` (${selectedAppointments.size})` : ''}
+          >
+            📥 Экспорт CSV{selectedAppointments.size > 0 ? ` (${selectedAppointments.size})` : ''}
           </button>
         </div>
       </div>
@@ -695,7 +703,8 @@ function AppointmentsPage() {
                       <strong>{a.client_name || '—'}</strong>
                       {a.notes ? (
                         <span className="notes-dot" title={`💬 ${a.notes}`}>
-                          {' '}💬
+                          {' '}
+                          💬
                         </span>
                       ) : null}
                     </td>

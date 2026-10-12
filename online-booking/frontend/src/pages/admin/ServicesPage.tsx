@@ -18,7 +18,11 @@ import '../../styles/tables.css';
 import './ServicesPage.css';
 
 function ServicesPage() {
-  const { widths: colW, setWidth: setColW, resetWidths } = useColumnWidths('services', {
+  const {
+    widths: colW,
+    setWidth: setColW,
+    resetWidths,
+  } = useColumnWidths('services', {
     name: 200,
     category: 130,
     desc: 260,
@@ -56,7 +60,9 @@ function ServicesPage() {
   // Per-service minutes inside the complex (default = service's own time).
   const [durMap, setDurMap] = useState<Record<number, number>>({});
 
-  const existingCategories = [...new Set(services.map((s) => s.category).filter(Boolean))] as string[];
+  const existingCategories = [
+    ...new Set(services.map((s) => s.category).filter(Boolean)),
+  ] as string[];
 
   const fetchData = async () => {
     try {
@@ -74,8 +80,9 @@ function ServicesPage() {
     try {
       const b = await adminApi.getBundles();
       setBundles(b.data || []);
-    } catch {
-      /* bundles are secondary — services error above already surfaces */
+    } catch (err) {
+      // Secondary list: services error above already surfaces failures.
+      console.warn('[Services] bundles failed', err);
     }
   };
 
@@ -433,7 +440,9 @@ function ServicesPage() {
                   onClick={() => {
                     openBundleForm();
                     requestAnimationFrame(() => {
-                      document.getElementById('bundles-card')?.scrollIntoView?.({ behavior: 'smooth' });
+                      document
+                        .getElementById('bundles-card')
+                        ?.scrollIntoView?.({ behavior: 'smooth' });
                     });
                   }}
                 >
@@ -447,11 +456,7 @@ function ServicesPage() {
           </div>
         </div>
         {services.length === 0 ? (
-          <EmptyState
-            title="Нет услуг"
-            actionLabel="Добавить услугу"
-            onAction={openCreateForm}
-          />
+          <EmptyState title="Нет услуг" actionLabel="Добавить услугу" onAction={openCreateForm} />
         ) : (
           <table className="services-table resizable-table">
             <thead>
@@ -588,8 +593,7 @@ function ServicesPage() {
                   ))}
                 </div>
                 <span style={{ fontSize: 12, color: '#666' }}>
-                  Выбрано: {picked.size} · ⏱ {pickedDuration} мин · Σ{' '}
-                  {formatPrice(pickedSum)} ₽
+                  Выбрано: {picked.size} · ⏱ {pickedDuration} мин · Σ {formatPrice(pickedSum)} ₽
                 </span>
               </div>
               <div className="form-actions">
@@ -632,7 +636,8 @@ function ServicesPage() {
                   ⏱ {b.duration_total} мин ·{' '}
                   {b.price != null ? (
                     <>
-                      <s>{formatPrice(b.price_total)} ₽</s> <strong>{formatPrice(b.effective_price)} ₽</strong>
+                      <s>{formatPrice(b.price_total)} ₽</s>{' '}
+                      <strong>{formatPrice(b.effective_price)} ₽</strong>
                     </>
                   ) : (
                     <strong>{formatPrice(b.effective_price)} ₽</strong>

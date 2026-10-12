@@ -1,11 +1,7 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { cabinetApi, type ClientMe } from '../../api/client';
-import {
-  AddressSelect,
-  CitySelect,
-  Skeleton,
-} from '../../components/common';
+import { AddressSelect, CitySelect, Skeleton } from '../../components/common';
 import type { CityOption } from '../../components/common/CitySelect';
 import { getApiErrorMessage } from '../../utils/apiError';
 import { capitalizeWords, splitFullName } from '../../utils/names';

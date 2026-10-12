@@ -3,16 +3,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 
-const { me, getBookSchedule, bookAppointment, getAllMasters, getAllServices, getBundles } = vi.hoisted(
-  () => ({
+const { me, getBookSchedule, bookAppointment, getAllMasters, getAllServices, getBundles } =
+  vi.hoisted(() => ({
     me: vi.fn(),
     getBookSchedule: vi.fn(),
     bookAppointment: vi.fn(),
     getAllMasters: vi.fn(),
     getAllServices: vi.fn(),
     getBundles: vi.fn(),
-  }),
-);
+  }));
 
 vi.mock('../api/client', () => ({
   cabinetApi: { me, getBookSchedule, bookAppointment, bundles: getBundles },
@@ -32,7 +31,10 @@ const MASTERS = [
   { id: 2, user_id: 12, name: 'Мария', avg_rating: null, city_name: 'Уфа', is_active: true },
 ];
 
-const SERVICES: Record<number, { id: number; master_id: number; name: string; duration_minutes: number; price: number }[]> = {
+const SERVICES: Record<
+  number,
+  { id: number; master_id: number; name: string; duration_minutes: number; price: number }[]
+> = {
   1: [{ id: 10, master_id: 1, name: 'Стрижка', duration_minutes: 60, price: 1500 }],
   2: [{ id: 20, master_id: 2, name: 'Маникюр', duration_minutes: 90, price: 1200 }],
 };
@@ -40,9 +42,15 @@ const SERVICES: Record<number, { id: number; master_id: number; name: string; du
 const BUNDLES: Record<number, object[]> = {
   1: [
     {
-      id: 100, master_id: 1, name: 'Сет', service_ids: [10],
+      id: 100,
+      master_id: 1,
+      name: 'Сет',
+      service_ids: [10],
       services: [{ id: 10, name: 'Стрижка', duration_minutes: 60, price: 1500 }],
-      duration_total: 60, price_total: 1500, price: null, effective_price: 1500,
+      duration_total: 60,
+      price_total: 1500,
+      price: null,
+      effective_price: 1500,
       is_active: true,
     },
   ],
@@ -130,9 +138,7 @@ describe('CabinetBookPage', () => {
     fireEvent.click(bookButtons[0]);
     expect(await screen.findByText(/Подтвердите запись/)).toBeInTheDocument();
 
-    fireEvent.click(
-      screen.getByText('Записаться', { selector: '.modal-actions .btn-primary' }),
-    );
+    fireEvent.click(screen.getByText('Записаться', { selector: '.modal-actions .btn-primary' }));
     await waitFor(() => {
       expect(bookAppointment).toHaveBeenCalledWith(
         expect.objectContaining({ master_id: 1, service_id: 10 }),
@@ -183,9 +189,7 @@ describe('CabinetBookPage', () => {
     });
     expect(await screen.findByText('🎁 Сет')).toBeInTheDocument();
 
-    fireEvent.click(
-      screen.getByText('Записаться', { selector: '.modal-actions .btn-primary' }),
-    );
+    fireEvent.click(screen.getByText('Записаться', { selector: '.modal-actions .btn-primary' }));
     await waitFor(() => {
       expect(bookAppointment).toHaveBeenCalledWith(
         expect.objectContaining({ master_id: 1, bundle_id: 100 }),

@@ -336,10 +336,7 @@ describe('helpers', () => {
     });
 
     it('getBlockingLive merges starters and continuations', () => {
-      const appts = [
-        mk(1, 14, 'confirmed', 90),
-        mk(2, 15, 'pending', 30),
-      ];
+      const appts = [mk(1, 14, 'confirmed', 90), mk(2, 15, 'pending', 30)];
       const blocking = getBlockingLive(appts, day, 15);
       expect(blocking.map((a) => a.id).sort()).toEqual([1, 2]);
     });

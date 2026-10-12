@@ -50,7 +50,12 @@ export const cabinetApi = {
   me() {
     return apiClient.get<ClientMe>('/api/v1/client/me');
   },
-  updateMe(data: { name?: string; last_name?: string | null; city_id?: number; address?: string | null }) {
+  updateMe(data: {
+    name?: string;
+    last_name?: string | null;
+    city_id?: number;
+    address?: string | null;
+  }) {
     return apiClient.patch<ClientMe>('/api/v1/client/me', data);
   },
   stats() {

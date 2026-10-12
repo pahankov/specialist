@@ -199,10 +199,7 @@ describe('Login identifier validation (regression)', () => {
     } as never);
     submitLogin();
     await vi.waitFor(() => {
-      expect(vi.mocked(mocked.loginUnified)).toHaveBeenCalledWith(
-        'user@example.com',
-        'Secret123!',
-      );
+      expect(vi.mocked(mocked.loginUnified)).toHaveBeenCalledWith('user@example.com', 'Secret123!');
     });
   });
 

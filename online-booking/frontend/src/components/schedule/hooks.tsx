@@ -159,20 +159,3 @@ export async function handleBookAppointment(
     setBookingLoading(false);
   }
 }
-
-export async function fetchAppointmentsForMonth(
-  currentMonth: Date,
-  setAppointments: (appts: any[]) => void,
-) {
-  const year = currentMonth.getFullYear();
-  const month = currentMonth.getMonth();
-  const from = `${year}-${String(month + 1).padStart(2, '0')}-01`;
-  const lastDay = new Date(year, month + 1, 0).getDate();
-  const to = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-  try {
-    const resp = await adminApi.getAppointmentsByDate(from, to);
-    setAppointments(resp.data || []);
-  } catch {
-    setAppointments([]);
-  }
-}

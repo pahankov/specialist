@@ -7,7 +7,7 @@ function renderTh(width: number, minWidth?: number) {
     <table>
       <thead>
         <tr>
-          <ResizableTh width={width} minWidth={minWidth} onResize={() => {}}>
+          <ResizableTh width={width} minWidth={minWidth} onResize={() => undefined}>
             Действия
           </ResizableTh>
         </tr>
