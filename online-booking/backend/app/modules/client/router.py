@@ -346,22 +346,10 @@ async def book_my_appointment(
     appt_dt = data.appointment_date.replace(tzinfo=None)
     if appt_dt <= utcnow_naive():
         raise HTTPException(status_code=400, detail="Нельзя записаться в прошлое")
-    # Overlap check with each side's own duration: existing rows carry their
-    # service length, so compare in Python (exact for any durations).
-    service_end = appt_dt + timedelta(minutes=service.duration_minutes)
-    candidates = (await db.execute(
-        select(Appointment, Service.duration_minutes)
-        .join(Service, Appointment.service_id == Service.id)
-        .where(
-            Appointment.master_id == mp.id,
-            Appointment.status != "cancelled",
-            Appointment.appointment_date < service_end,
-        )
-    )).all()
-    for existing, dur in candidates:
-        existing_start = existing.appointment_date.replace(tzinfo=None)
-        if existing_start + timedelta(minutes=dur or 0) > appt_dt:
-            raise HTTPException(status_code=409, detail="Это время уже занято")
+    from app.services.booking import find_conflict, format_slot
+    from app.services.notifications import notify_user
+    if await find_conflict(db, mp.id, appt_dt, service.duration_minutes):
+        raise HTTPException(status_code=409, detail="Это время уже занято")
 
     appointment = Appointment(
         master_id=mp.id, service_id=service.id, client_id=profile.id,
@@ -369,6 +357,12 @@ async def book_my_appointment(
         notes=(data.notes or "").strip() or None,
     )
     db.add(appointment)
+    await db.flush()
+    await notify_user(
+        db, recipient_id=mp.user_id,
+        text=f"Новая запись: {user.name} — {service.name}, {format_slot(appt_dt)}",
+        sender_id=user.id, audience="booking", link="appointments",
+    )
     await log_action(
         db, user.id, "create", "appointment", None,
         f"Клиент записался к мастеру {mp.id} на {appt_dt.isoformat()}", level="info",

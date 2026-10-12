@@ -119,6 +119,7 @@ def _to_item(n: Notification) -> dict:
         "id": n.id,
         "text": n.text,
         "audience": n.audience,
+        "link": n.link,
         "sender_name": n.sender.name if getattr(n, "sender", None) else None,
         "is_read": bool(n.is_read),
         "created_at": n.created_at.isoformat() if n.created_at else None,

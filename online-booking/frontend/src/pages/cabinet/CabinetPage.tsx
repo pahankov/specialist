@@ -30,7 +30,14 @@ function CabinetPage() {
   const [loading, setLoading] = useState(true);
   const [cancellingId, setCancellingId] = useState<number | null>(null);
   const [notes, setNotes] = useState<
-    { id: number; text: string; sender_name?: string | null; is_read: boolean; created_at?: string | null }[]
+    {
+      id: number;
+      text: string;
+      sender_name?: string | null;
+      link?: string | null;
+      is_read: boolean;
+      created_at?: string | null;
+    }[]
   >([]);
   const [notesUnread, setNotesUnread] = useState(0);
   // City was already given at registration — show it, edit only on demand.
@@ -197,7 +204,15 @@ function CabinetPage() {
           </h2>
           <div className="cabinet-list">
             {notes.map((n) => (
-              <div key={n.id} className="cabinet-card">
+              <div
+                key={n.id}
+                className="cabinet-card"
+                onClick={() => {
+                  if (n.link === 'appointments') navigate('/cabinet');
+                }}
+                style={n.link ? { cursor: 'pointer' } : undefined}
+                title={n.link === 'appointments' ? 'Открыть мои записи →' : undefined}
+              >
                 <div className="cabinet-card-main">
                   <span style={{ whiteSpace: 'pre-wrap' }}>{n.text}</span>
                   <span className="cabinet-card-date">
@@ -210,7 +225,8 @@ function CabinetPage() {
                   {!n.is_read && (
                     <button
                       className="btn btn-sm btn-ghost"
-                      onClick={async () => {
+                      onClick={async (e) => {
+                        e.stopPropagation();
                         try {
                           await cabinetApi.readNotification(n.id);
                           setNotes((prev) =>

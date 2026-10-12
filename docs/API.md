@@ -89,7 +89,7 @@
 | `PATCH` | `/api/v1/client/me` | Имя/фамилия/город/адрес (`city_id` проверяется, 404) |
 | `GET` | `/api/v1/client/stats` | Дашборд: траты, визиты, предстоящие, любимые мастер/услуга |
 | `GET` | `/api/v1/client/appointments` | Свои записи (все, новые сверху; фронт делит на будущие/историю) |
-| `POST` | `/api/v1/client/appointments` | Своя запись из визарда (`master_id/service_id/date`, проверка конфликтов по длительностям, статус pending) |
+| `POST` | `/api/v1/client/appointments` | Своя запись из визарда (`master_id/service_id/date`, проверка конфликтов по длительностям, статус pending; мастеру падает в колокольчик) |
 | `GET` | `/api/v1/client/booking/schedule` | Активное расписание мастера на месяц (окно + рабочие дни + занятые гранулы, без персональных данных) |
 | `POST` | `/api/v1/client/appointments/{id}/cancel` | Отмена своей pending/confirmed записи (чужая — 404, финальная — 400; пишется в аудит) |
 
@@ -109,7 +109,7 @@
 | `POST` | `/admin/appointments` | Создать запись |
 | `POST` | `/admin/appointments/book` | Админская запись (выбор клиента из БД; суперадмин шлёт `master_id`) |
 | `GET` | `/admin/appointments/by-date` | Записи по дате (есть `service_id/service_duration` для спанов гранул) |
-| `PATCH` | `/admin/appointments/{id}/confirm` | Подтвердить запись |
+| `PATCH` | `/admin/appointments/{id}/confirm` | Подтвердить запись (клиенту падает в колокольчик) |
 | `PATCH` | `/admin/appointments/{id}/cancel` | Отменить запись |
 | `PATCH` | `/admin/appointments/{id}/complete` | Завершить запись |
 | `DELETE` | `/admin/appointments/{id}` | Удалить запись |

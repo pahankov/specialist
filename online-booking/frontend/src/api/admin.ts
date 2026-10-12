@@ -237,6 +237,7 @@ export const adminApi = {
         id: number;
         text: string;
         audience?: string | null;
+        link?: string | null;
         sender_name?: string | null;
         is_read: boolean;
         created_at?: string | null;

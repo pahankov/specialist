@@ -124,19 +124,24 @@ export function Calendar({
           const hours = schedule[dateStr];
 
           let apptCount = 0;
+          const liveIds = new Set<number>();
           if (active && day.isCurrentMonth && hours) {
             for (let h = hours.start; h < hours.end; h++) {
               const slots = getAppointmentsForSlot(appointments, day.date, h);
               const status = getSlotStatus(slots);
               if (status !== 'free' && isSlotPast(day.date, h)) apptCount++;
+              for (const s of slots) {
+                if (s.status !== 'cancelled') liveIds.add(s.id);
+              }
             }
           }
+          const hasLive = liveIds.size > 0;
 
           return (
             <div
               key={i}
               data-date={day.date.toISOString()}
-              className={`calendar-day ${day.isCurrentMonth ? '' : 'other-month'} ${active ? 'active' : 'inactive'} ${today ? 'today' : ''} ${selected ? 'selected' : ''} ${past ? 'past' : ''}`}
+              className={`calendar-day ${day.isCurrentMonth ? '' : 'other-month'} ${active ? 'active' : 'inactive'} ${today ? 'today' : ''} ${selected ? 'selected' : ''} ${past ? 'past' : ''} ${hasLive && !past ? 'has-bookings' : ''}`}
               onClick={() => handleDayClick(day.date, day.isCurrentMonth, past)}
               onPointerDown={(e) => handlePointerDown(e, day.date)}
               onPointerUp={handlePointerUp}

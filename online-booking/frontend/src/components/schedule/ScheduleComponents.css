@@ -74,6 +74,13 @@
   border: 2px solid #4caf50;
 }
 
+/* Working day holding live bookings: a touch deeper green so busy days
+ * read at a glance (badge still says "Рабочий"). */
+.calendar-day.active.has-bookings {
+  background: linear-gradient(135deg, #c9ecd0 0%, #a9ddb2 100%);
+  border-color: #2e9e44;
+}
+
 .calendar-day.inactive {
   background: #f9f9f9;
   border: 2px solid #e0e0e0;

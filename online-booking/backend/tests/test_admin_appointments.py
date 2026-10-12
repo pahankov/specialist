@@ -444,3 +444,88 @@ class TestMarkNoShow:
             headers=auth_headers,
         )
         assert resp.status_code == 404
+
+
+class TestExactOverlapAndBells:
+    """Aligned overlap check (both sides' durations) + confirm bell."""
+
+    async def _setup(self, client, session, auth_headers):
+        from app.models.service import Service
+
+        long_svc = await client.post(
+            "/api/v1/services/",
+            json={"name": "Long", "description": "x", "duration_minutes": 120,
+                  "price": 1000, "master_id": 1},
+            headers=auth_headers,
+        )
+        short_svc = await client.post(
+            "/api/v1/services/",
+            json={"name": "Short", "description": "x", "duration_minutes": 30,
+                  "price": 500, "master_id": 1},
+            headers=auth_headers,
+        )
+        assert long_svc.status_code == 201, long_svc.text
+        assert short_svc.status_code == 201, short_svc.text
+        from datetime import datetime, timedelta
+        day = (datetime.now() + timedelta(days=6)).replace(
+            hour=14, minute=0, second=0, microsecond=0)
+        return long_svc.json()["id"], short_svc.json()["id"], day
+
+    async def test_book_exact_overlap_asymmetric(
+        self, client, session, auth_headers, test_master_data, test_service_data
+    ):
+        """120-min at 14:00 blocks a 30-min at 15:00, frees 16:00."""
+        long_id, short_id, day = await self._setup(client, session, auth_headers)
+        # Need a real client id: create one via clients endpoint.
+        created = await client.post(
+            "/api/v1/admin/clients",
+            json={"name": "Overlap", "phone": "+79990006655"},
+            headers=auth_headers,
+        )
+        cid = created.json()["id"]
+        first = await client.post("/api/v1/admin/appointments/book", json={
+            "client_id": cid, "service_id": long_id,
+            "appointment_date": day.isoformat(), "status": "pending",
+        }, headers=auth_headers)
+        assert first.status_code == 201, first.text
+
+        clash = await client.post("/api/v1/admin/appointments/book", json={
+            "client_id": cid, "service_id": short_id,
+            "appointment_date": day.replace(hour=15).isoformat(), "status": "pending",
+        }, headers=auth_headers)
+        assert clash.status_code == 409
+
+        free = await client.post("/api/v1/admin/appointments/book", json={
+            "client_id": cid, "service_id": short_id,
+            "appointment_date": day.replace(hour=16).isoformat(), "status": "pending",
+        }, headers=auth_headers)
+        assert free.status_code == 201, free.text
+
+    async def test_confirm_bells_the_client(self, client, session, auth_headers):
+        """Master confirm lands in the client's bell with a deep link."""
+        from sqlalchemy import select
+        from app.models.notification import Notification
+
+        long_id, _, day = await self._setup(client, session, auth_headers)
+        created = await client.post(
+            "/api/v1/admin/clients",
+            json={"name": "Bell", "phone": "+79990006677"},
+            headers=auth_headers,
+        )
+        cid = created.json()["id"]
+        booked = await client.post("/api/v1/admin/appointments/book", json={
+            "client_id": cid, "service_id": long_id,
+            "appointment_date": day.isoformat(), "status": "pending",
+        }, headers=auth_headers)
+        appt_id = booked.json()["id"]
+
+        r = await client.patch(
+            f"/api/v1/admin/appointments/{appt_id}/confirm", headers=auth_headers)
+        assert r.status_code == 200, r.text
+
+        notes = (await session.execute(
+            select(Notification).where(Notification.recipient_id == cid)
+        )).scalars().all()
+        assert len(notes) == 1
+        assert "подтвердил" in notes[0].text
+        assert notes[0].link == "appointments"

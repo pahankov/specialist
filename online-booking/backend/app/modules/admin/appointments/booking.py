@@ -3,7 +3,6 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
-from datetime import timedelta
 
 from app.database import get_db
 from app.models.appointment import Appointment
@@ -124,16 +123,9 @@ async def book_appointment(
     if not user or user.role.value != "CLIENT":
         raise HTTPException(status_code=404, detail="Клиент не найден")
 
-    service_end = data.appointment_date + timedelta(minutes=service.duration_minutes)
-    conflict_result = await db.execute(
-        select(Appointment).join(Service, Appointment.service_id == Service.id)
-        .where(
-            Appointment.master_id == mp.id, Appointment.status != "cancelled",
-            Appointment.appointment_date < service_end,
-            Appointment.appointment_date + timedelta(minutes=service.duration_minutes) > data.appointment_date
-        ).limit(1)
-    )
-    if conflict_result.scalar_one_or_none():
+    from app.services.booking import find_conflict
+    if await find_conflict(db, mp.id, data.appointment_date.replace(tzinfo=None),
+                           service.duration_minutes):
         raise HTTPException(status_code=409, detail="Это время уже занято")
 
     notes = "Запись из админ-панели"

@@ -105,6 +105,15 @@
   border-color: #c7d2fe;
 }
 
+.notifications-page .inbox-item.linked {
+  cursor: pointer;
+}
+
+.notifications-page .inbox-item.linked:hover {
+  border-color: #a5b4fc;
+  background: #eef2ff;
+}
+
 .notifications-page .inbox-text {
   font-size: 14px;
   color: #1a1a2e;

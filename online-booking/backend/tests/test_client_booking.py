@@ -147,6 +147,33 @@ class TestClientBook:
         assert mine.status_code == 200
         assert any(a["service_name"] == "Color" for a in mine.json())
 
+    async def test_booking_bells_the_master(self, client, session):
+        from datetime import datetime
+        from sqlalchemy import select
+        from app.models.notification import Notification
+        from app.models.user import User
+
+        mp, s, headers, me = await self._setup(client, session)
+        master_user = (await session.execute(
+            select(User).where(User.id == mp.user_id)
+        )).scalar_one()
+        day = (datetime.now() + timedelta(days=5)).replace(
+            hour=10, minute=0, second=0, microsecond=0)
+        r = await client.post(
+            "/api/v1/client/appointments",
+            json={"master_id": mp.id, "service_id": s.id,
+                  "appointment_date": day.isoformat()},
+            headers=headers,
+        )
+        assert r.status_code == 201, r.text
+        notes = (await session.execute(
+            select(Notification).where(Notification.recipient_id == master_user.id)
+        )).scalars().all()
+        assert len(notes) == 1
+        assert "Новая запись" in notes[0].text
+        assert notes[0].link == "appointments"
+        assert notes[0].sender_id == me.id
+
 
 class TestClientProfilePage:
     async def test_update_name_and_address(self, client, session):

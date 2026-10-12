@@ -214,17 +214,12 @@ async def public_booking(booking: PublicBookingCreate, db: AsyncSession = Depend
         logger.warning("Услуга не найдена: id=%s, мастер=%s", booking.service_id, booking.master_id)
         raise HTTPException(status_code=404, detail="Service not found or inactive")
 
-    # Check for time conflicts
-    service_end = booking.appointment_date + timedelta(minutes=service.duration_minutes)
-    conflict_result = await db.execute(
-        select(Appointment).where(
-            Appointment.master_id == booking.master_id,
-            Appointment.status != "cancelled",
-            Appointment.appointment_date < service_end,
-            Appointment.appointment_date > booking.appointment_date - timedelta(minutes=service.duration_minutes)
-        ).limit(1)
-    )
-    if conflict_result.scalar_one_or_none():
+    # Check for time conflicts (exact: each side's own duration)
+    from app.services.booking import find_conflict, format_slot
+    from app.services.notifications import notify_user
+    if await find_conflict(db, booking.master_id,
+                           booking.appointment_date.replace(tzinfo=None),
+                           service.duration_minutes):
         logger.warning("Конфликт времени: мастер=%s, время=%s", booking.master_id, booking.appointment_date)
         raise HTTPException(status_code=409, detail="Это время уже занято")
 
@@ -260,6 +255,13 @@ async def public_booking(booking: PublicBookingCreate, db: AsyncSession = Depend
     )
 
     db.add(appointment)
+    await db.flush()
+    await notify_user(
+        db, recipient_id=master_profile.user_id,
+        text=f"Новая запись: {booking.client_name} — "
+             f"{service.name}, {format_slot(booking.appointment_date)}",
+        sender_id=client.user_id, audience="booking", link="appointments",
+    )
     await db.commit()
     await db.refresh(appointment)
 

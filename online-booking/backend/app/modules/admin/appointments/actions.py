@@ -2,14 +2,18 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from typing import Optional
 
 from app.database import get_db
+from app.models.appointment import Appointment
 from app.models.client_profile import ClientProfile
 from app.models.user import User
 from app.dependencies.auth import require_master
 from app.modules.admin.helpers import get_appointment_for_master
 from app.services.audit import log_action
+from app.services.booking import format_slot
+from app.services.notifications import notify_user
 from app.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -28,6 +32,30 @@ async def confirm_appointment(
     appointment = await get_appointment_for_master(db, appointment_id, master)
     appointment.status = "confirmed"
     await log_action(db, master.id, "confirm", "appointment", appointment.id, "Статус изменён на confirmed", level="info")
+    # Bell the client (profile id; legacy rows may hold a user id).
+    full = (await db.execute(
+        select(Appointment)
+        .options(
+            selectinload(Appointment.client_profile).joinedload(ClientProfile.user),
+            selectinload(Appointment.service),
+        )
+        .where(Appointment.id == appointment.id)
+    )).scalar_one_or_none()
+    if full is not None:
+        cp = full.client_profile
+        if cp is None:
+            legacy = (await db.execute(
+                select(ClientProfile).where(ClientProfile.user_id == appointment.client_id)
+            )).scalar_one_or_none()
+            cp = legacy
+        if cp is not None:
+            service_name = full.service.name if full.service else "услуга"
+            await notify_user(
+                db, recipient_id=cp.user_id,
+                text=f"{master.name} подтвердил(а) запись: "
+                     f"{service_name}, {format_slot(appointment.appointment_date)}",
+                sender_id=master.id, audience="booking", link="appointments",
+            )
     await db.commit()
     await db.refresh(appointment)
     return appointment

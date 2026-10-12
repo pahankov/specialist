@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { adminApi, superAdminApi } from '../../api/client';
 import {
@@ -28,12 +29,14 @@ interface InboxItem {
   id: number;
   text: string;
   audience?: string | null;
+  link?: string | null;
   sender_name?: string | null;
   is_read: boolean;
   created_at?: string | null;
 }
 
 function NotificationsPage() {
+  const navigate = useNavigate();
   const section = useSectionPrefix();
   const isSuperSection = section === SUPER_PREFIX;
   const audiences = isSuperSection ? SUPER_AUDIENCES : MASTER_AUDIENCES;
@@ -195,7 +198,19 @@ function NotificationsPage() {
       setLastResult(data);
       setConfirmOpen(false);
       setText('');
-      toast.success(`В колокольчики доставлено: ${data.created} из ${data.total}`);
+      if (data.created === 0) {
+        toast.warning(
+          'Никому не доставлено: в этой аудитории нет получателей. ' +
+            (audience === 'my_clients'
+              ? 'Пока никто не записывался и не создан вами.'
+              : 'Проверьте выбор получателей.'),
+        );
+      } else {
+        toast.success(`В колокольчики доставлено: ${data.created} из ${data.total}`);
+      }
+      if (data.skipped_not_allowed > 0) {
+        toast.warning(`Пропущено без доступа: ${data.skipped_not_allowed}`);
+      }
       fetchSent();
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'Не удалось отправить'));
@@ -212,6 +227,11 @@ function NotificationsPage() {
     } catch {
       /* ignore */
     }
+  };
+
+  // Deep link: booking notices jump straight to the appointments list.
+  const openLinked = (n: InboxItem) => {
+    if (n.link === 'appointments') navigate(`${section}/appointments`);
   };
 
   const handleReadAll = async () => {
@@ -350,7 +370,21 @@ function NotificationsPage() {
           ) : (
             <div className="inbox-list">
               {inbox.map((n) => (
-                <div key={n.id} className={`inbox-item${n.is_read ? '' : ' unread'}`}>
+                <div
+                  key={n.id}
+                  className={`inbox-item${n.is_read ? '' : ' unread'}${n.link ? ' linked' : ''}`}
+                  onClick={() => openLinked(n)}
+                  role={n.link ? 'button' : undefined}
+                  tabIndex={n.link ? 0 : undefined}
+                  onKeyDown={
+                    n.link
+                      ? (e) => {
+                          if (e.key === 'Enter') openLinked(n);
+                        }
+                      : undefined
+                  }
+                  title={n.link === 'appointments' ? 'Перейти к записям →' : undefined}
+                >
                   <div className="inbox-text">{n.text}</div>
                   <div className="inbox-meta">
                     {n.sender_name && <span>от {n.sender_name}</span>}
@@ -358,7 +392,13 @@ function NotificationsPage() {
                       <span>{new Date(n.created_at).toLocaleString('ru-RU')}</span>
                     )}
                     {!n.is_read && (
-                      <button className="btn btn-sm btn-ghost" onClick={() => handleRead(n.id)}>
+                      <button
+                        className="btn btn-sm btn-ghost"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRead(n.id);
+                        }}
+                      >
                         ✓ Прочитано
                       </button>
                     )}

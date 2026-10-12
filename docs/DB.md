@@ -329,8 +329,9 @@
 | 8 | d4e5f6a7b8c9 | c3d4e5f6a7b8 | таблица `notification_broadcasts` (история отправок) | 2026-10-11 |
 | 9 | e5f6a7b8c9d0 | d4e5f6a7b8c9 | `users.last_name`, `master_profiles.cabinet_address/certificates` | 2026-10-12 |
 | 10 | f6a7b8c9d0e1 | e5f6a7b8c9d0 | `client_profiles.address` (локация клиента; ключ подбора — `users.city_id`) | 2026-10-12 |
+| 11 | 07b8c9d0e1f2 | f6a7b8c9d0e1 | `notifications.link` (диплинк в записи) | 2026-10-12 |
 
-**Head:** `f6a7b8c9d0e1`
+**Head:** `07b8c9d0e1f2`
 
 > Старая цепочка из 12 миграций (`9a9c2edb` → `b2c3d4e5f6a7`) удалена после squash —
 > история сохранена в git (`git log -- alembic/versions/`). Прод-БД со старым head

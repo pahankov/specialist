@@ -22,7 +22,10 @@ class Notification(Base):
     recipient_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"),
                           nullable=False, index=True)
     text = Column(Text, nullable=False)
-    audience = Column(String(20), nullable=True)  # all|masters|clients|my_clients|selected
+    audience = Column(String(20), nullable=True)
+    # Deep-link key resolved per section on the client
+    # ("appointments" → panel list / cabinet home).
+    link = Column(String(50), nullable=True)  # all|masters|clients|my_clients|selected
     is_read = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     read_at = Column(DateTime(timezone=True), nullable=True)
