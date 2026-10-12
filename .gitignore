@@ -134,3 +134,6 @@ test-*.png
 # Seed dumps (canonical seed lives in backend scripts, not dumps)
 seed_data.sql
 **/seed_data.sql
+
+# Uploaded user content (avatars, certificates) — user data, never in git
+online-booking/backend/app/static/
