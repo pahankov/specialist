@@ -367,9 +367,11 @@ async def book_my_appointment(
     )
     db.add(appointment)
     await db.flush()
+    client_note = (data.notes or "").strip()
     await notify_user(
         db, recipient_id=mp.user_id,
-        text=f"Новая запись: {user.name} — {item['name']}, {format_slot(appt_dt)}",
+        text=f"Новая запись: {user.name} — {item['name']}, {format_slot(appt_dt)}"
+             + (f" — «{client_note[:120]}»" if client_note else ""),
         sender_id=user.id, audience="booking", link="appointments",
     )
     await log_action(

@@ -693,6 +693,11 @@ function AppointmentsPage() {
                     <td>{new Date(a.appointment_date).toLocaleString('ru-RU')}</td>
                     <td>
                       <strong>{a.client_name || '—'}</strong>
+                      {a.notes ? (
+                        <span className="notes-dot" title={`💬 ${a.notes}`}>
+                          {' '}💬
+                        </span>
+                      ) : null}
                     </td>
                     <td>
                       <a href={`tel:${a.client_phone || ''}`}>{a.client_phone || '—'}</a>

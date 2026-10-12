@@ -18,6 +18,9 @@ class ServiceBundle(Base):
     name = Column(String(200), nullable=False)
     # Ordered service ids (validated: own + existing at write time).
     service_ids = Column(JSON, nullable=False, default=list)
+    # Per-service duration overrides inside the complex: {service_id: minutes}.
+    # Missing key = the service's own duration.
+    durations = Column(JSON, nullable=True)
     # Custom price; NULL = sum of services at booking time.
     price = Column(Numeric(10, 2), nullable=True)
     is_active = Column(Boolean, default=True)

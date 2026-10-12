@@ -320,3 +320,9 @@
     white-space: nowrap;
   }
 }
+
+/* Client comment marker in the client cell (full text on hover). */
+.notes-dot {
+  cursor: help;
+  font-size: 13px;
+}

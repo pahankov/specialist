@@ -4,7 +4,7 @@ Separate feature from services: bundles never mix into the services list;
 they are assembled from created services and booked as ONE appointment
 (durations sum up, price is custom or the sum).
 """
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -25,18 +25,51 @@ logger = get_logger(__name__)
 
 router = APIRouter()
 
+MIN_DURATION = 5
+MAX_DURATION = 480
+
 
 class BundleCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     service_ids: List[int] = Field(min_length=2, max_length=20)
+    durations: Optional[Dict[int, int]] = Field(default=None)
     price: Optional[float] = Field(default=None, ge=0)
 
 
 class BundleUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=200)
     service_ids: Optional[List[int]] = Field(default=None, min_length=2, max_length=20)
+    durations: Optional[Dict[int, int]] = Field(default=None)
     price: Optional[float] = Field(default=None, ge=0)
     is_active: Optional[bool] = None
+
+
+def effective_durations(bundle: ServiceBundle) -> Dict[int, int]:
+    """Member durations with per-service overrides applied (keys may be str)."""
+    raw = bundle.durations or {}
+    return {int(k): int(v) for k, v in raw.items()}
+
+
+def validate_durations(service_ids: list[int],
+                       durations: Optional[Dict[int, int]]) -> dict:
+    """Override map: subset of members, sane minutes. Stored with int keys."""
+    if not durations:
+        return {}
+    out = {}
+    for k, v in durations.items():
+        try:
+            sid, mins = int(k), int(v)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Некорректное время услуги")
+        if sid not in service_ids:
+            raise HTTPException(status_code=400, detail="Время для услуги вне комплекса")
+        if not (MIN_DURATION <= mins <= MAX_DURATION):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Время услуги — от {MIN_DURATION} до {MAX_DURATION} мин",
+            )
+        out[sid] = mins
+    return out
 
 
 async def _own_services(db: AsyncSession, mp_id: int, service_ids: list[int]) -> list[Service]:
@@ -53,18 +86,23 @@ async def _own_services(db: AsyncSession, mp_id: int, service_ids: list[int]) ->
 
 async def _bundle_to_dict(db: AsyncSession, b: ServiceBundle) -> dict:
     services = await _own_services(db, b.master_id, b.service_ids or [])
-    duration_total = sum(s.duration_minutes or 0 for s in services)
+    overrides = effective_durations(b)
+    items = [
+        {"id": s.id, "name": s.name,
+         "duration_minutes": overrides.get(s.id, s.duration_minutes or 0),
+         "base_duration_minutes": s.duration_minutes or 0,
+         "price": float(s.price or 0)}
+        for s in services
+    ]
+    duration_total = sum(i["duration_minutes"] for i in items)
     price_total = sum(float(s.price or 0) for s in services)
     return {
         "id": b.id,
         "master_id": b.master_id,
         "name": b.name,
         "service_ids": b.service_ids or [],
-        "services": [
-            {"id": s.id, "name": s.name,
-             "duration_minutes": s.duration_minutes, "price": float(s.price or 0)}
-            for s in services
-        ],
+        "durations": {str(k): v for k, v in overrides.items()},
+        "services": items,
         "duration_total": duration_total,
         "price_total": round(price_total, 2),
         # Custom price wins; NULL = sum at booking time.
@@ -94,9 +132,11 @@ async def create_bundle(
     """Assemble a complex from own services (min 2)."""
     mp_id = await get_master_profile_id(db, master)
     services = await _own_services(db, mp_id, data.service_ids)
+    ids = [s.id for s in services]
     b = ServiceBundle(
         master_id=mp_id, name=data.name.strip(),
-        service_ids=[s.id for s in services],
+        service_ids=ids,
+        durations=validate_durations(ids, data.durations),
         price=data.price, is_active=True,
     )
     db.add(b)
@@ -134,7 +174,17 @@ async def update_bundle(
         b.name = data.name.strip()
     if data.service_ids is not None:
         services = await _own_services(db, mp_id, data.service_ids)
-        b.service_ids = [s.id for s in services]
+        ids = [s.id for s in services]
+        b.service_ids = ids
+        # Composition changed: drop overrides for removed members, then
+        # validate the rest (explicit durations map wins over stored one).
+        stored = {int(k): int(v) for k, v in (b.durations or {}).items()
+                  if int(k) in ids}
+        incoming = data.durations if "durations" in data.model_fields_set else None
+        b.durations = validate_durations(
+            ids, incoming if incoming is not None else stored)
+    elif "durations" in data.model_fields_set:
+        b.durations = validate_durations(b.service_ids or [], data.durations)
     if "price" in data.model_fields_set:
         b.price = data.price
     if data.is_active is not None:

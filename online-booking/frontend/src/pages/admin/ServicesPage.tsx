@@ -53,6 +53,8 @@ function ServicesPage() {
   const [bundleName, setBundleName] = useState('');
   const [bundlePrice, setBundlePrice] = useState('');
   const [picked, setPicked] = useState<Set<number>>(new Set());
+  // Per-service minutes inside the complex (default = service's own time).
+  const [durMap, setDurMap] = useState<Record<number, number>>({});
 
   const existingCategories = [...new Set(services.map((s) => s.category).filter(Boolean))] as string[];
 
@@ -187,17 +189,22 @@ function ServicesPage() {
       setBundleName(b.name);
       setBundlePrice(b.price != null ? String(b.price) : '');
       setPicked(new Set(b.service_ids));
+      const dm: Record<number, number> = {};
+      for (const s of b.services) dm[s.id] = s.duration_minutes;
+      setDurMap(dm);
     } else {
       setEditingBundleId(null);
       setBundleName('');
       setBundlePrice('');
       setPicked(new Set());
+      setDurMap({});
     }
     setShowBundleForm(true);
   };
 
   const pickedServices = allServices.filter((s) => picked.has(s.id));
-  const pickedDuration = pickedServices.reduce((t, s) => t + (s.duration_minutes || 0), 0);
+  const effDur = (s: Service) => durMap[s.id] ?? s.duration_minutes ?? 0;
+  const pickedDuration = pickedServices.reduce((t, s) => t + effDur(s), 0);
   const pickedSum = pickedServices.reduce((t, s) => t + Number(s.price || 0), 0);
 
   const togglePicked = (id: number) => {
@@ -225,17 +232,24 @@ function ServicesPage() {
       setError('Некорректная цена');
       return;
     }
+    // Per-service minutes (clamped); backend re-validates.
+    const durations: Record<number, number> = {};
+    for (const s of pickedServices) {
+      const v = Math.round(Number(effDur(s)) || 0);
+      durations[s.id] = Math.min(480, Math.max(5, v));
+    }
     setError('');
     try {
       if (editingBundleId) {
         await adminApi.updateBundle(editingBundleId, {
           name,
           service_ids: [...picked],
+          durations,
           price: bundlePrice.trim() === '' ? null : Number(bundlePrice),
         });
         toast.success('Комплекс обновлён');
       } else {
-        await adminApi.createBundle({ name, service_ids: [...picked], price });
+        await adminApi.createBundle({ name, service_ids: [...picked], durations, price });
         toast.success('Комплекс собран');
       }
       setShowBundleForm(false);
@@ -413,9 +427,22 @@ function ServicesPage() {
               ⟲ Колонки
             </button>
             {services.length > 0 && (
-              <button className="btn btn-primary" onClick={openCreateForm}>
-                + Добавить услугу
-              </button>
+              <>
+                <button
+                  className="btn btn-primary"
+                  onClick={() => {
+                    openBundleForm();
+                    requestAnimationFrame(() => {
+                      document.getElementById('bundles-card')?.scrollIntoView?.({ behavior: 'smooth' });
+                    });
+                  }}
+                >
+                  ＋ Собрать комплекс
+                </button>
+                <button className="btn btn-primary" onClick={openCreateForm}>
+                  + Добавить услугу
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -494,12 +521,9 @@ function ServicesPage() {
       />
 
       {/* ─── Complexes: separate list, never mixed with services ─── */}
-      <div className="card" style={{ marginTop: 16 }}>
+      <div className="card" id="bundles-card" style={{ marginTop: 16 }}>
         <div className="card-header">
           <h3>🎁 Комплексы ({bundles.length})</h3>
-          <button className="btn btn-primary" onClick={() => openBundleForm()}>
-            ＋ Собрать комплекс
-          </button>
         </div>
         <p className="hint" style={{ margin: '0 0 12px' }}>
           Набор из созданных услуг: записываются одним слотом, время суммируется.
@@ -540,10 +564,26 @@ function ServicesPage() {
                         checked={picked.has(s.id)}
                         onChange={() => togglePicked(s.id)}
                       />
-                      <span>
+                      <span className="bundle-pick-name">
                         <strong>{s.name}</strong> · {s.duration_minutes} мин ·{' '}
                         {formatPrice(s.price)} ₽
                       </span>
+                      {picked.has(s.id) && (
+                        <span className="bundle-pick-mins">
+                          <input
+                            type="number"
+                            min={5}
+                            max={480}
+                            value={effDur(s)}
+                            aria-label={`Минут на услугу ${s.name} в комплексе`}
+                            onChange={(e) =>
+                              setDurMap((prev) => ({ ...prev, [s.id]: Number(e.target.value) }))
+                            }
+                            onClick={(e) => e.preventDefault()}
+                          />
+                          мин
+                        </span>
+                      )}
                     </label>
                   ))}
                 </div>

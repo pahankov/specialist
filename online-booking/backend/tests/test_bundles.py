@@ -255,3 +255,42 @@ class TestBundleBooking:
         mine = await client.get("/api/v1/client/appointments", headers=ch)
         assert any(a["bundle_id"] == bundle["id"] and a["service_name"] == "Set"
                    for a in mine.json())
+
+    async def test_duration_overrides(self, client, session):
+        user, mp = await _mk_master(session)
+        s1, s2 = await _mk_services(session, mp)
+        h = await _master_headers(session, user)
+
+        r = await client.post(
+            "/api/v1/admin/bundles",
+            json={"name": "Express", "service_ids": [s1.id, s2.id],
+                  "durations": {str(s1.id): 30}},
+            headers=h,
+        )
+        assert r.status_code == 201, r.text
+        body = r.json()
+        # 30 (override) + 90 (own) = 120, not 150.
+        assert body["duration_total"] == 120
+        assert body["services"][0]["duration_minutes"] == 30
+        assert body["services"][0]["base_duration_minutes"] == 60
+
+        # Booking uses the overridden total.
+        ch, _ = await _client_headers(session)
+        day = self._day()
+        b = await client.post(
+            "/api/v1/client/appointments",
+            json={"master_id": mp.id, "bundle_id": body["id"],
+                  "appointment_date": day.isoformat()},
+            headers=ch,
+        )
+        assert b.status_code == 201, b.text
+        assert b.json()["service_name"] == "Express"
+
+        # Override outside the complex is rejected.
+        bad = await client.post(
+            "/api/v1/admin/bundles",
+            json={"name": "Bad", "service_ids": [s1.id, s2.id],
+                  "durations": {"999999": 30}},
+            headers=h,
+        )
+        assert bad.status_code == 400

@@ -51,6 +51,12 @@
   border-radius: 8px;
   font-weight: 500;
 }
+
+/* Header buttons must not wrap mid-word (e.g. "+ Добавить услугу"). */
+.card-header .btn {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
 .services-table {
   width: 100%;
   border-collapse: collapse;
@@ -222,4 +228,24 @@
   padding: 0;
   accent-color: #d6336c;
   cursor: pointer;
+}
+
+.bundle-pick-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.bundle-pick-mins {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #666;
+  flex-shrink: 0;
+}
+
+.bundle-pick-mins input {
+  width: 64px !important;
+  padding: 2px 6px !important;
+  font-size: 13px;
 }

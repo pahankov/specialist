@@ -75,7 +75,10 @@ async def resolve_booking_item(
                 status_code=400,
                 detail="Комплекс изменился — попросите мастера обновить его",
             )
-        duration = sum(s.duration_minutes or 0 for s in members)
+        from app.modules.admin.bundles import effective_durations
+        overrides = effective_durations(b)
+        duration = sum(overrides.get(s.id, s.duration_minutes or 0)
+                       for s in members)
         price = float(b.price) if b.price is not None else \
             round(sum(float(s.price or 0) for s in members), 2)
         return {

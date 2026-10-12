@@ -26,6 +26,7 @@ export interface BundleService {
   id: number;
   name: string;
   duration_minutes: number;
+  base_duration_minutes: number;
   price: number;
 }
 
@@ -34,6 +35,7 @@ export interface Bundle {
   master_id: number;
   name: string;
   service_ids: number[];
+  durations: Record<string, number>;
   services: BundleService[];
   duration_total: number;
   price_total: number;

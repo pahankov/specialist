@@ -246,12 +246,14 @@ async def public_booking(booking: PublicBookingCreate, db: AsyncSession = Depend
         await db.refresh(client)
 
     # Create appointment
+    client_note = (booking.notes or "").strip()
     appointment = Appointment(
         master_id=booking.master_id,
         service_id=booking.service_id,
         client_id=client.id,
         appointment_date=booking.appointment_date,
-        status="pending"
+        status="pending",
+        notes=client_note or None,
     )
 
     db.add(appointment)
@@ -259,7 +261,8 @@ async def public_booking(booking: PublicBookingCreate, db: AsyncSession = Depend
     await notify_user(
         db, recipient_id=master_profile.user_id,
         text=f"Новая запись: {booking.client_name} — "
-             f"{service.name}, {format_slot(booking.appointment_date)}",
+             f"{service.name}, {format_slot(booking.appointment_date)}"
+             + (f" — «{client_note[:120]}»" if client_note else ""),
         sender_id=client.user_id, audience="booking", link="appointments",
     )
     await db.commit()

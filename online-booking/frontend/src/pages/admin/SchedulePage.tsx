@@ -25,6 +25,13 @@ import {
   handleBookAppointment,
 } from '../../components/schedule/hooks';
 
+function labelOf(a: Appointment): string {
+  const who = a.client_name || 'клиент';
+  const what = a.service_name || 'запись';
+  const when = String(a.appointment_date).slice(0, 16).replace('T', ' ');
+  return `${who} — ${what} (${when})`;
+}
+
 function SchedulePage() {
   const [schedule, setSchedule] = useState<Record<string, DaySchedule>>({});
   const [currentMonthISO, setCurrentMonthISO] = usePersistentState(
@@ -46,6 +53,13 @@ function SchedulePage() {
   // Month bookings failed to load (backend down/flapping): stale days must
   // say so instead of silently showing an empty month.
   const [monthError, setMonthError] = useState('');
+  // Slot cancel asks for a reason (no silent one-click cancels).
+  const [cancelTarget, setCancelTarget] = useState<{
+    id: number;
+    label: string;
+    notes?: string | null;
+  } | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
   const [bookingClients, setBookingClients] = useState<Client[]>([]);
   const [bookingServices, setBookingServices] = useState<Service[]>([]);
   const [bookingLoading, setBookingLoading] = useState(false);
@@ -357,16 +371,27 @@ function SchedulePage() {
 
   const handleCancelSlotAppointment = useCallback(
     async (id: number) => {
-      try {
-        await adminApi.cancelAppointment(id, 'Отмена из расписания');
-        toast.success('Запись отменена');
-        await refreshMonthAppointments();
-      } catch (err: unknown) {
-        setError(getApiErrorMessage(err, 'Не удалось отменить запись'));
-      }
+      // Never one-click: master must confirm + give a reason (the client
+      // gets it in the bell), and sees the client's comment for context.
+      const found = appointments.find((a) => a.id === id) || null;
+      setCancelTarget(found ? { id, label: labelOf(found), notes: found.notes } : { id, label: '', notes: undefined });
+      setCancelReason('');
     },
-    [refreshMonthAppointments],
+    [appointments],
   );
+
+  const handleConfirmSlotCancel = useCallback(async () => {
+    if (!cancelTarget || !cancelReason.trim()) return;
+    try {
+      await adminApi.cancelAppointment(cancelTarget.id, cancelReason.trim());
+      toast.success('Запись отменена');
+      setCancelTarget(null);
+      setCancelReason('');
+      await refreshMonthAppointments();
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, 'Не удалось отменить запись'));
+    }
+  }, [cancelTarget, cancelReason, refreshMonthAppointments]);
 
   const handleConfirmSlotAppointment = useCallback(
     async (id: number) => {
@@ -728,6 +753,39 @@ function SchedulePage() {
         hideCancel
         onConfirm={() => setError('')}
       />
+
+      {/* Slot cancel: confirm + mandatory reason, client comment visible */}
+      <ConfirmDialog
+        open={cancelTarget !== null}
+        onClose={() => setCancelTarget(null)}
+        title="❌ Отменить запись?"
+        message={cancelTarget?.label}
+        confirmLabel="Отменить запись"
+        danger
+        confirmDisabled={!cancelReason.trim()}
+        onConfirm={handleConfirmSlotCancel}
+      >
+        {cancelTarget?.notes ? (
+          <p className="modal-message">💬 Комментарий клиента: {cancelTarget.notes}</p>
+        ) : null}
+        <div className="form-group">
+          <label>Причина отмены (клиент увидит её в уведомлении)</label>
+          <textarea
+            value={cancelReason}
+            onChange={(e) => setCancelReason(e.target.value)}
+            placeholder="Укажите причину..."
+            rows={3}
+            style={{
+              width: '100%',
+              padding: 10,
+              border: '2px solid #e0e0e0',
+              borderRadius: 8,
+              fontSize: 14,
+              resize: 'vertical',
+            }}
+          />
+        </div>
+      </ConfirmDialog>
 
       <BookingModal
         open={bookingForm.open}

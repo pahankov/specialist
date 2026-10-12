@@ -181,50 +181,28 @@ function CabinetBookPage() {
     });
   }, [masters, masterQuery, serviceFilter, servicesByMaster]);
 
-  // Complexes of visible masters (separate list, never mixed with services).
+  // Complexes of the chosen master (booking modal only — never a
+  // standalone list: complexes belong to their master).
   const [bundlesByMaster, setBundlesByMaster] = useState<Record<number, Bundle[]>>({});
   useEffect(() => {
+    if (!selectedMaster) return;
     let cancelled = false;
-    (async () => {
-      const missing = masters.map((m) => m.id).filter((id) => !(id in bundlesByMaster));
-      if (missing.length === 0) return;
-      const entries = await Promise.all(
-        missing.map(async (id) => {
-          try {
-            const r = await cabinetApi.bundles(id);
-            return [id, r.data || []] as const;
-          } catch {
-            return [id, []] as const;
-          }
-        }),
-      );
-      if (!cancelled) {
-        setBundlesByMaster((prev) => ({ ...prev, ...Object.fromEntries(entries) }));
-      }
-    })();
+    cabinetApi.bundles(selectedMaster.id).then(
+      (r) => {
+        if (!cancelled) {
+          setBundlesByMaster((prev) => ({ ...prev, [selectedMaster.id]: r.data || [] }));
+        }
+      },
+      () => {
+        if (!cancelled) {
+          setBundlesByMaster((prev) => ({ ...prev, [selectedMaster.id]: [] }));
+        }
+      },
+    );
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [masters]);
-
-  const visibleBundles = useMemo(
-    () =>
-      visibleMasters.flatMap((m) =>
-        (bundlesByMaster[m.id] || []).map((b) => ({ bundle: b, master: m })),
-      ),
-    [visibleMasters, bundlesByMaster],
-  );
-
-  const pickBundle = (master: Master, bundle: Bundle) => {
-    setSelectedMaster(master);
-    setModalBundle(bundle);
-    setModalServiceId('');
-    requestAnimationFrame(() => {
-      // jsdom (tests) has no scrollIntoView — optional call.
-      document.getElementById('cabinet-schedule')?.scrollIntoView?.({ behavior: 'smooth' });
-    });
-  };
+  }, [selectedMaster?.id]);
 
   // Active schedule of the chosen master.
   useEffect(() => {
@@ -439,50 +417,6 @@ function CabinetBookPage() {
         </div>
       )}
 
-      {visibleBundles.length > 0 && (
-        <div className="card" style={{ marginTop: 16 }}>
-          <div className="card-header">
-            <h3>🎁 Комплексы</h3>
-          </div>
-          <p className="hint" style={{ margin: '0 0 12px' }}>
-            Набор услуг одним слотом — выберите, затем день и время ниже.
-          </p>
-          <div className="bundle-pick-list">
-            {visibleBundles.map(({ bundle: b, master: m }) => (
-              <div
-                key={`${m.id}-${b.id}`}
-                className={`bundle-pick-row${modalBundle?.id === b.id && selectedMaster?.id === m.id ? ' selected' : ''}`}
-              >
-                <span className="bundle-pick-main">
-                  <strong>{b.name}</strong>
-                  <span className="bundle-pick-master">{m.name}</span>
-                  <span className="bundle-pick-comp">
-                    {b.services.map((s) => `${s.name} (${s.duration_minutes} мин)`).join(' + ')}
-                  </span>
-                  <span className="bundle-pick-totals">
-                    ⏱ {b.duration_total} мин ·{' '}
-                    {b.price != null ? (
-                      <>
-                        <s>{b.price_total} ₽</s> <strong>{b.effective_price} ₽</strong>
-                      </>
-                    ) : (
-                      <strong>{b.effective_price} ₽</strong>
-                    )}
-                  </span>
-                </span>
-                <button
-                  type="button"
-                  className="btn btn-sm btn-primary"
-                  onClick={() => pickBundle(m, b)}
-                >
-                  Выбрать
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {selectedMaster && (
         <div className="card" id="cabinet-schedule" style={{ marginTop: 16 }}>
           <div className="card-header">
@@ -580,6 +514,7 @@ function CabinetBookPage() {
               ) : (
               <select
                 value={modalPickValue}
+                aria-label="Выбор услуги или комплекса"
                 onChange={(e) => handleModalPick(e.target.value)}
               >
                 <option value="" disabled>

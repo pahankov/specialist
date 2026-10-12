@@ -165,7 +165,11 @@ function generateHourSlots(
         {slotsForHour.length > 0 ? (
           <div className="time-slot-appointments">
             {slotsForHour.map((a) => (
-              <div key={a.id} className="time-slot-appt">
+              <div
+                key={a.id}
+                className="time-slot-appt"
+                title={a.notes ? `💬 ${a.notes}` : undefined}
+              >
                 <span className="appt-client">{a.client_name || 'Клиент'}</span>
                 <span className="appt-service">
                   {a.service_name}
@@ -176,6 +180,9 @@ function generateHourSlots(
                 <span className={`appt-status status-${a.status}`}>
                   {STATUS_CONFIG[a.status]?.label || a.status}
                 </span>
+                {a.notes ? (
+                  <span className="appt-notes">💬 {a.notes}</span>
+                ) : null}
               </div>
             ))}
           </div>

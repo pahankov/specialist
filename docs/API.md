@@ -89,7 +89,7 @@
 | `PATCH` | `/api/v1/client/me` | Имя/фамилия/город/адрес (`city_id` проверяется, 404) |
 | `GET` | `/api/v1/client/stats` | Дашборд: траты, визиты, предстоящие, любимые мастер/услуга |
 | `GET` | `/api/v1/client/appointments` | Свои записи (все, новые сверху; фронт делит на будущие/историю) |
-| `POST` | `/api/v1/client/appointments` | Своя запись из визарда (`master_id` + ровно один из `service_id`/`bundle_id` + date, проверка конфликтов по длительностям, статус pending; мастеру падает в колокольчик) |
+| `POST` | `/api/v1/client/appointments` | Своя запись из визарда (`master_id` + ровно один из `service_id`/`bundle_id` + date, проверка конфликтов по длительностям, статус pending; мастеру падает в колокольчик вместе с комментарием клиента) |
 | `GET` | `/api/v1/client/bundles?master_id=` | Активные комплексы мастера (состав, суммарное время, цена) |
 | `GET` | `/api/v1/client/booking/schedule` | Активное расписание мастера на месяц (окно + рабочие дни + занятые гранулы, без персональных данных) |
 | `POST` | `/api/v1/client/appointments/{id}/cancel` | Отмена своей pending/confirmed записи (чужая — 404, финальная — 400; пишется в аудит) |
@@ -120,8 +120,8 @@
 | `PATCH` | `/admin/services/{id}` | Обновить услугу |
 | `DELETE` | `/admin/services/{id}` | Soft-delete услуги |
 | `GET` | `/admin/bundles` | Свои комплексы (состав, суммы времени/цены, своя цена) |
-| `POST` | `/admin/bundles` | Собрать комплекс (`name`, `service_ids` ≥2 своих услуг, `price?`) |
-| `PATCH` | `/admin/bundles/{id}` | Обновить комплекс (состав/цена/`is_active`; `price: null` — сброс к сумме) |
+| `POST` | `/admin/bundles` | Собрать комплекс (`name`, `service_ids` ≥2 своих услуг, `durations?` {id: мин}, `price?`) |
+| `PATCH` | `/admin/bundles/{id}` | Обновить комплекс (состав/время/цена/`is_active`; `price: null` — сброс к сумме) |
 | `DELETE` | `/admin/bundles/{id}` | Удалить комплекс (прошлые записи хранят `bundle_name`) |
 | `GET` | `/admin/clients` | Свои клиенты (мастер: с записями у него или созданные им; супер: все). Пагинация, `city_id`/`city_name`, `address` |
 | `POST` | `/admin/clients` | Создать клиента (адрес одним полем + `city_name` для подбора; `city_id` тоже можно) |

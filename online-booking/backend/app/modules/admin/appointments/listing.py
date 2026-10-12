@@ -208,6 +208,7 @@ async def get_appointments_by_date(
          "service_name": a.bundle_name or (a.service.name if a.service else ""),
          "service_duration": (a.duration_minutes if a.duration_minutes is not None
                               else (a.service.duration_minutes if a.service else None)),
-         "appointment_date": a.appointment_date.isoformat(), "status": a.status}
+         "appointment_date": a.appointment_date.isoformat(), "status": a.status,
+         "notes": a.notes}
         for a in appointments
     ]

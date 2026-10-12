@@ -141,7 +141,9 @@ export function Calendar({
             holdCount = holdIds.size;
             apptCount = liveIds.size;
           }
-          const hasLive = liveIds.size + holdIds.size > 0;
+          const holdsOnly = holdIds.size > 0 && liveIds.size === 0;
+          // Pending-only days glow amber (awaiting confirmation);
+          // confirmed presence keeps the green booking tint.
           const dayLabel =
             holdCount > 0 && apptCount > 0
               ? `${pluralBookings(apptCount)} · ${pluralHolds(holdCount)}`
@@ -155,7 +157,7 @@ export function Calendar({
             <div
               key={i}
               data-date={day.date.toISOString()}
-              className={`calendar-day ${day.isCurrentMonth ? '' : 'other-month'} ${active ? 'active' : 'inactive'} ${today ? 'today' : ''} ${selected ? 'selected' : ''} ${past ? 'past' : ''} ${hasLive && !past ? 'has-bookings' : ''}`}
+              className={`calendar-day ${day.isCurrentMonth ? '' : 'other-month'} ${active ? 'active' : 'inactive'} ${today ? 'today' : ''} ${selected ? 'selected' : ''} ${past ? 'past' : ''} ${liveIds.size > 0 && !past ? 'has-bookings' : ''} ${holdsOnly && !past ? 'has-holds' : ''}`}
               onClick={() => handleDayClick(day.date, day.isCurrentMonth, past)}
               onPointerDown={(e) => handlePointerDown(e, day.date)}
               onPointerUp={handlePointerUp}

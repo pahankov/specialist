@@ -188,12 +188,12 @@ export const adminApi = {
   getBundles() {
     return apiClient.get<Bundle[]>('/api/v1/admin/bundles');
   },
-  createBundle(data: { name: string; service_ids: number[]; price?: number }) {
+  createBundle(data: { name: string; service_ids: number[]; durations?: Record<number, number>; price?: number }) {
     return apiClient.post<Bundle>('/api/v1/admin/bundles', data);
   },
   updateBundle(
     id: number,
-    data: { name?: string; service_ids?: number[]; price?: number | null; is_active?: boolean },
+    data: { name?: string; service_ids?: number[]; durations?: Record<number, number>; price?: number | null; is_active?: boolean },
   ) {
     return apiClient.patch<Bundle>(`/api/v1/admin/bundles/${id}`, data);
   },

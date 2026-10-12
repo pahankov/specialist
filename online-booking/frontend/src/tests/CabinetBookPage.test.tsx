@@ -141,7 +141,7 @@ describe('CabinetBookPage', () => {
     expect(await screen.findByText('cabinet home')).toBeInTheDocument();
   });
 
-  it('lists complexes separately and books a locked bundle', async () => {
+  it('books a complex from the modal select (complexes first)', async () => {
     const future = new Date();
     future.setDate(future.getDate() + 5);
     const pad = (n: number) => String(n).padStart(2, '0');
@@ -157,11 +157,13 @@ describe('CabinetBookPage', () => {
     });
     bookAppointment.mockResolvedValue({ data: { id: 101 } });
     renderPage();
-    // Complexes section is separate from services.
-    expect(await screen.findByText('🎁 Комплексы')).toBeInTheDocument();
-    expect(screen.getByText('Сет')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getAllByText(/Елена/).length).toBeGreaterThan(0);
+    });
+    // No standalone complexes list: complexes live in the booking modal.
+    expect(screen.queryByText('🎁 Комплексы')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('Выбрать'));
+    fireEvent.click(screen.getByText(/Елена/, { selector: 'strong' }));
     expect(await screen.findByText(/активное расписание/)).toBeInTheDocument();
     if (monthStr !== new Date().toISOString().slice(0, 7)) {
       fireEvent.click(screen.getByText('→'));
@@ -173,7 +175,12 @@ describe('CabinetBookPage', () => {
     );
     const bookButtons = await screen.findAllByText('+ Записаться');
     fireEvent.click(bookButtons[0]);
-    // Bundle is locked in the modal instead of the service select.
+    expect(await screen.findByText(/Подтвердите запись/)).toBeInTheDocument();
+
+    // Complexes optgroup comes first in the service select.
+    fireEvent.change(screen.getByLabelText('Выбор услуги или комплекса'), {
+      target: { value: 'bundle:100' },
+    });
     expect(await screen.findByText('🎁 Сет')).toBeInTheDocument();
 
     fireEvent.click(

@@ -281,6 +281,7 @@
 | master_id | INTEGER | NOT NULL, FK -> master_profiles.id ON DELETE CASCADE | ID мастера |
 | name | VARCHAR(200) | NOT NULL | Название комплекса |
 | service_ids | JSON | NOT NULL | Упорядоченные ID услуг (свои, ≥2) |
+| durations | JSON | NULLABLE | Переопределения минут {service_id: мин} (нет ключа = своё время услуги) |
 | price | NUMERIC(10,2) | NULLABLE | Своя цена; NULL = сумма услуг на момент записи |
 | is_active | BOOLEAN | DEFAULT TRUE | Видимость клиентам |
 | created_at | TIMESTAMP WITH TIME ZONE | | Дата создания |
@@ -356,8 +357,9 @@
 | 11 | 07b8c9d0e1f2 | f6a7b8c9d0e1 | `notifications.link` (диплинк в записи) | 2026-10-12 |
 | 12 | 08c9d0e1f2a3 | 07b8c9d0e1f2 | `master_profiles.avatar_preset` (стандартный аватар-эмодзи) | 2026-10-12 |
 | 13 | 09e0f1a2b3c4 | 08c9d0e1f2a3 | `service_bundles` + `appointments.bundle_id/bundle_name/duration_minutes/price`, `service_id` NULLABLE | 2026-10-12 |
+| 14 | 0af0e1d2c3b4 | 09e0f1a2b3c4 | `service_bundles.durations` (своё время услуги в комплексе) | 2026-10-12 |
 
-**Head:** `09e0f1a2b3c4`
+**Head:** `0af0e1d2c3b4`
 
 > Старая цепочка из 12 миграций (`9a9c2edb` → `b2c3d4e5f6a7`) удалена после squash —
 > история сохранена в git (`git log -- alembic/versions/`). Прод-БД со старым head
