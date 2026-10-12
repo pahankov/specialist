@@ -302,10 +302,13 @@ async def register_unified(
     city_name: Optional[str],
     telegram_username: Optional[str],
     is_master: bool,
-    db: AsyncSession
+    db: AsyncSession,
+    last_name: Optional[str] = None,
 ) -> User:
     """Full registration with role selection (client or master).
-    
+
+    `name` is the first name; `last_name` optional. The display `name`
+    stores "Имя Фамилия" so every existing list/badge keeps working.
     Returns User instance with appropriate profile.
     """
     logger.info("Unified registration: %s (is_master=%s)", email, is_master)
@@ -336,9 +339,12 @@ async def register_unified(
         )
         city_id = result.scalar_one_or_none()
 
-    # Create user
+    # Create user (display name keeps "Имя Фамилия" for all existing views)
+    first = name.strip()
+    last = (last_name or "").strip()
     new_user = User(
-        name=name,
+        name=f"{first} {last}".strip() if last else first,
+        last_name=last or None,
         email=email,
         phone=phone,
         hashed_password=hash_password(password),

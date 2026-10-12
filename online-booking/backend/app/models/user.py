@@ -33,6 +33,9 @@ class User(Base):
     phone = Column(String(20), unique=True, nullable=True)
     hashed_password = Column(String(255), nullable=True)  # null for OTP-only clients
     name = Column(String(100), nullable=False)
+    # Surname is entered separately at registration (editable in profile);
+    # `name` keeps the full display value "Имя Фамилия".
+    last_name = Column(String(100), nullable=True)
     role = Column(Enum(UserRole), nullable=False, default=UserRole.CLIENT)
     city_id = Column(Integer, ForeignKey("cities.id", ondelete="SET NULL"), nullable=True)
     # Which master created this user (set on ClientsPage "+ Добавить клиента").

@@ -15,6 +15,7 @@ import MasterDetailPage from './pages/admin/MasterDetailPage';
 import LogsPage from './pages/admin/LogsPage';
 import RevenuePage from './pages/admin/RevenuePage';
 import NotificationsPage from './pages/admin/NotificationsPage';
+import ProfilePage from './pages/admin/ProfilePage';
 import CabinetPage from './pages/cabinet/CabinetPage';
 import ClientLayout from './pages/cabinet/ClientLayout';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -84,6 +85,7 @@ const masterNavItems = [
   { path: `${ADMIN_PREFIX}/clients`, label: '👥 Клиенты' },
   { path: `${ADMIN_PREFIX}/schedule`, label: '🕐 Расписание' },
   { path: `${ADMIN_PREFIX}/notifications`, label: '🔔 Уведомления' },
+  { path: `${ADMIN_PREFIX}/profile`, label: '👤 Профиль' },
 ];
 
 function App() {
@@ -129,6 +131,7 @@ function App() {
             <Route path="clients" element={<ClientsPage />} />
             <Route path="schedule" element={<SchedulePage />} />
             <Route path="notifications" element={<NotificationsPage />} />
+            <Route path="profile" element={<ProfilePage />} />
           </Route>
 
           {/* Superadmin section: own layout, own nav, own URLs */}

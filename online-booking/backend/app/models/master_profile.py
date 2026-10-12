@@ -1,5 +1,5 @@
 """Master profile — stores master-specific data separate from User."""
-from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, DateTime, Index
+from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, DateTime, Index, JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime, timedelta, timezone
 from enum import Enum
@@ -35,6 +35,10 @@ class MasterProfile(Base):
     # [work_start_hour, work_end_hour). Defaults 08:00-22:00.
     work_start_hour = Column(Integer, default=8, nullable=False)
     work_end_hour = Column(Integer, default=22, nullable=False)
+    # Cabinet address (free text, picked via DaData suggest on the client).
+    cabinet_address = Column(String(500), nullable=True)
+    # Certificates: [{name, url?}] — editable by the master in profile.
+    certificates = Column(JSON, nullable=False, default=list)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc))

@@ -28,6 +28,7 @@ class UnifiedLoginRequest(BaseModel):
 class UnifiedRegisterRequest(BaseModel):
     """Full registration with role selection."""
     name: str
+    last_name: Optional[str] = None
     email: EmailStr
     phone: str
     password: str

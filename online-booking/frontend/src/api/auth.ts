@@ -5,9 +5,11 @@ import type { LoginResponse, UnifiedRegisterResponse } from './types';
 
 export interface UnifiedRegisterData {
   name: string;
+  last_name?: string | null;
   email: string;
   phone: string;
   password: string;
+  city_name?: string | null;
   city_data?: Record<string, unknown> | null;
   telegram_username?: string | null;
   is_master: boolean;

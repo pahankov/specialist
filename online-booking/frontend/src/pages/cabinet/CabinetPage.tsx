@@ -33,6 +33,8 @@ function CabinetPage() {
     { id: number; text: string; sender_name?: string | null; is_read: boolean; created_at?: string | null }[]
   >([]);
   const [notesUnread, setNotesUnread] = useState(0);
+  // City was already given at registration — show it, edit only on demand.
+  const [changingCity, setChangingCity] = useState(false);
 
   const fetchNotes = async () => {
     try {
@@ -76,6 +78,7 @@ function CabinetPage() {
     try {
       const resp = await cabinetApi.updateMe({ city_id: city.id });
       setMe(resp.data);
+      setChangingCity(false);
       toast.success(`Ваш город — ${resp.data.city_name || city.name}`);
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'Не удалось сохранить город'));
@@ -148,11 +151,20 @@ function CabinetPage() {
 
       <div className="cabinet-city-row">
         <span className="cabinet-city-label">Ваш город:</span>
-        <CitySelect
-          value={me?.city_id ?? null}
-          valueName={me?.city_name ?? ''}
-          onChange={handleCityChange}
-        />
+        {me?.city_id && !changingCity ? (
+          <>
+            <strong>{me.city_name}</strong>
+            <button className="btn btn-sm btn-ghost" onClick={() => setChangingCity(true)}>
+              Изменить
+            </button>
+          </>
+        ) : (
+          <CitySelect
+            value={me?.city_id ?? null}
+            valueName={me?.city_name ?? ''}
+            onChange={handleCityChange}
+          />
+        )}
       </div>
 
       {stats && (

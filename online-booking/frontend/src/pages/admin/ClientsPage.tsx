@@ -23,6 +23,7 @@ import {
 } from '../../components/common';
 import type { CityOption } from '../../components/common/CitySelect';
 import { useSectionPrefix, SUPER_PREFIX } from '../../utils/section';
+import { capitalizeWords } from '../../utils/names';
 import '../../styles/filters.css';
 import '../../styles/tables.css';
 import './ClientsPage.css';
@@ -294,7 +295,7 @@ function ClientsPage() {
                 <label>Имя</label>
                 <input
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) => setName(capitalizeWords(e.target.value))}
                   required
                   placeholder="Иван Иванов"
                 />

@@ -20,6 +20,7 @@ function DashboardPage() {
   // Own city (master only): default for newly created clients.
   const [myCity, setMyCity] = useState<CityOption | null>(null);
   const [myCityLoaded, setMyCityLoaded] = useState(false);
+  const [changingCity, setChangingCity] = useState(false);
 
   useEffect(() => {
     if (isSuperSection) return;
@@ -42,6 +43,7 @@ function DashboardPage() {
     try {
       const { data } = await adminApi.updateProfile({ city_id: city.id });
       setMyCity({ id: city.id, name: data.city_name || city.name, source: 'local' });
+      setChangingCity(false);
       toast.success(`Ваш город — ${data.city_name || city.name}. Новые клиенты получат его автоматически`);
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'Не удалось сохранить город'));
@@ -109,19 +111,26 @@ function DashboardPage() {
             }}
           >
             <span style={{ fontSize: 14, fontWeight: 600 }}>📍 Мой город:</span>
-            <div style={{ minWidth: 260, flex: '1 1 260px', maxWidth: 420 }}>
-              <CitySelect
-                value={myCity?.id ?? null}
-                valueName={myCity?.name ?? ''}
-                onChange={handleCityChange}
-                label=""
-              />
-            </div>
-            <span style={{ fontSize: 12, color: '#666' }}>
-              {myCity
-                ? 'Новые клиенты получат его автоматически'
-                : 'Укажите город, чтобы находить друг друга с клиентами'}
-            </span>
+            {myCity && !changingCity ? (
+              <>
+                <strong>{myCity.name}</strong>
+                <button className="btn btn-sm btn-ghost" onClick={() => setChangingCity(true)}>
+                  Изменить
+                </button>
+                <span style={{ fontSize: 12, color: '#666' }}>
+                  Новые клиенты получат его автоматически
+                </span>
+              </>
+            ) : (
+              <div style={{ minWidth: 260, flex: '1 1 260px', maxWidth: 420 }}>
+                <CitySelect
+                  value={myCity?.id ?? null}
+                  valueName={myCity?.name ?? ''}
+                  onChange={handleCityChange}
+                  label=""
+                />
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -41,6 +41,9 @@ function ServicesPage() {
   const [price, setPrice] = useState(1000);
   const [lastCategory, setLastCategory] = usePersistentState('services.lastCategory', '');
   const [category, setCategory] = useState('');
+  const [categoryCustom, setCategoryCustom] = useState(false);
+
+  const existingCategories = [...new Set(services.map((s) => s.category).filter(Boolean))] as string[];
 
   const fetchData = async () => {
     try {
@@ -67,6 +70,7 @@ function ServicesPage() {
     setDuration(30);
     setPrice(1000);
     setCategory('');
+    setCategoryCustom(false);
     setEditingId(null);
     setShowForm(false);
   };
@@ -81,6 +85,11 @@ function ServicesPage() {
     setDuration(30);
     setPrice(1000);
     setCategory(lastCategory);
+    // Stale memory (category was deleted meanwhile) → free input, not a lie.
+    setCategoryCustom(
+      lastCategory !== '' &&
+        ![...new Set(services.map((s) => s.category).filter(Boolean))].includes(lastCategory),
+    );
     setEditingId(null);
     setShowForm(true);
     setError('');
@@ -124,6 +133,11 @@ function ServicesPage() {
     setDuration(s.duration_minutes);
     setPrice(Number(s.price));
     setCategory(s.category || '');
+    // Category from another page (pagination) isn't in the visible list.
+    setCategoryCustom(
+      !!s.category &&
+        ![...new Set(services.map((x) => x.category).filter(Boolean))].includes(s.category),
+    );
     setEditingId(s.id);
     setShowForm(true);
     setError('');
@@ -168,18 +182,55 @@ function ServicesPage() {
           <form onSubmit={handleSubmit}>
             <div className="form-group" style={{ marginBottom: 16 }}>
               <label>Категория</label>
-              <input
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                placeholder="Например: Ногти, Шугаринг, Ресницы"
-                list="service-categories"
-                autoFocus={!editingId}
-              />
-              <datalist id="service-categories">
-                {[...new Set(services.map((s) => s.category).filter(Boolean))].map((c) => (
-                  <option key={c} value={c as string} />
-                ))}
-              </datalist>
+              {!categoryCustom && existingCategories.length > 0 ? (
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <select
+                    value={existingCategories.includes(category) ? category : ''}
+                    onChange={(e) => {
+                      if (e.target.value === '__new__') {
+                        setCategoryCustom(true);
+                        setCategory('');
+                      } else {
+                        setCategory(e.target.value);
+                      }
+                    }}
+                    style={{ flex: 1 }}
+                    autoFocus={!editingId}
+                  >
+                    <option value="" disabled>
+                      Выберите из созданных…
+                    </option>
+                    {existingCategories.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                    <option value="__new__">＋ Новая категория…</option>
+                  </select>
+                </div>
+              ) : (
+                <>
+                  <input
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    placeholder="Например: Ногти, Шугаринг, Ресницы"
+                    autoFocus={!editingId}
+                  />
+                  {existingCategories.length > 0 && (
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-ghost"
+                      style={{ marginTop: 6, alignSelf: 'flex-start' }}
+                      onClick={() => {
+                        setCategoryCustom(false);
+                        setCategory(lastCategory);
+                      }}
+                    >
+                      ← Выбрать из созданных
+                    </button>
+                  )}
+                </>
+              )}
               {!editingId && lastCategory && (
                 <span style={{ fontSize: 12, color: '#666' }}>
                   Последняя: {lastCategory} — подставлена автоматически

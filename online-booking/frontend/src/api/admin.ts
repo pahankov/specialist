@@ -14,17 +14,35 @@ export const adminApi = {
     return apiClient.get<{
       id: number;
       name: string;
+      last_name?: string | null;
       city_id?: number | null;
       city_name?: string | null;
+      telegram_username?: string | null;
+      description?: string | null;
+      avatar_url?: string | null;
+      experience_years?: number | null;
+      cabinet_address?: string | null;
+      certificates?: { name: string; url?: string }[];
     }>('/api/v1/admin/profile');
   },
-  updateProfile(data: { city_id?: number | null }) {
-    return apiClient.patch<{
-      id: number;
-      name: string;
-      city_id?: number | null;
-      city_name?: string | null;
-    }>('/api/v1/admin/profile', data);
+  updateProfile(data: {
+    name?: string;
+    last_name?: string | null;
+    city_id?: number | null;
+    telegram_username?: string | null;
+    description?: string | null;
+    experience_years?: number | null;
+    cabinet_address?: string | null;
+    certificates?: { name: string; url?: string }[];
+  }) {
+    return apiClient.patch('/api/v1/admin/profile', data);
+  },
+  uploadAvatar(file: File) {
+    const form = new FormData();
+    form.append('file', file);
+    return apiClient.post<{ avatar_url: string }>('/api/v1/admin/profile/avatar', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
   },
   // Dashboard
   getDashboard() {

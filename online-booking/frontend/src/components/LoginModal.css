@@ -29,6 +29,16 @@
   margin-bottom: 16px;
 }
 
+.login-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.login-row .login-group {
+  min-width: 0;
+}
+
 .login-group label {
   display: block;
   margin-bottom: 6px;

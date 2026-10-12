@@ -15,9 +15,10 @@ class TestRegisterUnified:
     """Tests for unified registration endpoint."""
 
     async def test_register_client(self, client):
-        """Client registration creates CLIENT user with ClientProfile."""
+        """Client registration creates CLIENT user with ClientProfile + logs in."""
         resp = await client.post("/api/v1/auth/register-unified", json={
-            "name": "Test Client",
+            "name": "Test",
+            "last_name": "Client",
             "email": "client_test@example.com",
             "phone": "+79991112233",
             "password": "SecurePass123!",
@@ -25,15 +26,14 @@ class TestRegisterUnified:
         })
         assert resp.status_code == 201
         data = resp.json()
-        assert data["role"] == "CLIENT"
-        assert data["is_master"] is False
-        assert data["name"] == "Test Client"
-        assert "id" in data
+        assert "access_token" in data
+        assert data["token_type"] == "bearer"
 
     async def test_register_master(self, client):
-        """Master registration creates MASTER user with MasterProfile."""
+        """Master registration creates MASTER user with MasterProfile + logs in."""
         resp = await client.post("/api/v1/auth/register-unified", json={
-            "name": "Test Master",
+            "name": "Test",
+            "last_name": "Master",
             "email": "master_test@example.com",
             "phone": "+79992223344",
             "password": "SecurePass123!",
@@ -42,10 +42,27 @@ class TestRegisterUnified:
         })
         assert resp.status_code == 201
         data = resp.json()
-        assert data["role"] == "MASTER"
-        assert data["is_master"] is True
-        assert data["name"] == "Test Master"
-        assert "id" in data
+        assert "access_token" in data
+
+    async def test_register_composes_full_name(self, client, session):
+        """First + last name compose the display name; last_name stored."""
+        from sqlalchemy import select
+        from app.models.user import User
+
+        resp = await client.post("/api/v1/auth/register-unified", json={
+            "name": "Иван",
+            "last_name": "Петров",
+            "email": "fio_test@example.com",
+            "phone": "+79993334455",
+            "password": "SecurePass123!",
+            "is_master": True
+        })
+        assert resp.status_code == 201, resp.text
+        user = (await session.execute(
+            select(User).where(User.email == "fio_test@example.com")
+        )).scalar_one()
+        assert user.name == "Иван Петров"
+        assert user.last_name == "Петров"
 
     async def test_register_duplicate_email(self, client):
         """Registration fails when email already exists."""

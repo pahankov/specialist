@@ -1,20 +1,38 @@
 """Current panel user profile (names + city for form defaults)."""
-from typing import Optional
+import os
+import uuid
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.database import get_db
 from app.dependencies.auth import require_master
 from app.models.city import City
-from app.models.user import User
+from app.models.master_profile import MasterProfile
+from app.models.user import User, UserRole
+from app.modules.admin.helpers import get_master_profile_id
+from app.services.audit import log_action
 from app.logging_config import get_logger
 
 logger = get_logger(__name__)
 
 router = APIRouter()
+
+AVATAR_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+                          "static", "avatars")
+AVATAR_URL_PREFIX = "/static/avatars"
+MAX_AVATAR_BYTES = 5 * 1024 * 1024
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
+EXT_BY_TYPE = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
+
+
+class Certificate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    url: Optional[str] = Field(default=None, max_length=500)
 
 
 @router.get("/profile")
@@ -28,16 +46,39 @@ async def get_my_profile(
         city_name = (await db.execute(
             select(City.name_ru).where(City.id == master.city_id)
         )).scalar_one_or_none()
-    return {
+    out = {
         "id": master.id,
         "name": master.name,
+        "last_name": master.last_name,
         "city_id": master.city_id,
         "city_name": city_name,
     }
+    if master.role == UserRole.MASTER:
+        mp_id = await get_master_profile_id(db, master)
+        mp = (await db.execute(
+            select(MasterProfile).where(MasterProfile.id == mp_id)
+        )).scalar_one_or_none()
+        if mp is not None:
+            out.update({
+                "telegram_username": mp.telegram_username,
+                "description": mp.description,
+                "avatar_url": mp.avatar_url,
+                "experience_years": mp.experience_years,
+                "cabinet_address": mp.cabinet_address,
+                "certificates": mp.certificates or [],
+            })
+    return out
 
 
 class ProfileUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    last_name: Optional[str] = Field(default=None, max_length=100)
     city_id: Optional[int] = None
+    telegram_username: Optional[str] = Field(default=None, max_length=100)
+    description: Optional[str] = None
+    experience_years: Optional[int] = Field(default=None, ge=0, le=80)
+    cabinet_address: Optional[str] = Field(default=None, max_length=500)
+    certificates: Optional[List[Certificate]] = Field(default=None, max_length=20)
 
 
 @router.patch("/profile")
@@ -46,8 +87,23 @@ async def update_my_profile(
     master: User = Depends(require_master),
     db: AsyncSession = Depends(get_db),
 ):
-    """Set own city (used as default for new clients)."""
-    city_name = None
+    """Edit own personal data: names, city, contacts, cabinet, certificates.
+
+    Names recompose the display `name` ("Имя Фамилия") so every existing
+    list/badge keeps working; `last_name` stored separately for structure.
+    """
+    if data.name is not None:
+        first = data.name.strip()
+        if not first:
+            raise HTTPException(status_code=400, detail="Имя пустое")
+        last = data.last_name.strip() if data.last_name is not None else (master.last_name or "")
+        master.name = f"{first} {last}".strip() if last else first
+        master.last_name = last or None
+    elif data.last_name is not None:
+        last = data.last_name.strip()
+        first = master.name.split(" ")[0] if master.name else ""
+        master.name = f"{first} {last}".strip() if last else first
+        master.last_name = last or None
     if data.city_id is not None:
         city_name = (await db.execute(
             select(City.name_ru).where(City.id == data.city_id)
@@ -55,12 +111,76 @@ async def update_my_profile(
         if city_name is None:
             raise HTTPException(status_code=404, detail="Город не найден")
         master.city_id = data.city_id
-        await db.commit()
-        await db.refresh(master)
-    logger.info("Profile updated: user=%s city_id=%s", master.id, master.city_id)
-    return {
-        "id": master.id,
-        "name": master.name,
-        "city_id": master.city_id,
-        "city_name": city_name,
-    }
+
+    mp = None
+    if master.role == UserRole.MASTER:
+        mp_id = await get_master_profile_id(db, master)
+        mp = (await db.execute(
+            select(MasterProfile).where(MasterProfile.id == mp_id)
+        )).scalar_one_or_none()
+        if mp is None:
+            raise HTTPException(status_code=404, detail="Профиль мастера не найден")
+        if data.telegram_username is not None:
+            mp.telegram_username = data.telegram_username.strip() or None
+        if data.description is not None:
+            mp.description = data.description.strip() or None
+        if data.experience_years is not None:
+            mp.experience_years = data.experience_years
+        if data.cabinet_address is not None:
+            mp.cabinet_address = data.cabinet_address.strip() or None
+        if data.certificates is not None:
+            mp.certificates = [c.model_dump(exclude_none=True) for c in data.certificates]
+
+    await log_action(db, master.id, "update", "profile", master.id,
+                     "Личные данные обновлены", level="info")
+    await db.commit()
+    await db.refresh(master)
+    return await get_my_profile(master, db)
+
+
+@router.post("/profile/avatar")
+async def upload_avatar(
+    file: UploadFile = File(...),
+    master: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload own photo (JPEG/PNG/WebP, ≤5MB). Returns public url.
+
+    Stored under backend/static/avatars, served same-origin at /static.
+    Old file is removed best-effort on replace.
+    """
+    if file.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(
+            status_code=400, detail="Только JPEG, PNG или WebP")
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Пустой файл")
+    if len(data) > MAX_AVATAR_BYTES:
+        raise HTTPException(status_code=400, detail="Файл больше 5 МБ")
+    os.makedirs(AVATAR_DIR, exist_ok=True)
+    ext = EXT_BY_TYPE[file.content_type]
+    filename = f"user_{master.id}_{uuid.uuid4().hex[:8]}{ext}"
+    with open(os.path.join(AVATAR_DIR, filename), "wb") as f:
+        f.write(data)
+    url = f"{AVATAR_URL_PREFIX}/{filename}"
+
+    if master.role == UserRole.MASTER:
+        mp_id = await get_master_profile_id(db, master)
+        mp = (await db.execute(
+            select(MasterProfile).where(MasterProfile.id == mp_id)
+        )).scalar_one_or_none()
+        if mp is None:
+            raise HTTPException(status_code=404, detail="Профиль мастера не найден")
+        old = mp.avatar_url
+        mp.avatar_url = url
+        if old and old.startswith(AVATAR_URL_PREFIX + "/"):
+            try:
+                os.remove(os.path.join(
+                    AVATAR_DIR, os.path.basename(old)))
+            except OSError:
+                pass
+    await log_action(db, master.id, "update", "profile", master.id,
+                     "Фото обновлено", level="info")
+    await db.commit()
+    logger.info("Avatar uploaded: user=%s url=%s", master.id, url)
+    return JSONResponse(content={"avatar_url": url})

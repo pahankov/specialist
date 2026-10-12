@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { authApi } from '../api/client';
 import { dadataApi, type DadataSuggestion } from '../api/dadata';
 import { PASSWORD_PLACEHOLDER } from '../constants';
+import { capitalizeWords } from '../utils/names';
 import type { MaxStartResponse } from '../api/auth';
 import PhoneInput, { isCompletePhone } from './common/PhoneInput';
 import { getCookie, decodeJwtPayload, getUserRole } from '../utils/cookies';
@@ -27,7 +28,8 @@ interface LoginFormState {
 }
 
 interface RegisterFormState {
-  name: string;
+  firstName: string;
+  lastName: string;
   email: string;
   phone: string;
   password: string;
@@ -47,7 +49,8 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
     isRegister: false,
   });
   const [registerForm, setRegisterForm] = useState<RegisterFormState>({
-    name: '',
+    firstName: '',
+    lastName: '',
     email: '',
     phone: '',
     password: '',
@@ -211,45 +214,21 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
     e.preventDefault();
     setLoading(true);
     try {
-      // Transform DadataSuggestion to backend DadataSuggestion format
-      const cityData = registerForm.selectedCity
-        ? {
-            value: registerForm.selectedCity.value,
-            unrestricted_value: registerForm.selectedCity.unrestricted_value,
-            data: {
-              country: registerForm.selectedCity.country,
-              country_iso_code: registerForm.selectedCity.data?.country_iso_code,
-              region: registerForm.selectedCity.data?.region,
-              city: registerForm.selectedCity.city,
-              postal_code: registerForm.selectedCity.data?.postal_code,
-              geo_lat: registerForm.selectedCity.data?.lat
-                ? parseFloat(registerForm.selectedCity.data.lat)
-                : undefined,
-              geo_lon: registerForm.selectedCity.data?.lon
-                ? parseFloat(registerForm.selectedCity.data.lon)
-                : undefined,
-              capital_marker: registerForm.selectedCity.data?.capital_marker,
-            },
-          }
-        : null;
-
       await authApi.registerUnified({
-        name: registerForm.name,
+        name: registerForm.firstName.trim(),
+        last_name: registerForm.lastName.trim() || null,
         email: registerForm.email,
         phone: registerForm.phone,
         password: registerForm.password,
-        city_data: cityData,
+        // Backend contract is city_name (plain string); city_data is legacy.
+        city_name:
+          registerForm.selectedCity?.city || registerForm.selectedCity?.value || null,
         telegram_username: registerForm.telegramUsername || null,
         is_master: registerForm.isMaster,
       });
-      toast.success('Регистрация успешна! Теперь войдите.');
-      setMode('login');
-      setLoginForm({
-        identifier: registerForm.email,
-        password: '',
-        isMaster: registerForm.isMaster,
-        isRegister: false,
-      });
+      // register-unified logs in immediately: land straight in the section.
+      toast.success('Добро пожаловать! Вы вошли в аккаунт.');
+      landByRole();
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Ошибка регистрации');
     } finally {
@@ -267,7 +246,8 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
       isRegister: false,
     });
     setRegisterForm({
-      name: '',
+      firstName: '',
+      lastName: '',
       email: '',
       phone: '',
       password: '',
@@ -564,16 +544,38 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
             </div>
           </div>
 
-          {/* Name */}
-          <div className="login-group">
-            <label>Имя *</label>
-            <input
-              type="text"
-              value={registerForm.name}
-              onChange={(e) => setRegisterForm((prev) => ({ ...prev, name: e.target.value }))}
-              placeholder="Иван Иванов"
-              required
-            />
+          {/* Name + surname (auto-capitalized, editable later in profile) */}
+          <div className="login-row">
+            <div className="login-group">
+              <label>Имя *</label>
+              <input
+                type="text"
+                value={registerForm.firstName}
+                onChange={(e) =>
+                  setRegisterForm((prev) => ({
+                    ...prev,
+                    firstName: capitalizeWords(e.target.value),
+                  }))
+                }
+                placeholder="Иван"
+                required
+              />
+            </div>
+            <div className="login-group">
+              <label>Фамилия *</label>
+              <input
+                type="text"
+                value={registerForm.lastName}
+                onChange={(e) =>
+                  setRegisterForm((prev) => ({
+                    ...prev,
+                    lastName: capitalizeWords(e.target.value),
+                  }))
+                }
+                placeholder="Петров"
+                required
+              />
+            </div>
           </div>
 
           {/* Email */}

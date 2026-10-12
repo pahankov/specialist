@@ -45,6 +45,7 @@
 | phone | VARCHAR(20) | UNIQUE, NULLABLE | Телефон (для login по SMS) |
 | hashed_password | VARCHAR(255) | NULLABLE | NULL для OTP-only клиентов |
 | name | VARCHAR(100) | NOT NULL | Имя пользователя |
+| last_name | VARCHAR(100) | NULLABLE | Фамилия (отображается вместе с именем: «Имя Фамилия») |
 | role | ENUM | NOT NULL, DEFAULT CLIENT | CLIENT, MASTER, ADMIN |
 | city_id | INTEGER | FK -> cities.id, NULLABLE | Город пользователя |
 | is_active | BOOLEAN | DEFAULT TRUE | Мягкое удаление |
@@ -92,6 +93,8 @@
 | trial_ends_at | TIMESTAMP WITH TIME ZONE | NULLABLE | Конец триала (новым: +180 дней) |
 | work_start_hour | INTEGER | NOT NULL, DEFAULT 8 | Начало дневного окна (границы гранул расписания) |
 | work_end_hour | INTEGER | NOT NULL, DEFAULT 22 | Конец дневного окна (границы гранул расписания) |
+| cabinet_address | VARCHAR(500) | NULLABLE | Адрес кабинета (выбирается через DaData-подсказки) |
+| certificates | JSON | NOT NULL, DEFAULT [] | Сертификаты [{name, url?}] |
 | created_at | TIMESTAMP WITH TIME ZONE | | Дата создания |
 | updated_at | TIMESTAMP WITH TIME ZONE | | Дата обновления |
 
@@ -323,8 +326,9 @@
 | 6 | a1b2c3d4e5f6 | f7a8b9c1d2e3 | таблица `notifications` (внутренний колокольчик) | 2026-10-11 |
 | 7 | c3d4e5f6a7b8 | a1b2c3d4e5f6 | `users.created_by` (свои клиенты мастера) | 2026-10-11 |
 | 8 | d4e5f6a7b8c9 | c3d4e5f6a7b8 | таблица `notification_broadcasts` (история отправок) | 2026-10-11 |
+| 9 | e5f6a7b8c9d0 | d4e5f6a7b8c9 | `users.last_name`, `master_profiles.cabinet_address/certificates` | 2026-10-12 |
 
-**Head:** `d4e5f6a7b8c9`
+**Head:** `e5f6a7b8c9d0`
 
 > Старая цепочка из 12 миграций (`9a9c2edb` → `b2c3d4e5f6a7`) удалена после squash —
 > история сохранена в git (`git log -- alembic/versions/`). Прод-БД со старым head

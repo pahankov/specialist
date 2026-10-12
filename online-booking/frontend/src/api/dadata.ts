@@ -66,6 +66,27 @@ export const dadataApi = {
     const suggestions = await dadataApi.searchCities(query, 1);
     return suggestions[0];
   },
+
+  /** Street addresses for the cabinet field (DaData suggest/address).
+   * Returns display strings; empty list when quota/network fails.
+   */
+  async searchAddresses(query: string, limit = 8): Promise<string[]> {
+    try {
+      const { data } = await dadataClient.post('/suggest/address', {
+        query,
+        count: limit,
+      });
+      const list = (data.suggestions ?? []) as { value?: string; unrestricted_value?: string }[];
+      const out: string[] = [];
+      for (const s of list) {
+        const v = (s.unrestricted_value || s.value || '').trim();
+        if (v && !out.includes(v)) out.push(v);
+      }
+      return out;
+    } catch {
+      return [];
+    }
+  },
 };
 
 /** Local DB fallback: same DadataSuggestion shape, enough for registration. */

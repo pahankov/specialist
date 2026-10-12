@@ -58,7 +58,7 @@ app = FastAPI(
         "Все API-эндпоинты версионированы: `/api/v1/`. "
         "Список изменений: `GET /api/v1/admin/changelog`."
     ),
-    version="1.24.3",
+    version="1.25.0",
     contact={
         "name": "Support",
         "email": "support@beauty-specialist.ru",
@@ -171,3 +171,11 @@ app.include_router(client_router, prefix="/api/v1/client", tags=["client"])
 app.include_router(admin_router)  # admin endpoints (User model, modules/admin/)
 app.include_router(dadata_router, prefix="/api/dadata")  # DAData address autocomplete proxy
 app.include_router(max_webhook_router, prefix="/api/max", tags=["max-webhook"])
+
+# Uploaded photos (avatars, certificates) — same-origin, no extra web server.
+# Directory is created on first upload; missing dir is fine at startup.
+import os as _os
+from fastapi.staticfiles import StaticFiles as _StaticFiles
+_static_dir = _os.path.join(_os.path.dirname(__file__), "static")
+_os.makedirs(_static_dir, exist_ok=True)
+app.mount("/static", _StaticFiles(directory=_static_dir), name="static")

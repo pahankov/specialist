@@ -11,7 +11,7 @@
 | `POST` | `/api/v1/auth/register` | Регистрация мастера (с выбором города) |
 | `POST` | `/api/v1/auth/login` | Вход мастера (JWT + refresh token в cookies) |
 | `POST` | `/api/v1/auth/login-unified` | Вход по email ИЛИ телефону (мастера и клиенты; пишет login в аудит) |
-| `POST` | `/api/v1/auth/register-unified` | Регистрация с выбором роли |
+| `POST` | `/api/v1/auth/register-unified` | Регистрация с выбором роли (имя+фамилия, город) — сразу входит: access_token + cookies |
 | `POST` | `/api/v1/auth/send-otp` | Отправка SMS-кода клиенту |
 | `POST` | `/api/v1/auth/verify-otp` | Проверка кода, вход/регистрация клиента |
 | `POST` | `/api/v1/auth/refresh` | Обновление access token (refresh token rotation) |
@@ -106,7 +106,7 @@
 | `GET` | `/admin/appointments` | Список записей (пагинация, фильтрация) |
 | `POST` | `/admin/appointments` | Создать запись |
 | `POST` | `/admin/appointments/book` | Админская запись (выбор клиента из БД; суперадмин шлёт `master_id`) |
-| `GET` | `/admin/appointments/by-date` | Записи по дате |
+| `GET` | `/admin/appointments/by-date` | Записи по дате (есть `service_id/service_duration` для спанов гранул) |
 | `PATCH` | `/admin/appointments/{id}/confirm` | Подтвердить запись |
 | `PATCH` | `/admin/appointments/{id}/cancel` | Отменить запись |
 | `PATCH` | `/admin/appointments/{id}/complete` | Завершить запись |
@@ -127,8 +127,9 @@
 | `DELETE` | `/admin/working-hours/{id}` | Удалить рабочий день |
 | `GET` | `/admin/work-window` | Окно рабочего времени мастера (`?master_id=` для суперадмина) |
 | `PATCH` | `/admin/work-window` | Задать окно (`start_hour`/`end_hour`, 0–24) |
-| `GET` | `/admin/profile` | Свой профиль панели (`id/name/city_id/city_name` — дефолты форм) |
-| `PATCH` | `/admin/profile` | Свой город (`city_id`) — дефолт для новых клиентов |
+| `GET` | `/admin/profile` | Свой профиль (имя/фамилия/город/контакты/фото/адрес/сертификаты) |
+| `PATCH` | `/admin/profile` | Свои данные: имя, фамилия, город, telegram, описание, опыт, адрес кабинета, сертификаты |
+| `POST` | `/admin/profile/avatar` | Своё фото (JPEG/PNG/WebP ≤5МБ) → `avatar_url` на `/static` |
 | `GET` | `/admin/audit-logs` | Журнал действий (пагинация, фильтрация; есть сущность `auth` — входы/выходы) |
 | `GET` | `/admin/export/appointments` | Экспорт записей в CSV (`status`, `master_id`, `ids`, `include_master`) |
 | `GET` | `/admin/export/clients` | Экспорт клиентов в CSV (`ids`, `search`, `master_id`; есть колонка Город) |

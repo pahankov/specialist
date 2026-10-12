@@ -313,14 +313,19 @@ async def login_unified(
 
 # ─── Unified Registration ────────────────────────────────────────────
 
-@router.post("/register-unified", response_model=dict, status_code=status.HTTP_201_CREATED)
+@router.post("/register-unified", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("10/minute")
 async def register_unified(
     request: Request,
+    response: Response,
     req: UnifiedRegisterRequest,
     db: AsyncSession = Depends(get_db)
 ):
-    """Full registration with role selection (client or master)."""
+    """Full registration with role selection (client or master).
+
+    Logs the user in immediately: returns access_token + sets auth cookies,
+    so the client lands straight in its section (no extra login step).
+    """
     logger.info(
         "Unified register: name=%s, email=%s, phone=%s, is_master=%s",
         req.name, req.email, req.phone, req.is_master
@@ -328,6 +333,7 @@ async def register_unified(
     try:
         new_user = await service.register_unified(
             name=req.name,
+            last_name=req.last_name,
             email=req.email,
             phone=req.phone,
             password=req.password,
@@ -341,19 +347,24 @@ async def register_unified(
             new_user.id, new_user.role.value
         )
 
-        return {
-            "id": new_user.id,
-            "name": new_user.name,
-            "email": new_user.email,
-            "phone": new_user.phone,
+        access_token = create_access_token({
+            "sub": str(new_user.id),
             "role": new_user.role.value,
-            "city_id": new_user.city_id,
-            "is_master": req.is_master,
-            "telegram_username": req.telegram_username,
-            "is_active": new_user.is_active,
-            "is_verified": new_user.is_verified,
-            "created_at": new_user.created_at.isoformat() if new_user.created_at else None,
-        }
+            "name": new_user.name,
+            "is_admin": new_user.role == UserRole.ADMIN,
+        })
+        refresh_value, expires_at = create_refresh_token_payload(
+            new_user.id, new_user.email or "")
+        db.add(RefreshToken(user_id=new_user.id, token=refresh_value,
+                            expires_at=expires_at))
+        _set_auth_cookies(response, access_token, refresh_value)
+        await log_action(
+            db, new_user.id, "register", "auth", new_user.id,
+            f"Регистрация: {new_user.email or new_user.phone} ({new_user.role.value})",
+            level="info",
+        )
+        await db.commit()
+        return {"access_token": access_token, "token_type": "bearer"}
     except HTTPException:
         logger.warning("Unified register failed: name=%s", req.name)
         raise
