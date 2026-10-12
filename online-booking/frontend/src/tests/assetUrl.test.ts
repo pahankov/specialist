@@ -16,6 +16,12 @@ describe('assetUrl', () => {
     expect(assetUrl('🐱')).toBe('🐱');
   });
 
+  it('blocks exotic schemes (stored-XSS guard)', () => {
+    expect(assetUrl('javascript:alert(1)')).toBeNull();
+    expect(assetUrl('JaVaScRiPt:alert(1)')).toBeNull();
+    expect(assetUrl('data:text/html,<h1>x</h1>')).toBeNull();
+  });
+
   it('maps empty values to null', () => {
     expect(assetUrl(null)).toBeNull();
     expect(assetUrl(undefined)).toBeNull();

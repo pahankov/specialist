@@ -5,7 +5,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -44,6 +44,19 @@ def _delete_avatar_file(url: Optional[str]) -> None:
 class Certificate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     url: Optional[str] = Field(default=None, max_length=500)
+
+    @field_validator("url")
+    @classmethod
+    def _safe_url(cls, v: Optional[str]) -> Optional[str]:
+        # Stored XSS guard: cert urls render as <a href>/<img src> in other
+        # users' browsers — only backend paths and http(s) allowed.
+        if v is None:
+            return v
+        s = v.strip()
+        if not (s.startswith("/") or s.startswith("http://")
+                or s.startswith("https://")):
+            raise ValueError("URL сертификата: только /static/... или http(s)")
+        return s
 
 
 @router.get("/profile")

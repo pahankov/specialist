@@ -232,3 +232,22 @@ class TestAvatarPreset:
             headers=auth_headers,
         )
         assert r.status_code in (400, 422)
+
+    async def test_cert_url_scheme_validated(self, client, auth_headers):
+        r = await client.patch(
+            "/api/v1/admin/profile",
+            json={"certificates": [
+                {"name": "X", "url": "javascript:alert(1)"},
+            ]},
+            headers=auth_headers,
+        )
+        assert r.status_code == 422
+
+        ok = await client.patch(
+            "/api/v1/admin/profile",
+            json={"certificates": [
+                {"name": "Y", "url": "/static/avatars/a.png"},
+            ]},
+            headers=auth_headers,
+        )
+        assert ok.status_code == 200, ok.text

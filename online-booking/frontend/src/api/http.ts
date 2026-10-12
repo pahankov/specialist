@@ -13,8 +13,11 @@ export const API_BASE_URL = API_BASE;
  */
 export function assetUrl(path?: string | null): string | null {
   if (!path) return null;
-  if (/^https?:\/\//i.test(path) || !path.startsWith('/')) return path;
-  return `${API_BASE}${path}`;
+  if (/^https?:\/\//i.test(path)) return path;
+  if (path.startsWith('/')) return `${API_BASE}${path}`;
+  // Plain values (emoji presets) pass through; exotic schemes
+  // (javascript:, data:) never reach <img>/<a> (backend validates too).
+  return /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(path) ? null : path;
 }
 
 // ─── Unified axios instance ────────────────────────────────────────
