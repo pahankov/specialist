@@ -33,6 +33,8 @@ class UnifiedRegisterRequest(BaseModel):
     phone: str
     password: str
     city_name: Optional[str] = None
+    # DaData location string: cabinet address (master) or home location (client).
+    address: Optional[str] = None
     telegram_username: Optional[str] = None
     is_master: bool = False
 

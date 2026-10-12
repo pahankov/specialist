@@ -1,11 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
 import { authApi } from '../api/client';
-import { dadataApi, type DadataSuggestion } from '../api/dadata';
 import { PASSWORD_PLACEHOLDER } from '../constants';
 import { capitalizeWords } from '../utils/names';
+import AddressSelect from './common/AddressSelect';
 import type { MaxStartResponse } from '../api/auth';
 import PhoneInput, { isCompletePhone } from './common/PhoneInput';
 import { getCookie, decodeJwtPayload, getUserRole } from '../utils/cookies';
@@ -33,7 +32,8 @@ interface RegisterFormState {
   email: string;
   phone: string;
   password: string;
-  selectedCity: DadataSuggestion | null;
+  address: string;
+  addressCity: string;
   telegramUsername: string;
   isMaster: boolean;
 }
@@ -54,7 +54,8 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
     email: '',
     phone: '',
     password: '',
-    selectedCity: null,
+    address: '',
+    addressCity: '',
     telegramUsername: '',
     isMaster: false,
   });
@@ -66,70 +67,6 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
   const [maxPhone, setMaxPhone] = useState('');
   const [maxOffer, setMaxOffer] = useState<MaxStartResponse | null>(null);
   const [maxCodeInput, setMaxCodeInput] = useState('');
-
-  // DAData city autocomplete (debounced: each keystroke must not burn quota)
-  const [citySuggestions, setCitySuggestions] = useState<DadataSuggestion[]>([]);
-  const [showCityDropdown, setShowCityDropdown] = useState(false);
-  const [cityInput, setCityInput] = useState('');
-  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
-
-  const cityInputRef = useRef<HTMLInputElement>(null);
-  const cityDropdownRef = useRef<HTMLDivElement>(null);
-  const citySearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const citySearchSeq = useRef(0);
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (cityDropdownRef.current && !cityDropdownRef.current.contains(e.target as Node)) {
-        setShowCityDropdown(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      if (citySearchTimer.current) clearTimeout(citySearchTimer.current);
-    };
-  }, []);
-
-  const handleCitySearch = (value: string) => {
-    setCityInput(value);
-    if (citySearchTimer.current) clearTimeout(citySearchTimer.current);
-    if (value.length < 2) {
-      setCitySuggestions([]);
-      setShowCityDropdown(false);
-      return;
-    }
-    const seq = ++citySearchSeq.current;
-    citySearchTimer.current = setTimeout(async () => {
-      try {
-        const suggestions = await dadataApi.searchCities(value, 10);
-        if (seq !== citySearchSeq.current) return; // stale response
-        setCitySuggestions(suggestions);
-        setShowCityDropdown(suggestions.length > 0);
-      } catch {
-        /* ignore: quota/network — dropdown stays empty */
-      }
-    }, 400);
-  };
-
-  const handleCitySelect = (suggestion: DadataSuggestion) => {
-    setCityInput(suggestion.value);
-    setShowCityDropdown(false);
-    setCitySuggestions([]);
-    setRegisterForm((prev) => ({ ...prev, selectedCity: suggestion }));
-  };
-
-  useEffect(() => {
-    if (showCityDropdown && cityInputRef.current) {
-      const rect = cityInputRef.current.getBoundingClientRect();
-      setDropdownPosition({
-        top: rect.bottom + window.scrollY,
-        left: rect.left + window.scrollX,
-        width: rect.width,
-      });
-    }
-  }, [showCityDropdown, cityInput]);
 
   const landByRole = () => {
     setTimeout(() => {
@@ -220,9 +157,10 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
         email: registerForm.email,
         phone: registerForm.phone,
         password: registerForm.password,
-        // Backend contract is city_name (plain string); city_data is legacy.
-        city_name:
-          registerForm.selectedCity?.city || registerForm.selectedCity?.value || null,
+        // Location string (cabinet for masters, home for clients) + the
+        // city parsed from the DaData suggestion (primary matching key).
+        address: registerForm.address.trim() || null,
+        city_name: registerForm.addressCity.trim() || null,
         telegram_username: registerForm.telegramUsername || null,
         is_master: registerForm.isMaster,
       });
@@ -251,14 +189,13 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
       email: '',
       phone: '',
       password: '',
-      selectedCity: null,
+      address: '',
+      addressCity: '',
       telegramUsername: '',
       isMaster: false,
     });
     setShowLoginPassword(false);
     setShowRegisterPassword(false);
-    setCityInput('');
-    setCitySuggestions([]);
   };
 
   const maxForm = !maxOffer ? (
@@ -453,49 +390,22 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
       ) : (
         /* ─── REGISTER FORM ─── */
         <form onSubmit={handleRegister}>
-          {/* City (DAData) */}
+          {/* Location: cabinet address (master) or home location (client).
+              City for matching is parsed from the DaData pick. */}
           <div className="login-group">
-            <label>Город *</label>
-            <div style={{ position: 'relative', overflow: 'visible' }}>
-              <input
-                ref={cityInputRef}
-                value={cityInput}
-                onChange={(e) => handleCitySearch(e.target.value)}
-                onFocus={() => {
-                  if (citySuggestions.length > 0) setShowCityDropdown(true);
-                }}
-                placeholder="Начните вводить город..."
-                required
-              />
-              {showCityDropdown && citySuggestions.length > 0 && (
-                <>
-                  {createPortal(
-                    <div
-                      ref={cityDropdownRef}
-                      className="city-dropdown"
-                      style={{
-                        position: 'fixed',
-                        top: dropdownPosition.top,
-                        left: dropdownPosition.left,
-                        width: dropdownPosition.width,
-                        zIndex: 99999,
-                      }}
-                    >
-                      {citySuggestions.map((suggestion, index) => (
-                        <div
-                          key={index}
-                          className="city-option"
-                          onClick={() => handleCitySelect(suggestion)}
-                        >
-                          {suggestion.value}
-                        </div>
-                      ))}
-                    </div>,
-                    document.body,
-                  )}
-                </>
-              )}
-            </div>
+            <AddressSelect
+              value={registerForm.address}
+              onChange={(address, city) =>
+                setRegisterForm((prev) => ({
+                  ...prev,
+                  address,
+                  addressCity: city || prev.addressCity,
+                }))
+              }
+              label={registerForm.isMaster ? 'Адрес кабинета *' : 'Ваш адрес *'}
+              placeholder="Город, улица, дом..."
+              required
+            />
           </div>
 
           {/* Phone */}

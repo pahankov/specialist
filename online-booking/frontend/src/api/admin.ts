@@ -107,12 +107,26 @@ export const adminApi = {
   }) {
     return apiClient.get<PaginatedResponse<Client>>('/api/v1/admin/clients', { params });
   },
-  createClient(data: { name: string; phone: string; email?: string; city_id?: number | null }) {
+  createClient(data: {
+    name: string;
+    phone: string;
+    email?: string;
+    city_id?: number | null;
+    city_name?: string | null;
+    address?: string | null;
+  }) {
     return apiClient.post<Client>('/api/v1/admin/clients', data);
   },
   updateClient(
     id: number,
-    data: { name?: string; phone?: string; email?: string; city_id?: number | null },
+    data: {
+      name?: string;
+      phone?: string;
+      email?: string;
+      city_id?: number | null;
+      city_name?: string | null;
+      address?: string | null;
+    },
   ) {
     return apiClient.patch<Client>(`/api/v1/admin/clients/${id}`, data);
   },

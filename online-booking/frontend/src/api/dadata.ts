@@ -70,17 +70,24 @@ export const dadataApi = {
   /** Street addresses for the cabinet field (DaData suggest/address).
    * Returns display strings; empty list when quota/network fails.
    */
-  async searchAddresses(query: string, limit = 8): Promise<string[]> {
+  async searchAddresses(query: string, limit = 8): Promise<{ value: string; city?: string }[]> {
     try {
       const { data } = await dadataClient.post('/suggest/address', {
         query,
         count: limit,
       });
-      const list = (data.suggestions ?? []) as { value?: string; unrestricted_value?: string }[];
-      const out: string[] = [];
+      const list = (data.suggestions ?? []) as {
+        value?: string;
+        unrestricted_value?: string;
+        data?: { city?: string };
+      }[];
+      const out: { value: string; city?: string }[] = [];
+      const seen = new Set<string>();
       for (const s of list) {
         const v = (s.unrestricted_value || s.value || '').trim();
-        if (v && !out.includes(v)) out.push(v);
+        if (!v || seen.has(v)) continue;
+        seen.add(v);
+        out.push({ value: v, city: s.data?.city?.trim() || undefined });
       }
       return out;
     } catch {

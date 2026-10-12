@@ -11,7 +11,7 @@
 | `POST` | `/api/v1/auth/register` | Регистрация мастера (с выбором города) |
 | `POST` | `/api/v1/auth/login` | Вход мастера (JWT + refresh token в cookies) |
 | `POST` | `/api/v1/auth/login-unified` | Вход по email ИЛИ телефону (мастера и клиенты; пишет login в аудит) |
-| `POST` | `/api/v1/auth/register-unified` | Регистрация с выбором роли (имя+фамилия, город) — сразу входит: access_token + cookies |
+| `POST` | `/api/v1/auth/register-unified` | Регистрация с выбором роли (имя+фамилия, адрес; город выводится из адреса) — сразу входит: access_token + cookies |
 | `POST` | `/api/v1/auth/send-otp` | Отправка SMS-кода клиенту |
 | `POST` | `/api/v1/auth/verify-otp` | Проверка кода, вход/регистрация клиента |
 | `POST` | `/api/v1/auth/refresh` | Обновление access token (refresh token rotation) |
@@ -116,8 +116,8 @@
 | `POST` | `/admin/services` | Создать услугу |
 | `PATCH` | `/admin/services/{id}` | Обновить услугу |
 | `DELETE` | `/admin/services/{id}` | Soft-delete услуги |
-| `GET` | `/admin/clients` | Свои клиенты (мастер: с записями у него или созданные им; супер: все). Пагинация, `city_id`/`city_name` |
-| `POST` | `/admin/clients` | Создать клиента (можно с `city_id`) |
+| `GET` | `/admin/clients` | Свои клиенты (мастер: с записями у него или созданные им; супер: все). Пагинация, `city_id`/`city_name`, `address` |
+| `POST` | `/admin/clients` | Создать клиента (адрес одним полем + `city_name` для подбора; `city_id` тоже можно) |
 | `PATCH` | `/admin/clients/{id}` | Обновить клиента (можно `city_id`) |
 | `DELETE` | `/admin/clients/{id}` | Удалить клиента |
 | `POST` | `/admin/clients/bulk-city` | Назначить город всем по фильтру (`city_id` + `search`/`master_id`) |

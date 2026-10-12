@@ -64,6 +64,65 @@ class TestRegisterUnified:
         assert user.name == "Иван Петров"
         assert user.last_name == "Петров"
 
+    async def test_register_master_address_and_city(self, client, session):
+        """Master address stored on profile; city resolved for matching."""
+        from sqlalchemy import select
+        from app.models.city import City
+        from app.models.country import Country
+        from app.models.master_profile import MasterProfile
+        from app.models.user import User
+
+        country = Country(code="RU", name_ru="Россия", name_en="Russia", phone_prefix="+7")
+        session.add(country)
+        await session.flush()
+        session.add(City(country_id=country.id, name_ru="Казань",
+                         name_en="Kazan", slug="kazan"))
+        await session.commit()
+
+        resp = await client.post("/api/v1/auth/register-unified", json={
+            "name": "Мастер",
+            "email": "addr_master@example.com",
+            "phone": "+79994445566",
+            "password": "SecurePass123!",
+            "address": "г. Казань, ул. Баумана, 10",
+            "city_name": "Казань",
+            "is_master": True
+        })
+        assert resp.status_code == 201, resp.text
+        user = (await session.execute(
+            select(User).where(User.email == "addr_master@example.com")
+        )).scalar_one()
+        assert user.city_id is not None
+        mp = (await session.execute(
+            select(MasterProfile).where(MasterProfile.user_id == user.id)
+        )).scalar_one()
+        assert mp.cabinet_address == "г. Казань, ул. Баумана, 10"
+
+    async def test_register_client_address(self, client, session):
+        """Client location stored on profile (unknown city: no match, kept)."""
+        from sqlalchemy import select
+        from app.models.client_profile import ClientProfile
+        from app.models.user import User
+
+        resp = await client.post("/api/v1/auth/register-unified", json={
+            "name": "Клиент",
+            "email": "addr_client@example.com",
+            "phone": "+79995556677",
+            "password": "SecurePass123!",
+            "address": "г. Москва, ул. Тверская, 1",
+            "city_name": "Нетакойгород",
+            "is_master": False
+        })
+        assert resp.status_code == 201, resp.text
+        user = (await session.execute(
+            select(User).where(User.email == "addr_client@example.com")
+        )).scalar_one()
+        assert user.city_id is None
+        cp = (await session.execute(
+            select(ClientProfile).where(ClientProfile.user_id == user.id)
+        )).scalar_one()
+        assert cp.address == "г. Москва, ул. Тверская, 1"
+
     async def test_register_duplicate_email(self, client):
         """Registration fails when email already exists."""
         await client.post("/api/v1/auth/register-unified", json={

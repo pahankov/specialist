@@ -43,6 +43,23 @@ async def _require_own_client(db: AsyncSession, master: User, user: User) -> Non
         raise HTTPException(status_code=404, detail="Client not found")
 
 
+async def _resolve_city(db: AsyncSession, city_name: str) -> tuple[Optional[int], Optional[str]]:
+    """Resolve a city name (e.g. parsed from a DaData address) to (id, name).
+
+    Returns (None, None) when no local match — the address is still stored,
+    and city matching falls back to it.
+    """
+    from app.models.city import City
+
+    row = await db.execute(
+        select(City.id, City.name_ru).where(City.name_ru == city_name.strip())
+    )
+    hit = row.one_or_none()
+    if hit is None:
+        return None, None
+    return hit[0], hit[1]
+
+
 @router.get("/clients", response_model=PaginatedResponse[ClientResponse])
 async def get_admin_clients(
     master: User = Depends(require_master),
@@ -149,6 +166,7 @@ async def get_admin_clients(
             "is_active": cp.user.is_active,
             "city_id": cp.user.city_id,
             "city_name": city_names.get(cp.user.city_id),
+            "address": cp.address,
             "created_at": cp.user.created_at.isoformat() if cp.user.created_at else None,
             "updated_at": cp.user.updated_at.isoformat() if cp.user.updated_at else None,
         }
@@ -184,22 +202,25 @@ async def create_admin_client(
         city_obj = city_row.scalar_one_or_none()
         if city_obj is None:
             raise HTTPException(status_code=400, detail="Город не найден")
+        city_id = data.city_id
         city_name = city_obj.name_ru
+    elif data.city_name:
+        city_id, city_name = await _resolve_city(db, data.city_name)
     else:
-        city_name = None
+        city_id, city_name = None, None
 
-    user = User(name=data.name, phone=data.phone, email=data.email, role=UserRole.CLIENT, city_id=data.city_id, created_by=master.id)
+    user = User(name=data.name, phone=data.phone, email=data.email, role=UserRole.CLIENT, city_id=city_id, created_by=master.id)
     db.add(user)
     await db.flush()
-    
-    client_profile = ClientProfile(user_id=user.id)
+
+    client_profile = ClientProfile(user_id=user.id, address=(data.address or None))
     db.add(client_profile)
     await db.flush()
     await db.refresh(user)
-    
+
     await log_action(db, master.id, "create", "client", user.id, data.name, level="info")
     await db.commit()
-    
+
     return {
         "id": user.id,
         "name": user.name,
@@ -207,8 +228,9 @@ async def create_admin_client(
         "email": user.email,
         "no_show_count": 0,
         "is_active": user.is_active,
-        "city_id": data.city_id,
+        "city_id": city_id,
         "city_name": city_name,
+        "address": data.address or None,
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "updated_at": user.updated_at.isoformat() if user.updated_at else None,
     }
@@ -241,21 +263,44 @@ async def update_admin_client(
         city = await db.execute(select(City).where(City.id == data.city_id))
         if city.scalar_one_or_none() is None:
             raise HTTPException(status_code=400, detail="Город не найден")
+    elif data.city_name:
+        resolved_id, _ = await _resolve_city(db, data.city_name)
+        data = data.model_copy(update={"city_id": resolved_id})
 
     for field, value in data.model_dump(exclude_unset=True).items():
+        if field in ("city_name", "address"):
+            continue  # not User columns — handled below
         setattr(user, field, value)
+
+    profile_result = await db.execute(
+        select(ClientProfile).where(ClientProfile.user_id == user.id)
+    )
+    profile = profile_result.scalar_one_or_none()
+    if profile is not None and data.address is not None:
+        profile.address = data.address.strip() or None
     
     await log_action(db, master.id, "update", "client", client_id, f"Обновлены поля: {', '.join(data.model_dump(exclude_unset=True).keys())}", level="info")
     await db.commit()
     await db.refresh(user)
-    
+    if profile is not None:
+        await db.refresh(profile)
+
+    city_name = None
+    if user.city_id is not None:
+        from app.models.city import City
+        city_name = (await db.execute(
+            select(City.name_ru).where(City.id == user.city_id)
+        )).scalar_one_or_none()
     return {
         "id": user.id,
         "name": user.name,
         "phone": user.phone,
         "email": user.email,
-        "no_show_count": 0,
+        "no_show_count": profile.no_show_count if profile else 0,
         "is_active": user.is_active,
+        "city_id": user.city_id,
+        "city_name": city_name,
+        "address": profile.address if profile else None,
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "updated_at": user.updated_at.isoformat() if user.updated_at else None,
     }
@@ -286,6 +331,12 @@ async def toggle_client_active(
         select(ClientProfile).where(ClientProfile.user_id == user.id)
     )
     profile = profile_result.scalar_one_or_none()
+    city_name = None
+    if user.city_id is not None:
+        from app.models.city import City
+        city_name = (await db.execute(
+            select(City.name_ru).where(City.id == user.city_id)
+        )).scalar_one_or_none()
     return {
         "id": user.id,
         "name": user.name,
@@ -293,6 +344,9 @@ async def toggle_client_active(
         "email": user.email,
         "no_show_count": profile.no_show_count if profile else 0,
         "is_active": user.is_active,
+        "city_id": user.city_id,
+        "city_name": city_name,
+        "address": profile.address if profile else None,
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "updated_at": user.updated_at.isoformat() if user.updated_at else None,
     }

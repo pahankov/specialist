@@ -20,8 +20,8 @@ import {
   useColumnWidths,
   Pager,
   CitySelect,
+  AddressSelect,
 } from '../../components/common';
-import type { CityOption } from '../../components/common/CitySelect';
 import { useSectionPrefix, SUPER_PREFIX } from '../../utils/section';
 import { capitalizeWords } from '../../utils/names';
 import '../../styles/filters.css';
@@ -51,11 +51,12 @@ function ClientsPage() {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
-  const [city, setCity] = useState<CityOption | null>(null);
-  // Own city of the panel user (master): default for newly created clients
-  // so master and client share the city and can find each other.
-  const [myCity, setMyCity] = useState<CityOption | null>(null);
-  const [myCityLoaded, setMyCityLoaded] = useState(false);
+  // Single address field (city is parsed from the DaData pick for matching).
+  const [address, setAddress] = useState('');
+  const [addressCity, setAddressCity] = useState('');
+  // Panel user's own location: prefill for new clients so both sides match.
+  const [myDefaults, setMyDefaults] = useState<{ city: string; address: string } | null>(null);
+  const [myDefaultsLoaded, setMyDefaultsLoaded] = useState(false);
   const [search, setSearch] = usePersistentState('clients.search', '');
   const [searchInput, setSearchInput] = usePersistentState('clients.searchInput', '');
   const [masterIdFilter, setMasterIdFilter] = usePersistentState<number | ''>('clients.master', '');
@@ -123,25 +124,27 @@ function ClientsPage() {
     setName('');
     setPhone('');
     setEmail('');
-    setCity(null);
+    setAddress('');
+    setAddressCity('');
+    setEditingClient(null);
     setEditingId(null);
     setShowForm(false);
   };
 
-  const ensureMyCity = async (): Promise<CityOption | null> => {
-    if (myCityLoaded) return myCity;
+  const ensureMyDefaults = async (): Promise<{ city: string; address: string } | null> => {
+    if (myDefaultsLoaded) return myDefaults;
     try {
       const { data } = await adminApi.getProfile();
-      const c =
-        data.city_id != null
-          ? { id: data.city_id, name: data.city_name || '', source: 'local' as const }
-          : null;
-      setMyCity(c);
-      return c;
+      const d = {
+        city: data.city_name || '',
+        address: (data as { cabinet_address?: string }).cabinet_address || '',
+      };
+      setMyDefaults(d);
+      return d;
     } catch {
       return null;
     } finally {
-      setMyCityLoaded(true);
+      setMyDefaultsLoaded(true);
     }
   };
 
@@ -149,7 +152,9 @@ function ClientsPage() {
     setName('');
     setPhone('');
     setEmail('');
-    setCity(await ensureMyCity());
+    const d = await ensureMyDefaults();
+    setAddress(d?.address || '');
+    setAddressCity(d?.city || '');
     setEditingId(null);
     setShowForm(true);
   };
@@ -160,13 +165,18 @@ function ClientsPage() {
       toast.error('Введите корректный номер телефона (11 цифр)');
       return;
     }
+    // City for matching: parsed from the address pick, else the stored one,
+    // else the panel user's own city.
+    const cityName =
+      addressCity.trim() || (editingClient?.city_name || '') || myDefaults?.city || '';
     try {
       if (editingId) {
         await adminApi.updateClient(editingId, {
           name,
           phone,
           email: email || undefined,
-          city_id: city?.id ?? null,
+          city_name: cityName || undefined,
+          address: address.trim() || null,
         });
         toast.success('Клиент обновлён');
       } else {
@@ -174,7 +184,8 @@ function ClientsPage() {
           name,
           phone,
           email: email || undefined,
-          city_id: city?.id ?? null,
+          city_name: cityName || undefined,
+          address: address.trim() || null,
         });
         toast.success('Клиент создан');
       }
@@ -185,11 +196,15 @@ function ClientsPage() {
     }
   };
 
+  const [editingClient, setEditingClient] = useState<Client | null>(null);
+
   const handleEdit = (c: Client) => {
     setName(c.name);
     setPhone(c.phone);
     setEmail(c.email || '');
-    setCity(c.city_id != null ? { id: c.city_id, name: c.city_name || '', source: 'local' } : null);
+    setAddress(c.address || '');
+    setAddressCity(c.city_name || '');
+    setEditingClient(c);
     setEditingId(c.id);
     setShowForm(true);
   };
@@ -317,15 +332,22 @@ function ClientsPage() {
                   placeholder={EMAIL_PLACEHOLDER}
                 />
               </div>
-              <CitySelect
-                value={city?.id ?? null}
-                valueName={city?.name ?? ''}
-                onChange={setCity}
+              <AddressSelect
+                value={address}
+                onChange={(a, pickedCity) => {
+                  setAddress(a);
+                  if (pickedCity) setAddressCity(pickedCity);
+                }}
+                label="Адрес"
+                placeholder="Город, улица, дом... (подсказки DaData)"
                 style={{ marginBottom: 0 }}
               />
-              {editingId === null && city && myCity && city.id === myCity.id && (
+              {(addressCity || editingClient?.city_name || (!editingId && myDefaults?.city)) && (
                 <span style={{ fontSize: 12, color: '#666' }}>
-                  Ваш город — подставлен автоматически, можно сменить
+                  Город для подбора: {addressCity || editingClient?.city_name || myDefaults?.city}
+                  {!editingId && myDefaults?.address && address === myDefaults.address
+                    ? ' — ваш адрес, подставлен автоматически'
+                    : ''}
                 </span>
               )}
             </div>

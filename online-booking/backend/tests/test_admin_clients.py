@@ -182,3 +182,47 @@ class TestMasterOwnScope:
         assert (await client.post(
             f"/api/v1/admin/clients/{cid}/toggle-active", headers=other,
         )).status_code == 404
+
+
+class TestClientAddress:
+    """Address + city parsed from it (single-field location UX)."""
+
+    async def test_create_with_address_and_city_name(self, client, session, auth_headers):
+        from sqlalchemy import select
+        from app.models.city import City
+        from app.models.country import Country
+
+        country = Country(code="RU", name_ru="Россия", name_en="Russia", phone_prefix="+7")
+        session.add(country)
+        await session.flush()
+        session.add(City(country_id=country.id, name_ru="Уфа", name_en="Ufa", slug="ufa"))
+        await session.commit()
+
+        created = await client.post(
+            "/api/v1/admin/clients",
+            json={"name": "Addr", "phone": "+79991112299",
+                  "address": "г. Уфа, ул. Ленина, 5", "city_name": "Уфа"},
+            headers=auth_headers,
+        )
+        assert created.status_code == 201, created.text
+        body = created.json()
+        assert body["address"] == "г. Уфа, ул. Ленина, 5"
+        assert body["city_name"] == "Уфа"
+        assert body["city_id"] is not None
+
+        listed = await client.get("/api/v1/admin/clients", headers=auth_headers)
+        row = next(c for c in listed.json()["items"] if c["id"] == body["id"])
+        assert row["address"] == "г. Уфа, ул. Ленина, 5"
+
+    async def test_update_address(self, client, auth_headers, test_client_data):
+        created = await client.post(
+            "/api/v1/admin/clients", json=test_client_data, headers=auth_headers
+        )
+        cid = created.json()["id"]
+        r = await client.patch(
+            f"/api/v1/admin/clients/{cid}",
+            json={"address": "г. Казань, ул. Баумана, 1"},
+            headers=auth_headers,
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["address"] == "г. Казань, ул. Баумана, 1"

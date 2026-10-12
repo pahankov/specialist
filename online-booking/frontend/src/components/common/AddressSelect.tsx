@@ -5,9 +5,10 @@ import './SelectDropdown.css';
 
 interface AddressSelectProps {
   value: string;
-  onChange: (address: string) => void;
+  onChange: (address: string, city?: string) => void;
   label?: string;
   placeholder?: string;
+  required?: boolean;
   style?: CSSProperties;
 }
 
@@ -18,9 +19,10 @@ export default function AddressSelect({
   onChange,
   label = 'Адрес кабинета',
   placeholder = 'Начните вводить адрес...',
+  required = false,
   style,
 }: AddressSelectProps) {
-  const [rows, setRows] = useState<string[]>([]);
+  const [rows, setRows] = useState<{ value: string; city?: string }[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [dropPos, setDropPos] = useState({ top: 0, left: 0, width: 0 });
@@ -80,8 +82,8 @@ export default function AddressSelect({
     }, 400);
   };
 
-  const pick = (address: string) => {
-    onChange(address);
+  const pick = (row: { value: string; city?: string }) => {
+    onChange(row.value, row.city);
     setRows([]);
     setOpen(false);
     if (timer.current) clearTimeout(timer.current);
@@ -105,6 +107,7 @@ export default function AddressSelect({
           placeholder={placeholder}
           className="master-select-input"
           aria-label={label}
+          required={required && value.trim() === ''}
         />
         {value && (
           <button
@@ -144,13 +147,13 @@ export default function AddressSelect({
             ) : (
               rows.map((r) => (
                 <div
-                  key={r}
+                  key={r.value}
                   className="master-select-item"
                   onClick={() => pick(r)}
                   role="option"
                   aria-selected={false}
                 >
-                  <span className="master-select-name">{r}</span>
+                  <span className="master-select-name">{r.value}</span>
                 </div>
               ))
             )}

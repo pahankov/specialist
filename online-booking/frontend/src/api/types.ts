@@ -79,6 +79,7 @@ export interface Client {
   is_active?: boolean;
   city_id?: number | null;
   city_name?: string | null;
+  address?: string | null;
 }
 
 export interface Appointment {

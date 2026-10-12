@@ -279,6 +279,7 @@ def _client_profile_to_dict(cp):
         "phone": cp.user.phone,
         "email": cp.user.email,
         "no_show_count": cp.no_show_count,
+        "address": cp.address,
         "created_at": cp.created_at.isoformat() if cp.created_at else None,
         "updated_at": cp.updated_at.isoformat() if cp.updated_at else None,
     }

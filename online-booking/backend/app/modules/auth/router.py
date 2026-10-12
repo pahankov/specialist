@@ -338,6 +338,7 @@ async def register_unified(
             phone=req.phone,
             password=req.password,
             city_name=req.city_name,
+            address=req.address,
             telegram_username=req.telegram_username,
             is_master=req.is_master,
             db=db,

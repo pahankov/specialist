@@ -304,11 +304,15 @@ async def register_unified(
     is_master: bool,
     db: AsyncSession,
     last_name: Optional[str] = None,
+    address: Optional[str] = None,
 ) -> User:
     """Full registration with role selection (client or master).
 
     `name` is the first name; `last_name` optional. The display `name`
     stores "Имя Фамилия" so every existing list/badge keeps working.
+    `address` is the DaData location string: master's cabinet for masters,
+    home location for clients. `city_name` (parsed from it by the client)
+    resolves users.city_id — the primary matching key.
     Returns User instance with appropriate profile.
     """
     logger.info("Unified registration: %s (is_master=%s)", email, is_master)
@@ -360,10 +364,12 @@ async def register_unified(
         master_profile = MasterProfile(
             user_id=new_user.id,
             telegram_username=telegram_username,
+            cabinet_address=(address or "").strip() or None,
         )
         db.add(master_profile)
     else:
-        client_profile = ClientProfile(user_id=new_user.id)
+        client_profile = ClientProfile(
+            user_id=new_user.id, address=(address or "").strip() or None)
         db.add(client_profile)
 
     await db.commit()

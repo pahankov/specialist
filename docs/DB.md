@@ -71,6 +71,7 @@
 | id | INTEGER | PK | Автоинкремент |
 | user_id | INTEGER | UNIQUE, NOT NULL, FK -> users.id ON DELETE CASCADE | Ссылка на users.id |
 | no_show_count | INTEGER | DEFAULT 0 | Количество no-show |
+| address | VARCHAR(500) | NULLABLE | Локация клиента (подсказки DaData; ключ подбора — users.city_id) |
 | preferred_service_ids | JSON | NULLABLE | Список предпочтительных услуг |
 | created_at | TIMESTAMP WITH TIME ZONE | | Дата создания |
 | updated_at | TIMESTAMP WITH TIME ZONE | | Дата обновления |
@@ -327,8 +328,9 @@
 | 7 | c3d4e5f6a7b8 | a1b2c3d4e5f6 | `users.created_by` (свои клиенты мастера) | 2026-10-11 |
 | 8 | d4e5f6a7b8c9 | c3d4e5f6a7b8 | таблица `notification_broadcasts` (история отправок) | 2026-10-11 |
 | 9 | e5f6a7b8c9d0 | d4e5f6a7b8c9 | `users.last_name`, `master_profiles.cabinet_address/certificates` | 2026-10-12 |
+| 10 | f6a7b8c9d0e1 | e5f6a7b8c9d0 | `client_profiles.address` (локация клиента; ключ подбора — `users.city_id`) | 2026-10-12 |
 
-**Head:** `e5f6a7b8c9d0`
+**Head:** `f6a7b8c9d0e1`
 
 > Старая цепочка из 12 миграций (`9a9c2edb` → `b2c3d4e5f6a7`) удалена после squash —
 > история сохранена в git (`git log -- alembic/versions/`). Прод-БД со старым head

@@ -9,6 +9,9 @@ export interface UnifiedRegisterData {
   email: string;
   phone: string;
   password: string;
+  /** DaData location: cabinet address (master) or home location (client). */
+  address?: string | null;
+  /** City parsed from the address (primary matching key). */
   city_name?: string | null;
   city_data?: Record<string, unknown> | null;
   telegram_username?: string | null;
