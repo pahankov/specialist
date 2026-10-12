@@ -16,7 +16,7 @@ import { ConfirmDialog, MasterSelect } from '../../components/common';
 import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError';
 import { getCookie, decodeJwtPayload } from '../../utils/cookies';
 import { MonthlyStatsComponent } from '../../components/schedule/MonthlyStats';
-import { getBlockingLive } from '../../components/schedule/helpers';
+import { getBlockingLive, monthRangeISO } from '../../components/schedule/helpers';
 import { usePersistentState } from '../../utils/persistentState';
 import {
   toggleDayWork,
@@ -86,13 +86,10 @@ function SchedulePage() {
     async function init() {
       try {
         const masterParam = selectedMasterId !== '' ? selectedMasterId : undefined;
+        const { from, to } = monthRangeISO(currentMonth);
         const [scheduleResp, apptsResp, statsResp, windowResp] = await Promise.all([
           adminApi.getWorkingHours(masterParam),
-          adminApi.getAppointmentsByDate(
-            `${currentMonth.getFullYear()}-01-01`,
-            `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-28`,
-            masterParam,
-          ),
+          adminApi.getAppointmentsByDate(from, to, masterParam),
           adminApi.getMonthlyStats(
             currentMonth.getFullYear(),
             currentMonth.getMonth() + 1,
@@ -326,9 +323,7 @@ function SchedulePage() {
   }, []);
 
   const refreshMonthAppointments = useCallback(async () => {
-    const from = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth()).padStart(2, '0')}-01`;
-    const lastDay = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0).getDate();
-    const to = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    const { from, to } = monthRangeISO(currentMonth);
     try {
       const resp = await adminApi.getAppointmentsByDate(
         from,

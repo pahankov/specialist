@@ -284,6 +284,25 @@ function CabinetBookPage() {
 
   const modalServices = selectedMaster ? servicesByMaster[selectedMaster.id] || [] : [];
   const modalService = modalServices.find((s) => s.id === modalServiceId) ?? null;
+  // Complexes of the chosen master, first in the service select.
+  const modalBundles = selectedMaster ? bundlesByMaster[selectedMaster.id] || [] : [];
+  const modalPickValue =
+    modalBundle && selectedMaster && modalBundle.master_id === selectedMaster.id
+      ? `bundle:${modalBundle.id}`
+      : modalServiceId === ''
+        ? ''
+        : `service:${modalServiceId}`;
+
+  const handleModalPick = (value: string) => {
+    if (value.startsWith('bundle:')) {
+      const b = modalBundles.find((x) => x.id === Number(value.slice(7))) ?? null;
+      setModalBundle(b);
+      setModalServiceId('');
+    } else {
+      setModalBundle(null);
+      setModalServiceId(value === '' ? '' : Number(value));
+    }
+  };
 
   const handleBook = async () => {
     if (!selectedMaster || !selectedDate || slotHour === null) return;
@@ -438,7 +457,7 @@ function CabinetBookPage() {
                   <strong>{b.name}</strong>
                   <span className="bundle-pick-master">{m.name}</span>
                   <span className="bundle-pick-comp">
-                    {b.services.map((s) => s.name).join(' + ')}
+                    {b.services.map((s) => `${s.name} (${s.duration_minutes} мин)`).join(' + ')}
                   </span>
                   <span className="bundle-pick-totals">
                     ⏱ {b.duration_total} мин ·{' '}
@@ -542,7 +561,7 @@ function CabinetBookPage() {
                   <div>
                     <strong>🎁 {modalBundle.name}</strong>
                     <div className="hint">
-                      {modalBundle.services.map((s) => s.name).join(' + ')} · ⏱{' '}
+                      {modalBundle.services.map((s) => `${s.name} (${s.duration_minutes} мин)`).join(' + ')} · ⏱{' '}
                       {modalBundle.duration_total} мин · {modalBundle.effective_price} ₽
                     </div>
                   </div>
@@ -560,19 +579,28 @@ function CabinetBookPage() {
                 </div>
               ) : (
               <select
-                value={modalServiceId}
-                onChange={(e) =>
-                  setModalServiceId(e.target.value === '' ? '' : Number(e.target.value))
-                }
+                value={modalPickValue}
+                onChange={(e) => handleModalPick(e.target.value)}
               >
                 <option value="" disabled>
                   Выберите услугу…
                 </option>
+                {modalBundles.length > 0 && (
+                  <optgroup label="🎁 Комплексы">
+                    {modalBundles.map((b) => (
+                      <option key={b.id} value={`bundle:${b.id}`}>
+                        🎁 {b.name} — {b.duration_total} мин, {b.effective_price} ₽
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                <optgroup label="Услуги">
                 {modalServices.map((s) => (
-                  <option key={s.id} value={s.id}>
+                  <option key={s.id} value={`service:${s.id}`}>
                     {s.name} — {s.duration_minutes} мин, {s.price} ₽
                   </option>
                 ))}
+                </optgroup>
               </select>
               )}
               {modalService && (
@@ -654,17 +682,21 @@ function CabinetBookPage() {
                   {aboutMaster.name} {formatRating(aboutMaster.avg_rating)}
                 </strong>
                 <div className="master-about-sub">
-                  {[aboutMaster.city_name, aboutMaster.cabinet_address]
-                    .filter(Boolean)
-                    .join(' • ') || 'Адрес уточняйте'}
+                  {aboutMaster.city_name || 'Город уточняйте'}
+                </div>
+                <div className="master-about-sub">
+                  Кабинет: {aboutMaster.cabinet_address || 'адрес уточняйте'}
                 </div>
                 {aboutMaster.experience_years != null && (
                   <div className="master-about-sub">Опыт: {aboutMaster.experience_years} лет</div>
                 )}
               </div>
             </div>
-            {aboutMaster.description && (
+            <h4>О себе</h4>
+            {aboutMaster.description ? (
               <p className="master-about-desc">{aboutMaster.description}</p>
+            ) : (
+              <p className="master-about-sub">Мастер пока ничего не рассказал о себе</p>
             )}
             <h4>Сертификаты</h4>
             {!aboutMaster.certificates || aboutMaster.certificates.length === 0 ? (

@@ -18,6 +18,8 @@ import {
   formatPrice,
   buildMonthlyStats,
   pluralBookings,
+  pluralHolds,
+  monthRangeISO,
 } from '../components/schedule/helpers';
 import type { Appointment, DaySchedule } from '../api/types';
 
@@ -33,6 +35,27 @@ describe('helpers', () => {
       expect(pluralBookings(21)).toBe('21 запись');
       expect(pluralBookings(22)).toBe('22 записи');
       expect(pluralBookings(25)).toBe('25 записей');
+    });
+  });
+
+  describe('pluralHolds', () => {
+    it('declines бронь correctly', () => {
+      expect(pluralHolds(1)).toBe('1 бронь');
+      expect(pluralHolds(3)).toBe('3 брони');
+      expect(pluralHolds(5)).toBe('5 броней');
+      expect(pluralHolds(11)).toBe('11 броней');
+      expect(pluralHolds(21)).toBe('21 бронь');
+    });
+  });
+
+  describe('monthRangeISO', () => {
+    it('covers the whole month incl. 29–31', () => {
+      expect(monthRangeISO(new Date(2026, 9, 12))).toEqual({
+        from: '2026-10-01',
+        to: '2026-10-31',
+      });
+      expect(monthRangeISO(new Date(2026, 1, 5)).to).toBe('2026-02-28');
+      expect(monthRangeISO(new Date(2024, 1, 5)).to).toBe('2024-02-29');
     });
   });
 

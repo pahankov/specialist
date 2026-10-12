@@ -170,6 +170,24 @@ export function formatPrice(price: number | string): string {
   return num.toLocaleString('ru-RU');
 }
 
+/** Russian plural for pending holds: "1 бронь", "3 брони", "5 броней". */
+export function pluralHolds(n: number): string {
+  const m10 = n % 10;
+  const m100 = n % 100;
+  const word =
+    m10 === 1 && m100 !== 11 ? 'бронь' : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)
+      ? 'брони'
+      : 'броней';
+  return `${n} ${word}`;
+}
+
+/** Exact viewed-month range for by-date fetches (init once cut at the 28th). */
+export function monthRangeISO(d: Date): { from: string; to: string } {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const last = new Date(y, d.getMonth() + 1, 0).getDate();
+  return { from: `${y}-${m}-01`, to: `${y}-${m}-${String(last).padStart(2, '0')}` };
+}
 /** Russian plural for bookings: "1 запись", "3 записи", "5 записей". */
 export function pluralBookings(n: number): string {
   const m10 = n % 10;

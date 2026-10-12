@@ -7,6 +7,7 @@ import {
   isPast,
   isToday,
   pluralBookings,
+  pluralHolds,
 } from './helpers';
 import './ScheduleComponents.css';
 
@@ -123,19 +124,32 @@ export function Calendar({
           const hours = schedule[dateStr];
 
           let apptCount = 0;
+          let holdCount = 0;
           const liveIds = new Set<number>();
+          const holdIds = new Set<number>();
           if (active && day.isCurrentMonth && hours) {
             for (let h = hours.start; h < hours.end; h++) {
               const slots = getAppointmentsForSlot(appointments, day.date, h);
               for (const s of slots) {
-                if (s.status !== 'cancelled') liveIds.add(s.id);
+                if (s.status === 'cancelled') continue;
+                if (s.status === 'pending') holdIds.add(s.id);
+                else liveIds.add(s.id);
               }
             }
             // One label per day: unique live bookings touching it
             // (long services span granules but count once).
+            holdCount = holdIds.size;
             apptCount = liveIds.size;
           }
-          const hasLive = liveIds.size > 0;
+          const hasLive = liveIds.size + holdIds.size > 0;
+          const dayLabel =
+            holdCount > 0 && apptCount > 0
+              ? `${pluralBookings(apptCount)} · ${pluralHolds(holdCount)}`
+              : holdCount > 0
+                ? pluralHolds(holdCount)
+                : apptCount > 0
+                  ? pluralBookings(apptCount)
+                  : '';
 
           return (
             <div
@@ -154,8 +168,8 @@ export function Calendar({
               >
                 {past ? 'Прошёл' : active ? 'Рабочий' : today ? 'Сегодня' : 'Выходной'}
               </div>
-              {active && !past && apptCount > 0 && (
-                <div className="calendar-day-count">{pluralBookings(apptCount)}</div>
+              {active && !past && dayLabel !== '' && (
+                <div className="calendar-day-count">{dayLabel}</div>
               )}
             </div>
           );
