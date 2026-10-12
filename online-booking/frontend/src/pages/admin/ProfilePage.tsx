@@ -134,9 +134,16 @@ function ProfilePage() {
       toast.error('Введите имя');
       return;
     }
+    // A typed-but-unadded draft (name + optional photo, "+ Добавить" not
+    // pressed) goes in automatically — otherwise it silently vanishes.
+    let list = certs;
+    const draft = newCertName.trim();
+    if (draft && !certs.some((c) => c.name === draft)) {
+      list = [...certs, newCertUrl ? { name: draft, url: newCertUrl } : { name: draft }];
+    }
     setSaving(true);
     try {
-      await adminApi.updateProfile({
+      const { data } = await adminApi.updateProfile({
         name: firstName.trim(),
         last_name: lastName.trim() || null,
         telegram_username: telegram.trim() || null,
@@ -144,9 +151,13 @@ function ProfilePage() {
         experience_years: experience.trim() === '' ? null : Number(experience),
         city_id: city?.id ?? null,
         cabinet_address: address.trim() || null,
-        certificates: certs,
+        certificates: list,
         avatar_preset: preset,
       });
+      // Converge with the server (it echoes the saved profile).
+      setCerts(data?.certificates || list);
+      setNewCertName('');
+      setNewCertUrl(undefined);
       toast.success('Профиль сохранён');
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'Не удалось сохранить профиль'));

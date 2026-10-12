@@ -17,10 +17,25 @@ import {
   getFilteredServices,
   formatPrice,
   buildMonthlyStats,
+  pluralBookings,
 } from '../components/schedule/helpers';
 import type { Appointment, DaySchedule } from '../api/types';
 
 describe('helpers', () => {
+  describe('pluralBookings', () => {
+    it('declines запись correctly', () => {
+      expect(pluralBookings(1)).toBe('1 запись');
+      expect(pluralBookings(2)).toBe('2 записи');
+      expect(pluralBookings(4)).toBe('4 записи');
+      expect(pluralBookings(5)).toBe('5 записей');
+      expect(pluralBookings(11)).toBe('11 записей');
+      expect(pluralBookings(12)).toBe('12 записей');
+      expect(pluralBookings(21)).toBe('21 запись');
+      expect(pluralBookings(22)).toBe('22 записи');
+      expect(pluralBookings(25)).toBe('25 записей');
+    });
+  });
+
   describe('formatDate', () => {
     it('formats date to YYYY-MM-DD', () => {
       const date = new Date(2026, 0, 15);

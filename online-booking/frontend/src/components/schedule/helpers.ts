@@ -170,6 +170,17 @@ export function formatPrice(price: number | string): string {
   return num.toLocaleString('ru-RU');
 }
 
+/** Russian plural for bookings: "1 запись", "3 записи", "5 записей". */
+export function pluralBookings(n: number): string {
+  const m10 = n % 10;
+  const m100 = n % 100;
+  const word =
+    m10 === 1 && m100 !== 11 ? 'запись' : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)
+      ? 'записи'
+      : 'записей';
+  return `${n} ${word}`;
+}
+
 export function buildMonthlyStats(
   stats: {
     confirmed_appointments: number;

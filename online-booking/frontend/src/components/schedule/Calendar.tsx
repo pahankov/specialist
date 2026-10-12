@@ -4,10 +4,9 @@ import {
   formatDate,
   getMonthDays,
   getAppointmentsForSlot,
-  getSlotStatus,
   isPast,
   isToday,
-  isSlotPast,
+  pluralBookings,
 } from './helpers';
 import './ScheduleComponents.css';
 
@@ -128,12 +127,13 @@ export function Calendar({
           if (active && day.isCurrentMonth && hours) {
             for (let h = hours.start; h < hours.end; h++) {
               const slots = getAppointmentsForSlot(appointments, day.date, h);
-              const status = getSlotStatus(slots);
-              if (status !== 'free' && isSlotPast(day.date, h)) apptCount++;
               for (const s of slots) {
                 if (s.status !== 'cancelled') liveIds.add(s.id);
               }
             }
+            // One label per day: unique live bookings touching it
+            // (long services span granules but count once).
+            apptCount = liveIds.size;
           }
           const hasLive = liveIds.size > 0;
 
@@ -155,7 +155,7 @@ export function Calendar({
                 {past ? 'Прошёл' : active ? 'Рабочий' : today ? 'Сегодня' : 'Выходной'}
               </div>
               {active && !past && apptCount > 0 && (
-                <div className="calendar-day-count">{apptCount} записей</div>
+                <div className="calendar-day-count">{pluralBookings(apptCount)}</div>
               )}
             </div>
           );

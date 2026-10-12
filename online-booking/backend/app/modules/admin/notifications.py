@@ -114,13 +114,16 @@ async def resolve_targets(
     raise HTTPException(status_code=400, detail="Неизвестная аудитория")
 
 
-def _to_item(n: Notification) -> dict:
+def _to_item(n: Notification, sender_name: Optional[str] = None) -> dict:
+    # Never touch n.sender here: on AsyncSession rows the relationship is
+    # unloaded and lazy access raises MissingGreenlet (500). Callers pass
+    # the pre-resolved name (batched query, no N+1).
     return {
         "id": n.id,
         "text": n.text,
         "audience": n.audience,
         "link": n.link,
-        "sender_name": n.sender.name if getattr(n, "sender", None) else None,
+        "sender_name": sender_name,
         "is_read": bool(n.is_read),
         "created_at": n.created_at.isoformat() if n.created_at else None,
     }
@@ -152,9 +155,7 @@ async def _inbox(db: AsyncSession, user: User, unread_only: bool,
         names = dict(srows.all())
     items = []
     for n in rows:
-        d = _to_item(n)
-        d["sender_name"] = names.get(n.sender_id)
-        items.append(d)
+        items.append(_to_item(n, names.get(n.sender_id)))
     return {"items": items, "total": total, "unread": unread,
             "page": page, "page_size": page_size}
 
@@ -169,7 +170,12 @@ async def _mark_read(db: AsyncSession, user: User, notif_id: int) -> dict:
         n.read_at = datetime.now(timezone.utc)
         await db.commit()
         await db.refresh(n)
-    return _to_item(n)
+    sender_name = None
+    if n.sender_id:
+        sender_name = (await db.execute(
+            select(User.name).where(User.id == n.sender_id)
+        )).scalar_one_or_none()
+    return _to_item(n, sender_name)
 
 
 @router.get("/notifications/audience-counts")

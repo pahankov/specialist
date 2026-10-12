@@ -115,6 +115,40 @@ class TestBellBroadcast:
         assert mr.status_code == 200
         assert mr.json()["is_read"] is True
 
+    async def test_inbox_with_sender_no_500(self, client, session, super_admin_headers):
+        """Rows WITH sender_id must not 500 (lazy .sender raised
+        MissingGreenlet — real prod crash, sender-less rows masked it)."""
+        from sqlalchemy import select
+        from app.models.notification import Notification
+        from app.models.user import User
+
+        me = (await session.execute(
+            select(User).where(User.email == "superadmin@example.com")
+        )).scalar_one()
+        other = await _mk_user(session, "Sender", "sender@example.com", "MASTER")
+        await session.commit()
+        session.add(Notification(sender_id=other.id, recipient_id=me.id,
+                                 text="Новая запись", audience="booking",
+                                 link="appointments"))
+        await session.commit()
+        # Detach everything: rows must serialize from fresh SELECTs.
+        session.expunge_all()
+
+        r = await client.get("/api/v1/admin/notifications/inbox",
+                             headers=super_admin_headers)
+        assert r.status_code == 200, r.text
+        items = [i for i in r.json()["items"] if i["text"] == "Новая запись"]
+        assert len(items) == 1
+        assert items[0]["sender_name"] == "Sender"
+        assert items[0]["link"] == "appointments"
+
+        mr = await client.post(
+            f"/api/v1/admin/notifications/{items[0]['id']}/read",
+            headers=super_admin_headers)
+        assert mr.status_code == 200, mr.text
+        assert mr.json()["is_read"] is True
+        assert mr.json()["sender_name"] == "Sender"
+
     async def test_audience_counts(self, client, super_admin_headers):
         r = await client.get(
             "/api/v1/admin/notifications/audience-counts",
