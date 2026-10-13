@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { adminApi } from '../../api/client';
@@ -16,12 +16,12 @@ import {
   ConfirmDialog,
   MasterSelect,
   PhoneInput,
-  ResizableTh,
-  useColumnWidths,
+  DataTable,
   Pager,
   CitySelect,
   AddressSelect,
 } from '../../components/common';
+import type { FitColumnDef } from '../../components/common';
 import { useSectionPrefix, SUPER_PREFIX } from '../../utils/section';
 import { capitalizeWords } from '../../utils/names';
 import '../../styles/filters.css';
@@ -32,19 +32,6 @@ function ClientsPage() {
   const navigate = useNavigate();
   const section = useSectionPrefix();
   const isSuperSection = section === SUPER_PREFIX;
-  const {
-    widths: colW,
-    setWidth: setColW,
-    resetWidths,
-  } = useColumnWidths('clients2', {
-    check: 44,
-    name: 180,
-    phone: 140,
-    email: 180,
-    city: 150,
-    noshow: 90,
-    actions: 170,
-  });
   const [selectedClients, setSelectedClients] = useState<Set<number>>(new Set());
   const [editingCityId, setEditingCityId] = useState<number | null>(null);
   const [clients, setClients] = useState<Client[]>([]);
@@ -312,6 +299,229 @@ function ClientsPage() {
       .join('; ');
   };
 
+  const columns: FitColumnDef<Client>[] = useMemo(
+    () => [
+      {
+        id: 'check',
+        header: () => (
+          <input
+            type="checkbox"
+            checked={clients.length > 0 && selectedClients.size === clients.length}
+            onChange={() => {
+              if (selectedClients.size === clients.length) setSelectedClients(new Set());
+              else setSelectedClients(new Set(clients.map((c) => c.id)));
+            }}
+            title="Выбрать всех на странице"
+          />
+        ),
+        cell: ({ row }) => {
+          const c = row.original;
+          return (
+            <input
+              type="checkbox"
+              checked={selectedClients.has(c.id)}
+              onChange={() =>
+                setSelectedClients((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(c.id)) next.delete(c.id);
+                  else next.add(c.id);
+                  return next;
+                })
+              }
+              title="Выбрать для экспорта"
+            />
+          );
+        },
+        meta: { minWidth: 36, maxWidth: 44, defaultWidth: 40, hideable: false, label: '✓' },
+      },
+      {
+        id: 'name',
+        header: () => (
+          <span
+            onClick={() => toggleSort('name')}
+            style={{ cursor: 'pointer', userSelect: 'none' }}
+            title="Сортировать по имени"
+          >
+            Имя{sortArrow('name')}
+          </span>
+        ),
+        accessorFn: (c) => c.name,
+        cell: ({ row }) => {
+          const c = row.original;
+          return (
+            <>
+              <Tooltip content="Показать записи клиента">
+                <button
+                  className="link-button"
+                  onClick={() => navigate(`${section}/appointments?client_id=${c.id}`)}
+                >
+                  <strong>{c.name}</strong>
+                </button>
+              </Tooltip>
+              {c.is_blocked && (
+                <span
+                  style={{
+                    marginLeft: 6,
+                    fontSize: 12,
+                    color: '#fff',
+                    background: '#e5484d',
+                    borderRadius: 10,
+                    padding: '1px 8px',
+                    whiteSpace: 'nowrap',
+                  }}
+                  title={`Клиент в чёрном списке: не видит расписание и не может записываться${attributionTitle(c) ? `\n${attributionTitle(c)}` : ''}`}
+                >
+                  ⛔ Заблокирован
+                </span>
+              )}
+              {c.is_hidden && !c.is_blocked && (
+                <span
+                  style={{
+                    marginLeft: 6,
+                    fontSize: 12,
+                    color: '#666',
+                    background: '#eee',
+                    borderRadius: 10,
+                    padding: '1px 8px',
+                    whiteSpace: 'nowrap',
+                  }}
+                  title={`Клиент в архиве — скрыт из списков, история сохранена${attributionTitle(c) ? `\n${attributionTitle(c)}` : ''}`}
+                >
+                  📦 Архив
+                  {c.hidden_reason ? `: ${REASON_LABELS[c.hidden_reason] || c.hidden_reason}` : ''}
+                </span>
+              )}
+            </>
+          );
+        },
+        meta: { minWidth: 130, label: 'Имя' },
+      },
+      {
+        id: 'phone',
+        header: 'Телефон',
+        accessorFn: (c) => c.phone,
+        cell: ({ row }) => <a href={`tel:${row.original.phone}`}>{row.original.phone}</a>,
+        meta: { minWidth: 110, label: 'Телефон' },
+      },
+      {
+        id: 'email',
+        header: 'Email',
+        accessorFn: (c) => c.email || '—',
+        cell: ({ row }) => row.original.email || '—',
+        meta: { minWidth: 120, label: 'Email' },
+      },
+      {
+        id: 'city',
+        header: 'Город',
+        accessorFn: (c) => c.city_name || '—',
+        cell: ({ row }) => {
+          const c = row.original;
+          return editingCityId === c.id ? (
+            <CitySelect
+              value={c.city_id ?? null}
+              valueName={c.city_name || ''}
+              label=""
+              onChange={async (opt) => {
+                try {
+                  await adminApi.updateClient(c.id, { city_id: opt?.id ?? null });
+                  toast.success('Город обновлён');
+                  setEditingCityId(null);
+                  fetchData();
+                } catch (err: unknown) {
+                  toast.error(getApiErrorMessage(err, 'Не удалось обновить город'));
+                }
+              }}
+            />
+          ) : (
+            <Tooltip content="Нажмите, чтобы назначить город">
+              <button className="link-button" onClick={() => setEditingCityId(c.id)}>
+                {c.city_name || '—'}
+              </button>
+            </Tooltip>
+          );
+        },
+        meta: { minWidth: 110, label: 'Город' },
+      },
+      {
+        id: 'noshow',
+        header: () => (
+          <span
+            onClick={() => toggleSort('no_show')}
+            style={{ cursor: 'pointer', userSelect: 'none' }}
+            title="Сортировать по неявкам"
+          >
+            Неявки{sortArrow('no_show')}
+          </span>
+        ),
+        accessorFn: (c) => c.no_show_count ?? 0,
+        cell: ({ row }) =>
+          (row.original.no_show_count ?? 0) > 0 ? `⚠️ ${row.original.no_show_count}` : '—',
+        meta: { minWidth: 70, maxWidth: 120, label: 'Неявки' },
+      },
+      {
+        id: 'actions',
+        header: 'Действия',
+        cell: ({ row }) => {
+          const c = row.original;
+          return (
+            <span style={{ display: 'inline-flex', gap: 4 }}>
+              {c.is_hidden && !c.is_blocked && (
+                <Tooltip content="Вернуть из архива в списки" position="top">
+                  <button className="btn btn-sm btn-ghost" onClick={() => handleRestore(c.id)}>
+                    ↩️
+                  </button>
+                </Tooltip>
+              )}
+              {c.is_blocked ? (
+                <Tooltip content="Разблокировать — клиент снова сможет записываться" position="top">
+                  <button className="btn btn-sm btn-ghost" onClick={() => handleUnblock(c.id)}>
+                    ✅
+                  </button>
+                </Tooltip>
+              ) : (
+                <Tooltip
+                  content="Заблокировать — скроет из списков и запретит запись"
+                  position="top"
+                >
+                  <button className="btn btn-sm btn-ghost" onClick={() => setBlockingId(c.id)}>
+                    🚫
+                  </button>
+                </Tooltip>
+              )}
+              <Tooltip
+                content={
+                  c.is_active === false
+                    ? 'Включить аккаунт (сейчас выключен)'
+                    : 'Выключить аккаунт (сейчас активен)'
+                }
+                position="top"
+              >
+                <button
+                  className={`btn btn-sm ${c.is_active === false ? 'btn-danger' : 'btn-ghost'}`}
+                  onClick={() => handleToggleActive(c.id)}
+                >
+                  {c.is_active === false ? '🔒' : '🔓'}
+                </button>
+              </Tooltip>
+              <Tooltip content="Редактировать">
+                <button className="btn btn-sm btn-edit" onClick={() => handleEdit(c)}>
+                  ✏️
+                </button>
+              </Tooltip>
+              <Tooltip content="Удалить">
+                <button className="btn btn-sm btn-delete" onClick={() => setDeletingId(c.id)}>
+                  🗑️
+                </button>
+              </Tooltip>
+            </span>
+          );
+        },
+        meta: { minWidth: 150, hideable: false, label: 'Действия' },
+      },
+    ],
+    [clients, selectedClients, editingCityId, section],
+  );
+
   return (
     <div className="clients-page">
       <div className="page-header">
@@ -504,13 +714,6 @@ function ClientsPage() {
             </h3>
             {clients.length > 0 && (
               <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  className="btn btn-ghost btn-sm"
-                  onClick={resetWidths}
-                  title="Вернуть стандартную ширину колонок таблицы"
-                >
-                  ⟲ Колонки
-                </button>
                 <Tooltip content="Добавить нового клиента">
                   <button className="btn btn-primary" onClick={openCreateForm}>
                     + Добавить клиента
@@ -529,240 +732,7 @@ function ClientsPage() {
               onAction={openCreateForm}
             />
           ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table className="clients-table resizable-table" style={{ minWidth: 640 }}>
-                <thead>
-                  <tr>
-                    <ResizableTh
-                      width={colW.check}
-                      onResize={(w) => setColW('check', w)}
-                      className="col-checkbox"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={clients.length > 0 && selectedClients.size === clients.length}
-                        onChange={() => {
-                          if (selectedClients.size === clients.length)
-                            setSelectedClients(new Set());
-                          else setSelectedClients(new Set(clients.map((c) => c.id)));
-                        }}
-                        title="Выбрать всех на странице"
-                      />
-                    </ResizableTh>
-                    <ResizableTh
-                      width={colW.name}
-                      minWidth={130}
-                      onResize={(w) => setColW('name', w)}
-                      onClick={() => toggleSort('name')}
-                      style={{ cursor: 'pointer', userSelect: 'none' }}
-                      title="Сортировать по имени"
-                    >
-                      Имя{sortArrow('name')}
-                    </ResizableTh>
-                    <ResizableTh
-                      width={colW.phone}
-                      minWidth={120}
-                      onResize={(w) => setColW('phone', w)}
-                    >
-                      Телефон
-                    </ResizableTh>
-                    <ResizableTh
-                      width={colW.email}
-                      minWidth={140}
-                      onResize={(w) => setColW('email', w)}
-                    >
-                      Email
-                    </ResizableTh>
-                    <ResizableTh
-                      width={colW.city}
-                      minWidth={100}
-                      onResize={(w) => setColW('city', w)}
-                    >
-                      Город
-                    </ResizableTh>
-                    <ResizableTh
-                      width={colW.noshow}
-                      minWidth={80}
-                      onResize={(w) => setColW('noshow', w)}
-                      onClick={() => toggleSort('no_show')}
-                      style={{ cursor: 'pointer', userSelect: 'none' }}
-                      title="Сортировать по неявкам"
-                    >
-                      Неявки{sortArrow('no_show')}
-                    </ResizableTh>
-                    <ResizableTh
-                      width={colW.actions}
-                      minWidth={150}
-                      defaultWidth={170}
-                      onResize={(w) => setColW('actions', w)}
-                    >
-                      Действия
-                    </ResizableTh>
-                  </tr>
-                </thead>
-                <tbody>
-                  {clients.map((c) => (
-                    <tr key={c.id}>
-                      <td className="col-checkbox">
-                        <input
-                          type="checkbox"
-                          checked={selectedClients.has(c.id)}
-                          onChange={() =>
-                            setSelectedClients((prev) => {
-                              const next = new Set(prev);
-                              if (next.has(c.id)) next.delete(c.id);
-                              else next.add(c.id);
-                              return next;
-                            })
-                          }
-                          title="Выбрать для экспорта"
-                        />
-                      </td>
-                      <td>
-                        <Tooltip content="Показать записи клиента">
-                          <button
-                            className="link-button"
-                            onClick={() => navigate(`${section}/appointments?client_id=${c.id}`)}
-                          >
-                            <strong>{c.name}</strong>
-                          </button>
-                        </Tooltip>
-                        {c.is_blocked && (
-                          <span
-                            style={{
-                              marginLeft: 6,
-                              fontSize: 12,
-                              color: '#fff',
-                              background: '#e5484d',
-                              borderRadius: 10,
-                              padding: '1px 8px',
-                              whiteSpace: 'nowrap',
-                            }}
-                            title={`Клиент в чёрном списке: не видит расписание и не может записываться${attributionTitle(c) ? `\n${attributionTitle(c)}` : ''}`}
-                          >
-                            ⛔ Заблокирован
-                          </span>
-                        )}
-                        {c.is_hidden && !c.is_blocked && (
-                          <span
-                            style={{
-                              marginLeft: 6,
-                              fontSize: 12,
-                              color: '#666',
-                              background: '#eee',
-                              borderRadius: 10,
-                              padding: '1px 8px',
-                              whiteSpace: 'nowrap',
-                            }}
-                            title={`Клиент в архиве — скрыт из списков, история сохранена${attributionTitle(c) ? `\n${attributionTitle(c)}` : ''}`}
-                          >
-                            📦 Архив{/* reason below in tooltip */}
-                            {c.hidden_reason
-                              ? `: ${REASON_LABELS[c.hidden_reason] || c.hidden_reason}`
-                              : ''}
-                          </span>
-                        )}
-                      </td>
-                      <td>
-                        <a href={`tel:${c.phone}`}>{c.phone}</a>
-                      </td>
-                      <td>{c.email || '—'}</td>
-                      <td>
-                        {editingCityId === c.id ? (
-                          <CitySelect
-                            value={c.city_id ?? null}
-                            valueName={c.city_name || ''}
-                            label=""
-                            onChange={async (opt) => {
-                              try {
-                                await adminApi.updateClient(c.id, { city_id: opt?.id ?? null });
-                                toast.success('Город обновлён');
-                                setEditingCityId(null);
-                                fetchData();
-                              } catch (err: unknown) {
-                                toast.error(getApiErrorMessage(err, 'Не удалось обновить город'));
-                              }
-                            }}
-                          />
-                        ) : (
-                          <Tooltip content="Нажмите, чтобы назначить город">
-                            <button className="link-button" onClick={() => setEditingCityId(c.id)}>
-                              {c.city_name || '—'}
-                            </button>
-                          </Tooltip>
-                        )}
-                      </td>
-                      <td>{(c.no_show_count ?? 0) > 0 ? `⚠️ ${c.no_show_count}` : '—'}</td>
-                      <td className="actions-cell">
-                        {c.is_hidden && !c.is_blocked && (
-                          <Tooltip content="Вернуть из архива в списки" position="top">
-                            <button
-                              className="btn btn-sm btn-ghost"
-                              onClick={() => handleRestore(c.id)}
-                            >
-                              ↩️
-                            </button>
-                          </Tooltip>
-                        )}
-                        {c.is_blocked ? (
-                          <Tooltip
-                            content="Разблокировать — клиент снова сможет записываться"
-                            position="top"
-                          >
-                            <button
-                              className="btn btn-sm btn-ghost"
-                              onClick={() => handleUnblock(c.id)}
-                            >
-                              ✅
-                            </button>
-                          </Tooltip>
-                        ) : (
-                          <Tooltip
-                            content="Заблокировать — скроет из списков и запретит запись"
-                            position="top"
-                          >
-                            <button
-                              className="btn btn-sm btn-ghost"
-                              onClick={() => setBlockingId(c.id)}
-                            >
-                              🚫
-                            </button>
-                          </Tooltip>
-                        )}
-                        <Tooltip
-                          content={
-                            c.is_active === false
-                              ? 'Включить аккаунт (сейчас выключен)'
-                              : 'Выключить аккаунт (сейчас активен)'
-                          }
-                          position="top"
-                        >
-                          <button
-                            className={`btn btn-sm ${c.is_active === false ? 'btn-danger' : 'btn-ghost'}`}
-                            onClick={() => handleToggleActive(c.id)}
-                          >
-                            {c.is_active === false ? '🔒' : '🔓'}
-                          </button>
-                        </Tooltip>
-                        <Tooltip content="Редактировать">
-                          <button className="btn btn-sm btn-edit" onClick={() => handleEdit(c)}>
-                            ✏️
-                          </button>
-                        </Tooltip>
-                        <Tooltip content="Удалить">
-                          <button
-                            className="btn btn-sm btn-delete"
-                            onClick={() => setDeletingId(c.id)}
-                          >
-                            🗑️
-                          </button>
-                        </Tooltip>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <DataTable tableId="clients" columns={columns} data={clients} />
           )}
         </div>
       )}

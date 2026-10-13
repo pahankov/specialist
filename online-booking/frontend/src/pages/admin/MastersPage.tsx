@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { superAdminApi } from '../../api/client';
@@ -11,9 +11,9 @@ import {
   ConfirmDialog,
   CitySelect,
   PhoneInput,
-  ResizableTh,
-  useColumnWidths,
+  DataTable,
 } from '../../components/common';
+import type { FitColumnDef } from '../../components/common';
 import type { CityOption } from '../../components/common/CitySelect';
 import { isCompletePhone } from '../../components/common/PhoneInput';
 import {
@@ -35,20 +35,6 @@ import './MastersPage.css';
 function MastersPage() {
   const navigate = useNavigate();
   const section = useSectionPrefix();
-  const {
-    widths: colW,
-    setWidth: setColW,
-    resetWidths,
-  } = useColumnWidths('masters', {
-    check: 44,
-    name: 170,
-    email: 200,
-    phone: 140,
-    status: 120,
-    role: 170,
-    tariff: 130,
-    actions: 176,
-  });
   const [tariffMaster, setTariffMaster] = useState<Master | null>(null);
   const [tariffDraft, setTariffDraft] = useState('');
   const [trialDraft, setTrialDraft] = useState('');
@@ -268,6 +254,217 @@ function MastersPage() {
     setShowEditModal(true);
   };
 
+  const columns: FitColumnDef<Master>[] = useMemo(
+    () => [
+      {
+        id: 'check',
+        header: () => (
+          <input
+            type="checkbox"
+            checked={masters.length > 0 && selectedMasters.size === masters.length}
+            onChange={() => {
+              if (selectedMasters.size === masters.length) {
+                setSelectedMasters(new Set());
+              } else {
+                setSelectedMasters(new Set(masters.map((m) => m.id)));
+              }
+            }}
+          />
+        ),
+        cell: ({ row }) => (
+          <input
+            type="checkbox"
+            checked={selectedMasters.has(row.original.id)}
+            onChange={() => toggleSelect(row.original.id)}
+          />
+        ),
+        meta: { minWidth: 36, maxWidth: 44, defaultWidth: 40, hideable: false, label: '✓' },
+      },
+      {
+        id: 'name',
+        header: () => (
+          <span
+            onClick={() => toggleSort('name')}
+            style={{ cursor: 'pointer', userSelect: 'none' }}
+            title="Сортировать по имени"
+          >
+            Имя{sortArrow('name')}
+          </span>
+        ),
+        accessorFn: (m) => m.name,
+        cell: ({ row }) => {
+          const master = row.original;
+          return (
+            <button
+              className="master-name-link"
+              onClick={() => navigate(`${section}/masters/${master.id}`)}
+            >
+              <div className="master-name">{master.name}</div>
+              {master.telegram_username && (
+                <div className="master-telegram">@{master.telegram_username}</div>
+              )}
+            </button>
+          );
+        },
+        meta: { minWidth: 140, label: 'Имя' },
+      },
+      {
+        id: 'email',
+        header: () => (
+          <span
+            onClick={() => toggleSort('email')}
+            style={{ cursor: 'pointer', userSelect: 'none' }}
+            title="Сортировать по email"
+          >
+            Email{sortArrow('email')}
+          </span>
+        ),
+        accessorFn: (m) => m.email,
+        cell: ({ row }) => row.original.email,
+        meta: { minWidth: 150, label: 'Email' },
+      },
+      {
+        id: 'phone',
+        header: 'Телефон',
+        accessorFn: (m) => m.phone || '—',
+        cell: ({ row }) => row.original.phone || '—',
+        meta: { minWidth: 110, label: 'Телефон' },
+      },
+      {
+        id: 'status',
+        header: () => (
+          <span
+            onClick={() => toggleSort('status')}
+            style={{ cursor: 'pointer', userSelect: 'none' }}
+            title="Сортировать по статусу"
+          >
+            Статус{sortArrow('status')}
+          </span>
+        ),
+        accessorFn: (m) => (m.is_active ? 'Активен' : 'Заблокирован'),
+        cell: ({ row }) => {
+          const master = row.original;
+          return (
+            <Tooltip content={master.is_active ? 'Активен' : 'Заблокирован'} position="top">
+              <span
+                className={`status-badge ${master.is_active ? 'status-active' : 'status-inactive'}`}
+              >
+                {master.is_active ? 'Активен' : 'Заблокирован'}
+              </span>
+            </Tooltip>
+          );
+        },
+        meta: { minWidth: 110, label: 'Статус' },
+      },
+      {
+        id: 'role',
+        header: 'Роль',
+        accessorFn: (m) => (m.is_admin ? 'Суперпользователь' : 'Мастер'),
+        cell: ({ row }) => {
+          const master = row.original;
+          return (
+            <Tooltip
+              content={master.is_admin ? 'Суперпользователь' : 'Обычный мастер'}
+              position="top"
+            >
+              <span className={`role-badge ${master.is_admin ? 'role-admin' : 'role-user'}`}>
+                {master.is_admin ? '👑 Суперпользователь' : '👤 Мастер'}
+              </span>
+            </Tooltip>
+          );
+        },
+        meta: { minWidth: 130, label: 'Роль' },
+      },
+      {
+        id: 'tariff',
+        header: 'Тариф',
+        accessorFn: (m) => m.tariff || '—',
+        cell: ({ row }) => {
+          const master = row.original;
+          return (
+            <>
+              <Tooltip
+                content={
+                  master.trial_ends_at
+                    ? `Триал до ${new Date(master.trial_ends_at).toLocaleDateString('ru-RU')}. Нажмите, чтобы сменить тариф`
+                    : 'Нажмите, чтобы сменить тариф'
+                }
+                position="top"
+              >
+                <button
+                  type="button"
+                  className="tariff-badge tariff-btn"
+                  onClick={() => {
+                    setTariffMaster(master);
+                    setTariffDraft(master.tariff || 'trial');
+                    setTrialDraft(master.trial_ends_at ? master.trial_ends_at.slice(0, 10) : '');
+                  }}
+                >
+                  {master.tariff === 'trial' ? '🆓 Триал' : master.tariff || '—'}
+                </button>
+              </Tooltip>
+              {master.trial_ends_at && (
+                <div className="tariff-ends">
+                  {new Date(master.trial_ends_at).toLocaleDateString('ru-RU')}
+                </div>
+              )}
+            </>
+          );
+        },
+        meta: { minWidth: 90, label: 'Тариф' },
+      },
+      {
+        id: 'actions',
+        header: 'Действия',
+        cell: ({ row }) => {
+          const master = row.original;
+          return (
+            <span style={{ display: 'inline-flex', gap: 4 }}>
+              <Tooltip content="Редактировать" position="top">
+                <button className="btn btn-sm btn-secondary" onClick={() => openEditModal(master)}>
+                  ✏️
+                </button>
+              </Tooltip>
+              <Tooltip
+                content={
+                  master.is_active
+                    ? 'Заблокировать (сейчас активен)'
+                    : 'Разблокировать (сейчас заблокирован)'
+                }
+                position="top"
+              >
+                <button
+                  className={`btn btn-sm ${master.is_active ? 'btn-ghost' : 'btn-danger'}`}
+                  onClick={() => handleToggleActive(master.id)}
+                >
+                  {master.is_active ? '🔓' : '🔒'}
+                </button>
+              </Tooltip>
+              <Tooltip content="Войти как мастер (поддержка)" position="top">
+                <button
+                  className="btn btn-sm btn-secondary"
+                  onClick={() => handleImpersonate(master)}
+                >
+                  👁
+                </button>
+              </Tooltip>
+              <Tooltip content="Удалить" position="top">
+                <button
+                  className="btn btn-sm btn-danger"
+                  onClick={() => setDeleteConfirm(master.id)}
+                >
+                  🗑️
+                </button>
+              </Tooltip>
+            </span>
+          );
+        },
+        meta: { minWidth: 160, hideable: false, label: 'Действия' },
+      },
+    ],
+    [masters, selectedMasters, section],
+  );
+
   return (
     <div className="masters-page">
       <div className="page-header">
@@ -330,13 +527,6 @@ function MastersPage() {
               + Добавить мастера
             </button>
           )}
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={resetWidths}
-            title="Вернуть стандартную ширину колонок таблицы"
-          >
-            ⟲ Колонки
-          </button>
         </div>
       </div>
 
@@ -388,201 +578,7 @@ function MastersPage() {
         />
       ) : (
         <div className="masters-table-wrapper">
-          <table className="masters-table resizable-table">
-            <thead>
-              <tr>
-                <ResizableTh
-                  width={colW.check}
-                  onResize={(w) => setColW('check', w)}
-                  className="col-checkbox"
-                >
-                  <input
-                    type="checkbox"
-                    checked={masters.length > 0 && selectedMasters.size === masters.length}
-                    onChange={() => {
-                      if (selectedMasters.size === masters.length) {
-                        setSelectedMasters(new Set());
-                      } else {
-                        setSelectedMasters(new Set(masters.map((m) => m.id)));
-                      }
-                    }}
-                  />
-                </ResizableTh>
-                <ResizableTh
-                  width={colW.name}
-                  minWidth={140}
-                  onResize={(w) => setColW('name', w)}
-                  onClick={() => toggleSort('name')}
-                  style={{ cursor: 'pointer', userSelect: 'none' }}
-                  title="Сортировать по имени"
-                >
-                  Имя{sortArrow('name')}
-                </ResizableTh>
-                <ResizableTh
-                  width={colW.email}
-                  minWidth={150}
-                  onResize={(w) => setColW('email', w)}
-                  onClick={() => toggleSort('email')}
-                  style={{ cursor: 'pointer', userSelect: 'none' }}
-                  title="Сортировать по email"
-                >
-                  Email{sortArrow('email')}
-                </ResizableTh>
-                <ResizableTh
-                  width={colW.phone}
-                  minWidth={110}
-                  onResize={(w) => setColW('phone', w)}
-                >
-                  Телефон
-                </ResizableTh>
-                <ResizableTh
-                  width={colW.status}
-                  minWidth={110}
-                  onResize={(w) => setColW('status', w)}
-                  onClick={() => toggleSort('status')}
-                  style={{ cursor: 'pointer', userSelect: 'none' }}
-                  title="Сортировать по статусу"
-                >
-                  Статус{sortArrow('status')}
-                </ResizableTh>
-                <ResizableTh width={colW.role} minWidth={130} onResize={(w) => setColW('role', w)}>
-                  Роль
-                </ResizableTh>
-                <ResizableTh
-                  width={colW.tariff}
-                  minWidth={90}
-                  onResize={(w) => setColW('tariff', w)}
-                >
-                  Тариф
-                </ResizableTh>
-                <ResizableTh
-                  width={colW.actions}
-                  minWidth={160}
-                  defaultWidth={176}
-                  onResize={(w) => setColW('actions', w)}
-                >
-                  Действия
-                </ResizableTh>
-              </tr>
-            </thead>
-            <tbody>
-              {masters.map((master) => (
-                <tr key={master.id} className={selectedMasters.has(master.id) ? 'selected' : ''}>
-                  <td className="col-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={selectedMasters.has(master.id)}
-                      onChange={() => toggleSelect(master.id)}
-                    />
-                  </td>
-                  <td>
-                    <button
-                      className="master-name-link"
-                      onClick={() => navigate(`${section}/masters/${master.id}`)}
-                    >
-                      <div className="master-name">{master.name}</div>
-                      {master.telegram_username && (
-                        <div className="master-telegram">@{master.telegram_username}</div>
-                      )}
-                    </button>
-                  </td>
-                  <td>{master.email}</td>
-                  <td>{master.phone || '—'}</td>
-                  <td>
-                    <Tooltip content={master.is_active ? 'Активен' : 'Заблокирован'} position="top">
-                      <span
-                        className={`status-badge ${master.is_active ? 'status-active' : 'status-inactive'}`}
-                      >
-                        {master.is_active ? 'Активен' : 'Заблокирован'}
-                      </span>
-                    </Tooltip>
-                  </td>
-                  <td>
-                    <Tooltip
-                      content={master.is_admin ? 'Суперпользователь' : 'Обычный мастер'}
-                      position="top"
-                    >
-                      <span
-                        className={`role-badge ${master.is_admin ? 'role-admin' : 'role-user'}`}
-                      >
-                        {master.is_admin ? '👑 Суперпользователь' : '👤 Мастер'}
-                      </span>
-                    </Tooltip>
-                  </td>
-                  <td>
-                    <Tooltip
-                      content={
-                        master.trial_ends_at
-                          ? `Триал до ${new Date(master.trial_ends_at).toLocaleDateString('ru-RU')}. Нажмите, чтобы сменить тариф`
-                          : 'Нажмите, чтобы сменить тариф'
-                      }
-                      position="top"
-                    >
-                      <button
-                        type="button"
-                        className="tariff-badge tariff-btn"
-                        onClick={() => {
-                          setTariffMaster(master);
-                          setTariffDraft(master.tariff || 'trial');
-                          setTrialDraft(
-                            master.trial_ends_at ? master.trial_ends_at.slice(0, 10) : '',
-                          );
-                        }}
-                      >
-                        {master.tariff === 'trial' ? '🆓 Триал' : master.tariff || '—'}
-                      </button>
-                    </Tooltip>
-                    {master.trial_ends_at && (
-                      <div className="tariff-ends">
-                        {new Date(master.trial_ends_at).toLocaleDateString('ru-RU')}
-                      </div>
-                    )}
-                  </td>
-                  <td className="actions-cell">
-                    <Tooltip content="Редактировать" position="top">
-                      <button
-                        className="btn btn-sm btn-secondary"
-                        onClick={() => openEditModal(master)}
-                      >
-                        ✏️
-                      </button>
-                    </Tooltip>
-                    <Tooltip
-                      content={
-                        master.is_active
-                          ? 'Заблокировать (сейчас активен)'
-                          : 'Разблокировать (сейчас заблокирован)'
-                      }
-                      position="top"
-                    >
-                      <button
-                        className={`btn btn-sm ${master.is_active ? 'btn-ghost' : 'btn-danger'}`}
-                        onClick={() => handleToggleActive(master.id)}
-                      >
-                        {master.is_active ? '🔓' : '🔒'}
-                      </button>
-                    </Tooltip>
-                    <Tooltip content="Войти как мастер (поддержка)" position="top">
-                      <button
-                        className="btn btn-sm btn-secondary"
-                        onClick={() => handleImpersonate(master)}
-                      >
-                        👁
-                      </button>
-                    </Tooltip>
-                    <Tooltip content="Удалить" position="top">
-                      <button
-                        className="btn btn-sm btn-danger"
-                        onClick={() => setDeleteConfirm(master.id)}
-                      >
-                        🗑️
-                      </button>
-                    </Tooltip>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <DataTable tableId="masters" columns={columns} data={masters} />
         </div>
       )}
 

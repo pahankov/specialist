@@ -1,14 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { adminApi } from '../../api/client';
-import {
-  ConfirmDialog,
-  ResizableTh,
-  useColumnWidths,
-  Skeleton,
-  EmptyState,
-  Pager,
-} from '../../components/common';
+import { ConfirmDialog, DataTable, Skeleton, EmptyState, Pager } from '../../components/common';
+import type { FitColumnDef } from '../../components/common';
 import { usePersistentState } from '../../utils/persistentState';
 import type { Service } from '../../api/types';
 import type { Bundle } from '../../api/cabinet';
@@ -18,18 +12,6 @@ import '../../styles/tables.css';
 import './ServicesPage.css';
 
 function ServicesPage() {
-  const {
-    widths: colW,
-    setWidth: setColW,
-    resetWidths,
-  } = useColumnWidths('services', {
-    name: 200,
-    category: 130,
-    desc: 260,
-    duration: 120,
-    price: 110,
-    actions: 120,
-  });
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -289,6 +271,65 @@ function ServicesPage() {
     }
   };
 
+  const columns: FitColumnDef<Service>[] = useMemo(
+    () => [
+      {
+        id: 'name',
+        header: 'Название',
+        accessorFn: (s) => s.name,
+        cell: ({ row }) => <strong>{row.original.name}</strong>,
+        meta: { minWidth: 140, label: 'Название' },
+      },
+      {
+        id: 'category',
+        header: 'Категория',
+        accessorFn: (s) => s.category || '—',
+        cell: ({ row }) => row.original.category || '—',
+        meta: { minWidth: 100, label: 'Категория' },
+      },
+      {
+        id: 'desc',
+        header: 'Описание',
+        accessorFn: (s) => s.description || '—',
+        cell: ({ row }) => row.original.description || '—',
+        meta: { minWidth: 150, label: 'Описание' },
+      },
+      {
+        id: 'duration',
+        header: 'Длительность',
+        accessorFn: (s) => s.duration_minutes,
+        cell: ({ row }) => `${row.original.duration_minutes} мин`,
+        meta: { minWidth: 90, maxWidth: 140, label: 'Длительность' },
+      },
+      {
+        id: 'price',
+        header: 'Цена',
+        accessorFn: (s) => Number(s.price) || 0,
+        cell: ({ row }) => `${formatPrice(row.original.price)} ₽`,
+        meta: { minWidth: 80, maxWidth: 140, label: 'Цена' },
+      },
+      {
+        id: 'actions',
+        header: 'Действия',
+        cell: ({ row }) => {
+          const s = row.original;
+          return (
+            <span style={{ display: 'inline-flex', gap: 4 }}>
+              <button className="btn btn-sm btn-edit" onClick={() => handleEdit(s)}>
+                ✏️ Редактировать
+              </button>
+              <button className="btn btn-sm btn-delete" onClick={() => setDeletingId(s.id)}>
+                🗑️ Удалить
+              </button>
+            </span>
+          );
+        },
+        meta: { minWidth: 200, hideable: false, label: 'Действия' },
+      },
+    ],
+    [],
+  );
+
   if (loading)
     return (
       <div>
@@ -426,13 +467,6 @@ function ServicesPage() {
         <div className="card-header">
           <h3>Список услуг ({total})</h3>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={resetWidths}
-              title="Вернуть стандартную ширину колонок таблицы"
-            >
-              ⟲ Колонки
-            </button>
             {services.length > 0 && (
               <>
                 <button
@@ -458,63 +492,7 @@ function ServicesPage() {
         {services.length === 0 ? (
           <EmptyState title="Нет услуг" actionLabel="Добавить услугу" onAction={openCreateForm} />
         ) : (
-          <table className="services-table resizable-table">
-            <thead>
-              <tr>
-                <ResizableTh width={colW.name} minWidth={140} onResize={(w) => setColW('name', w)}>
-                  Название
-                </ResizableTh>
-                <ResizableTh
-                  width={colW.category}
-                  minWidth={100}
-                  onResize={(w) => setColW('category', w)}
-                >
-                  Категория
-                </ResizableTh>
-                <ResizableTh width={colW.desc} minWidth={150} onResize={(w) => setColW('desc', w)}>
-                  Описание
-                </ResizableTh>
-                <ResizableTh
-                  width={colW.duration}
-                  minWidth={90}
-                  onResize={(w) => setColW('duration', w)}
-                >
-                  Длительность
-                </ResizableTh>
-                <ResizableTh width={colW.price} minWidth={80} onResize={(w) => setColW('price', w)}>
-                  Цена
-                </ResizableTh>
-                <ResizableTh
-                  width={colW.actions}
-                  minWidth={220}
-                  onResize={(w) => setColW('actions', w)}
-                >
-                  Действия
-                </ResizableTh>
-              </tr>
-            </thead>
-            <tbody>
-              {services.map((s) => (
-                <tr key={s.id}>
-                  <td>
-                    <strong>{s.name}</strong>
-                  </td>
-                  <td>{s.category || '—'}</td>
-                  <td>{s.description || '—'}</td>
-                  <td>{s.duration_minutes} мин</td>
-                  <td>{formatPrice(s.price)} ₽</td>
-                  <td className="actions-cell">
-                    <button className="btn btn-sm btn-edit" onClick={() => handleEdit(s)}>
-                      ✏️ Редактировать
-                    </button>
-                    <button className="btn btn-sm btn-delete" onClick={() => setDeletingId(s.id)}>
-                      🗑️ Удалить
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <DataTable tableId="services" columns={columns} data={services} />
         )}
       </div>
 

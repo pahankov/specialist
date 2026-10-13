@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { adminApi } from '../../api/client';
@@ -9,11 +9,11 @@ import {
   Tooltip,
   ConfirmDialog,
   MasterSelect,
-  ResizableTh,
-  useColumnWidths,
+  DataTable,
   Pager,
   StatusBadge,
 } from '../../components/common';
+import type { FitColumnDef } from '../../components/common';
 import { downloadCsv } from '../../api/export';
 import { usePersistentState } from '../../utils/persistentState';
 import { useSectionPrefix, SUPER_PREFIX } from '../../utils/section';
@@ -30,21 +30,6 @@ type SortDirection = 'asc' | 'desc';
 function AppointmentsPage() {
   const section = useSectionPrefix();
   const isSuperSection = section === SUPER_PREFIX;
-  const {
-    widths: colW,
-    setWidth: setColW,
-    resetWidths,
-  } = useColumnWidths('appointments2', {
-    check: 44,
-    date: 150,
-    client: 160,
-    phone: 130,
-    service: 180,
-    price: 90,
-    status: 140,
-    master: 150,
-    actions: 150,
-  });
   const [selectedAppointments, setSelectedAppointments] = useState<Set<number>>(new Set());
 
   const [appointments, setAppointments] = useState<
@@ -195,7 +180,6 @@ function AppointmentsPage() {
       setShowFilters(true);
       setSearchParams({}, { replace: true });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -326,6 +310,202 @@ function AppointmentsPage() {
     return true;
   });
 
+  type Row = (typeof filteredAppointments)[number];
+  const sortMark = (field: SortField) =>
+    sortField === field ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ' ⇅';
+  const sortHead = (field: SortField, label: string) => (
+    <span
+      onClick={() => handleSort(field)}
+      style={{ cursor: 'pointer', userSelect: 'none' }}
+      title={`Сортировать: ${label}`}
+    >
+      {label}
+      <span className="sort-arrow">{sortMark(field)}</span>
+    </span>
+  );
+
+  const columns: FitColumnDef<Row>[] = useMemo(
+    () => [
+      {
+        id: 'check',
+        header: () => (
+          <input
+            type="checkbox"
+            checked={
+              filteredAppointments.length > 0 &&
+              selectedAppointments.size === filteredAppointments.length
+            }
+            onChange={() => {
+              if (selectedAppointments.size === filteredAppointments.length)
+                setSelectedAppointments(new Set());
+              else setSelectedAppointments(new Set(filteredAppointments.map((a) => a.id)));
+            }}
+            title="Выбрать все на странице"
+          />
+        ),
+        cell: ({ row }) => {
+          const a = row.original;
+          return (
+            <input
+              type="checkbox"
+              checked={selectedAppointments.has(a.id)}
+              onChange={() =>
+                setSelectedAppointments((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(a.id)) next.delete(a.id);
+                  else next.add(a.id);
+                  return next;
+                })
+              }
+              title="Выбрать для экспорта"
+            />
+          );
+        },
+        meta: { minWidth: 36, maxWidth: 44, defaultWidth: 40, hideable: false, label: '✓' },
+      },
+      {
+        id: 'date',
+        header: () => sortHead('appointment_date', 'Дата'),
+        accessorFn: (a) => a.appointment_date,
+        cell: ({ row }) => new Date(row.original.appointment_date).toLocaleString('ru-RU'),
+        meta: { minWidth: 130, label: 'Дата' },
+      },
+      {
+        id: 'client',
+        header: () => sortHead('client_name', 'Клиент'),
+        accessorFn: (a) => a.client_name || '—',
+        cell: ({ row }) => {
+          const a = row.original;
+          return (
+            <>
+              <strong>{a.client_name || '—'}</strong>
+              {a.notes ? (
+                <span className="notes-dot" title={`💬 ${a.notes}`}>
+                  {' '}
+                  💬
+                </span>
+              ) : null}
+            </>
+          );
+        },
+        meta: { minWidth: 120, label: 'Клиент' },
+      },
+      {
+        id: 'phone',
+        header: 'Телефон',
+        accessorFn: (a) => a.client_phone || '—',
+        cell: ({ row }) => {
+          const a = row.original;
+          return <a href={`tel:${a.client_phone || ''}`}>{a.client_phone || '—'}</a>;
+        },
+        meta: { minWidth: 110, label: 'Телефон' },
+      },
+      {
+        id: 'service',
+        header: () => sortHead('service_name', 'Услуга'),
+        accessorFn: (a) => a.service_name || '—',
+        cell: ({ row }) => row.original.service_name || '—',
+        meta: { minWidth: 120, label: 'Услуга' },
+      },
+      {
+        id: 'price',
+        header: () => sortHead('service_price', 'Сумма'),
+        accessorFn: (a) => a.service_price ?? 0,
+        cell: ({ row }) => {
+          const p = row.original.service_price;
+          return p ? `${Number(p).toLocaleString('ru-RU')} ₽` : '—';
+        },
+        meta: { minWidth: 80, maxWidth: 140, label: 'Сумма' },
+      },
+      {
+        id: 'status',
+        header: () => sortHead('status', 'Статус'),
+        accessorFn: (a) => a.status,
+        cell: ({ row }) => (
+          <Tooltip
+            content={statusLabels[row.original.status] || row.original.status}
+            position="top"
+          >
+            <StatusBadge status={row.original.status} />
+          </Tooltip>
+        ),
+        meta: { minWidth: 120, label: 'Статус' },
+      },
+      ...(isSuperSection
+        ? [
+            {
+              id: 'master',
+              header: () => sortHead('master_name', 'Мастер'),
+              accessorFn: (a: Row) => a.master_name || '—',
+              cell: ({ row }: { row: { original: Row } }) => (
+                <span title={row.original.master_name || ''}>
+                  {row.original.master_name || '—'}
+                </span>
+              ),
+              meta: { minWidth: 110, label: 'Мастер' },
+            } as FitColumnDef<Row>,
+          ]
+        : []),
+      {
+        id: 'actions',
+        header: 'Действия',
+        cell: ({ row }) => {
+          const a = row.original;
+          return (
+            <span style={{ display: 'inline-flex', gap: 4 }}>
+              {a.status === 'pending' && (
+                <>
+                  <Tooltip content="Подтвердить запись">
+                    <button className="btn btn-sm btn-confirm" onClick={() => handleConfirm(a.id)}>
+                      ✅
+                    </button>
+                  </Tooltip>
+                  <Tooltip content="Отменить запись">
+                    <button className="btn btn-sm btn-cancel" onClick={() => handleCancel(a.id)}>
+                      ❌
+                    </button>
+                  </Tooltip>
+                </>
+              )}
+              {a.status === 'confirmed' && (
+                <>
+                  <Tooltip content="Завершить запись">
+                    <button
+                      className="btn btn-sm btn-complete"
+                      onClick={() => handleComplete(a.id)}
+                      disabled={!isAppointmentTimePassed(a.appointment_date)}
+                    >
+                      🏁
+                    </button>
+                  </Tooltip>
+                  <Tooltip content="Отменить запись">
+                    <button className="btn btn-sm btn-cancel" onClick={() => handleCancel(a.id)}>
+                      ❌
+                    </button>
+                  </Tooltip>
+                </>
+              )}
+              {a.status === 'confirmed' && isAppointmentTimePassed(a.appointment_date) && (
+                <Tooltip content="Отметить неявку">
+                  <button className="btn btn-sm btn-no-show" onClick={() => setNoShowingId(a.id)}>
+                    👤
+                  </button>
+                </Tooltip>
+              )}
+              <Tooltip content="Удалить запись">
+                <button className="btn btn-sm btn-delete" onClick={() => setDeletingId(a.id)}>
+                  🗑️
+                </button>
+              </Tooltip>
+            </span>
+          );
+        },
+        meta: { minWidth: 150, hideable: false, label: 'Действия' },
+      },
+    ],
+    [filteredAppointments, selectedAppointments, sortField, sortDirection, isSuperSection],
+  );
+
   return (
     <div className="appointments-page">
       <div className="page-header">
@@ -398,14 +578,6 @@ function AppointmentsPage() {
           style={{ fontSize: 13 }}
         >
           {showFilters ? '▲ Скрыть фильтры' : '▼ Расширенные фильтры'}
-        </button>
-        <button
-          className="btn btn-ghost"
-          onClick={resetWidths}
-          style={{ fontSize: 13 }}
-          title="Вернуть стандартную ширину колонок таблицы"
-        >
-          ⟲ Колонки
         </button>
       </div>
 
@@ -563,231 +735,7 @@ function AppointmentsPage() {
       ) : (
         <div className="card">
           <div className="appointments-table-wrapper">
-            <table className="appointments-table resizable-table">
-              <thead>
-                <tr>
-                  <ResizableTh
-                    width={colW.check}
-                    onResize={(w) => setColW('check', w)}
-                    className="col-checkbox"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={
-                        filteredAppointments.length > 0 &&
-                        selectedAppointments.size === filteredAppointments.length
-                      }
-                      onChange={() => {
-                        if (selectedAppointments.size === filteredAppointments.length)
-                          setSelectedAppointments(new Set());
-                        else
-                          setSelectedAppointments(new Set(filteredAppointments.map((a) => a.id)));
-                      }}
-                      title="Выбрать все на странице"
-                    />
-                  </ResizableTh>
-                  <ResizableTh
-                    width={colW.date}
-                    minWidth={140}
-                    onResize={(w) => setColW('date', w)}
-                    className={`sortable ${sortField === 'appointment_date' ? 'active' : ''}`}
-                    onClick={() => handleSort('appointment_date')}
-                  >
-                    Дата{' '}
-                    <span className="sort-arrow">
-                      {sortField === 'appointment_date'
-                        ? sortDirection === 'asc'
-                          ? '↑'
-                          : '↓'
-                        : '⇅'}
-                    </span>
-                  </ResizableTh>
-                  <ResizableTh
-                    width={colW.client}
-                    minWidth={120}
-                    onResize={(w) => setColW('client', w)}
-                    className={`sortable ${sortField === 'client_name' ? 'active' : ''}`}
-                    onClick={() => handleSort('client_name')}
-                  >
-                    Клиент{' '}
-                    <span className="sort-arrow">
-                      {sortField === 'client_name' ? (sortDirection === 'asc' ? '↑' : '↓') : '⇅'}
-                    </span>
-                  </ResizableTh>
-                  <ResizableTh
-                    width={colW.phone}
-                    minWidth={120}
-                    onResize={(w) => setColW('phone', w)}
-                  >
-                    Телефон
-                  </ResizableTh>
-                  <ResizableTh
-                    width={colW.service}
-                    minWidth={120}
-                    onResize={(w) => setColW('service', w)}
-                    className={`sortable ${sortField === 'service_name' ? 'active' : ''}`}
-                    onClick={() => handleSort('service_name')}
-                  >
-                    Услуга{' '}
-                    <span className="sort-arrow">
-                      {sortField === 'service_name' ? (sortDirection === 'asc' ? '↑' : '↓') : '⇅'}
-                    </span>
-                  </ResizableTh>
-                  <ResizableTh
-                    width={colW.price}
-                    minWidth={80}
-                    onResize={(w) => setColW('price', w)}
-                    className={`sortable ${sortField === 'service_price' ? 'active' : ''}`}
-                    onClick={() => handleSort('service_price')}
-                  >
-                    Сумма{' '}
-                    <span className="sort-arrow">
-                      {sortField === 'service_price' ? (sortDirection === 'asc' ? '↑' : '↓') : '⇅'}
-                    </span>
-                  </ResizableTh>
-                  <ResizableTh
-                    width={colW.status}
-                    minWidth={130}
-                    onResize={(w) => setColW('status', w)}
-                    className={`sortable ${sortField === 'status' ? 'active' : ''}`}
-                    onClick={() => handleSort('status')}
-                  >
-                    Статус{' '}
-                    <span className="sort-arrow">
-                      {sortField === 'status' ? (sortDirection === 'asc' ? '↑' : '↓') : '⇅'}
-                    </span>
-                  </ResizableTh>
-                  {isSuperSection && (
-                    <ResizableTh
-                      width={colW.master}
-                      onResize={(w) => setColW('master', w)}
-                      className={`sortable ${sortField === 'master_name' ? 'active' : ''}`}
-                      onClick={() => handleSort('master_name')}
-                    >
-                      Мастер{' '}
-                      <span className="sort-arrow">
-                        {sortField === 'master_name' ? (sortDirection === 'asc' ? '↑' : '↓') : '⇅'}
-                      </span>
-                    </ResizableTh>
-                  )}
-                  <ResizableTh
-                    width={colW.actions}
-                    minWidth={150}
-                    defaultWidth={150}
-                    onResize={(w) => setColW('actions', w)}
-                  >
-                    Действия
-                  </ResizableTh>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredAppointments.map((a) => (
-                  <tr key={a.id}>
-                    <td className="col-checkbox">
-                      <input
-                        type="checkbox"
-                        checked={selectedAppointments.has(a.id)}
-                        onChange={() =>
-                          setSelectedAppointments((prev) => {
-                            const next = new Set(prev);
-                            if (next.has(a.id)) next.delete(a.id);
-                            else next.add(a.id);
-                            return next;
-                          })
-                        }
-                        title="Выбрать для экспорта"
-                      />
-                    </td>
-                    <td>{new Date(a.appointment_date).toLocaleString('ru-RU')}</td>
-                    <td>
-                      <strong>{a.client_name || '—'}</strong>
-                      {a.notes ? (
-                        <span className="notes-dot" title={`💬 ${a.notes}`}>
-                          {' '}
-                          💬
-                        </span>
-                      ) : null}
-                    </td>
-                    <td>
-                      <a href={`tel:${a.client_phone || ''}`}>{a.client_phone || '—'}</a>
-                    </td>
-                    <td>{a.service_name || '—'}</td>
-                    <td>
-                      {a.service_price
-                        ? `${Number(a.service_price).toLocaleString('ru-RU')} ₽`
-                        : '—'}
-                    </td>
-                    <td>
-                      <Tooltip content={statusLabels[a.status] || a.status} position="top">
-                        <StatusBadge status={a.status} />
-                      </Tooltip>
-                    </td>
-                    {isSuperSection && <td title={a.master_name || ''}>{a.master_name || '—'}</td>}
-                    <td className="actions-cell">
-                      {a.status === 'pending' && (
-                        <>
-                          <Tooltip content="Подтвердить запись">
-                            <button
-                              className="btn btn-sm btn-confirm"
-                              onClick={() => handleConfirm(a.id)}
-                            >
-                              ✅
-                            </button>
-                          </Tooltip>
-                          <Tooltip content="Отменить запись">
-                            <button
-                              className="btn btn-sm btn-cancel"
-                              onClick={() => handleCancel(a.id)}
-                            >
-                              ❌
-                            </button>
-                          </Tooltip>
-                        </>
-                      )}
-                      {a.status === 'confirmed' && (
-                        <>
-                          <Tooltip content="Завершить запись">
-                            <button
-                              className="btn btn-sm btn-complete"
-                              onClick={() => handleComplete(a.id)}
-                              disabled={!isAppointmentTimePassed(a.appointment_date)}
-                            >
-                              🏁
-                            </button>
-                          </Tooltip>
-                          <Tooltip content="Отменить запись">
-                            <button
-                              className="btn btn-sm btn-cancel"
-                              onClick={() => handleCancel(a.id)}
-                            >
-                              ❌
-                            </button>
-                          </Tooltip>
-                        </>
-                      )}
-                      {a.status === 'confirmed' && isAppointmentTimePassed(a.appointment_date) && (
-                        <Tooltip content="Отметить неявку">
-                          <button
-                            className="btn btn-sm btn-no-show"
-                            onClick={() => setNoShowingId(a.id)}
-                          >
-                            👤
-                          </button>
-                        </Tooltip>
-                      )}
-                      <Tooltip content="Удалить запись">
-                        <button
-                          className="btn btn-sm btn-delete"
-                          onClick={() => setDeletingId(a.id)}
-                        >
-                          🗑️
-                        </button>
-                      </Tooltip>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <DataTable tableId="appointments" columns={columns} data={filteredAppointments} />
           </div>
         </div>
       )}

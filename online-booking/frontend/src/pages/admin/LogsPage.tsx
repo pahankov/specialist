@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { adminApi } from '../../api/client';
 import type { AuditLogEntry } from '../../api/types';
 import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError';
 import { getCookie, decodeJwtPayload } from '../../utils/cookies';
-import { Pager, Skeleton, EmptyState, ResizableTh, useColumnWidths } from '../../components/common';
+import { Pager, Skeleton, EmptyState, DataTable } from '../../components/common';
+import type { FitColumnDef } from '../../components/common';
 import { usePersistentState } from '../../utils/persistentState';
 import '../../styles/tables.css';
 import './LogsPage.css';
@@ -28,15 +29,6 @@ function LogsPage() {
   const [masterFilter, setMasterFilter] = usePersistentState('logs.master', '');
   const [currentPage, setCurrentPage] = usePersistentState('logs.page', 0);
   const pageSize = 20;
-  const { widths: colW, setWidth: setColW } = useColumnWidths('logs', {
-    date: 150,
-    level: 110,
-    action: 150,
-    object: 110,
-    object_id: 100,
-    master: 150,
-    details: 220,
-  });
 
   const fetchLogs = async () => {
     try {
@@ -82,6 +74,97 @@ function LogsPage() {
         <div className="error-message">{error}</div>
       </div>
     );
+
+  const columns: FitColumnDef<AuditLogEntry>[] = useMemo(
+    () => [
+      {
+        id: 'date',
+        header: 'Дата и время',
+        accessorFn: (log) => log.created_at || '',
+        cell: ({ row }) => {
+          const log = row.original;
+          return log.created_at
+            ? new Date(log.created_at).toLocaleString('ru-RU', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+              })
+            : '—';
+        },
+        meta: { minWidth: 130, label: 'Дата и время' },
+      },
+      {
+        id: 'level',
+        header: 'Уровень',
+        accessorFn: (log) => log.level,
+        cell: ({ row }) => (
+          <span className={`level-badge level-${row.original.level}`}>
+            {levelLabels[row.original.level] || row.original.level}
+          </span>
+        ),
+        meta: { minWidth: 90, maxWidth: 140, label: 'Уровень' },
+      },
+      {
+        id: 'action',
+        header: 'Действие',
+        accessorFn: (log) => log.action,
+        cell: ({ row }) => {
+          const log = row.original;
+          return (
+            <span
+              className={`status-badge ${
+                log.action === 'delete'
+                  ? 'status-cancelled'
+                  : log.action === 'confirm'
+                    ? 'status-confirmed'
+                    : log.action === 'cancel'
+                      ? 'status-cancelled'
+                      : log.action === 'complete'
+                        ? 'status-completed'
+                        : log.action === 'create'
+                          ? 'status-pending'
+                          : 'status-pending'
+              }`}
+            >
+              {actionLabels[log.action] || log.action}
+            </span>
+          );
+        },
+        meta: { minWidth: 110, label: 'Действие' },
+      },
+      {
+        id: 'object',
+        header: 'Объект',
+        accessorFn: (log) => log.entity_type,
+        cell: ({ row }) => entityLabels[row.original.entity_type] || row.original.entity_type,
+        meta: { minWidth: 90, maxWidth: 150, label: 'Объект' },
+      },
+      {
+        id: 'object_id',
+        header: 'ID объекта',
+        accessorFn: (log) => log.entity_id ?? 0,
+        cell: ({ row }) => <code>{row.original.entity_id || '—'}</code>,
+        meta: { minWidth: 70, maxWidth: 110, label: 'ID объекта' },
+      },
+      {
+        id: 'master',
+        header: 'Мастер',
+        accessorFn: (log) => log.master_name || '—',
+        cell: ({ row }) => row.original.master_name || '—',
+        meta: { minWidth: 110, label: 'Мастер' },
+      },
+      {
+        id: 'details',
+        header: 'Детали',
+        accessorFn: (log) => log.details || '—',
+        cell: ({ row }) => row.original.details || '—',
+        meta: { minWidth: 160, maxWidth: 600, label: 'Детали' },
+      },
+    ],
+    [],
+  );
 
   const visibleLogs = logs.filter((log) => {
     if (levelFilter && log.level !== levelFilter) return false;
@@ -196,89 +279,7 @@ function LogsPage() {
             description={logs.length === 0 ? undefined : 'Измените фильтры'}
           />
         ) : (
-          <table className="logs-table resizable-table">
-            <thead>
-              <tr>
-                <ResizableTh width={colW.date} onResize={(w) => setColW('date', w)}>
-                  Дата и время
-                </ResizableTh>
-                <ResizableTh width={colW.level} onResize={(w) => setColW('level', w)}>
-                  Уровень
-                </ResizableTh>
-                <ResizableTh width={colW.action} onResize={(w) => setColW('action', w)}>
-                  Действие
-                </ResizableTh>
-                <ResizableTh width={colW.object} onResize={(w) => setColW('object', w)}>
-                  Объект
-                </ResizableTh>
-                <ResizableTh width={colW.object_id} onResize={(w) => setColW('object_id', w)}>
-                  ID объекта
-                </ResizableTh>
-                <ResizableTh width={colW.master} onResize={(w) => setColW('master', w)}>
-                  Мастер
-                </ResizableTh>
-                <ResizableTh width={colW.details} onResize={(w) => setColW('details', w)}>
-                  Детали
-                </ResizableTh>
-              </tr>
-            </thead>
-            <tbody>
-              {visibleLogs.map((log) => (
-                <tr key={log.id}>
-                  <td>
-                    {log.created_at
-                      ? new Date(log.created_at).toLocaleString('ru-RU', {
-                          day: '2-digit',
-                          month: '2-digit',
-                          year: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })
-                      : '—'}
-                  </td>
-                  <td>
-                    <span className={`level-badge level-${log.level}`}>
-                      {levelLabels[log.level] || log.level}
-                    </span>
-                  </td>
-                  <td>
-                    <span
-                      className={`status-badge ${
-                        log.action === 'delete'
-                          ? 'status-cancelled'
-                          : log.action === 'confirm'
-                            ? 'status-confirmed'
-                            : log.action === 'cancel'
-                              ? 'status-cancelled'
-                              : log.action === 'complete'
-                                ? 'status-completed'
-                                : log.action === 'create'
-                                  ? 'status-pending'
-                                  : 'status-pending'
-                      }`}
-                    >
-                      {actionLabels[log.action] || log.action}
-                    </span>
-                  </td>
-                  <td>{entityLabels[log.entity_type] || log.entity_type}</td>
-                  <td>
-                    <code>{log.entity_id || '—'}</code>
-                  </td>
-                  <td>{log.master_name || '—'}</td>
-                  <td
-                    style={{
-                      maxWidth: 200,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {log.details || '—'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <DataTable tableId="logs" columns={columns} data={visibleLogs} />
         )}
       </div>
 
