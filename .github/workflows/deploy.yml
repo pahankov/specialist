@@ -61,6 +61,21 @@ jobs:
             sudo chmod -R u+rw /var/www/beauty-specialist 2>/dev/null || true
 
             git config --global --add safe.directory /var/www/beauty-specialist
+
+            # Preflight: the fetch below needs non-interactive GitHub auth.
+            # HTTPS remotes without a credential helper die with
+            # "could not read Username" (exit 128). Fail fast with the fix.
+            echo "=== GIT REMOTE ==="
+            git remote -v
+            if ! git ls-remote origin HEAD >/dev/null 2>&1; then
+              echo "ERROR: cannot read from git origin non-interactively."
+              echo "On the server, as the deploy user, run ONE of:"
+              echo "  A) SSH (needs a read-only Deploy key on GitHub):"
+              echo "     git remote set-url origin git@github.com:pahankov/specialist.git"
+              echo "  B) HTTPS with token (fine-grained PAT, contents=read):"
+              echo "     git remote set-url origin https://<TOKEN>@github.com/pahankov/specialist.git"
+              exit 1
+            fi
             git fetch origin main
             git reset --hard origin/main
             git clean -fd
