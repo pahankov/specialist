@@ -55,6 +55,7 @@ jobs:
             DATABASE_URL
           script_stop: true
           timeout: 30m
+          command_timeout: 30m
           script: |
             cd /var/www/beauty-specialist
 
