@@ -66,9 +66,20 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
                 exc_info=True,  # Include traceback
             )
             # Exception path skips the normal exception handlers — return JSON
-            # ourselves so X-Request-ID is present on 500s too.
+            # ourselves so X-Request-ID is present on 500s too. Echo the
+            # origin like the global 500 handler: without ACAO the browser
+            # reports a CORS error and hides the real failure.
+            from app.config import settings
+            headers = {"X-Request-ID": request_id}
+            origin = request.headers.get("origin")
+            if origin and origin in settings.allowed_origins_list:
+                headers.update({
+                    "Access-Control-Allow-Origin": origin,
+                    "Access-Control-Allow-Credentials": "true",
+                    "Vary": "Origin",
+                })
             return JSONResponse(
                 status_code=500,
                 content={"detail": "Внутренняя ошибка сервера", "request_id": request_id},
-                headers={"X-Request-ID": request_id},
+                headers=headers,
             )

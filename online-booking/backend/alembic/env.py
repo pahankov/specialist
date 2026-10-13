@@ -32,14 +32,12 @@ from app.models.review import Review  # noqa: F401
 # access to the values within the .ini file in use.
 config = context.config
 
-# Use DATABASE_URL from environment (set by deploy.yml or .env)
-# This allows migrations to target the correct database
-db_url = os.environ.get("DATABASE_URL")
+# Alembic runs synchronously — map async drivers to sync ones:
+# postgresql+asyncpg:// -> postgresql+psycopg2:// (server),
+# sqlite+aiosqlite:// -> sqlite:// (local dev).
+db_url = os.environ.get("DATABASE_URL") or config.get_main_option("sqlalchemy.url")
 if db_url:
-    # Alembic runs synchronously — convert asyncpg to psycopg2
-    # DATABASE_URL on server is postgresql+asyncpg://
-    # Alembic needs postgresql+psycopg2://
-    db_url = db_url.replace("+asyncpg", "+psycopg2")
+    db_url = db_url.replace("+asyncpg", "+psycopg2").replace("+aiosqlite", "")
     config.set_main_option("sqlalchemy.url", db_url)
 
 # Interpret the config file for Python logging.

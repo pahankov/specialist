@@ -83,39 +83,6 @@
   overflow-x: auto;
 }
 
-.masters-table {
-  width: 100%;
-  min-width: 880px; /* scroll instead of squeezing action buttons off-screen */
-  border-collapse: collapse;
-}
-
-.masters-table th,
-.masters-table td {
-  padding: 14px 16px;
-  text-align: left;
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.masters-table th {
-  font-weight: 600;
-  color: #666;
-  font-size: 13px;
-  text-transform: uppercase;
-  background: #fafafa;
-}
-
-.col-checkbox {
-  width: 40px;
-  text-align: center;
-}
-
-.col-checkbox input[type='checkbox'] {
-  width: 18px;
-  height: 18px;
-  cursor: pointer;
-  accent-color: #667eea;
-}
-
 .master-name-link {
   background: none;
   border: none;
@@ -127,18 +94,6 @@
 .master-name-link:hover .master-name {
   color: #667eea;
   text-decoration: underline;
-}
-
-.masters-table tbody tr.selected {
-  background: #f0f4ff;
-}
-
-.masters-table tbody tr {
-  transition: background 0.2s;
-}
-
-.masters-table tbody tr:hover {
-  background: #f8f9ff;
 }
 
 .master-name {
@@ -200,13 +155,6 @@
   color: #1565c0;
 }
 
-.actions-cell {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  white-space: nowrap;
-}
-
 .tariff-badge {
   display: inline-flex;
   align-items: center;
@@ -234,10 +182,6 @@ button.tariff-badge.tariff-btn:hover {
   color: #999;
   margin-top: 2px;
   white-space: nowrap;
-}
-
-.actions-cell button {
-  flex-shrink: 0;
 }
 
 .btn-sm {
@@ -375,11 +319,5 @@ button.tariff-badge.tariff-btn:hover {
 
   .filter-input {
     min-width: 100%;
-  }
-
-  .masters-table th,
-  .masters-table td {
-    padding: 10px 8px;
-    font-size: 13px;
   }
 }

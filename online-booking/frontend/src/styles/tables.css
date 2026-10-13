@@ -1,66 +1,6 @@
-/* Shared admin table behaviour: fixed layout + manual column widths.
- * Tables using ResizableTh must add .resizable-table so stored widths hold
- * and long text ellipsizes instead of pushing action buttons off-screen. */
-
-table.resizable-table {
-  table-layout: fixed;
-  width: 100%;
-}
-
-.resizable-table th {
-  position: relative;
-  overflow: visible;
-  white-space: nowrap;
-}
-
-/* Visible column separators so resize handles are discoverable */
-.resizable-table thead th + th {
-  border-left: 1px solid #e3e8f0;
-}
-
-.resizable-table td {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.resizable-table td.allow-wrap {
-  white-space: normal;
-  overflow: visible;
-}
-
-/* Badges have fixed min-widths that fight manual shrinking — let them clip */
-.resizable-table .status-badge,
-.resizable-table .role-badge {
-  min-width: 0;
-}
-
-.col-resizer {
-  position: absolute;
-  top: 6px;
-  right: -4px;
-  width: 8px;
-  height: calc(100% - 12px);
-  cursor: col-resize;
-  z-index: 5;
-  border-radius: 4px;
-  background: rgba(102, 126, 234, 0.25);
-}
-
-.col-resizer:hover,
-.col-resizer:active {
-  background: rgba(102, 126, 234, 0.35);
-  border-radius: 4px;
-}
-
-/* Page titles stay on one line (was wrapping to two). */
-.page-header h1 {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* ─── DataTable (TanStack): autofit + resize + visibility ─────────── */
+/* Shared admin table behaviour. Every summary table renders through
+ * <DataTable> (.datatable): columns fit their content by default, stay
+ * resizable and hideable — no per-page width wars. */
 
 .datatable-wrap {
   width: 100%;
@@ -122,17 +62,35 @@ table.datatable {
   overflow: visible;
   white-space: nowrap;
   text-align: left;
+  font-weight: 600;
+  color: #666;
+  font-size: 13px;
+  text-transform: uppercase;
+  padding: 12px 16px;
+  border-bottom: 1px solid #f0f0f0;
 }
 
 .datatable thead th + th {
   border-left: 1px solid #e3e8f0;
 }
 
-.datatable td {
+.datatable tbody td {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   vertical-align: middle;
+  font-size: 14px;
+  color: #333;
+  padding: 12px 16px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.datatable tbody tr {
+  transition: background 0.2s;
+}
+
+.datatable tbody tr:hover {
+  background: #f8f9ff;
 }
 
 .datatable td.allow-wrap {
@@ -140,8 +98,49 @@ table.datatable {
   overflow: visible;
 }
 
+.datatable td a {
+  color: #667eea;
+  text-decoration: none;
+}
+
+.datatable td a:hover {
+  text-decoration: underline;
+}
+
+.datatable td code {
+  background: #f5f5f5;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
 /* Badges have fixed min-widths that fight manual shrinking — let them clip */
 .datatable .status-badge,
 .datatable .role-badge {
   min-width: 0;
+}
+
+.col-resizer {
+  position: absolute;
+  top: 6px;
+  right: -4px;
+  width: 8px;
+  height: calc(100% - 12px);
+  cursor: col-resize;
+  z-index: 5;
+  border-radius: 4px;
+  background: rgba(102, 126, 234, 0.25);
+}
+
+.col-resizer:hover,
+.col-resizer:active {
+  background: rgba(102, 126, 234, 0.35);
+  border-radius: 4px;
+}
+
+/* Page titles stay on one line (was wrapping to two). */
+.page-header h1 {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
