@@ -172,8 +172,8 @@ async def get_admin_clients(
 
     # Build response
     blocked_by_cp: dict = {}
+    from app.models.master_hidden_client import MasterHiddenClient
     if not is_admin:
-        from app.models.master_hidden_client import MasterHiddenClient
         _mp_id = await get_master_profile_id(db, master)
         _rows = await db.execute(
             select(MasterHiddenClient.client_profile_id,
@@ -181,6 +181,14 @@ async def get_admin_clients(
                 MasterHiddenClient.master_profile_id == _mp_id)
         )
         blocked_by_cp = dict(_rows.all())
+    else:
+        # Superadmin: badge when blocked anywhere.
+        _rows = await db.execute(
+            select(MasterHiddenClient.client_profile_id,
+                   MasterHiddenClient.is_blocked)
+        )
+        for _cp_id, _flag in _rows.all():
+            blocked_by_cp[_cp_id] = blocked_by_cp.get(_cp_id, False) or bool(_flag)
     items = [
         {
             "id": cp.user.id,
@@ -441,16 +449,20 @@ async def bulk_set_client_city(
 @router.post("/clients/{client_id}/block", status_code=200)
 async def block_client(
     client_id: int,
+    master_id: Optional[int] = Query(
+        default=None,
+        description="Superadmin only: MasterProfile.id to block for. "
+                    "Omitted = block at every master (global blacklist)."),
     master: User = Depends(require_master),
     db: AsyncSession = Depends(get_db)
 ):
     """Blacklist an own client: hide + bar new bookings (idempotent).
 
-    Masters only — superadmins erase instead. History stays, rendered as
-    «Удалённый клиент». A new booking (by either side) lifts the block.
+    Masters block for themselves. Superadmins block for the selected
+    master (?master_id=) or everywhere at once (no master_id).
+    History stays, rendered as «Удалённый клиент». A new booking
+    (by either side) lifts the block.
     """
-    if master.role == UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="Только для мастеров")
     result = await db.execute(select(User).where(User.id == client_id))
     user = result.scalar_one_or_none()
     if not user:
@@ -458,6 +470,17 @@ async def block_client(
     await _require_own_client(db, master, user)
 
     from app.services.client_visibility import block_client_from_master
+    from app.models.master_profile import MasterProfile
+    if master.role == UserRole.ADMIN:
+        if master_id is not None:
+            mp_ids = [master_id]
+        else:
+            mp_ids = (await db.execute(select(MasterProfile.id))).scalars().all()
+        total = 0
+        for mp_id in mp_ids:
+            total += await block_client_from_master(db, master, mp_id, user)
+        return {"blocked": True, "cancelled_appointments": total,
+                "masters": len(mp_ids)}
     mp_id = await get_master_profile_id(db, master)
     cancelled = await block_client_from_master(db, master, mp_id, user)
     return {"blocked": True, "cancelled_appointments": cancelled}
@@ -466,12 +489,14 @@ async def block_client(
 @router.delete("/clients/{client_id}/block", status_code=200)
 async def unblock_client_endpoint(
     client_id: int,
+    master_id: Optional[int] = Query(
+        default=None,
+        description="Superadmin only: MasterProfile.id to unblock for. "
+                    "Omitted = unblock everywhere."),
     master: User = Depends(require_master),
     db: AsyncSession = Depends(get_db)
 ):
     """Lift the blacklist: the client is fully visible again."""
-    if master.role == UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="Только для мастеров")
     result = await db.execute(select(User).where(User.id == client_id))
     user = result.scalar_one_or_none()
     if not user:
@@ -479,12 +504,21 @@ async def unblock_client_endpoint(
     await _require_own_client(db, master, user)
 
     from app.services.client_visibility import unblock_client
-    mp_id = await get_master_profile_id(db, master)
+    from app.models.master_profile import MasterProfile
     cp = (await db.execute(
         select(ClientProfile).where(ClientProfile.user_id == user.id)
     )).scalar_one_or_none()
-    existed = await unblock_client(
-        db, mp_id, cp.id) if cp is not None else False
+    if cp is None:
+        return {"blocked": False, "was_blocked": False}
+    if master.role == UserRole.ADMIN:
+        mp_ids = ([master_id] if master_id is not None
+                  else (await db.execute(select(MasterProfile.id))).scalars().all())
+        lifted = False
+        for mp_id in mp_ids:
+            lifted = await unblock_client(db, mp_id, cp.id) or lifted
+        return {"blocked": False, "was_blocked": lifted}
+    mp_id = await get_master_profile_id(db, master)
+    existed = await unblock_client(db, mp_id, cp.id)
     return {"blocked": False, "was_blocked": existed}
 
 

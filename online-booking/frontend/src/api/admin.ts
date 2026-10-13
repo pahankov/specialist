@@ -151,14 +151,17 @@ export const adminApi = {
   deleteClient(id: number) {
     return apiClient.delete(`/api/v1/admin/clients/${id}`);
   },
-  blockClient(id: number) {
+  blockClient(id: number, masterId?: number) {
     return apiClient.post<{ blocked: boolean; cancelled_appointments: number }>(
       `/api/v1/admin/clients/${id}/block`,
+      null,
+      { params: masterId ? { master_id: masterId } : undefined },
     );
   },
-  unblockClient(id: number) {
+  unblockClient(id: number, masterId?: number) {
     return apiClient.delete<{ blocked: boolean; was_blocked: boolean }>(
       `/api/v1/admin/clients/${id}/block`,
+      { params: masterId ? { master_id: masterId } : undefined },
     );
   },
   toggleClientActive(id: number) {

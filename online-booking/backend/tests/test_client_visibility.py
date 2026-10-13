@@ -314,11 +314,60 @@ class TestBlacklist:
         row = [i for i in lst.json()["items"] if i["id"] == client_uid]
         assert len(row) == 1 and row[0]["is_blocked"] is False
 
-    async def test_admin_cannot_block(
-        self, client, hide_setup, super_admin_headers,
+    async def _book_as(self, client, session, token, mp_id, days=5):
+        from sqlalchemy import select
+        from app.models.service import Service
+        from datetime import timedelta
+
+        svc_id = (await session.execute(
+            select(Service.id).where(Service.master_id == mp_id)
+        )).scalars().first()
+        dt = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+        return await client.post(
+            "/api/v1/client/appointments", headers=token, json={
+                "master_id": mp_id, "service_id": svc_id,
+                "appointment_date": dt,
+            })
+
+    async def test_admin_global_block_bars_everywhere(
+        self, client, session, hide_setup, super_admin_headers,
     ):
-        client_uid = hide_setup["c"]["id"]
+        s = hide_setup
+        client_uid = s["c"]["id"]
         r = await client.post(f"/api/v1/admin/clients/{client_uid}/block",
                               headers=super_admin_headers)
-        assert r.status_code == 403
+        assert r.status_code == 200, r.text
+        assert r.json()["masters"] == 2
+
+        for mp_id in (s["mp_a"], s["mp_b"]):
+            r = await self._book_as(client, session, _auth(s["c"]), mp_id)
+            assert r.status_code == 403, (mp_id, r.text)
+
+        lst = await client.get("/api/v1/admin/clients",
+                               headers=super_admin_headers)
+        row = [i for i in lst.json()["items"] if i["id"] == client_uid]
+        assert len(row) == 1 and row[0]["is_blocked"] is True
+
+    async def test_admin_scoped_block_and_global_unblock(
+        self, client, session, hide_setup, super_admin_headers,
+    ):
+        s = hide_setup
+        client_uid = s["c"]["id"]
+        r = await client.post(
+            f"/api/v1/admin/clients/{client_uid}/block",
+            headers=super_admin_headers, params={"master_id": s["mp_b"]})
+        assert r.status_code == 200, r.text
+
+        r = await self._book_as(client, session, _auth(s["c"]), s["mp_a"])
+        assert r.status_code == 201, r.text
+        r = await self._book_as(client, session, _auth(s["c"]), s["mp_b"],
+                                days=6)
+        assert r.status_code == 403, r.text
+
+        r = await client.delete(f"/api/v1/admin/clients/{client_uid}/block",
+                                headers=super_admin_headers)
+        assert r.status_code == 200, r.text
+        r = await self._book_as(client, session, _auth(s["c"]), s["mp_b"],
+                                days=7)
+        assert r.status_code == 201, r.text
 

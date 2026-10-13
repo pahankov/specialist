@@ -226,13 +226,20 @@ function ClientsPage() {
     }
   };
 
+  const scopedMasterId =
+    isSuperSection && typeof masterIdFilter === 'number' ? masterIdFilter : undefined;
+
   const handleBlock = async (id: number) => {
     try {
-      const { data } = await adminApi.blockClient(id);
+      const { data } = await adminApi.blockClient(id, scopedMasterId);
       if (data.cancelled_appointments > 0) {
         toast.info(`Отменено будущих записей: ${data.cancelled_appointments}`);
       }
-      toast.success('Клиент заблокирован');
+      toast.success(
+        isSuperSection && scopedMasterId === undefined
+          ? 'Клиент заблокирован у всех мастеров'
+          : 'Клиент заблокирован',
+      );
       fetchData();
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'Не удалось заблокировать'));
@@ -243,7 +250,7 @@ function ClientsPage() {
 
   const handleUnblock = async (id: number) => {
     try {
-      await adminApi.unblockClient(id);
+      await adminApi.unblockClient(id, scopedMasterId);
       toast.success('Клиент разблокирован');
       fetchData();
     } catch (err: unknown) {
@@ -597,37 +604,36 @@ function ClientsPage() {
                       </td>
                       <td>{(c.no_show_count ?? 0) > 0 ? `⚠️ ${c.no_show_count}` : '—'}</td>
                       <td className="actions-cell">
-                        {!isSuperSection &&
-                          (c.is_blocked ? (
-                            <Tooltip
-                              content="Разблокировать — клиент снова сможет записываться"
-                              position="top"
+                        {c.is_blocked ? (
+                          <Tooltip
+                            content="Разблокировать — клиент снова сможет записываться"
+                            position="top"
+                          >
+                            <button
+                              className="btn btn-sm btn-ghost"
+                              onClick={() => handleUnblock(c.id)}
                             >
-                              <button
-                                className="btn btn-sm btn-ghost"
-                                onClick={() => handleUnblock(c.id)}
-                              >
-                                ✅
-                              </button>
-                            </Tooltip>
-                          ) : (
-                            <Tooltip
-                              content="Заблокировать — скроет из списков и запретит запись"
-                              position="top"
+                              ✅
+                            </button>
+                          </Tooltip>
+                        ) : (
+                          <Tooltip
+                            content="Заблокировать — скроет из списков и запретит запись"
+                            position="top"
+                          >
+                            <button
+                              className="btn btn-sm btn-ghost"
+                              onClick={() => setBlockingId(c.id)}
                             >
-                              <button
-                                className="btn btn-sm btn-ghost"
-                                onClick={() => setBlockingId(c.id)}
-                              >
-                                🚫
-                              </button>
-                            </Tooltip>
-                          ))}
+                              🚫
+                            </button>
+                          </Tooltip>
+                        )}
                         <Tooltip
                           content={
                             c.is_active === false
-                              ? 'Разблокировать (сейчас заблокирован)'
-                              : 'Заблокировать (сейчас активен)'
+                              ? 'Включить аккаунт (сейчас выключен)'
+                              : 'Выключить аккаунт (сейчас активен)'
                           }
                           position="top"
                         >
@@ -679,7 +685,11 @@ function ClientsPage() {
         open={blockingId !== null}
         onClose={() => setBlockingId(null)}
         title="🚫 Заблокировать клиента?"
-        message="Клиент пропадёт из ваших списков, не сможет видеть ваше расписание и записываться (ни из кабинета, ни с публичной формы). Прошлые визиты останутся как «Удалённый клиент»."
+        message={
+          isSuperSection && scopedMasterId === undefined
+            ? 'Клиент будет заблокирован у ВСЕХ мастеров: пропадёт из списков, не сможет видеть расписания и записываться. Прошлые визиты останутся как «Удалённый клиент».'
+            : 'Клиент пропадёт из ваших списков, не сможет видеть ваше расписание и записываться (ни из кабинета, ни с публичной формы). Прошлые визиты останутся как «Удалённый клиент».'
+        }
         confirmLabel="Заблокировать"
         danger
         onConfirm={() => blockingId !== null && handleBlock(blockingId)}
