@@ -223,9 +223,15 @@ async def public_booking(booking: PublicBookingCreate, db: AsyncSession = Depend
         logger.warning("Конфликт времени: мастер=%s, время=%s", booking.master_id, booking.appointment_date)
         raise HTTPException(status_code=409, detail="Это время уже занято")
 
-    # Check or create client
+    # Check or create client (normalize first: registration stores phones
+    # as +7 (XXX) XXX-XX-XX, raw input would miss and clone the client).
+    from app.utils.phone import normalize_phone
+    try:
+        lookup_phone = normalize_phone(booking.client_phone)
+    except ValueError:
+        lookup_phone = booking.client_phone
     client_result = await db.execute(
-        select(ClientProfile).join(ClientProfile.user).where(User.phone == booking.client_phone)
+        select(ClientProfile).join(ClientProfile.user).where(User.phone == lookup_phone)
     )
     client = client_result.scalar_one_or_none()
 
@@ -244,6 +250,13 @@ async def public_booking(booking: PublicBookingCreate, db: AsyncSession = Depend
         db.add(client)
         await db.flush()
         await db.refresh(client)
+    else:
+        # Anonymous entry point: a blacklisted phone sees the same generic
+        # "unavailable" as an inactive master (no block disclosure).
+        from app.services.client_visibility import is_client_blocked
+        if await is_client_blocked(db, booking.master_id, client.id):
+            raise HTTPException(status_code=404,
+                                detail="Master not found or inactive")
 
     # Create appointment
     client_note = (booking.notes or "").strip()

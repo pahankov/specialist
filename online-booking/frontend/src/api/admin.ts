@@ -151,6 +151,16 @@ export const adminApi = {
   deleteClient(id: number) {
     return apiClient.delete(`/api/v1/admin/clients/${id}`);
   },
+  blockClient(id: number) {
+    return apiClient.post<{ blocked: boolean; cancelled_appointments: number }>(
+      `/api/v1/admin/clients/${id}/block`,
+    );
+  },
+  unblockClient(id: number) {
+    return apiClient.delete<{ blocked: boolean; was_blocked: boolean }>(
+      `/api/v1/admin/clients/${id}/block`,
+    );
+  },
   toggleClientActive(id: number) {
     return apiClient.post(`/api/v1/admin/clients/${id}/toggle-active`);
   },

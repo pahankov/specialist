@@ -297,6 +297,13 @@ async def get_booking_schedule(
     if mp_user is None or mp_user.is_active is False or mp.status != "active":
         raise HTTPException(status_code=404, detail="Мастер недоступен")
 
+    from app.services.client_visibility import is_client_blocked
+    _me_profile = await _get_or_create_profile(db, user)
+    if await is_client_blocked(db, mp.id, _me_profile.id):
+        raise HTTPException(
+            status_code=403,
+            detail="Этот мастер вас заблокировал. Выберите другого мастера.")
+
     month_prefix = f"{year:04d}-{mon:02d}"
     hours = (await db.execute(
         select(WorkingHour).where(
@@ -361,6 +368,12 @@ async def book_my_appointment(
     )).scalar_one_or_none()
     if mp_user is None or mp_user.is_active is False or mp.status != "active":
         raise HTTPException(status_code=404, detail="Мастер недоступен")
+
+    from app.services.client_visibility import is_client_blocked
+    if await is_client_blocked(db, mp.id, profile.id):
+        raise HTTPException(
+            status_code=403,
+            detail="Этот мастер вас заблокировал. Выберите другого мастера.")
 
     appt_dt = data.appointment_date.replace(tzinfo=None)
     if appt_dt <= utcnow_naive():

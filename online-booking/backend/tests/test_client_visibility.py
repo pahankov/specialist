@@ -197,3 +197,128 @@ class TestAdminPurge:
         user = (await session.execute(
             select(User).where(User.id == client_uid))).scalar_one_or_none()
         assert user is None
+
+
+class TestBlacklist:
+    async def test_block_bars_bookings_but_keeps_badge(
+        self, client, session, hide_setup,
+    ):
+        from sqlalchemy import select
+        from app.models.service import Service
+        from datetime import timedelta
+
+        s = hide_setup
+        client_uid = s["c"]["id"]
+
+        r = await client.post(f"/api/v1/admin/clients/{client_uid}/block",
+                              headers=_auth(s["a"]))
+        assert r.status_code == 200, r.text
+        assert r.json()["cancelled_appointments"] == 1
+
+        # Listed back with the badge (manageable), not vanished.
+        lst = await client.get("/api/v1/admin/clients", headers=_auth(s["a"]))
+        row = [i for i in lst.json()["items"] if i["id"] == client_uid]
+        assert len(row) == 1 and row[0]["is_blocked"] is True
+
+        # Cabinet booking + schedule barred…
+        svc_id = (await session.execute(
+            select(Service.id).where(Service.master_id == s["mp_a"])
+        )).scalars().first()
+        dt = (datetime.now(timezone.utc) + timedelta(days=5)).isoformat()
+        r = await client.post("/api/v1/client/appointments",
+                              headers=_auth(s["c"]), json={
+                                  "master_id": s["mp_a"], "service_id": svc_id,
+                                  "appointment_date": dt,
+                              })
+        assert r.status_code == 403, r.text
+        r = await client.get("/api/v1/client/booking/schedule",
+                             headers=_auth(s["c"]),
+                             params={"master_id": s["mp_a"], "month": "2026-11"})
+        assert r.status_code == 403, r.text
+
+        # …public entry point sees a generic 404 (no block disclosure)…
+        r = await client.post("/api/v1/appointments/public", json={
+            "master_id": s["mp_a"], "service_id": svc_id,
+            "client_name": "X", "client_phone": "+79991110003",
+            "appointment_date": dt,
+        })
+        assert r.status_code == 404, r.text
+
+        # …but the other master is unaffected.
+        svc_b = (await session.execute(
+            select(Service.id).where(Service.master_id == s["mp_b"])
+        )).scalars().first()
+        r = await client.post("/api/v1/client/appointments",
+                              headers=_auth(s["c"]), json={
+                                  "master_id": s["mp_b"], "service_id": svc_b,
+                                  "appointment_date": dt,
+                              })
+        assert r.status_code == 201, r.text
+
+    async def test_unblock_restores_everything(
+        self, client, session, hide_setup,
+    ):
+        from sqlalchemy import select
+        from app.models.service import Service
+        from datetime import timedelta
+
+        s = hide_setup
+        client_uid = s["c"]["id"]
+        await client.post(f"/api/v1/admin/clients/{client_uid}/block",
+                          headers=_auth(s["a"]))
+        r = await client.delete(f"/api/v1/admin/clients/{client_uid}/block",
+                                headers=_auth(s["a"]))
+        assert r.status_code == 200, r.text
+
+        lst = await client.get("/api/v1/admin/clients", headers=_auth(s["a"]))
+        row = [i for i in lst.json()["items"] if i["id"] == client_uid]
+        assert len(row) == 1 and row[0]["is_blocked"] is False
+
+        svc_id = (await session.execute(
+            select(Service.id).where(Service.master_id == s["mp_a"])
+        )).scalars().first()
+        dt = (datetime.now(timezone.utc) + timedelta(days=5)).isoformat()
+        r = await client.post("/api/v1/client/appointments",
+                              headers=_auth(s["c"]), json={
+                                  "master_id": s["mp_a"], "service_id": svc_id,
+                                  "appointment_date": dt,
+                              })
+        assert r.status_code == 201, r.text
+
+    async def test_master_booking_lifts_block(
+        self, client, session, hide_setup,
+    ):
+        from sqlalchemy import select
+        from app.models.service import Service
+        from datetime import timedelta
+
+        s = hide_setup
+        client_uid = s["c"]["id"]
+        await client.post(f"/api/v1/admin/clients/{client_uid}/block",
+                          headers=_auth(s["a"]))
+
+        svc_id = (await session.execute(
+            select(Service.id).where(Service.master_id == s["mp_a"])
+        )).scalars().first()
+        dt = (datetime.now(timezone.utc) + timedelta(days=6)).isoformat()
+        r = await client.post("/api/v1/admin/appointments/book",
+                              headers=_auth(s["a"]), json={
+                                  "client_id": client_uid,
+                                  "service_id": svc_id,
+                                  "appointment_date": dt,
+                                  "status": "pending",
+                              })
+        assert r.status_code == 201, r.text
+
+        lst = await client.get("/api/v1/admin/clients", headers=_auth(s["a"]))
+        row = [i for i in lst.json()["items"] if i["id"] == client_uid]
+        assert len(row) == 1 and row[0]["is_blocked"] is False
+
+    async def test_admin_cannot_block(
+        self, client, hide_setup, super_admin_headers,
+    ):
+        client_uid = hide_setup["c"]["id"]
+        r = await client.post(f"/api/v1/admin/clients/{client_uid}/block",
+                              headers=super_admin_headers)
+        assert r.status_code == 403
+

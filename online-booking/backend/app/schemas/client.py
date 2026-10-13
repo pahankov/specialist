@@ -56,6 +56,9 @@ class ClientResponse(BaseModel):
     email: Optional[str] = None
     no_show_count: int = 0
     is_active: bool = True
+    # Master-scoped blacklist badge (clients list only; default keeps
+    # every other producer of this schema unchanged).
+    is_blocked: bool = False
     city_id: Optional[int] = None
     city_name: Optional[str] = None
     address: Optional[str] = None

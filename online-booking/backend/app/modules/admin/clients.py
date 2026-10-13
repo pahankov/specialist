@@ -94,9 +94,24 @@ async def get_admin_clients(
         effective_master_id = await get_master_profile_id(db, master)
 
     # Regular master: strictly OWN clients (booked with them or created
-    # by them). The master_id filter above is then redundant but harmless.
+    # by them). Hidden ones stay out — except blocked: the blacklist must
+    # stay manageable (badge + unblock), so blocked are listed back in.
     if not is_admin:
+        from app.models.master_hidden_client import MasterHiddenClient
         own_ids = await own_client_user_ids(db, master)
+        _mp_id = await get_master_profile_id(db, master)
+        _blocked_cp = await db.execute(
+            select(MasterHiddenClient.client_profile_id).where(
+                MasterHiddenClient.master_profile_id == _mp_id,
+                MasterHiddenClient.is_blocked == True)  # noqa: E712
+        )
+        _blocked_cp_ids = [r[0] for r in _blocked_cp.all()]
+        if _blocked_cp_ids:
+            _blocked_users = await db.execute(
+                select(ClientProfile.user_id).where(
+                    ClientProfile.id.in_(_blocked_cp_ids))
+            )
+            own_ids |= {r[0] for r in _blocked_users.all()}
         if not own_ids:
             return PaginatedResponse(items=[], total=0, page=page,
                                      page_size=page_size, total_pages=0)
@@ -156,6 +171,16 @@ async def get_admin_clients(
         city_names = dict(city_rows.all())
 
     # Build response
+    blocked_by_cp: dict = {}
+    if not is_admin:
+        from app.models.master_hidden_client import MasterHiddenClient
+        _mp_id = await get_master_profile_id(db, master)
+        _rows = await db.execute(
+            select(MasterHiddenClient.client_profile_id,
+                   MasterHiddenClient.is_blocked).where(
+                MasterHiddenClient.master_profile_id == _mp_id)
+        )
+        blocked_by_cp = dict(_rows.all())
     items = [
         {
             "id": cp.user.id,
@@ -164,6 +189,7 @@ async def get_admin_clients(
             "email": cp.user.email,
             "no_show_count": cp.no_show_count or 0,
             "is_active": cp.user.is_active,
+            "is_blocked": bool(blocked_by_cp.get(cp.id, False)),
             "city_id": cp.user.city_id,
             "city_name": city_names.get(cp.user.city_id),
             "address": cp.address,
@@ -410,6 +436,56 @@ async def bulk_set_client_city(
     )
     await db.commit()
     return {"updated": len(user_ids), "city_id": data.city_id, "city_name": city_obj.name_ru}
+
+
+@router.post("/clients/{client_id}/block", status_code=200)
+async def block_client(
+    client_id: int,
+    master: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db)
+):
+    """Blacklist an own client: hide + bar new bookings (idempotent).
+
+    Masters only — superadmins erase instead. History stays, rendered as
+    «Удалённый клиент». A new booking (by either side) lifts the block.
+    """
+    if master.role == UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Только для мастеров")
+    result = await db.execute(select(User).where(User.id == client_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Client not found")
+    await _require_own_client(db, master, user)
+
+    from app.services.client_visibility import block_client_from_master
+    mp_id = await get_master_profile_id(db, master)
+    cancelled = await block_client_from_master(db, master, mp_id, user)
+    return {"blocked": True, "cancelled_appointments": cancelled}
+
+
+@router.delete("/clients/{client_id}/block", status_code=200)
+async def unblock_client_endpoint(
+    client_id: int,
+    master: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db)
+):
+    """Lift the blacklist: the client is fully visible again."""
+    if master.role == UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Только для мастеров")
+    result = await db.execute(select(User).where(User.id == client_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Client not found")
+    await _require_own_client(db, master, user)
+
+    from app.services.client_visibility import unblock_client
+    mp_id = await get_master_profile_id(db, master)
+    cp = (await db.execute(
+        select(ClientProfile).where(ClientProfile.user_id == user.id)
+    )).scalar_one_or_none()
+    existed = await unblock_client(
+        db, mp_id, cp.id) if cp is not None else False
+    return {"blocked": False, "was_blocked": existed}
 
 
 @router.delete("/clients/{client_id}", status_code=204)

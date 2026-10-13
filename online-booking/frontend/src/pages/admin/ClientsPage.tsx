@@ -52,6 +52,7 @@ function ClientsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [blockingId, setBlockingId] = useState<number | null>(null);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -222,6 +223,31 @@ function ClientsPage() {
       toast.error('Ошибка удаления');
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleBlock = async (id: number) => {
+    try {
+      const { data } = await adminApi.blockClient(id);
+      if (data.cancelled_appointments > 0) {
+        toast.info(`Отменено будущих записей: ${data.cancelled_appointments}`);
+      }
+      toast.success('Клиент заблокирован');
+      fetchData();
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Не удалось заблокировать'));
+    } finally {
+      setBlockingId(null);
+    }
+  };
+
+  const handleUnblock = async (id: number) => {
+    try {
+      await adminApi.unblockClient(id);
+      toast.success('Клиент разблокирован');
+      fetchData();
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Не удалось разблокировать'));
     }
   };
 
@@ -523,6 +549,22 @@ function ClientsPage() {
                             <strong>{c.name}</strong>
                           </button>
                         </Tooltip>
+                        {c.is_blocked && (
+                          <span
+                            style={{
+                              marginLeft: 6,
+                              fontSize: 12,
+                              color: '#fff',
+                              background: '#e5484d',
+                              borderRadius: 10,
+                              padding: '1px 8px',
+                              whiteSpace: 'nowrap',
+                            }}
+                            title="Клиент в чёрном списке: не видит расписание и не может записаться"
+                          >
+                            ⛔ Заблокирован
+                          </span>
+                        )}
                       </td>
                       <td>
                         <a href={`tel:${c.phone}`}>{c.phone}</a>
@@ -555,6 +597,32 @@ function ClientsPage() {
                       </td>
                       <td>{(c.no_show_count ?? 0) > 0 ? `⚠️ ${c.no_show_count}` : '—'}</td>
                       <td className="actions-cell">
+                        {!isSuperSection &&
+                          (c.is_blocked ? (
+                            <Tooltip
+                              content="Разблокировать — клиент снова сможет записываться"
+                              position="top"
+                            >
+                              <button
+                                className="btn btn-sm btn-ghost"
+                                onClick={() => handleUnblock(c.id)}
+                              >
+                                ✅
+                              </button>
+                            </Tooltip>
+                          ) : (
+                            <Tooltip
+                              content="Заблокировать — скроет из списков и запретит запись"
+                              position="top"
+                            >
+                              <button
+                                className="btn btn-sm btn-ghost"
+                                onClick={() => setBlockingId(c.id)}
+                              >
+                                🚫
+                              </button>
+                            </Tooltip>
+                          ))}
                         <Tooltip
                           content={
                             c.is_active === false
@@ -605,6 +673,16 @@ function ClientsPage() {
         confirmLabel={isSuperSection ? 'Удалить' : 'Убрать из моих'}
         danger
         onConfirm={() => deletingId !== null && handleDelete(deletingId)}
+      />
+
+      <ConfirmDialog
+        open={blockingId !== null}
+        onClose={() => setBlockingId(null)}
+        title="🚫 Заблокировать клиента?"
+        message="Клиент пропадёт из ваших списков, не сможет видеть ваше расписание и записываться (ни из кабинета, ни с публичной формы). Прошлые визиты останутся как «Удалённый клиент»."
+        confirmLabel="Заблокировать"
+        danger
+        onConfirm={() => blockingId !== null && handleBlock(blockingId)}
       />
 
       {/* Pagination */}

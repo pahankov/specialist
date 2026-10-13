@@ -82,6 +82,8 @@ export interface Client {
   email?: string;
   no_show_count?: number;
   is_active?: boolean;
+  /** Master-scoped blacklist badge (clients list only). */
+  is_blocked?: boolean;
   city_id?: number | null;
   city_name?: string | null;
   address?: string | null;
