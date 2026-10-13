@@ -116,6 +116,7 @@ export const adminApi = {
     master_id?: number;
     sort_by?: string;
     sort_dir?: string;
+    include_hidden?: boolean;
   }) {
     return apiClient.get<PaginatedResponse<Client>>('/api/v1/admin/clients', { params });
   },
@@ -148,14 +149,24 @@ export const adminApi = {
       data,
     );
   },
-  deleteClient(id: number) {
-    return apiClient.delete(`/api/v1/admin/clients/${id}`);
+  deleteClient(id: number, reason?: string) {
+    return apiClient.delete(`/api/v1/admin/clients/${id}`, {
+      params: reason ? { reason } : undefined,
+    });
   },
-  blockClient(id: number, masterId?: number) {
+  restoreClient(id: number, masterId?: number) {
+    return apiClient.post<{ restored: boolean }>(`/api/v1/admin/clients/${id}/restore`, null, {
+      params: masterId ? { master_id: masterId } : undefined,
+    });
+  },
+  blockClient(id: number, masterId?: number, reason?: string) {
+    const params: Record<string, string | number> = {};
+    if (masterId) params.master_id = masterId;
+    if (reason) params.reason = reason;
     return apiClient.post<{ blocked: boolean; cancelled_appointments: number }>(
       `/api/v1/admin/clients/${id}/block`,
       null,
-      { params: masterId ? { master_id: masterId } : undefined },
+      { params: Object.keys(params).length ? params : undefined },
     );
   },
   unblockClient(id: number, masterId?: number) {

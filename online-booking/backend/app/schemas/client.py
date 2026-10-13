@@ -59,6 +59,9 @@ class ClientResponse(BaseModel):
     # Master-scoped blacklist badge (clients list only; default keeps
     # every other producer of this schema unchanged).
     is_blocked: bool = False
+    # Archive visibility (master clients list with ?include_hidden=true).
+    is_hidden: bool = False
+    hidden_reason: Optional[str] = None
     city_id: Optional[int] = None
     city_name: Optional[str] = None
     address: Optional[str] = None

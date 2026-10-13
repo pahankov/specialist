@@ -4,7 +4,7 @@ The client row stays intact (other masters, own login, history). Past
 appointments with this master are kept but rendered as DELETED_CLIENT_NAME.
 A new booking with this master revives visibility (unhide).
 """
-from sqlalchemy import Column, Integer, ForeignKey, DateTime, Boolean, UniqueConstraint, Index
+from sqlalchemy import Column, Integer, ForeignKey, DateTime, Boolean, String, UniqueConstraint, Index
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from app.database import Base
@@ -25,6 +25,9 @@ class MasterHiddenClient(Base):
     client_profile_id = Column(Integer, ForeignKey("client_profiles.id", ondelete="CASCADE"),
                                nullable=False)
     hidden_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    # Archive reason (master's own bookkeeping): moved | left | inactive |
+    # deceased | other. NULL = hidden without a reason (legacy rows).
+    hidden_reason = Column(String(30), nullable=True)
     # Blacklist: hidden AND barred from new bookings with this master.
     # Plain hides (via clients DELETE) leave is_blocked False.
     is_blocked = Column(Boolean, default=False, nullable=False)

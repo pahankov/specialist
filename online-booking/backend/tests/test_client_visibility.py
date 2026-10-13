@@ -184,7 +184,7 @@ class TestMasterHide:
 
 
 class TestAdminPurge:
-    async def test_admin_hard_deletes(
+    async def test_admin_delete_defaults_to_global_block(
         self, client, session, hide_setup, super_admin_headers,
     ):
         from sqlalchemy import select
@@ -195,8 +195,66 @@ class TestAdminPurge:
                                 headers=super_admin_headers)
         assert r.status_code == 204, r.text
         user = (await session.execute(
+            select(User).where(User.id == client_uid))).scalar_one()
+        assert user.is_active is True  # reversible block, not erasure
+
+    async def test_admin_purge_erases(
+        self, client, session, hide_setup, super_admin_headers,
+    ):
+        from sqlalchemy import select
+        from app.models.user import User
+
+        client_uid = (hide_setup["c"]["id"])
+        r = await client.delete(
+            f"/api/v1/admin/clients/{client_uid}?purge=true",
+            headers=super_admin_headers)
+        assert r.status_code == 204, r.text
+        user = (await session.execute(
             select(User).where(User.id == client_uid))).scalar_one_or_none()
         assert user is None
+
+
+class TestArchive:
+    async def test_hide_reason_archive_restore(
+        self, client, session, hide_setup,
+    ):
+        s = hide_setup
+        client_uid = s["c"]["id"]
+        headers_a = _auth(s["a"])
+
+        r = await client.delete(
+            f"/api/v1/admin/clients/{client_uid}?reason=moved",
+            headers=headers_a)
+        assert r.status_code == 204, r.text
+
+        # Hidden from the default list…
+        lst = await client.get("/api/v1/admin/clients", headers=headers_a)
+        assert all(i["id"] != client_uid for i in lst.json()["items"])
+
+        # …visible in the archive with the reason…
+        lst = await client.get("/api/v1/admin/clients",
+                               headers=headers_a,
+                               params={"include_hidden": True})
+        row = [i for i in lst.json()["items"] if i["id"] == client_uid]
+        assert len(row) == 1
+        assert row[0]["is_hidden"] is True
+        assert row[0]["hidden_reason"] == "moved"
+        assert row[0]["is_blocked"] is False
+
+        # …bad reason rejected…
+        r = await client.delete(
+            f"/api/v1/admin/clients/{client_uid}?reason=bogus",
+            headers=headers_a)
+        assert r.status_code == 422
+
+        # …and restorable with one call.
+        r = await client.post(f"/api/v1/admin/clients/{client_uid}/restore",
+                              headers=headers_a)
+        assert r.status_code == 200, r.text
+        assert r.json()["restored"] is True
+        lst = await client.get("/api/v1/admin/clients", headers=headers_a)
+        row = [i for i in lst.json()["items"] if i["id"] == client_uid]
+        assert len(row) == 1 and row[0]["is_hidden"] is False
 
 
 class TestBlacklist:
@@ -268,8 +326,9 @@ class TestBlacklist:
                                  headers=_auth(s["c"]))
         assert inbox.status_code == 200
         texts = [i["text"] for i in inbox.json()["items"]]
-        assert any("отменил вашу запись" in t for t in texts), texts
-        assert any("ограничил вам запись" in t for t in texts), texts
+        assert any("отменил ваши будущие записи" in t for t in texts), texts
+        assert any("ограничил вам запись" in t and "pahankov@mail.ru" in t
+                   for t in texts), texts
 
     async def test_unblock_restores_everything(
         self, client, session, hide_setup,

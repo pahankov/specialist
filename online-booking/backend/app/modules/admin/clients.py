@@ -69,6 +69,10 @@ async def get_admin_clients(
     master_id: Optional[int] = Query(None, description="Filter by master ID (clients who booked with this master)"),
     sort_by: Optional[str] = Query(None, description="Sort column: name|no_show|created_at"),
     sort_dir: str = Query("asc", description="Sort direction: asc|desc"),
+    include_hidden: bool = Query(
+        default=False,
+        description="Master view: also list archived (hidden, not blocked) "
+                    "clients with their archive reason."),
     db: AsyncSession = Depends(get_db)
 ):
     """Get all clients (paginated with total count)."""
@@ -94,24 +98,25 @@ async def get_admin_clients(
         effective_master_id = await get_master_profile_id(db, master)
 
     # Regular master: strictly OWN clients (booked with them or created
-    # by them). Hidden ones stay out — except blocked: the blacklist must
-    # stay manageable (badge + unblock), so blocked are listed back in.
+    # by them). Hidden ones stay out — except blocked (manageable badge)
+    # and, on ?include_hidden=true, archived with their reason.
     if not is_admin:
         from app.models.master_hidden_client import MasterHiddenClient
         own_ids = await own_client_user_ids(db, master)
         _mp_id = await get_master_profile_id(db, master)
-        _blocked_cp = await db.execute(
-            select(MasterHiddenClient.client_profile_id).where(
-                MasterHiddenClient.master_profile_id == _mp_id,
-                MasterHiddenClient.is_blocked == True)  # noqa: E712
+        _hidden = await db.execute(
+            select(MasterHiddenClient.client_profile_id,
+                   MasterHiddenClient.is_blocked).where(
+                MasterHiddenClient.master_profile_id == _mp_id)
         )
-        _blocked_cp_ids = [r[0] for r in _blocked_cp.all()]
-        if _blocked_cp_ids:
-            _blocked_users = await db.execute(
+        _extra_cp_ids = [r[0] for r in _hidden.all()
+                         if r[1] or include_hidden]
+        if _extra_cp_ids:
+            _extra_users = await db.execute(
                 select(ClientProfile.user_id).where(
-                    ClientProfile.id.in_(_blocked_cp_ids))
+                    ClientProfile.id.in_(_extra_cp_ids))
             )
-            own_ids |= {r[0] for r in _blocked_users.all()}
+            own_ids |= {r[0] for r in _extra_users.all()}
         if not own_ids:
             return PaginatedResponse(items=[], total=0, page=page,
                                      page_size=page_size, total_pages=0)
@@ -172,23 +177,29 @@ async def get_admin_clients(
 
     # Build response
     blocked_by_cp: dict = {}
+    hidden_by_cp: dict = {}
     from app.models.master_hidden_client import MasterHiddenClient
     if not is_admin:
         _mp_id = await get_master_profile_id(db, master)
         _rows = await db.execute(
             select(MasterHiddenClient.client_profile_id,
-                   MasterHiddenClient.is_blocked).where(
+                   MasterHiddenClient.is_blocked,
+                   MasterHiddenClient.hidden_reason).where(
                 MasterHiddenClient.master_profile_id == _mp_id)
         )
-        blocked_by_cp = dict(_rows.all())
+        for _cp_id, _flag, _reason in _rows.all():
+            blocked_by_cp[_cp_id] = bool(_flag)
+            hidden_by_cp[_cp_id] = _reason
     else:
         # Superadmin: badge when blocked anywhere.
         _rows = await db.execute(
             select(MasterHiddenClient.client_profile_id,
-                   MasterHiddenClient.is_blocked)
+                   MasterHiddenClient.is_blocked,
+                   MasterHiddenClient.hidden_reason)
         )
-        for _cp_id, _flag in _rows.all():
+        for _cp_id, _flag, _reason in _rows.all():
             blocked_by_cp[_cp_id] = blocked_by_cp.get(_cp_id, False) or bool(_flag)
+            hidden_by_cp.setdefault(_cp_id, _reason)
     items = [
         {
             "id": cp.user.id,
@@ -198,6 +209,8 @@ async def get_admin_clients(
             "no_show_count": cp.no_show_count or 0,
             "is_active": cp.user.is_active,
             "is_blocked": bool(blocked_by_cp.get(cp.id, False)),
+            "is_hidden": cp.id in hidden_by_cp,
+            "hidden_reason": hidden_by_cp.get(cp.id),
             "city_id": cp.user.city_id,
             "city_name": city_names.get(cp.user.city_id),
             "address": cp.address,
@@ -453,6 +466,9 @@ async def block_client(
         default=None,
         description="Superadmin only: MasterProfile.id to block for. "
                     "Omitted = block at every master (global blacklist)."),
+    reason: Optional[str] = Query(
+        default=None,
+        description="Archive reason: moved | left | inactive | deceased | other."),
     master: User = Depends(require_master),
     db: AsyncSession = Depends(get_db)
 ):
@@ -463,13 +479,18 @@ async def block_client(
     History stays, rendered as «Удалённый клиент». A new booking
     (by either side) lifts the block.
     """
+    from app.services.client_visibility import (
+        HIDE_REASONS, block_client_from_master,
+    )
+    if reason is not None and reason not in HIDE_REASONS:
+        raise HTTPException(status_code=422,
+                            detail=f"reason: one of {', '.join(HIDE_REASONS)}")
     result = await db.execute(select(User).where(User.id == client_id))
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="Client not found")
     await _require_own_client(db, master, user)
 
-    from app.services.client_visibility import block_client_from_master
     from app.models.master_profile import MasterProfile
     if master.role == UserRole.ADMIN:
         if master_id is not None:
@@ -478,11 +499,12 @@ async def block_client(
             mp_ids = (await db.execute(select(MasterProfile.id))).scalars().all()
         total = 0
         for mp_id in mp_ids:
-            total += await block_client_from_master(db, master, mp_id, user)
+            total += await block_client_from_master(db, master, mp_id, user,
+                                                    reason)
         return {"blocked": True, "cancelled_appointments": total,
                 "masters": len(mp_ids)}
     mp_id = await get_master_profile_id(db, master)
-    cancelled = await block_client_from_master(db, master, mp_id, user)
+    cancelled = await block_client_from_master(db, master, mp_id, user, reason)
     return {"blocked": True, "cancelled_appointments": cancelled}
 
 
@@ -522,18 +544,75 @@ async def unblock_client_endpoint(
     return {"blocked": False, "was_blocked": existed}
 
 
-@router.delete("/clients/{client_id}", status_code=204)
-async def delete_admin_client(
+@router.post("/clients/{client_id}/restore", status_code=200)
+async def restore_client(
     client_id: int,
+    master_id: Optional[int] = Query(
+        default=None,
+        description="Superadmin only: MasterProfile.id to restore for. "
+                    "Omitted = restore everywhere."),
     master: User = Depends(require_master),
     db: AsyncSession = Depends(get_db)
 ):
-    """Remove a client from the master's lists (hide, history kept).
+    """Return an archived client to the lists (lifts hide and block)."""
+    result = await db.execute(select(User).where(User.id == client_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Client not found")
+    await _require_own_client(db, master, user)
 
-    Regular masters only hide: the account stays active, past appointments
-    render as «Удалённый клиент», future ones with this master are cancelled.
-    Superadmin performs a full erasure instead (account + profile rows).
+    from app.services.client_visibility import unblock_client
+    from app.models.master_profile import MasterProfile
+    cp = (await db.execute(
+        select(ClientProfile).where(ClientProfile.user_id == user.id)
+    )).scalar_one_or_none()
+    if cp is None:
+        return {"restored": False}
+    if master.role == UserRole.ADMIN:
+        mp_ids = ([master_id] if master_id is not None
+                  else (await db.execute(select(MasterProfile.id))).scalars().all())
+        lifted = False
+        for mp_id in mp_ids:
+            lifted = await unblock_client(db, mp_id, cp.id) or lifted
+        await log_action(db, master.id, "restore", "client", client_id,
+                         user.name, level="info")
+        return {"restored": lifted}
+    mp_id = await get_master_profile_id(db, master)
+    restored = await unblock_client(db, mp_id, cp.id)
+    await log_action(db, master.id, "restore", "client", client_id,
+                     user.name, level="info")
+    return {"restored": restored}
+
+
+@router.delete("/clients/{client_id}", status_code=204)
+async def delete_admin_client(
+    client_id: int,
+    purge: bool = Query(
+        default=False,
+        description="Superadmin only: true = irreversible full erasure "
+                    "(account + appointments). Default = reversible block "
+                    "everywhere (superadmin) or archive (master)."),
+    reason: Optional[str] = Query(
+        default=None,
+        description="Archive reason: moved | left | inactive | deceased | other."),
+    master: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db)
+):
+    """Remove a client from the master's lists (archive, history kept).
+
+    Regular masters archive with an optional reason: the account stays
+    active, past appointments render as «Удалённый клиент», future ones
+    with this master are cancelled.
+    Superadmins block everywhere instead (reversible). Pass ?purge=true
+    for the irreversible full erasure (account + appointments) — legal
+    erasure requests only, logged as a warning.
     """
+    from app.services.client_visibility import (
+        HIDE_REASONS, block_client_from_master, hide_client_from_master,
+    )
+    if reason is not None and reason not in HIDE_REASONS:
+        raise HTTPException(status_code=422,
+                            detail=f"reason: one of {', '.join(HIDE_REASONS)}")
     result = await db.execute(select(User).where(User.id == client_id))
     user = result.scalar_one_or_none()
     if not user:
@@ -541,9 +620,15 @@ async def delete_admin_client(
     await _require_own_client(db, master, user)
 
     if master.role != UserRole.ADMIN:
-        from app.services.client_visibility import hide_client_from_master
         mp_id = await get_master_profile_id(db, master)
-        await hide_client_from_master(db, master, mp_id, user)
+        await hide_client_from_master(db, master, mp_id, user, reason)
+        return None
+
+    if not purge:
+        from app.models.master_profile import MasterProfile
+        mp_ids = (await db.execute(select(MasterProfile.id))).scalars().all()
+        for mp_id in mp_ids:
+            await block_client_from_master(db, master, mp_id, user, reason)
         return None
 
     # Also delete the client_profile

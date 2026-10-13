@@ -84,6 +84,9 @@ export interface Client {
   is_active?: boolean;
   /** Master-scoped blacklist badge (clients list only). */
   is_blocked?: boolean;
+  /** Archive visibility (clients list with ?include_hidden=true). */
+  is_hidden?: boolean;
+  hidden_reason?: string | null;
   city_id?: number | null;
   city_name?: string | null;
   address?: string | null;

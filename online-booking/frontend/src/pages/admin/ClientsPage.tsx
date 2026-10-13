@@ -53,6 +53,8 @@ function ClientsPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [blockingId, setBlockingId] = useState<number | null>(null);
+  const [showArchive, setShowArchive] = useState(false);
+  const [hideReason, setHideReason] = useState('inactive');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -97,9 +99,11 @@ function ClientsPage() {
         master_id?: number;
         sort_by?: string;
         sort_dir?: string;
+        include_hidden?: boolean;
       } = { page: currentPage + 1, page_size: pageSize };
       if (search?.trim()) params.search = search.trim();
       if (isSuperSection && masterIdFilter !== '') params.master_id = masterIdFilter;
+      if (showArchive) params.include_hidden = true;
       if (sortKey) {
         params.sort_by = sortKey;
         params.sort_dir = sortDir;
@@ -119,11 +123,11 @@ function ClientsPage() {
 
   useEffect(() => {
     setCurrentPage(0);
-  }, [search, masterIdFilter, sortKey, sortDir]);
+  }, [search, masterIdFilter, sortKey, sortDir, showArchive]);
 
   useEffect(() => {
     fetchData();
-  }, [currentPage, search, masterIdFilter, sortKey, sortDir]);
+  }, [currentPage, search, masterIdFilter, sortKey, sortDir, showArchive]);
 
   const resetForm = () => {
     setName('');
@@ -215,9 +219,9 @@ function ClientsPage() {
 
   const handleDelete = async (id: number) => {
     try {
-      await adminApi.deleteClient(id);
+      await adminApi.deleteClient(id, hideReason || undefined);
       // No undo: backend has no unhide/undelete, a fake "cancel" toast would lie.
-      toast.success(isSuperSection ? 'Клиент удалён' : 'Клиент убран из ваших списков');
+      toast.success(isSuperSection ? 'Клиент заблокирован у всех' : 'Клиент убран в архив');
       fetchData();
     } catch {
       toast.error('Ошибка удаления');
@@ -231,7 +235,7 @@ function ClientsPage() {
 
   const handleBlock = async (id: number) => {
     try {
-      const { data } = await adminApi.blockClient(id, scopedMasterId);
+      const { data } = await adminApi.blockClient(id, scopedMasterId, hideReason || undefined);
       if (data.cancelled_appointments > 0) {
         toast.info(`Отменено будущих записей: ${data.cancelled_appointments}`);
       }
@@ -258,6 +262,24 @@ function ClientsPage() {
     }
   };
 
+  const handleRestore = async (id: number) => {
+    try {
+      await adminApi.restoreClient(id, scopedMasterId);
+      toast.success('Клиент возвращён в списки');
+      fetchData();
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Не удалось вернуть клиента'));
+    }
+  };
+
+  const REASON_LABELS: Record<string, string> = {
+    inactive: 'Неактивен',
+    moved: 'Переехал',
+    left: 'Ушёл к другому мастеру',
+    deceased: 'Умер',
+    other: 'Другое',
+  };
+
   return (
     <div className="clients-page">
       <div className="page-header">
@@ -270,6 +292,23 @@ function ClientsPage() {
           </p>
         </div>
         <div className="page-header-actions">
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              fontSize: 13,
+              cursor: 'pointer',
+            }}
+            title="Показать клиентов, убранных в архив"
+          >
+            <input
+              type="checkbox"
+              checked={showArchive}
+              onChange={(e) => setShowArchive(e.target.checked)}
+            />
+            📦 Архив
+          </label>
           <button
             className="btn btn-ghost"
             onClick={async () => {
@@ -572,6 +611,25 @@ function ClientsPage() {
                             ⛔ Заблокирован
                           </span>
                         )}
+                        {c.is_hidden && !c.is_blocked && (
+                          <span
+                            style={{
+                              marginLeft: 6,
+                              fontSize: 12,
+                              color: '#666',
+                              background: '#eee',
+                              borderRadius: 10,
+                              padding: '1px 8px',
+                              whiteSpace: 'nowrap',
+                            }}
+                            title="Клиент в архиве — скрыт из списков, история сохранена"
+                          >
+                            📦 Архив{/* reason below in tooltip */}
+                            {c.hidden_reason
+                              ? `: ${REASON_LABELS[c.hidden_reason] || c.hidden_reason}`
+                              : ''}
+                          </span>
+                        )}
                       </td>
                       <td>
                         <a href={`tel:${c.phone}`}>{c.phone}</a>
@@ -604,6 +662,16 @@ function ClientsPage() {
                       </td>
                       <td>{(c.no_show_count ?? 0) > 0 ? `⚠️ ${c.no_show_count}` : '—'}</td>
                       <td className="actions-cell">
+                        {c.is_hidden && !c.is_blocked && (
+                          <Tooltip content="Вернуть из архива в списки" position="top">
+                            <button
+                              className="btn btn-sm btn-ghost"
+                              onClick={() => handleRestore(c.id)}
+                            >
+                              ↩️
+                            </button>
+                          </Tooltip>
+                        )}
                         {c.is_blocked ? (
                           <Tooltip
                             content="Разблокировать — клиент снова сможет записываться"
@@ -670,16 +738,29 @@ function ClientsPage() {
       <ConfirmDialog
         open={deletingId !== null}
         onClose={() => setDeletingId(null)}
-        title={isSuperSection ? '🗑️ Удалить клиента?' : '🗑️ Убрать клиента из моих?'}
+        title={isSuperSection ? '🗑️ Заблокировать клиента у всех?' : '🗑️ Убрать клиента в архив?'}
         message={
           isSuperSection
-            ? 'Клиент будет удалён вместе со всеми записями. Это действие нельзя отменить.'
-            : 'Клиент пропадёт из ваших списков, будущие записи с вами отменятся. Прошлые визиты останутся как «Удалённый клиент». Аккаунт клиента не пострадает.'
+            ? 'Клиент будет заблокирован у ВСЕХ мастеров (обратимо, разблокировка одной кнопкой). Полное стирание из базы — только по запросу, через API ?purge=true.'
+            : 'Клиент пропадёт из ваших списков, будущие записи с вами отменятся. Прошлые визиты останутся как «Удалённый клиент». Вернуть можно из архива (галочка 📦 сверху).'
         }
-        confirmLabel={isSuperSection ? 'Удалить' : 'Убрать из моих'}
+        confirmLabel={isSuperSection ? 'Заблокировать у всех' : 'Убрать в архив'}
         danger
         onConfirm={() => deletingId !== null && handleDelete(deletingId)}
-      />
+      >
+        <div style={{ marginTop: 8 }}>
+          <label style={{ fontSize: 13 }}>
+            Причина:{' '}
+            <select value={hideReason} onChange={(e) => setHideReason(e.target.value)}>
+              {Object.entries(REASON_LABELS).map(([v, label]) => (
+                <option key={v} value={v}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </ConfirmDialog>
 
       <ConfirmDialog
         open={blockingId !== null}
@@ -693,7 +774,20 @@ function ClientsPage() {
         confirmLabel="Заблокировать"
         danger
         onConfirm={() => blockingId !== null && handleBlock(blockingId)}
-      />
+      >
+        <div style={{ marginTop: 8 }}>
+          <label style={{ fontSize: 13 }}>
+            Причина:{' '}
+            <select value={hideReason} onChange={(e) => setHideReason(e.target.value)}>
+              {Object.entries(REASON_LABELS).map(([v, label]) => (
+                <option key={v} value={v}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </ConfirmDialog>
 
       {/* Pagination */}
       <Pager page={currentPage} totalPages={totalPages} onChange={setCurrentPage} />
