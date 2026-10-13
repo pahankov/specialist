@@ -130,6 +130,20 @@ async def update_me(
     return await get_me(user, db)
 
 
+@router.delete("/me", status_code=200)
+async def delete_me(
+    user: User = Depends(require_client),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete own client account (soft delete + PII anonymization).
+
+    Future appointments are cancelled, past history is kept for the
+    3-year retention promised in /privacy.
+    """
+    from app.services.account_deletion import delete_own_account
+    return await delete_own_account(db, user)
+
+
 @router.get("/stats", response_model=ClientStatsResponse)
 async def get_my_stats(
     user: User = Depends(require_client),

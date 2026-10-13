@@ -65,6 +65,13 @@ async def get_current_user(
             detail="User not found"
         )
 
+    if user.is_active is False:
+        logger.warning("Deactivated user from JWT: user_id=%s", user_id)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Аккаунт удалён"
+        )
+
     logger.debug("Authenticated user: id=%s, role=%s, name=%s", user.id, user.role, user.name)
     return user
 
@@ -167,6 +174,13 @@ async def get_current_client(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found"
+        )
+
+    if user.is_active is False:
+        logger.warning("Deactivated client from JWT: user_id=%s", user_id)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Аккаунт удалён"
         )
 
     return user

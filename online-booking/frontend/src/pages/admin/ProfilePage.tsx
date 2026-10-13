@@ -1,15 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { adminApi, assetUrl } from '../../api/client';
+import { adminApi, assetUrl, authApi } from '../../api/client';
 import {
   AddressSelect,
   BackendImg,
   CitySelect,
+  ConfirmDialog,
   EmptyState,
   Skeleton,
 } from '../../components/common';
 import type { CityOption } from '../../components/common/CitySelect';
 import { getApiErrorMessage } from '../../utils/apiError';
+import { clearAuthCookies } from '../../utils/cookies';
 import { capitalizeWords, splitFullName } from '../../utils/names';
 import './ProfilePage.css';
 
@@ -23,8 +26,11 @@ const AVATAR_PRESETS = ['🐱', '🐶', '🐥', '🦅', '🦊', '🐼', '🐸', 
 
 /** Master personal data: photo, names, contacts, city, cabinet, certificates. */
 function ProfilePage() {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -165,6 +171,29 @@ function ProfilePage() {
       toast.error(getApiErrorMessage(err, 'Не удалось сохранить профиль'));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      const { data } = await adminApi.deleteMyProfile();
+      if (data.cancelled_appointments > 0) {
+        toast.info(`Отменено будущих записей: ${data.cancelled_appointments}`);
+      }
+      try {
+        await authApi.logout();
+      } catch {
+        /* sessions already revoked server-side */
+      }
+      clearAuthCookies();
+      toast.success('Аккаунт удалён');
+      navigate('/', { replace: true });
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Не удалось удалить аккаунт'));
+    } finally {
+      setDeleting(false);
+      setConfirmDelete(false);
     }
   };
 
@@ -391,6 +420,32 @@ function ProfilePage() {
           </button>
         </div>
       </form>
+
+      <div className="card" style={{ marginTop: 16, borderColor: '#e5484d' }}>
+        <h3>🗑️ Удаление аккаунта</h3>
+        <p style={{ fontSize: 13, color: '#666' }}>
+          Профиль снимется с публикации, контакты сотрутся, будущие записи клиентов отменятся.
+          История хранится обезличенной 3 года согласно политике обработки данных.
+        </p>
+        <button
+          type="button"
+          className="btn btn-delete"
+          disabled={deleting}
+          onClick={() => setConfirmDelete(true)}
+        >
+          {deleting ? 'Удаление…' : 'Удалить мой аккаунт'}
+        </button>
+      </div>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        title="Удалить аккаунт?"
+        message="Профиль исчезнет из каталога, вход станет невозможен. Это действие нельзя отменить."
+        confirmLabel="Удалить аккаунт"
+        danger
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

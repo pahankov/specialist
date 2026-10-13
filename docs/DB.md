@@ -55,6 +55,7 @@
 | consent_at | TIMESTAMP WITH TIME ZONE | NULLABLE | Момент согласия (галочка при регистрации; NULL = до трекинга) |
 | consent_policy_version | VARCHAR(20) | NULLABLE | Версия политики ПДн на момент согласия |
 | consent_offer_version | VARCHAR(20) | NULLABLE | Версия оферты на момент согласия |
+| deleted_at | TIMESTAMP WITH TIME ZONE | NULLABLE | Момент самоудаления (NULL = активен; ПДн обезличены, строки хранятся 3 года) |
 | created_at | TIMESTAMP WITH TIME ZONE | | Дата создания |
 | updated_at | TIMESTAMP WITH TIME ZONE | | Дата обновления |
 
@@ -362,8 +363,9 @@
 | 13 | 09e0f1a2b3c4 | 08c9d0e1f2a3 | `service_bundles` + `appointments.bundle_id/bundle_name/duration_minutes/price`, `service_id` NULLABLE | 2026-10-12 |
 | 14 | 0af0e1d2c3b4 | 09e0f1a2b3c4 | `service_bundles.durations` (своё время услуги в комплексе) | 2026-10-12 |
 | 15 | 0cf0a1b2c3d4 | 0af0e1d2c3b4 | `users.consent_at/consent_policy_version/consent_offer_version` (доказательство согласия) | 2026-10-12 |
+| 16 | 0d0e1f2a3b4c | 0cf0a1b2c3d4 | `users.deleted_at` (метка самоудаления, retention 3 года) | 2026-10-13 |
 
-**Head:** `0cf0a1b2c3d4`
+**Head:** `0d0e1f2a3b4c`
 
 > Старая цепочка из 12 миграций (`9a9c2edb` → `b2c3d4e5f6a7`) удалена после squash —
 > история сохранена в git (`git log -- alembic/versions/`). Прод-БД со старым head

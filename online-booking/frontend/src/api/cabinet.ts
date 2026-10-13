@@ -58,6 +58,11 @@ export const cabinetApi = {
   }) {
     return apiClient.patch<ClientMe>('/api/v1/client/me', data);
   },
+  deleteMe() {
+    return apiClient.delete<{ detail: string; cancelled_appointments: number }>(
+      '/api/v1/client/me',
+    );
+  },
   stats() {
     return apiClient.get<ClientStats>('/api/v1/client/stats');
   },

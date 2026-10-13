@@ -40,6 +40,11 @@ export const adminApi = {
   }) {
     return apiClient.patch('/api/v1/admin/profile', data);
   },
+  deleteMyProfile() {
+    return apiClient.delete<{ detail: string; cancelled_appointments: number }>(
+      '/api/v1/admin/profile',
+    );
+  },
   uploadAvatar(file: File, kind: 'avatar' | 'cert' = 'avatar') {
     const form = new FormData();
     form.append('file', file);

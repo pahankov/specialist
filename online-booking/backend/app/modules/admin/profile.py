@@ -174,6 +174,20 @@ async def update_my_profile(
     return await get_my_profile(master, db)
 
 
+@router.delete("/profile", status_code=200)
+async def delete_my_profile(
+    master: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete own master account (soft delete + PII anonymization).
+
+    Profile disappears from public listings, future appointments are
+    cancelled, past history is kept for the 3-year retention in /privacy.
+    """
+    from app.services.account_deletion import delete_own_account
+    return await delete_own_account(db, master)
+
+
 @router.post("/profile/avatar")
 async def upload_avatar(
     file: UploadFile = File(...),

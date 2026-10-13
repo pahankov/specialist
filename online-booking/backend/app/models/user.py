@@ -54,6 +54,9 @@ class User(Base):
     consent_at = Column(DateTime(timezone=True), nullable=True)
     consent_policy_version = Column(String(20), nullable=True)
     consent_offer_version = Column(String(20), nullable=True)
+    # Self-service soft delete: account deactivated + PII anonymized, rows kept
+    # for the 3-year retention promised in /privacy, then purged. NULL = active.
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc))
