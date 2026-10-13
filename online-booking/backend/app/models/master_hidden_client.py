@@ -1,0 +1,31 @@
+"""MasterHiddenClient — a master removed a client from their own lists.
+
+The client row stays intact (other masters, own login, history). Past
+appointments with this master are kept but rendered as DELETED_CLIENT_NAME.
+A new booking with this master revives visibility (unhide).
+"""
+from sqlalchemy import Column, Integer, ForeignKey, DateTime, UniqueConstraint, Index
+from sqlalchemy.orm import relationship
+from datetime import datetime, timezone
+from app.database import Base
+
+DELETED_CLIENT_NAME = "Удалённый клиент"
+
+
+class MasterHiddenClient(Base):
+    __tablename__ = "master_hidden_clients"
+    __table_args__ = (
+        UniqueConstraint('master_profile_id', 'client_profile_id'),
+        Index('ix_hidden_by_master', 'master_profile_id'),
+    )
+
+    id = Column(Integer, primary_key=True)
+    master_profile_id = Column(Integer, ForeignKey("master_profiles.id", ondelete="CASCADE"),
+                               nullable=False)
+    client_profile_id = Column(Integer, ForeignKey("client_profiles.id", ondelete="CASCADE"),
+                               nullable=False)
+    hidden_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    def __repr__(self):
+        return (f"<MasterHiddenClient(master_profile_id={self.master_profile_id}, "
+                f"client_profile_id={self.client_profile_id})>")

@@ -215,8 +215,8 @@ function ClientsPage() {
   const handleDelete = async (id: number) => {
     try {
       await adminApi.deleteClient(id);
-      // No undo: backend has no undelete, a fake "cancel" toast would lie.
-      toast.success('Клиент удалён');
+      // No undo: backend has no unhide/undelete, a fake "cancel" toast would lie.
+      toast.success(isSuperSection ? 'Клиент удалён' : 'Клиент убран из ваших списков');
       fetchData();
     } catch {
       toast.error('Ошибка удаления');
@@ -596,9 +596,13 @@ function ClientsPage() {
       <ConfirmDialog
         open={deletingId !== null}
         onClose={() => setDeletingId(null)}
-        title="🗑️ Удалить клиента?"
-        message="Клиент будет удалён вместе со всеми записями. Это действие нельзя отменить."
-        confirmLabel="Удалить"
+        title={isSuperSection ? '🗑️ Удалить клиента?' : '🗑️ Убрать клиента из моих?'}
+        message={
+          isSuperSection
+            ? 'Клиент будет удалён вместе со всеми записями. Это действие нельзя отменить.'
+            : 'Клиент пропадёт из ваших списков, будущие записи с вами отменятся. Прошлые визиты останутся как «Удалённый клиент». Аккаунт клиента не пострадает.'
+        }
+        confirmLabel={isSuperSection ? 'Удалить' : 'Убрать из моих'}
         danger
         onConfirm={() => deletingId !== null && handleDelete(deletingId)}
       />

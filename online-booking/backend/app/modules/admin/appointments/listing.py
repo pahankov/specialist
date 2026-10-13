@@ -139,15 +139,34 @@ async def get_admin_appointments(
     result = await db.execute(query)
     rows = result.all()
 
+    # Clients hidden by this master keep their history rows, but render
+    # anonymized instead of the real name/phone.
+    hidden_cp_ids: set = set()
+    if not is_admin:
+        from app.models.master_hidden_client import (
+            DELETED_CLIENT_NAME, MasterHiddenClient,
+        )
+        mp_id = await get_master_profile_id(db, master)
+        hidden_rows = await db.execute(
+            select(MasterHiddenClient.client_profile_id).where(
+                MasterHiddenClient.master_profile_id == mp_id)
+        )
+        hidden_cp_ids = {r[0] for r in hidden_rows.all()}
+    else:
+        from app.models.master_hidden_client import DELETED_CLIENT_NAME
+
     items = []
     for row in rows:
         appt = row[0]
+        client_name, client_phone = row[1], row[2]
+        if appt.client_id in hidden_cp_ids:
+            client_name, client_phone = DELETED_CLIENT_NAME, None
         items.append(AppointmentWithDetails(
             id=appt.id, master_id=appt.master_id, service_id=appt.service_id,
             bundle_id=appt.bundle_id, bundle_name=appt.bundle_name,
             client_id=appt.client_id, appointment_date=appt.appointment_date,
             status=appt.status, notes=appt.notes,
-            client_name=row[1], client_phone=row[2],
+            client_name=client_name, client_phone=client_phone,
             # Bundle bookings: snapshots win over the (absent) service join.
             service_name=(appt.bundle_name or row[3]),
             service_price=(float(appt.price) if appt.price is not None
@@ -201,9 +220,27 @@ async def get_appointments_by_date(
 
     result = await db.execute(query)
     appointments = result.scalars().all()
+    hidden_cp_ids: set = set()
+    if not is_admin:
+        from app.models.master_hidden_client import (
+            DELETED_CLIENT_NAME, MasterHiddenClient,
+        )
+        mp_id = await get_master_profile_id(db, master)
+        hidden_rows = await db.execute(
+            select(MasterHiddenClient.client_profile_id).where(
+                MasterHiddenClient.master_profile_id == mp_id)
+        )
+        hidden_cp_ids = {r[0] for r in hidden_rows.all()}
+    else:
+        from app.models.master_hidden_client import DELETED_CLIENT_NAME
     return [
-        {"id": a.id, "client_name": a.client_profile.user.name if a.client_profile else "Unknown",
-         "client_phone": a.client_profile.user.phone if a.client_profile else "",
+        {"id": a.id,
+         "client_name": (DELETED_CLIENT_NAME
+                         if a.client_id in hidden_cp_ids
+                         else (a.client_profile.user.name if a.client_profile else "Unknown")),
+         "client_phone": (None
+                          if a.client_id in hidden_cp_ids
+                          else (a.client_profile.user.phone if a.client_profile else "")),
          "service_id": a.service_id,
          "bundle_id": a.bundle_id,
          "service_name": a.bundle_name or (a.service.name if a.service else ""),

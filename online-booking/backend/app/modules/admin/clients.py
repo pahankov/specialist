@@ -418,12 +418,23 @@ async def delete_admin_client(
     master: User = Depends(require_master),
     db: AsyncSession = Depends(get_db)
 ):
-    """Delete a client."""
+    """Remove a client from the master's lists (hide, history kept).
+
+    Regular masters only hide: the account stays active, past appointments
+    render as «Удалённый клиент», future ones with this master are cancelled.
+    Superadmin performs a full erasure instead (account + profile rows).
+    """
     result = await db.execute(select(User).where(User.id == client_id))
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="Client not found")
     await _require_own_client(db, master, user)
+
+    if master.role != UserRole.ADMIN:
+        from app.services.client_visibility import hide_client_from_master
+        mp_id = await get_master_profile_id(db, master)
+        await hide_client_from_master(db, master, mp_id, user)
+        return None
 
     # Also delete the client_profile
     profile_result = await db.execute(
@@ -431,8 +442,16 @@ async def delete_admin_client(
     )
     profile = profile_result.scalar_one_or_none()
     if profile:
+        # Full erasure: drop the client's appointments explicitly first —
+        # leaving ORM to nullify client_id hits the NOT NULL constraint (500).
+        from sqlalchemy import delete as sa_delete
+        from app.models.master_hidden_client import MasterHiddenClient
+        await db.execute(sa_delete(Appointment).where(
+            Appointment.client_id == profile.id))
+        await db.execute(sa_delete(MasterHiddenClient).where(
+            MasterHiddenClient.client_profile_id == profile.id))
         await db.delete(profile)
-    
+
     await log_action(db, master.id, "delete", "client", client_id, user.name, level="warning")
     await db.delete(user)
     await db.commit()

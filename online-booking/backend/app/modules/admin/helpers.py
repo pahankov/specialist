@@ -30,9 +30,12 @@ async def own_client_user_ids(db: AsyncSession, master: User) -> set:
     """User ids of a regular master's OWN clients.
 
     Own = booked at least once with this master OR created by this
-    master (ClientsPage "+ Добавить клиента" stamps created_by).
+    master (ClientsPage "+ Добавить клиента" stamps created_by),
+    MINUS clients the master hid from their lists.
     Superadmin must not call this (sees everyone).
     """
+    from app.models.master_hidden_client import MasterHiddenClient
+
     mp_id = await get_master_profile_id(db, master)
     booked = await db.execute(
         select(ClientProfile.user_id)
@@ -42,7 +45,19 @@ async def own_client_user_ids(db: AsyncSession, master: User) -> set:
     created = await db.execute(
         select(User.id).where(User.created_by == master.id)
     )
-    return {r[0] for r in booked.all()} | {r[0] for r in created.all()}
+    hidden_cp = await db.execute(
+        select(MasterHiddenClient.client_profile_id).where(
+            MasterHiddenClient.master_profile_id == mp_id)
+    )
+    hidden_cp_ids = [r[0] for r in hidden_cp.all()]
+    hidden: set = set()
+    if hidden_cp_ids:
+        hidden_rows = await db.execute(
+            select(ClientProfile.user_id).where(
+                ClientProfile.id.in_(hidden_cp_ids))
+        )
+        hidden = {r[0] for r in hidden_rows.all()}
+    return ({r[0] for r in booked.all()} | {r[0] for r in created.all()}) - hidden
 
 
 async def get_appointment_for_master(

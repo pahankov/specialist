@@ -381,6 +381,8 @@ async def book_my_appointment(
     )
     db.add(appointment)
     await db.flush()
+    from app.services.client_visibility import unhide_client
+    await unhide_client(db, mp.id, profile.id)
     client_note = (data.notes or "").strip()
     await notify_user(
         db, recipient_id=mp.user_id,

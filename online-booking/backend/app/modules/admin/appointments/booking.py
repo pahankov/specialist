@@ -77,6 +77,8 @@ async def create_appointment(
     db.add(new_appointment)
     await db.flush()
     await db.refresh(new_appointment)
+    from app.services.client_visibility import unhide_client
+    await unhide_client(db, data.master_id, profile.id)
     await log_action(db, master.id, "create", "appointment", new_appointment.id, f"Клиент: {client.name}", level="info")
     await db.commit()
     return new_appointment
@@ -137,6 +139,8 @@ async def book_appointment(
         appointment_date=data.appointment_date, status=data.status, notes=notes
     )
     db.add(new_appointment)
+    from app.services.client_visibility import unhide_client
+    await unhide_client(db, mp.id, user.client_profile.id)
     await db.commit()
     await db.refresh(new_appointment)
     return new_appointment
