@@ -120,9 +120,19 @@ jobs:
             source venv/bin/activate
             pip install -r requirements.txt
 
-            # Run tests BEFORE deployment
+            # Run tests BEFORE deployment — with CI-identical test env.
+            # The shell currently carries production values exported from the
+            # server .env above (notably ALLOWED_ORIGINS without localhost),
+            # which break dev-oriented CORS tests. conftest uses throwaway
+            # sqlite files per test, so overriding these for pytest is safe
+            # and does NOT touch the production database or .env file.
             echo "=== RUNNING TESTS ==="
             pip install pytest pytest-asyncio pytest-cov httpx aiosqlite
+            RATE_LIMIT_DISABLED=true \
+            APP_ENV=development \
+            ALLOWED_ORIGINS=http://localhost:3000 \
+            SECRET_KEY=ci-test-secret-key-not-for-production-01 \
+            REFRESH_SECRET_KEY=ci-test-refresh-key-not-for-production-01 \
             PYTHONPATH=. pytest tests/ -v --tb=short --cov=app --cov-report=term-missing --tb=no 2>&1 | tee /tmp/test-results.txt
             
             # Check for actual test failures (not coverage report lines)
