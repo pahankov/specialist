@@ -28,6 +28,11 @@ class MasterHiddenClient(Base):
     # Archive reason (master's own bookkeeping): moved | left | inactive |
     # deceased | other. NULL = hidden without a reason (legacy rows).
     hidden_reason = Column(String(30), nullable=True)
+    # Blacklist cause (master picks from a list): no_show | rude | spam |
+    # debt | other. block_note carries the free text for "other" (or any
+    # extra context). NULL when merely archived.
+    block_reason = Column(String(30), nullable=True)
+    block_note = Column(String(500), nullable=True)
     # Blacklist: hidden AND barred from new bookings with this master.
     # Plain hides (via clients DELETE) leave is_blocked False.
     is_blocked = Column(Boolean, default=False, nullable=False)

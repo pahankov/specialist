@@ -31,6 +31,7 @@ LIVE_STATUSES = ("pending", "confirmed")
 SUPPORT_CONTACT = "pahankov@mail.ru"
 
 HIDE_REASONS = ("moved", "left", "inactive", "deceased", "other")
+BLOCK_REASONS = ("no_show", "rude", "spam", "debt", "other")
 
 
 async def hidden_client_profile_ids(db: AsyncSession, master_profile_id: int) -> set:
@@ -45,6 +46,7 @@ async def hidden_client_profile_ids(db: AsyncSession, master_profile_id: int) ->
 async def hide_client_from_master(
     db: AsyncSession, master_user: User, master_profile_id: int,
     client_user: User, reason: Optional[str] = None,
+    note: Optional[str] = None,
 ) -> int:
     """Archive a client from one master's lists (idempotent).
 
@@ -94,9 +96,13 @@ async def hide_client_from_master(
                 master_profile_id=master_profile_id,
                 client_profile_id=cp.id,
                 hidden_reason=reason,
+                block_note=(note or "").strip() or None,
             ))
-        elif reason:
-            row.hidden_reason = reason
+        else:
+            if reason:
+                row.hidden_reason = reason
+            if note is not None:
+                row.block_note = note.strip() or None
 
     if client_user.created_by == master_user.id:
         client_user.created_by = None
@@ -124,6 +130,7 @@ async def unhide_client(db: AsyncSession, master_profile_id: int,
 async def block_client_from_master(
     db: AsyncSession, master_user: User, master_profile_id: int,
     client_user: User, reason: Optional[str] = None,
+    block_reason: Optional[str] = None, note: Optional[str] = None,
 ) -> int:
     """Blacklist: archive + bar new bookings (idempotent).
 
@@ -132,7 +139,7 @@ async def block_client_from_master(
     in-app messenger yet).
     """
     cancelled = await hide_client_from_master(
-        db, master_user, master_profile_id, client_user, reason)
+        db, master_user, master_profile_id, client_user, reason, note)
     cp = (await db.execute(
         select(ClientProfile).where(ClientProfile.user_id == client_user.id)
     )).scalar_one_or_none()
@@ -144,6 +151,10 @@ async def block_client_from_master(
         )).scalar_one()
         row.is_blocked = True
         row.blocked_at = utcnow()
+        if block_reason:
+            row.block_reason = block_reason
+        if note is not None:
+            row.block_note = note.strip() or None
         await notify_user(
             db, recipient_id=client_user.id,
             text=(f"Мастер {master_user.name} ограничил вам запись: новые "

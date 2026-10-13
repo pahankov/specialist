@@ -149,9 +149,12 @@ export const adminApi = {
       data,
     );
   },
-  deleteClient(id: number, reason?: string) {
+  deleteClient(id: number, reason?: string, note?: string) {
+    const params: Record<string, string> = {};
+    if (reason) params.reason = reason;
+    if (note?.trim()) params.note = note.trim();
     return apiClient.delete(`/api/v1/admin/clients/${id}`, {
-      params: reason ? { reason } : undefined,
+      params: Object.keys(params).length ? params : undefined,
     });
   },
   restoreClient(id: number, masterId?: number) {
@@ -159,10 +162,12 @@ export const adminApi = {
       params: masterId ? { master_id: masterId } : undefined,
     });
   },
-  blockClient(id: number, masterId?: number, reason?: string) {
+  blockClient(id: number, masterId?: number, reason?: string, blockReason?: string, note?: string) {
     const params: Record<string, string | number> = {};
     if (masterId) params.master_id = masterId;
     if (reason) params.reason = reason;
+    if (blockReason) params.block_reason = blockReason;
+    if (note?.trim()) params.note = note.trim();
     return apiClient.post<{ blocked: boolean; cancelled_appointments: number }>(
       `/api/v1/admin/clients/${id}/block`,
       null,

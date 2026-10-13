@@ -55,6 +55,8 @@ function ClientsPage() {
   const [blockingId, setBlockingId] = useState<number | null>(null);
   const [showArchive, setShowArchive] = useState(false);
   const [hideReason, setHideReason] = useState('inactive');
+  const [blockCause, setBlockCause] = useState('no_show');
+  const [causeNote, setCauseNote] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -219,7 +221,7 @@ function ClientsPage() {
 
   const handleDelete = async (id: number) => {
     try {
-      await adminApi.deleteClient(id, hideReason || undefined);
+      await adminApi.deleteClient(id, hideReason || undefined, causeNote || undefined);
       // No undo: backend has no unhide/undelete, a fake "cancel" toast would lie.
       toast.success(isSuperSection ? 'Клиент заблокирован у всех' : 'Клиент убран в архив');
       fetchData();
@@ -227,6 +229,7 @@ function ClientsPage() {
       toast.error('Ошибка удаления');
     } finally {
       setDeletingId(null);
+      setCauseNote('');
     }
   };
 
@@ -235,7 +238,13 @@ function ClientsPage() {
 
   const handleBlock = async (id: number) => {
     try {
-      const { data } = await adminApi.blockClient(id, scopedMasterId, hideReason || undefined);
+      const { data } = await adminApi.blockClient(
+        id,
+        scopedMasterId,
+        hideReason || undefined,
+        blockCause || undefined,
+        causeNote || undefined,
+      );
       if (data.cancelled_appointments > 0) {
         toast.info(`Отменено будущих записей: ${data.cancelled_appointments}`);
       }
@@ -249,6 +258,7 @@ function ClientsPage() {
       toast.error(getApiErrorMessage(err, 'Не удалось заблокировать'));
     } finally {
       setBlockingId(null);
+      setCauseNote('');
     }
   };
 
@@ -278,6 +288,28 @@ function ClientsPage() {
     left: 'Ушёл к другому мастеру',
     deceased: 'Умер',
     other: 'Другое',
+  };
+
+  const BLOCK_LABELS: Record<string, string> = {
+    no_show: 'Не приходит на записи',
+    rude: 'Грубость',
+    spam: 'Спам',
+    debt: 'Неоплата',
+    other: 'Другое',
+  };
+
+  /** "Скрыт: Иван (переехал), Мария (чёрный список: спам — текст)" */
+  const attributionTitle = (c: Client): string | undefined => {
+    if (!c.hidden_by || c.hidden_by.length === 0) return undefined;
+    return c.hidden_by
+      .map((h) => {
+        const who = h.master_name || `мастер #${h.master_id}`;
+        const what = h.is_blocked
+          ? `чёрный список${h.block_reason ? `: ${BLOCK_LABELS[h.block_reason] || h.block_reason}` : ''}`
+          : `архив${h.reason ? `: ${REASON_LABELS[h.reason] || h.reason}` : ''}`;
+        return `${who} — ${what}${h.note ? ` («${h.note}»)` : ''}`;
+      })
+      .join('; ');
   };
 
   return (
@@ -606,7 +638,7 @@ function ClientsPage() {
                               padding: '1px 8px',
                               whiteSpace: 'nowrap',
                             }}
-                            title="Клиент в чёрном списке: не видит расписание и не может записаться"
+                            title={`Клиент в чёрном списке: не видит расписание и не может записываться${attributionTitle(c) ? `\n${attributionTitle(c)}` : ''}`}
                           >
                             ⛔ Заблокирован
                           </span>
@@ -622,7 +654,7 @@ function ClientsPage() {
                               padding: '1px 8px',
                               whiteSpace: 'nowrap',
                             }}
-                            title="Клиент в архиве — скрыт из списков, история сохранена"
+                            title={`Клиент в архиве — скрыт из списков, история сохранена${attributionTitle(c) ? `\n${attributionTitle(c)}` : ''}`}
                           >
                             📦 Архив{/* reason below in tooltip */}
                             {c.hidden_reason
@@ -748,7 +780,7 @@ function ClientsPage() {
         danger
         onConfirm={() => deletingId !== null && handleDelete(deletingId)}
       >
-        <div style={{ marginTop: 8 }}>
+        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <label style={{ fontSize: 13 }}>
             Причина:{' '}
             <select value={hideReason} onChange={(e) => setHideReason(e.target.value)}>
@@ -758,6 +790,16 @@ function ClientsPage() {
                 </option>
               ))}
             </select>
+          </label>
+          <label style={{ fontSize: 13 }}>
+            Заметка (необязательно):{' '}
+            <input
+              value={causeNote}
+              onChange={(e) => setCauseNote(e.target.value)}
+              placeholder="Детали для себя и админа"
+              maxLength={500}
+              style={{ width: '100%' }}
+            />
           </label>
         </div>
       </ConfirmDialog>
@@ -775,16 +817,26 @@ function ClientsPage() {
         danger
         onConfirm={() => blockingId !== null && handleBlock(blockingId)}
       >
-        <div style={{ marginTop: 8 }}>
+        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <label style={{ fontSize: 13 }}>
-            Причина:{' '}
-            <select value={hideReason} onChange={(e) => setHideReason(e.target.value)}>
-              {Object.entries(REASON_LABELS).map(([v, label]) => (
+            Причина блока:{' '}
+            <select value={blockCause} onChange={(e) => setBlockCause(e.target.value)}>
+              {Object.entries(BLOCK_LABELS).map(([v, label]) => (
                 <option key={v} value={v}>
                   {label}
                 </option>
               ))}
             </select>
+          </label>
+          <label style={{ fontSize: 13 }}>
+            Заметка (необязательно):{' '}
+            <input
+              value={causeNote}
+              onChange={(e) => setCauseNote(e.target.value)}
+              placeholder="Например: три неявки подряд"
+              maxLength={500}
+              style={{ width: '100%' }}
+            />
           </label>
         </div>
       </ConfirmDialog>

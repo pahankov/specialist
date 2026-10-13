@@ -87,6 +87,15 @@ export interface Client {
   /** Archive visibility (clients list with ?include_hidden=true). */
   is_hidden?: boolean;
   hidden_reason?: string | null;
+  /** Attribution: which masters hid/blocked, with causes and notes. */
+  hidden_by?: {
+    master_id: number;
+    master_name?: string | null;
+    is_blocked: boolean;
+    reason?: string | null;
+    block_reason?: string | null;
+    note?: string | null;
+  }[];
   city_id?: number | null;
   city_name?: string | null;
   address?: string | null;

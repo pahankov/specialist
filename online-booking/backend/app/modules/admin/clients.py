@@ -178,28 +178,43 @@ async def get_admin_clients(
     # Build response
     blocked_by_cp: dict = {}
     hidden_by_cp: dict = {}
+    # Attribution: which masters hid/blocked, with causes and notes.
+    hidden_details: dict = {}
     from app.models.master_hidden_client import MasterHiddenClient
+    from app.models.master_profile import MasterProfile
     if not is_admin:
         _mp_id = await get_master_profile_id(db, master)
         _rows = await db.execute(
-            select(MasterHiddenClient.client_profile_id,
-                   MasterHiddenClient.is_blocked,
-                   MasterHiddenClient.hidden_reason).where(
+            select(MasterHiddenClient).where(
                 MasterHiddenClient.master_profile_id == _mp_id)
         )
-        for _cp_id, _flag, _reason in _rows.all():
-            blocked_by_cp[_cp_id] = bool(_flag)
-            hidden_by_cp[_cp_id] = _reason
+        _all_rows = _rows.scalars().all()
     else:
         # Superadmin: badge when blocked anywhere.
-        _rows = await db.execute(
-            select(MasterHiddenClient.client_profile_id,
-                   MasterHiddenClient.is_blocked,
-                   MasterHiddenClient.hidden_reason)
+        _rows = await db.execute(select(MasterHiddenClient))
+        _all_rows = _rows.scalars().all()
+    _mp_ids = list({r.master_profile_id for r in _all_rows})
+    _mp_names: dict = {}
+    if _mp_ids:
+        _mps = await db.execute(
+            select(MasterProfile.id, User.name).join(
+                User, User.id == MasterProfile.user_id).where(
+                MasterProfile.id.in_(_mp_ids))
         )
-        for _cp_id, _flag, _reason in _rows.all():
-            blocked_by_cp[_cp_id] = blocked_by_cp.get(_cp_id, False) or bool(_flag)
-            hidden_by_cp.setdefault(_cp_id, _reason)
+        _mp_names = dict(_mps.all())
+    for _r in _all_rows:
+        blocked_by_cp[_r.client_profile_id] = (
+            blocked_by_cp.get(_r.client_profile_id, False)
+            or bool(_r.is_blocked))
+        hidden_by_cp.setdefault(_r.client_profile_id, _r.hidden_reason)
+        hidden_details.setdefault(_r.client_profile_id, []).append({
+            "master_id": _r.master_profile_id,
+            "master_name": _mp_names.get(_r.master_profile_id),
+            "is_blocked": bool(_r.is_blocked),
+            "reason": _r.hidden_reason,
+            "block_reason": _r.block_reason,
+            "note": _r.block_note,
+        })
     items = [
         {
             "id": cp.user.id,
@@ -211,6 +226,7 @@ async def get_admin_clients(
             "is_blocked": bool(blocked_by_cp.get(cp.id, False)),
             "is_hidden": cp.id in hidden_by_cp,
             "hidden_reason": hidden_by_cp.get(cp.id),
+            "hidden_by": hidden_details.get(cp.id, []),
             "city_id": cp.user.city_id,
             "city_name": city_names.get(cp.user.city_id),
             "address": cp.address,
@@ -469,6 +485,12 @@ async def block_client(
     reason: Optional[str] = Query(
         default=None,
         description="Archive reason: moved | left | inactive | deceased | other."),
+    block_reason: Optional[str] = Query(
+        default=None,
+        description="Block cause: no_show | rude | spam | debt | other."),
+    note: Optional[str] = Query(
+        default=None, max_length=500,
+        description="Free text for 'other' (or any extra context)."),
     master: User = Depends(require_master),
     db: AsyncSession = Depends(get_db)
 ):
@@ -480,11 +502,15 @@ async def block_client(
     (by either side) lifts the block.
     """
     from app.services.client_visibility import (
-        HIDE_REASONS, block_client_from_master,
+        BLOCK_REASONS, HIDE_REASONS, block_client_from_master,
     )
     if reason is not None and reason not in HIDE_REASONS:
         raise HTTPException(status_code=422,
                             detail=f"reason: one of {', '.join(HIDE_REASONS)}")
+    if block_reason is not None and block_reason not in BLOCK_REASONS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"block_reason: one of {', '.join(BLOCK_REASONS)}")
     result = await db.execute(select(User).where(User.id == client_id))
     user = result.scalar_one_or_none()
     if not user:
@@ -500,11 +526,13 @@ async def block_client(
         total = 0
         for mp_id in mp_ids:
             total += await block_client_from_master(db, master, mp_id, user,
-                                                    reason)
+                                                    reason, block_reason,
+                                                    note)
         return {"blocked": True, "cancelled_appointments": total,
                 "masters": len(mp_ids)}
     mp_id = await get_master_profile_id(db, master)
-    cancelled = await block_client_from_master(db, master, mp_id, user, reason)
+    cancelled = await block_client_from_master(db, master, mp_id, user,
+                                               reason, block_reason, note)
     return {"blocked": True, "cancelled_appointments": cancelled}
 
 
@@ -595,6 +623,9 @@ async def delete_admin_client(
     reason: Optional[str] = Query(
         default=None,
         description="Archive reason: moved | left | inactive | deceased | other."),
+    note: Optional[str] = Query(
+        default=None, max_length=500,
+        description="Free text for 'other' (or any extra context)."),
     master: User = Depends(require_master),
     db: AsyncSession = Depends(get_db)
 ):
@@ -621,14 +652,15 @@ async def delete_admin_client(
 
     if master.role != UserRole.ADMIN:
         mp_id = await get_master_profile_id(db, master)
-        await hide_client_from_master(db, master, mp_id, user, reason)
+        await hide_client_from_master(db, master, mp_id, user, reason, note)
         return None
 
     if not purge:
         from app.models.master_profile import MasterProfile
         mp_ids = (await db.execute(select(MasterProfile.id))).scalars().all()
         for mp_id in mp_ids:
-            await block_client_from_master(db, master, mp_id, user, reason)
+            await block_client_from_master(db, master, mp_id, user, reason,
+                                           None, note)
         return None
 
     # Also delete the client_profile

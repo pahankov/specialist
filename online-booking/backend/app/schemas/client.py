@@ -62,6 +62,8 @@ class ClientResponse(BaseModel):
     # Archive visibility (master clients list with ?include_hidden=true).
     is_hidden: bool = False
     hidden_reason: Optional[str] = None
+    # Attribution: which masters hid/blocked, with causes and notes.
+    hidden_by: list = []
     city_id: Optional[int] = None
     city_name: Optional[str] = None
     address: Optional[str] = None

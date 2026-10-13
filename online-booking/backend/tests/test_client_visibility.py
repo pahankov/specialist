@@ -258,6 +258,36 @@ class TestArchive:
 
 
 class TestBlacklist:
+    async def test_block_cause_and_attribution(
+        self, client, hide_setup, super_admin_headers,
+    ):
+        s = hide_setup
+        client_uid = s["c"]["id"]
+
+        r = await client.post(
+            f"/api/v1/admin/clients/{client_uid}/block",
+            headers=_auth(s["a"]),
+            params={"block_reason": "no_show", "note": "Три неявки подряд"})
+        assert r.status_code == 200, r.text
+
+        r = await client.post(
+            f"/api/v1/admin/clients/{client_uid}/block",
+            headers=_auth(s["a"]),
+            params={"block_reason": "bogus"})
+        assert r.status_code == 422
+
+        lst = await client.get("/api/v1/admin/clients",
+                               headers=super_admin_headers)
+        row = [i for i in lst.json()["items"] if i["id"] == client_uid]
+        assert len(row) == 1
+        by = row[0]["hidden_by"]
+        assert len(by) == 1
+        assert by[0]["master_id"] == s["mp_a"]
+        assert "Master A" in (by[0]["master_name"] or "")
+        assert by[0]["is_blocked"] is True
+        assert by[0]["block_reason"] == "no_show"
+        assert by[0]["note"] == "Три неявки подряд"
+
     async def test_block_bars_bookings_but_keeps_badge(
         self, client, session, hide_setup,
     ):
