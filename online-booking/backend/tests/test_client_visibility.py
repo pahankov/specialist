@@ -255,6 +255,22 @@ class TestBlacklist:
                               })
         assert r.status_code == 201, r.text
 
+    async def test_blocked_client_gets_bells(
+        self, client, hide_setup,
+    ):
+        s = hide_setup
+        client_uid = s["c"]["id"]
+        r = await client.post(f"/api/v1/admin/clients/{client_uid}/block",
+                              headers=_auth(s["a"]))
+        assert r.status_code == 200, r.text
+
+        inbox = await client.get("/api/v1/client/notifications/inbox",
+                                 headers=_auth(s["c"]))
+        assert inbox.status_code == 200
+        texts = [i["text"] for i in inbox.json()["items"]]
+        assert any("отменил вашу запись" in t for t in texts), texts
+        assert any("ограничил вам запись" in t for t in texts), texts
+
     async def test_unblock_restores_everything(
         self, client, session, hide_setup,
     ):

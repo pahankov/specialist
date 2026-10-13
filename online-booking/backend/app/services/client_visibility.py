@@ -13,6 +13,8 @@ from app.models.client_profile import ClientProfile
 from app.models.master_hidden_client import MasterHiddenClient
 from app.models.user import User
 from app.services.audit import log_action
+from app.services.booking import format_slot
+from app.services.notifications import notify_user
 from app.utils import utcnow
 
 logger = get_logger(__name__)
@@ -46,18 +48,41 @@ async def hide_client_from_master(
     )).scalar_one_or_none()
 
     cancelled = 0
+    doomed: list = []
     if cp is not None:
-        res = await db.execute(
-            update(Appointment)
-            .where(
+        doomed = (await db.execute(
+            select(Appointment).where(
                 Appointment.master_id == master_profile_id,
                 Appointment.client_id == cp.id,
                 Appointment.status.in_(LIVE_STATUSES),
                 Appointment.appointment_date > now,
             )
-            .values(status="cancelled")
-        )
-        cancelled = res.rowcount or 0
+        )).scalars().all()
+        if doomed:
+            from app.models.service import Service
+            svc_ids = {a.service_id for a in doomed if a.service_id}
+            svc_names: dict = {}
+            if svc_ids:
+                svc_names = dict((await db.execute(
+                    select(Service.id, Service.name).where(
+                        Service.id.in_(svc_ids))
+                )).all())
+            res = await db.execute(
+                update(Appointment)
+                .where(Appointment.id.in_([a.id for a in doomed]))
+                .values(status="cancelled")
+            )
+            cancelled = res.rowcount or 0
+            for a in doomed:
+                item = (a.bundle_name or svc_names.get(a.service_id)
+                        or "услуга")
+                await notify_user(
+                    db, recipient_id=client_user.id,
+                    text=(f"Мастер {master_user.name} отменил вашу запись: "
+                          f"{item}, {format_slot(a.appointment_date)}."),
+                    sender_id=master_user.id, audience="booking",
+                    link="appointments",
+                )
 
         exists = (await db.execute(
             select(MasterHiddenClient.id).where(
@@ -114,6 +139,15 @@ async def block_client_from_master(
         )).scalar_one()
         row.is_blocked = True
         row.blocked_at = utcnow()
+        await notify_user(
+            db, recipient_id=client_user.id,
+            text=(f"Мастер {master_user.name} ограничил вам запись: новые "
+                  f"записи недоступны. Вы можете выбрать другого мастера "
+                  f"в каталоге или связаться с мастером по контактам "
+                  f"(телефон, Telegram) из его профиля."),
+            sender_id=master_user.id, audience="booking",
+            link="appointments",
+        )
         await db.commit()
     return cancelled
 
