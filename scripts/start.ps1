@@ -125,6 +125,21 @@ if ($MaxToken -ne "") {
 
 # --- Start backend ---
 Write-Step 6 "Starting backend (port 8000)"
+$PyExe = Join-Path $BackendDir "venv\Scripts\python.exe"
+if (Test-Path $PyExe) {
+    # Migrate first: new columns otherwise 500 every query
+    # (lifespan create_all only adds tables, never columns).
+    try {
+        Push-Location $BackendDir
+        & $PyExe -m alembic upgrade head 2>$null
+        Pop-Location
+        if ($LASTEXITCODE -eq 0) { Write-Ok "DB migrated to head" }
+        else { Write-Warn "alembic upgrade failed, backend may 500" }
+    } catch {
+        Pop-Location
+        Write-Warn "alembic upgrade failed, backend may 500"
+    }
+}
 Start-Process "cmd.exe" -ArgumentList "/k", "cd /d `"$BackendDir`" && call venv\Scripts\activate.bat && python -m uvicorn app.main:app --host 0.0.0.0 --port 8000" -WindowStyle Minimized -WorkingDirectory $BackendDir
 Write-Ok "Backend console launched (minimized)"
 
