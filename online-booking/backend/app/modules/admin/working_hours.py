@@ -69,6 +69,15 @@ async def create_working_hour(
         mp_id = data.master_id
     else:
         mp_id = await get_master_profile_id(db, master)
+    dup = (await db.execute(
+        select(WorkingHour.id).where(
+            WorkingHour.master_id == mp_id,
+            WorkingHour.schedule_date == data.schedule_date)
+    )).scalar_one_or_none()
+    if dup is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="На этот день часы уже заданы — отредактируйте их")
     hour = WorkingHour(
         master_id=mp_id, schedule_date=data.schedule_date,
         start_time=data.start_time,

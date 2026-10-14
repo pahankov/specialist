@@ -58,6 +58,22 @@ class TestAdminCreateWorkingHour:
         )
         assert resp.status_code == 422
 
+    async def test_create_duplicate_date_conflict(self, client, auth_headers):
+        """Second hours row for the same date is 409, not 500."""
+        payload = {
+            "schedule_date": "2026-11-20",
+            "start_time": "09:00",
+            "end_time": "18:00",
+        }
+        first = await client.post(
+            "/api/v1/admin/working-hours", json=payload, headers=auth_headers
+        )
+        assert first.status_code == 201, first.text
+        again = await client.post(
+            "/api/v1/admin/working-hours", json=payload, headers=auth_headers
+        )
+        assert again.status_code == 409
+
 
 class TestAdminUpdateWorkingHour:
     """Tests for PATCH /api/v1/admin/working-hours/{id}"""
