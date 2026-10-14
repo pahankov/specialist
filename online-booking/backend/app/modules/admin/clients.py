@@ -11,7 +11,7 @@ from app.models.user import User, UserRole
 from app.models.appointment import Appointment
 from app.schemas.client import ClientCreate, ClientUpdate, ClientResponse
 from app.schemas.pagination import PaginatedResponse
-from app.dependencies.auth import require_master
+from app.dependencies.auth import require_admin, require_master
 from app.dependencies.crud import get_or_404
 from app.modules.admin.helpers import get_master_profile_id, own_client_user_ids
 from app.services.audit import log_action
@@ -372,15 +372,18 @@ async def update_admin_client(
 @router.post("/clients/{client_id}/toggle-active", response_model=ClientResponse)
 async def toggle_client_active(
     client_id: int,
-    master: User = Depends(require_master),
+    master: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    """Block/unblock a client (flips User.is_active)."""
+    """Block/unblock a client account service-wide (flips User.is_active).
+
+    Superadmin only: masters have archive/blacklist for their own book,
+    but only the admin may switch an account off entirely.
+    """
     result = await db.execute(select(User).where(User.id == client_id))
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="Client not found")
-    await _require_own_client(db, master, user)
 
     user.is_active = not user.is_active
     await log_action(

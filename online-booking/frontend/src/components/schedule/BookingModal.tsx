@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Client, Service } from '../../api/types';
+import type { Bundle } from '../../api/cabinet';
 import { getFilteredClients, getFilteredServices, formatPrice, formatHour } from './helpers';
 import Modal from '../common/Modal';
 import './ScheduleComponents.css';
@@ -10,10 +11,12 @@ interface BookingModalProps {
   hour: number | null;
   clientId: number | null;
   serviceId: number | null;
+  bundleId: number | null;
   status: 'pending' | 'confirmed';
   notes: string;
   clients: Client[];
   services: Service[];
+  bundles: Bundle[];
   bookingLoading: boolean;
   onClose: () => void;
   onUpdate: (field: string, value: any) => void;
@@ -28,10 +31,12 @@ export function BookingModal({
   hour,
   clientId,
   serviceId,
+  bundleId,
   status,
   notes,
   clients,
   services,
+  bundles,
   bookingLoading,
   onClose,
   onUpdate,
@@ -59,10 +64,17 @@ export function BookingModal({
     servicesMasterId !== '' && servicesMasterId != null
       ? services.filter((s) => s.master_id === servicesMasterId)
       : services;
+  const scopedBundles = bundles.filter((b) => b.is_active !== false);
   const filteredClients = getFilteredClients(clients, clientSearch);
   const filteredServices = getFilteredServices(scopedServices, serviceSearch);
+  const filteredBundles = scopedBundles.filter((b) =>
+    serviceSearch.trim() === ''
+      ? true
+      : b.name.toLowerCase().includes(serviceSearch.trim().toLowerCase()),
+  );
   const selectedClient = clients.find((c) => c.id === clientId);
   const selectedService = scopedServices.find((s) => s.id === serviceId);
+  const selectedBundle = scopedBundles.find((b) => b.id === bundleId);
 
   const clearClient = () => {
     onUpdate('clientId', null);
@@ -71,6 +83,7 @@ export function BookingModal({
   };
   const clearService = () => {
     onUpdate('serviceId', null);
+    onUpdate('bundleId', null);
     setServiceSearch('');
     setShowServiceDropdown(false);
   };
@@ -140,23 +153,23 @@ export function BookingModal({
       </div>
 
       <div className="form-group">
-        <label>Услуга</label>
+        <label>Услуга или комплекс</label>
         <div style={{ position: 'relative' }}>
           <input
             type="text"
-            value={selectedService?.name || serviceSearch}
+            value={selectedBundle?.name || selectedService?.name || serviceSearch}
             onChange={(e) => {
               setServiceSearch(e.target.value);
               setShowServiceDropdown(true);
             }}
             onFocus={() => {
-              if (!selectedService) setShowServiceDropdown(true);
+              if (!selectedService && !selectedBundle) setShowServiceDropdown(true);
             }}
             placeholder="Начните вводить название..."
             className="form-input"
             style={{ paddingRight: 34 }}
           />
-          {(selectedService || serviceSearch) && (
+          {(selectedService || selectedBundle || serviceSearch) && (
             <button
               type="button"
               className="input-clear"
@@ -169,34 +182,63 @@ export function BookingModal({
           )}
           {showServiceDropdown && (
             <div className="dropdown-list">
-              {filteredServices.length === 0 ? (
+              {filteredBundles.length === 0 && filteredServices.length === 0 ? (
                 <div className="dropdown-empty">Ничего не найдено</div>
               ) : (
-                filteredServices.map((s) => (
-                  <div
-                    key={s.id}
-                    className={`dropdown-item ${serviceId === s.id ? 'selected' : ''}`}
-                    onClick={() => {
-                      onUpdate('serviceId', s.id);
-                      setShowServiceDropdown(false);
-                      setServiceSearch('');
-                    }}
-                  >
-                    <strong>{s.name}</strong> — {s.duration_minutes} мин, {formatPrice(s.price)} ₽
-                  </div>
-                ))
+                <>
+                  {filteredBundles.map((b) => (
+                    <div
+                      key={`bundle-${b.id}`}
+                      className={`dropdown-item ${bundleId === b.id ? 'selected' : ''}`}
+                      onClick={() => {
+                        onUpdate('bundleId', b.id);
+                        onUpdate('serviceId', null);
+                        setShowServiceDropdown(false);
+                        setServiceSearch('');
+                      }}
+                    >
+                      <strong>🎁 {b.name}</strong> — {b.duration_total} мин,{' '}
+                      {formatPrice(b.effective_price)} ₽
+                    </div>
+                  ))}
+                  {filteredServices.map((s) => (
+                    <div
+                      key={s.id}
+                      className={`dropdown-item ${serviceId === s.id ? 'selected' : ''}`}
+                      onClick={() => {
+                        onUpdate('serviceId', s.id);
+                        onUpdate('bundleId', null);
+                        setShowServiceDropdown(false);
+                        setServiceSearch('');
+                      }}
+                    >
+                      <strong>{s.name}</strong> — {s.duration_minutes} мин, {formatPrice(s.price)} ₽
+                    </div>
+                  ))}
+                </>
               )}
             </div>
           )}
         </div>
-        {!selectedService && (
+        {!selectedService && !selectedBundle && (
           <div className="field-hint">
-            Выберите услугу из списка — кнопка записи активна только после выбора
+            Выберите услугу или комплекс из списка — кнопка записи активна только после выбора
           </div>
         )}
         {scopedServices.length === 0 && (
           <div className="field-hint">
             У мастера пока нет услуг — добавьте их в разделе «Услуги», иначе записать некого
+          </div>
+        )}
+        {selectedBundle && hour !== null && (
+          <div className="field-hint">
+            {(() => {
+              const dur = selectedBundle.duration_total || 60;
+              const endH = hour + Math.floor(dur / 60);
+              const endM = dur % 60;
+              const end = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+              return `Займёт гранулы ${formatHour(hour)}–${end}`;
+            })()}
           </div>
         )}
         {selectedService && hour !== null && (
@@ -245,7 +287,7 @@ export function BookingModal({
         <button
           className="btn btn-primary"
           onClick={onBook}
-          disabled={!clientId || !serviceId || bookingLoading}
+          disabled={!clientId || (!serviceId && !bundleId) || bookingLoading}
         >
           {bookingLoading ? 'Запись...' : 'Записать'}
         </button>

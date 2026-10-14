@@ -98,6 +98,7 @@ export function openBookingForm(
     hour,
     clientId: null,
     serviceId: null,
+    bundleId: null,
     status: 'pending',
     notes: '',
   }));
@@ -113,6 +114,7 @@ export function closeBookingForm(
     hour: null,
     clientId: null,
     serviceId: null,
+    bundleId: null,
     status: 'pending',
     notes: '',
   }));
@@ -131,7 +133,8 @@ export async function handleBookAppointment(
     !bookingForm.date ||
     bookingForm.hour === null ||
     !bookingForm.clientId ||
-    !bookingForm.serviceId
+    (!bookingForm.serviceId && !bookingForm.bundleId) ||
+    (bookingForm.serviceId && bookingForm.bundleId)
   )
     return false;
 
@@ -145,7 +148,9 @@ export async function handleBookAppointment(
     await api.bookAppointment({
       master_id: masterId !== '' && masterId != null ? masterId : undefined,
       client_id: bookingForm.clientId,
-      service_id: bookingForm.serviceId,
+      ...(bookingForm.bundleId
+        ? { bundle_id: bookingForm.bundleId }
+        : { service_id: bookingForm.serviceId! }),
       appointment_date: appointmentDate,
       status: bookingForm.status,
       notes: bookingForm.notes || undefined,

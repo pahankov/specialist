@@ -6,7 +6,7 @@ they are assembled from created services and booked as ONE appointment
 """
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,7 +16,7 @@ from app.dependencies.auth import require_master
 from app.models.master_profile import MasterProfile
 from app.models.service import Service
 from app.models.service_bundle import ServiceBundle
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.modules.admin.helpers import get_master_profile_id
 from app.services.audit import log_action
 from app.logging_config import get_logger
@@ -150,10 +150,18 @@ async def create_bundle(
 @router.get("/bundles")
 async def list_bundles(
     master: User = Depends(require_master),
+    master_id: Optional[int] = Query(
+        default=None,
+        description="Superadmin only: MasterProfile.id to list for."),
     db: AsyncSession = Depends(get_db),
 ):
     """Own complexes (active and inactive), with computed totals."""
-    mp_id = await get_master_profile_id(db, master)
+    if master_id is not None:
+        if master.role != UserRole.ADMIN:
+            raise HTTPException(status_code=403, detail="Только для суперадмина")
+        mp_id = master_id
+    else:
+        mp_id = await get_master_profile_id(db, master)
     rows = (await db.execute(
         select(ServiceBundle).where(ServiceBundle.master_id == mp_id)
         .order_by(ServiceBundle.name)

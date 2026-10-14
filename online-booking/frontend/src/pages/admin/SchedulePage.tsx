@@ -9,6 +9,7 @@ import type {
   MonthlyStats,
   BookingFormState,
 } from '../../api/types';
+import type { Bundle } from '../../api/cabinet';
 import { Calendar } from '../../components/schedule/Calendar';
 import { TimeSlots } from '../../components/schedule/TimeSlots';
 import { BookingModal } from '../../components/schedule/BookingModal';
@@ -62,6 +63,7 @@ function SchedulePage() {
   const [cancelReason, setCancelReason] = useState('');
   const [bookingClients, setBookingClients] = useState<Client[]>([]);
   const [bookingServices, setBookingServices] = useState<Service[]>([]);
+  const [bookingBundles, setBookingBundles] = useState<Bundle[]>([]);
   const [bookingLoading, setBookingLoading] = useState(false);
   const [bookingForm, setBookingForm] = useState<BookingFormState>({
     open: false,
@@ -69,6 +71,7 @@ function SchedulePage() {
     hour: null,
     clientId: null,
     serviceId: null,
+    bundleId: null,
     status: 'pending',
     notes: '',
   });
@@ -170,16 +173,19 @@ function SchedulePage() {
       adminApi.getAllServices(
         selectedMasterId !== '' ? { master_id: selectedMasterId } : undefined,
       ),
+      adminApi.getBundles(selectedMasterId !== '' ? selectedMasterId : undefined),
     ])
-      .then(([clientsResp, servicesResp]) => {
+      .then(([clientsResp, servicesResp, bundlesResp]) => {
         if (cancelled) return;
         setBookingClients(clientsResp.data?.items || []);
         setBookingServices(servicesResp.data?.items || []);
+        setBookingBundles(bundlesResp.data || []);
       })
       .catch(() => {
         if (!cancelled) {
           setBookingClients([]);
           setBookingServices([]);
+          setBookingBundles([]);
         }
       });
     return () => {
@@ -802,10 +808,12 @@ function SchedulePage() {
         hour={bookingForm.hour}
         clientId={bookingForm.clientId}
         serviceId={bookingForm.serviceId}
+        bundleId={bookingForm.bundleId}
         status={bookingForm.status}
         notes={bookingForm.notes}
         clients={bookingClients}
         services={bookingServices}
+        bundles={bookingBundles}
         bookingLoading={bookingLoading}
         onClose={handleCloseBooking}
         onUpdate={handleBookingUpdate}

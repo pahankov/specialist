@@ -13,7 +13,9 @@ class AppointmentCreate(BaseModel):
 class AppointmentResponse(BaseModel):
     id: int
     master_id: int
-    service_id: int
+    service_id: Optional[int] = None
+    bundle_id: Optional[int] = None
+    bundle_name: Optional[str] = None
     client_id: Optional[int]
     appointment_date: datetime
     status: str
@@ -57,7 +59,8 @@ class PublicBookingCreate(BaseModel):
 
 class AdminBookingCreate(BaseModel):
     client_id: int
-    service_id: int
+    service_id: Optional[int] = None
+    bundle_id: Optional[int] = None
     appointment_date: datetime
     status: str = "pending"
     notes: Optional[str] = None

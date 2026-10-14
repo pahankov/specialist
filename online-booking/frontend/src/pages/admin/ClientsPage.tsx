@@ -332,7 +332,7 @@ function ClientsPage() {
             />
           );
         },
-        meta: { minWidth: 36, maxWidth: 44, defaultWidth: 40, hideable: false, label: '✓' },
+        meta: { defaultWidth: 40, hideable: false, resizable: false, label: '✓' },
       },
       {
         id: 'name',
@@ -488,21 +488,23 @@ function ClientsPage() {
                   </button>
                 </Tooltip>
               )}
-              <Tooltip
-                content={
-                  c.is_active === false
-                    ? 'Включить аккаунт (сейчас выключен)'
-                    : 'Выключить аккаунт (сейчас активен)'
-                }
-                position="top"
-              >
-                <button
-                  className={`btn btn-sm ${c.is_active === false ? 'btn-danger' : 'btn-ghost'}`}
-                  onClick={() => handleToggleActive(c.id)}
+              {isSuperSection && (
+                <Tooltip
+                  content={
+                    c.is_active === false
+                      ? 'Включить аккаунт (сейчас выключен)'
+                      : 'Выключить аккаунт (сейчас активен)'
+                  }
+                  position="top"
                 >
-                  {c.is_active === false ? '🔒' : '🔓'}
-                </button>
-              </Tooltip>
+                  <button
+                    className={`btn btn-sm ${c.is_active === false ? 'btn-danger' : 'btn-ghost'}`}
+                    onClick={() => handleToggleActive(c.id)}
+                  >
+                    {c.is_active === false ? '🔒' : '🔓'}
+                  </button>
+                </Tooltip>
+              )}
               <Tooltip content="Редактировать">
                 <button className="btn btn-sm btn-edit" onClick={() => handleEdit(c)}>
                   ✏️

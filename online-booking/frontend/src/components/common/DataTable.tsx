@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import {
   flexRender,
   getCoreRowModel,
@@ -31,6 +31,8 @@ export interface FitColumnMeta {
   defaultWidth?: number;
   /** Show in the "Столбцы" menu (default true). */
   hideable?: boolean;
+  /** No resize handle, width pinned to defaultWidth (checkbox columns). */
+  resizable?: boolean;
   /** Label in the "Столбцы" menu (default: header text or column id). */
   label?: string;
 }
@@ -130,6 +132,7 @@ export default function DataTable<T>({
   });
 
   // Auto-fit columns that the user never sized manually.
+  // Fixed (resizable:false) columns always take their defaultWidth.
   useLayoutEffect(() => {
     const sig = `${tableId}|${columns.map((c) => c.id).join(',')}|${data.length}`;
     if (sig === fittedSig.current) return;
@@ -142,6 +145,10 @@ export default function DataTable<T>({
       if (!col.getIsVisible()) continue;
       if (userSized.current.has(col.id)) continue;
       const meta = (col.columnDef as FitColumnDef<T>).meta ?? {};
+      if (meta.resizable === false) {
+        next[col.id] = meta.defaultWidth ?? meta.minWidth ?? FALLBACK_DEFAULT;
+        continue;
+      }
       const min = meta.minWidth ?? FALLBACK_MIN;
       const max = meta.maxWidth ?? FALLBACK_MAX;
       const fallback = meta.defaultWidth ?? FALLBACK_DEFAULT;
@@ -184,14 +191,12 @@ export default function DataTable<T>({
     setMenuOpen(false);
   }, [widthsKey, visKey]);
 
-  const hideable = useMemo(
-    () =>
-      table.getAllLeafColumns().filter((c) => {
-        const meta = (c.columnDef as FitColumnDef<T>).meta ?? {};
-        return meta.hideable !== false;
-      }),
-    [columns],
-  );
+  // Derived fresh every render from props + state: memoizing column
+  // objects from a previous table instance shows stale checkboxes
+  // (the "menu does nothing" bug) because they read old state.
+  const hideable = table
+    .getAllLeafColumns()
+    .filter((c) => ((c.columnDef as FitColumnDef<T>).meta ?? {}).hideable !== false);
 
   const menuLabel = (colId: string): string => {
     const col = table.getColumn(colId);
@@ -199,6 +204,16 @@ export default function DataTable<T>({
     if (meta.label) return meta.label;
     const h = col?.columnDef.header;
     return typeof h === 'string' ? h : colId;
+  };
+
+  const isVisible = (colId: string): boolean => columnVisibility[colId] !== false;
+
+  const setVisible = (colId: string, v: boolean) => {
+    setColumnVisibility((prev) => {
+      const next = { ...prev, [colId]: v };
+      writeStored(visKey, next);
+      return next;
+    });
   };
 
   const total = table.getTotalSize();
@@ -221,8 +236,8 @@ export default function DataTable<T>({
                 <label key={c.id} className="datatable-menu-item">
                   <input
                     type="checkbox"
-                    checked={c.getIsVisible()}
-                    onChange={() => c.toggleVisibility()}
+                    checked={isVisible(c.id)}
+                    onChange={(e) => setVisible(c.id, e.target.checked)}
                   />
                   {menuLabel(c.id)}
                 </label>
@@ -235,7 +250,9 @@ export default function DataTable<T>({
         </div>
       </div>
       <div style={{ overflowX: 'auto' }}>
-        <table className="datatable" style={{ width: total, minWidth: '100%' }}>
+        {/* Exact total width: freed space must NOT redistribute to other
+            columns (the "shrinking col 3 grows col 1" bug). */}
+        <table className="datatable" style={{ width: total }}>
           <thead>
             {table.getHeaderGroups().map((hg) => (
               <tr key={hg.id}>
@@ -262,37 +279,39 @@ export default function DataTable<T>({
                       }}
                     >
                       {flexRender(h.column.columnDef.header, h.getContext())}
-                      <span
-                        className="col-resizer"
-                        onMouseDown={(e) => {
-                          userSized.current.add(h.column.id);
-                          dragMoved.current = false;
-                          const x0 = e.clientX;
-                          const onMove = (ev: MouseEvent) => {
-                            if (Math.abs(ev.clientX - x0) > 3) dragMoved.current = true;
-                          };
-                          const onUp = () => {
-                            window.removeEventListener('mousemove', onMove);
-                            window.removeEventListener('mouseup', onUp);
-                          };
-                          window.addEventListener('mousemove', onMove);
-                          window.addEventListener('mouseup', onUp);
-                          h.getResizeHandler()(e);
-                        }}
-                        onDoubleClick={(e) => {
-                          e.stopPropagation();
-                          userSized.current.delete(h.column.id);
-                          fittedSig.current = '';
-                          const fallback = meta.defaultWidth ?? meta.minWidth ?? FALLBACK_DEFAULT;
-                          setColumnSizing((prev) => {
-                            const next = { ...prev, [h.column.id]: fallback };
-                            writeStored(widthsKey, next);
-                            return next;
-                          });
-                        }}
-                        title="Потяните, чтобы изменить ширину (двойной клик — сброс)"
-                        aria-hidden
-                      />
+                      {meta.resizable !== false && (
+                        <span
+                          className="col-resizer"
+                          onMouseDown={(e) => {
+                            userSized.current.add(h.column.id);
+                            dragMoved.current = false;
+                            const x0 = e.clientX;
+                            const onMove = (ev: MouseEvent) => {
+                              if (Math.abs(ev.clientX - x0) > 3) dragMoved.current = true;
+                            };
+                            const onUp = () => {
+                              window.removeEventListener('mousemove', onMove);
+                              window.removeEventListener('mouseup', onUp);
+                            };
+                            window.addEventListener('mousemove', onMove);
+                            window.addEventListener('mouseup', onUp);
+                            h.getResizeHandler()(e);
+                          }}
+                          onDoubleClick={(e) => {
+                            e.stopPropagation();
+                            userSized.current.delete(h.column.id);
+                            fittedSig.current = '';
+                            const fallback = meta.defaultWidth ?? meta.minWidth ?? FALLBACK_DEFAULT;
+                            setColumnSizing((prev) => {
+                              const next = { ...prev, [h.column.id]: fallback };
+                              writeStored(widthsKey, next);
+                              return next;
+                            });
+                          }}
+                          title="Потяните, чтобы изменить ширину (двойной клик — сброс)"
+                          aria-hidden
+                        />
+                      )}
                     </th>
                   );
                 })}

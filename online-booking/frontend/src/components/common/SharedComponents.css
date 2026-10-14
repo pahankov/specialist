@@ -83,6 +83,39 @@
   cursor: pointer;
 }
 
+/* Portal bubble (document.body, position:fixed): escapes overflow:hidden
+ * cells and scrolled wrappers, so text is never clipped. Long texts wrap. */
+.tooltip-portal {
+  position: fixed;
+  z-index: 10000;
+  background: #1a1a2e;
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: normal;
+  overflow-wrap: break-word;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  pointer-events: none;
+}
+
+.tooltip-portal-top {
+  transform: translate(-0%, -100%);
+}
+
+.tooltip-portal-bottom {
+  transform: translate(-0%, 0);
+}
+
+.tooltip-portal-left {
+  transform: translate(-100%, -50%);
+}
+
+.tooltip-portal-right {
+  transform: translate(0, -50%);
+}
+
 .tooltip-trigger-active .tooltip {
   opacity: 1;
   visibility: visible;

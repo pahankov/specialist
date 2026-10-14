@@ -159,5 +159,4 @@ Write-Host "  +========================================+" -ForegroundColor Green
 Write-Host ""
 Write-Host "  Consoles minimized. To stop - close them from taskbar." -ForegroundColor Gray
 Write-Host ""
-Write-Host "  Press Enter to exit..." -ForegroundColor Gray
-$null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+# No ReadKey here: start.bat ends with pause (single exit prompt).

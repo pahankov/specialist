@@ -294,3 +294,48 @@ class TestBundleBooking:
             headers=h,
         )
         assert bad.status_code == 400
+
+
+class TestAdminBundleBooking:
+    async def test_admin_books_bundle(self, client, session):
+        from datetime import timedelta
+        user, mp = await _mk_master(session)
+        s1, s2 = await _mk_services(session, mp)
+        h = await _master_headers(session, user)
+        ch, cu = await _client_headers(session)
+
+        b = await client.post(
+            '/api/v1/admin/bundles',
+            json={'name': 'Full set', 'service_ids': [s1.id, s2.id]},
+            headers=h,
+        )
+        assert b.status_code == 201, b.text
+        bid = b.json()['id']
+        day = (__import__('datetime').datetime.now() +
+               timedelta(days=3)).isoformat()
+
+        r = await client.post(
+            '/api/v1/admin/appointments/book',
+            json={'client_id': cu.id, 'bundle_id': bid,
+                  'appointment_date': day, 'status': 'confirmed'},
+            headers=h,
+        )
+        assert r.status_code == 201, r.text
+        body = r.json()
+        assert body['bundle_id'] == bid
+        assert body['service_id'] is None
+
+        # Exactly one of service/bundle — both or neither is 400.
+        bad = await client.post(
+            '/api/v1/admin/appointments/book',
+            json={'client_id': cu.id, 'service_id': s1.id,
+                  'bundle_id': bid, 'appointment_date': day},
+            headers=h,
+        )
+        assert bad.status_code == 400
+        bad2 = await client.post(
+            '/api/v1/admin/appointments/book',
+            json={'client_id': cu.id, 'appointment_date': day},
+            headers=h,
+        )
+        assert bad2.status_code in (400, 422)

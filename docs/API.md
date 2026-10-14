@@ -115,7 +115,7 @@
 | `GET` | `/admin/monthly-stats` | Статистика за месяц |
 | `GET` | `/admin/appointments` | Список записей (пагинация, фильтрация) |
 | `POST` | `/admin/appointments` | Создать запись |
-| `POST` | `/admin/appointments/book` | Админская запись (выбор клиента из БД; суперадмин шлёт `master_id`) |
+| `POST` | `/admin/appointments/book` | Админская запись (выбор клиента из БД; услуга ИЛИ комплекс; суперадмин шлёт `master_id`) |
 | `GET` | `/admin/appointments/by-date` | Записи по дате (есть `service_id/service_duration` для спанов гранул) |
 | `PATCH` | `/admin/appointments/{id}/confirm` | Подтвердить запись (клиенту падает в колокольчик) |
 | `PATCH` | `/admin/appointments/{id}/cancel` | Отменить запись (клиенту падает в колокольчик с причиной) |
@@ -126,7 +126,7 @@
 | `POST` | `/admin/services` | Создать услугу |
 | `PATCH` | `/admin/services/{id}` | Обновить услугу |
 | `DELETE` | `/admin/services/{id}` | Soft-delete услуги |
-| `GET` | `/admin/bundles` | Свои комплексы (состав, суммы времени/цены, своя цена) |
+| `GET` | `/admin/bundles` | Свои комплексы (состав, суммы времени/цены, своя цена); админ `?master_id=` — комплексы выбранного мастера |
 | `POST` | `/admin/bundles` | Собрать комплекс (`name`, `service_ids` ≥2 своих услуг, `durations?` {id: мин}, `price?`) |
 | `PATCH` | `/admin/bundles/{id}` | Обновить комплекс (состав/время/цена/`is_active`; `price: null` — сброс к сумме) |
 | `DELETE` | `/admin/bundles/{id}` | Удалить комплекс (прошлые записи хранят `bundle_name`) |
@@ -137,6 +137,7 @@
 | `POST` | `/admin/clients/{id}/restore` | Вернуть из архива/снять блок (мастер — у себя, админ — `?master_id=` или везде) |
 | `POST` | `/admin/clients/{id}/block` | Чёрный список: скрытие + запрет новой записи (кабинет 403, расписание 403, публичная форма 404; история анонимизирована; новая запись с любой стороны снимает блок). Причина блока выбирается на фронте (`?block_reason=no_show/rude/spam/debt/other` + `?note=`), админ видит кем/за что в `hidden_by`. Клиент получает колокольчик: отмена каждой будущей записи + объяснение блока (другой мастер или контакты из профиля). Мастер — за себя; админ — `?master_id=` за выбранного мастера, без него сразу у всех |
 | `DELETE` | `/admin/clients/{id}/block` | Разблокировать (клиент полностью видим снова; scope как у block) |
+| `POST` | `/admin/clients/{id}/toggle-active` | Выключатель аккаунта — только админ (мастера: архив/блок) |
 | `POST` | `/admin/clients/bulk-city` | Назначить город всем по фильтру (`city_id` + `search`/`master_id`) |
 | `GET` | `/admin/working-hours` | Расписание |
 | `POST` | `/admin/working-hours` | Добавить рабочий день |

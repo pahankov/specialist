@@ -94,7 +94,8 @@ export const adminApi = {
   },
   bookAppointment(data: {
     client_id: number;
-    service_id: number;
+    service_id?: number;
+    bundle_id?: number;
     appointment_date: string;
     status: string;
     notes?: string;
@@ -223,8 +224,10 @@ export const adminApi = {
   },
 
   // Service bundles (complexes) — separate list, assembled from services.
-  getBundles() {
-    return apiClient.get<Bundle[]>('/api/v1/admin/bundles');
+  getBundles(master_id?: number) {
+    return apiClient.get<Bundle[]>('/api/v1/admin/bundles', {
+      params: master_id ? { master_id } : undefined,
+    });
   },
   createBundle(data: {
     name: string;

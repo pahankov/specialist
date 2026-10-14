@@ -111,23 +111,24 @@ async def book_appointment(
         if not mp:
             raise HTTPException(status_code=403, detail="Not a master")
 
-    service_result = await db.execute(
-        select(Service).where(Service.id == data.service_id, Service.master_id == mp.id)
-    )
-    service = service_result.scalar_one_or_none()
-    if not service:
-        raise HTTPException(status_code=404, detail="Услуга не найдена")
-
     client_result = await db.execute(
         select(User).options(joinedload(User.client_profile)).where(User.id == data.client_id)
     )
     user = client_result.scalar_one_or_none()
     if not user or user.role.value != "CLIENT":
         raise HTTPException(status_code=404, detail="Клиент не найден")
+    if user.client_profile is None:
+        user.client_profile = ClientProfile(user_id=user.id)
+        db.add(user.client_profile)
+        await db.flush()
 
-    from app.services.booking import find_conflict
+    from app.services.booking import find_conflict, resolve_booking_item
+    # Exactly one of service_id / bundle_id; facts resolved server-side
+    # (bundles carry snapshots, like the cabinet wizard).
+    item = await resolve_booking_item(db, mp.id, data.service_id,
+                                      data.bundle_id)
     if await find_conflict(db, mp.id, data.appointment_date.replace(tzinfo=None),
-                           service.duration_minutes):
+                           item["duration_minutes"]):
         raise HTTPException(status_code=409, detail="Это время уже занято")
 
     notes = "Запись из админ-панели"
@@ -135,7 +136,10 @@ async def book_appointment(
         notes = f"{notes}. {data.notes}"
 
     new_appointment = Appointment(
-        master_id=mp.id, service_id=data.service_id, client_id=user.client_profile.id,
+        master_id=mp.id, service_id=item["service_id"],
+        client_id=user.client_profile.id,
+        bundle_id=item["bundle_id"], bundle_name=item["bundle_name"],
+        duration_minutes=item["duration_minutes"], price=item["price"],
         appointment_date=data.appointment_date, status=data.status, notes=notes
     )
     db.add(new_appointment)

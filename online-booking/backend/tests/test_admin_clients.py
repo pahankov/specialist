@@ -131,6 +131,41 @@ class TestAdminDeleteClient:
         assert resp.status_code == 404
 
 
+class TestToggleActiveAdminOnly:
+    """Global account on/off is a superadmin power (masters: archive/block)."""
+
+    async def test_master_cannot_toggle_even_own(
+        self, client, auth_headers, test_client_data,
+    ):
+        created = await client.post(
+            "/api/v1/admin/clients", json=test_client_data, headers=auth_headers,
+        )
+        cid = created.json()["id"]
+        assert (await client.post(
+            f"/api/v1/admin/clients/{cid}/toggle-active", headers=auth_headers,
+        )).status_code == 403
+
+    async def test_admin_can_toggle(
+        self, client, super_admin_headers, test_client_data,
+    ):
+        created = await client.post(
+            "/api/v1/admin/clients", json=test_client_data,
+            headers=super_admin_headers,
+        )
+        cid = created.json()["id"]
+        off = await client.post(
+            f"/api/v1/admin/clients/{cid}/toggle-active",
+            headers=super_admin_headers,
+        )
+        assert off.status_code == 200, off.text
+        assert off.json()["is_active"] is False
+        on = await client.post(
+            f"/api/v1/admin/clients/{cid}/toggle-active",
+            headers=super_admin_headers,
+        )
+        assert on.json()["is_active"] is True
+
+
 class TestMasterOwnScope:
     """Masters see strictly their own clients (booked or created by them)."""
 
@@ -181,7 +216,7 @@ class TestMasterOwnScope:
         )).status_code == 404
         assert (await client.post(
             f"/api/v1/admin/clients/{cid}/toggle-active", headers=other,
-        )).status_code == 404
+        )).status_code == 403
 
 
 class TestClientAddress:

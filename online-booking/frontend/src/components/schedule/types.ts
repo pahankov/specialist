@@ -31,6 +31,8 @@ export interface BookingFormState {
   hour: number | null;
   clientId: number | null;
   serviceId: number | null;
+  /** Complex instead of a service (mutually exclusive with serviceId). */
+  bundleId: number | null;
   status: 'pending' | 'confirmed';
   notes: string;
 }
