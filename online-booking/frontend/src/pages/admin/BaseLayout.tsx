@@ -168,6 +168,39 @@ function BaseLayout({
 
   const isActive = (path: string) => location.pathname === path;
 
+  // Drag-to-reorder nav (order persists per section in localStorage).
+  const navSection = location.pathname.startsWith(SUPER_PREFIX)
+    ? 'super'
+    : location.pathname.startsWith('/cabinet')
+      ? 'cabinet'
+      : 'admin';
+  const [navOrder, setNavOrder] = useState<string[] | null>(null);
+  const dragFrom = useRef<number | null>(null);
+  const [dropAt, setDropAt] = useState<number | null>(null);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(`navorder:${navSection}`);
+      setNavOrder(raw ? (JSON.parse(raw) as string[]) : null);
+    } catch {
+      setNavOrder(null);
+    }
+  }, [navSection]);
+  const orderedNav = navOrder
+    ? [...navItems].sort((a, b) => {
+        const ia = navOrder.indexOf(a.path);
+        const ib = navOrder.indexOf(b.path);
+        return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+      })
+    : navItems;
+  const persistOrder = (paths: string[]) => {
+    setNavOrder(paths);
+    try {
+      localStorage.setItem(`navorder:${navSection}`, JSON.stringify(paths));
+    } catch {
+      /* ignore */
+    }
+  };
+
   // Build breadcrumb from current path
   const breadcrumbs = location.pathname
     .split('/')
@@ -223,13 +256,36 @@ function BaseLayout({
           {user && !sidebarCollapsed && <p className="sidebar-user">👤 {user.name}</p>}
         </div>
         <nav className="sidebar-nav">
-          {navItems.map((item) => (
+          {orderedNav.map((item, idx) => (
             <Link
               key={item.path}
               to={item.path}
-              className={`nav-item ${isActive(item.path) ? 'active' : ''}`}
+              draggable
+              onDragStart={() => {
+                dragFrom.current = idx;
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDropAt(idx);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                const from = dragFrom.current;
+                dragFrom.current = null;
+                setDropAt(null);
+                if (from === null || from === idx) return;
+                const paths = orderedNav.map((n) => n.path);
+                const [moved] = paths.splice(from, 1);
+                paths.splice(idx, 0, moved);
+                persistOrder(paths);
+              }}
+              onDragEnd={() => {
+                dragFrom.current = null;
+                setDropAt(null);
+              }}
+              className={`nav-item ${isActive(item.path) ? 'active' : ''}${dropAt === idx ? ' nav-drop-target' : ''}`}
               onClick={() => setMobileMenuOpen(false)}
-              title={sidebarCollapsed ? item.label : undefined}
+              title={sidebarCollapsed ? item.label : 'Потяните, чтобы поменять порядок'}
             >
               <span className="nav-icon">{item.label.split(' ')[0]}</span>
               {!sidebarCollapsed && (

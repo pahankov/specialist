@@ -253,6 +253,19 @@
   border-left-color: #e94560;
 }
 
+/* Drag-to-reorder: drop target highlight + grab cursor. */
+.nav-item[draggable='true'] {
+  cursor: grab;
+}
+
+.nav-item[draggable='true']:active {
+  cursor: grabbing;
+}
+
+.nav-item.nav-drop-target {
+  border-top: 2px solid #e94560;
+}
+
 .nav-icon {
   font-size: 18px;
   flex-shrink: 0;

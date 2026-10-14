@@ -190,9 +190,10 @@
 
 .bundle-pick {
   display: flex;
-  gap: 10px;
   align-items: center;
+  gap: 10px;
   font-size: 14px;
+  line-height: 1.4;
   cursor: pointer;
 }
 
@@ -201,6 +202,7 @@
   width: 18px;
   height: 18px;
   flex-shrink: 0;
+  align-self: center;
   margin: 0 10px 0 0;
   padding: 0;
   accent-color: #d6336c;
@@ -210,6 +212,7 @@
 .bundle-pick-name {
   flex: 1;
   min-width: 0;
+  align-self: center;
 }
 
 .bundle-pick-mins {

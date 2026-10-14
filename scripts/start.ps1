@@ -97,7 +97,7 @@ $PyExe = Join-Path $BackendDir "venv\Scripts\python.exe"
 if (Test-Path $PyExe) {
     try {
         Push-Location $BackendDir
-        & $PyExe "pull_production.py" --yes --quiet --db "online_booking.db"
+        & $PyExe "pull_production.py" --yes --quiet --retries 2 --retry-wait 15 --db "online_booking.db"
         $SyncExit = $LASTEXITCODE
         Pop-Location
         if ($SyncExit -eq 0) { Write-Ok "Synced with production" }
@@ -134,13 +134,20 @@ $PyExe = Join-Path $BackendDir "venv\Scripts\python.exe"
 if (Test-Path $PyExe) {
     # Migrate first: new columns otherwise 500 every query
     # (lifespan create_all only adds tables, never columns).
+    # Output goes to a log file; on failure the tail is shown so the
+    # cause is visible instead of a bare WARN.
+    $AlembicLog = Join-Path $ProjectDir "online-booking\backend\logs\alembic-last.log"
     try {
         Push-Location $BackendDir
-        & $PyExe -m alembic upgrade head 2>$null
+        & $PyExe -m alembic upgrade head > $AlembicLog 2>&1
         $AlembicExit = $LASTEXITCODE
         Pop-Location
         if ($AlembicExit -eq 0) { Write-Ok "DB migrated to head" }
-        else { Write-Warn "alembic upgrade failed, backend may 500" }
+        else {
+            Write-Warn "alembic upgrade failed, backend may 500"
+            Get-Content $AlembicLog -Tail 5 -ErrorAction SilentlyContinue |
+                ForEach-Object { Write-Host "    | $_" -ForegroundColor Gray }
+        }
     } catch {
         try { Pop-Location } catch {}
         Write-Warn "alembic upgrade failed, backend may 500"
