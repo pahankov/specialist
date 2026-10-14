@@ -253,6 +253,21 @@ function NotificationsPage() {
     }
   };
 
+  const [confirmClear, setConfirmClear] = useState(false);
+
+  const handleClear = async () => {
+    try {
+      await adminApi.clearNotifications();
+      setInbox([]);
+      setUnread(0);
+      toast.success('Входящие очищены');
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Не удалось очистить входящие'));
+    } finally {
+      setConfirmClear(false);
+    }
+  };
+
   return (
     <div className="notifications-page">
       <div className="page-header">
@@ -264,25 +279,34 @@ function NotificationsPage() {
               : 'Внутренняя рассылка своим клиентам + ваши входящие'}
           </p>
         </div>
-        <div className="page-header-actions">
+        <div className="segmented" role="tablist" aria-label="Разделы уведомлений">
           <button
-            className={`btn ${tab === 'send' ? 'btn-primary' : 'btn-ghost'}`}
+            type="button"
+            role="tab"
+            aria-selected={tab === 'send'}
+            className={`segmented-btn${tab === 'send' ? ' active' : ''}`}
             onClick={() => setTab('send')}
           >
             📤 Отправить
           </button>
           <button
-            className={`btn ${tab === 'inbox' ? 'btn-primary' : 'btn-ghost'}`}
+            type="button"
+            role="tab"
+            aria-selected={tab === 'inbox'}
+            className={`segmented-btn${tab === 'inbox' ? ' active' : ''}`}
             onClick={() => setTab('inbox')}
           >
             📥 Входящие{unread > 0 ? ` (${unread})` : ''}
           </button>
           <button
-            className={`btn ${tab === 'sent' ? 'btn-primary' : 'btn-ghost'}`}
+            type="button"
+            role="tab"
+            aria-selected={tab === 'sent'}
+            className={`segmented-btn${tab === 'sent' ? ' active' : ''}`}
             onClick={() => setTab('sent')}
             title="Какие, когда и кому вы отправляли"
           >
-            📤 Отправленные
+            📋 Отправленные
           </button>
         </div>
       </div>
@@ -364,11 +388,18 @@ function NotificationsPage() {
         <div className="card">
           <div className="card-header">
             <h3>Входящие {unread > 0 && <span className="client-count">({unread} новых)</span>}</h3>
-            {unread > 0 && (
-              <button className="btn btn-ghost" onClick={handleReadAll}>
-                ✓ Прочитать все
-              </button>
-            )}
+            <div style={{ display: 'flex', gap: 8 }}>
+              {unread > 0 && (
+                <button className="btn btn-ghost" onClick={handleReadAll}>
+                  ✓ Прочитать все
+                </button>
+              )}
+              {inbox.length > 0 && (
+                <button className="btn btn-ghost" onClick={() => setConfirmClear(true)}>
+                  🗑 Очистить
+                </button>
+              )}
+            </div>
           </div>
           {inboxLoading ? (
             <Skeleton rows={4} />
@@ -476,6 +507,16 @@ function NotificationsPage() {
         message={`Получателей: ${count ?? '?'}. Сообщение появится в их колокольчике.`}
         confirmLabel="Отправить"
         onConfirm={handleSend}
+      />
+
+      <ConfirmDialog
+        open={confirmClear}
+        onClose={() => setConfirmClear(false)}
+        title="🗑 Очистить входящие?"
+        message="Все входящие уведомления будут удалены без возможности восстановления."
+        confirmLabel="Очистить"
+        danger
+        onConfirm={handleClear}
       />
     </div>
   );

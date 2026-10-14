@@ -273,11 +273,13 @@ export function BookingModal({
         <label>Примечания</label>
         <textarea
           value={notes}
-          onChange={(e) => onUpdate('notes', e.target.value)}
+          onChange={(e) => onUpdate('notes', e.target.value.slice(0, 140))}
           placeholder="Доп. информация..."
           rows={2}
           className="form-input"
+          maxLength={140}
         />
+        <span className="hint">{notes.length}/140</span>
       </div>
 
       <div className="modal-actions">

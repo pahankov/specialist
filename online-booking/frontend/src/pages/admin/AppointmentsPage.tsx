@@ -11,6 +11,7 @@ import {
   MasterSelect,
   DataTable,
   AutoConfirmSwitch,
+  AutoCompleteSwitch,
   Pager,
   StatusBadge,
 } from '../../components/common';
@@ -304,7 +305,8 @@ function AppointmentsPage() {
     // Completed live under the "show completed" toggle; everything else
     // stays visible — overdue pending/confirmed need actions (confirm /
     // complete), hiding them orphaned past bookings.
-    if (a.status === 'completed' && !showCompleted) return false;
+    // An explicit "completed" tab always shows them (the tab IS the opt-in).
+    if (a.status === 'completed' && !showCompleted && statusFilter !== 'completed') return false;
     return true;
   });
 
@@ -572,7 +574,12 @@ function AppointmentsPage() {
           <button
             key={f.value}
             className={`filter-btn ${statusFilter === f.value ? 'active' : ''}`}
-            onClick={() => setStatusFilter(f.value)}
+            onClick={() => {
+              setStatusFilter(f.value);
+              // The completed tab promises completed rows — reveal them
+              // even if the toggle below is off.
+              if (f.value === 'completed') setShowCompleted(true);
+            }}
           >
             {f.label}
           </button>
@@ -728,6 +735,7 @@ function AppointmentsPage() {
           Показать завершённые
         </label>
         {!isSuperSection && <AutoConfirmSwitch />}
+        {!isSuperSection && <AutoCompleteSwitch />}
       </div>
 
       {loading ? (

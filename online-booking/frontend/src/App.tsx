@@ -69,8 +69,10 @@ function RequireMasterSection({ children }: { children: React.ReactNode }) {
 
 /** Client cabinet: CLIENT and MASTER roles (dual-role: masters book as clients). */
 function RequireClient({ children }: { children: React.ReactNode }) {
+  const location = useLocation();
   if (!getIsAuthenticated()) {
-    return <Navigate to="/" replace />;
+    // Guests bounce to home, which opens login and continues to `from`.
+    return <Navigate to="/" replace state={{ from: location.pathname + location.search }} />;
   }
   if (getIsAdmin()) {
     return <Navigate to={`${SUPER_PREFIX}/dashboard`} replace />;

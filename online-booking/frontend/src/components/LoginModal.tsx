@@ -16,6 +16,8 @@ import './LoginModal.css';
 interface LoginModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /** After any successful auth, land here instead of the role default. */
+  redirectTo?: string | null;
 }
 
 type ModalMode = 'login' | 'register' | 'max';
@@ -41,7 +43,7 @@ interface RegisterFormState {
   consent: boolean;
 }
 
-function LoginModal({ isOpen, onClose }: LoginModalProps) {
+function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
   const navigate = useNavigate();
 
   const [mode, setMode] = useState<ModalMode>('login');
@@ -85,6 +87,11 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
         }
       } catch {
         /* fall through to role landing */
+      }
+      // Deep-link continue (e.g. carousel "Записаться" → cabinet booking).
+      if (redirectTo) {
+        navigate(redirectTo, { replace: true });
+        return;
       }
       if (loginAs === 'client') {
         navigate('/cabinet', { replace: true });

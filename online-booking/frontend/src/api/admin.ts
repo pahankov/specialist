@@ -26,6 +26,7 @@ export const adminApi = {
       cabinet_address?: string | null;
       certificates?: { name: string; url?: string }[];
       auto_confirm?: boolean | null;
+      auto_complete?: boolean | null;
     }>('/api/v1/admin/profile');
   },
   updateProfile(data: {
@@ -39,6 +40,7 @@ export const adminApi = {
     certificates?: { name: string; url?: string }[];
     avatar_preset?: string | null;
     auto_confirm?: boolean | null;
+    auto_complete?: boolean | null;
   }) {
     return apiClient.patch('/api/v1/admin/profile', data);
   },
@@ -331,6 +333,9 @@ export const adminApi = {
   },
   readAllNotifications() {
     return apiClient.post('/api/v1/admin/notifications/read-all');
+  },
+  clearNotifications() {
+    return apiClient.delete<{ deleted: number }>('/api/v1/admin/notifications');
   },
   getSentBroadcasts(params?: { page?: number; page_size?: number }) {
     return apiClient.get<{

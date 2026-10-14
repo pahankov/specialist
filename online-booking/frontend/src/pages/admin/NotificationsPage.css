@@ -128,3 +128,34 @@
   font-size: 12px;
   color: #888;
 }
+
+/* Segmented tab switch: one joined control, active segment filled. */
+.notifications-page .segmented {
+  display: inline-flex;
+  background: #eef1f6;
+  border-radius: 12px;
+  padding: 4px;
+  gap: 4px;
+}
+
+.notifications-page .segmented-btn {
+  border: none;
+  background: transparent;
+  padding: 8px 16px;
+  border-radius: 9px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #555;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.notifications-page .segmented-btn:hover {
+  color: #1a1a2e;
+}
+
+.notifications-page .segmented-btn.active {
+  background: #e94560;
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(233, 69, 96, 0.4);
+}

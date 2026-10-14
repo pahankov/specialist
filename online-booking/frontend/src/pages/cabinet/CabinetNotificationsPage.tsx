@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cabinetApi } from '../../api/client';
-import { EmptyState, Skeleton } from '../../components/common';
+import { ConfirmDialog, EmptyState, Skeleton } from '../../components/common';
 import { getApiErrorMessage } from '../../utils/apiError';
 import './CabinetPage.css';
 
@@ -22,6 +22,7 @@ function CabinetNotificationsPage() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [unread, setUnread] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [confirmClear, setConfirmClear] = useState(false);
 
   const fetchNotes = async () => {
     try {
@@ -60,6 +61,19 @@ function CabinetNotificationsPage() {
     }
   };
 
+  const clearAll = async () => {
+    try {
+      await cabinetApi.clearNotifications();
+      setNotes([]);
+      setUnread(0);
+      toast.success('Уведомления очищены');
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Не удалось очистить уведомления'));
+    } finally {
+      setConfirmClear(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="cabinet-page">
@@ -72,11 +86,18 @@ function CabinetNotificationsPage() {
     <div className="cabinet-page">
       <div className="page-header">
         <h1>🔔 Уведомления{unread > 0 ? ` (${unread} новых)` : ''}</h1>
-        {unread > 0 && (
-          <button className="btn btn-sm btn-ghost" onClick={readAll}>
-            ✓ Прочитать все
-          </button>
-        )}
+        <div style={{ display: 'flex', gap: 8 }}>
+          {unread > 0 && (
+            <button className="btn btn-sm btn-ghost" onClick={readAll}>
+              ✓ Прочитать все
+            </button>
+          )}
+          {notes.length > 0 && (
+            <button className="btn btn-sm btn-ghost" onClick={() => setConfirmClear(true)}>
+              🗑 Очистить
+            </button>
+          )}
+        </div>
       </div>
       {notes.length === 0 ? (
         <EmptyState title="Пока тихо" description="Подтверждения и отмены записей появятся здесь" />
@@ -120,6 +141,16 @@ function CabinetNotificationsPage() {
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmClear}
+        onClose={() => setConfirmClear(false)}
+        title="🗑 Очистить уведомления?"
+        message="Все уведомления будут удалены без возможности восстановления."
+        confirmLabel="Очистить"
+        danger
+        onConfirm={clearAll}
+      />
     </div>
   );
 }

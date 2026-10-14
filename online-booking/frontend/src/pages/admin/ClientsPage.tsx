@@ -685,6 +685,12 @@ function ClientsPage() {
                 Отмена
               </button>
             </div>
+            {!editingId && (
+              <p className="hint" style={{ marginTop: 8 }}>
+                Отдельный кабинет не создаётся: клиент зайдёт в приложение по этому номеру через
+                SMS-код/MAX и увидит свои записи и историю.
+              </p>
+            )}
           </form>
         </div>
       )}

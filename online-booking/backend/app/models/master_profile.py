@@ -29,6 +29,9 @@ class MasterProfile(Base):
     # Client-initiated bookings (cabinet wizard, public form) land as
     # "confirmed" instead of "pending". Master toggles it in profile.
     auto_confirm = Column(Boolean, default=False, nullable=False)
+    # Past confirmed bookings flip to "completed" on their own (background
+    # loop). Manual complete/cancel still work — the switch only automates.
+    auto_complete = Column(Boolean, default=False, nullable=True)
     # Billing foundation (no charges yet): every master sits on a tariff.
     # Default 'trial' with trial_ends_at assigned at creation (+180 days).
     tariff = Column(String(20), default="trial", nullable=False)

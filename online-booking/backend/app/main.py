@@ -40,7 +40,11 @@ async def lifespan(app: FastAPI):
         logger.info("База данных: SQLite (auto-create tables)")
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+    from app.services.auto_complete import auto_complete_loop
+    auto_task = asyncio.create_task(auto_complete_loop())
+    logger.info("Auto-complete loop started")
     yield
+    auto_task.cancel()
 
 
 # ─── App creation ─────────────────────────────────────────────
@@ -59,7 +63,7 @@ app = FastAPI(
         "Все API-эндпоинты версионированы: `/api/v1/`. "
         "Список изменений: `GET /api/v1/admin/changelog`."
     ),
-    version="1.46.0",
+    version="1.47.0",
     contact={
         "name": "Support",
         "email": "support@beauty-specialist.ru",

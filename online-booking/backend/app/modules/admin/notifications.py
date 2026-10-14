@@ -347,6 +347,15 @@ async def admin_read_all(
     return {"ok": True}
 
 
+@router.delete("/notifications")
+async def admin_clear_notifications(
+    user: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete all own inbox rows (master panel + superadmin)."""
+    return await delete_own_notifications(db, user)
+
+
 # ─── Shared helpers for the client cabinet (any authenticated user) ───
 
 async def client_inbox(db: AsyncSession, user: User, unread_only: bool,
@@ -383,6 +392,17 @@ async def client_unread_count(db: AsyncSession, user: User) -> dict:
         q = q.where(scope)
     unread = (await db.execute(q)).scalar() or 0
     return {"unread": unread}
+
+
+async def delete_own_notifications(db: AsyncSession, user: User) -> dict:
+    """Clear own bell inbox (logout-safe: only recipient's rows)."""
+    from sqlalchemy import delete as sa_delete
+
+    res = await db.execute(
+        sa_delete(Notification).where(Notification.recipient_id == user.id)
+    )
+    await db.commit()
+    return {"deleted": res.rowcount or 0}
 
 
 async def any_user_unread_count(

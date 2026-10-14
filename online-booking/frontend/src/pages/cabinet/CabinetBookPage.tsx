@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cabinetApi, mastersApi, servicesApi, assetUrl } from '../../api/client';
 import type { Bundle } from '../../api/cabinet';
@@ -82,6 +82,10 @@ function ClientSlots({
 
 function CabinetBookPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  // Deep link from the home carousel: /cabinet/book?master_id=X preselects.
+  const deepMasterId = Number(searchParams.get('master_id')) || null;
+  const deepMasterDone = useRef(false);
   const [cityId, setCityId] = useState<number | null>(null);
   const [cityName, setCityName] = useState('');
   const [masters, setMasters] = useState<Master[]>([]);
@@ -119,12 +123,16 @@ function CabinetBookPage() {
 
   // Own city first (trip? pick another — masters reload).
   // Own user id too: a master-as-client never sees (or books) themselves.
+  // Deep link wins over the city: the carousel master may be elsewhere.
   const [myUserId, setMyUserId] = useState<number | null>(null);
   useEffect(() => {
     cabinetApi
       .me()
       .then((resp) => {
-        if (resp.data.city_id) {
+        if (deepMasterId) {
+          setCityId(null);
+          setCityName('');
+        } else if (resp.data.city_id) {
           setCityId(resp.data.city_id);
           setCityName(resp.data.city_name || '');
         }
@@ -167,6 +175,16 @@ function CabinetBookPage() {
       cancelled = true;
     };
   }, [cityId]);
+
+  // Deep link: once masters arrive, jump straight to the carousel master
+  // (schedule loads via the selectedMaster effect below).
+  useEffect(() => {
+    if (!deepMasterId || deepMasterDone.current || masters.length === 0) return;
+    const found = masters.find((m) => m.id === deepMasterId) ?? null;
+    deepMasterDone.current = true;
+    if (found && found.user_id !== myUserId) pickMaster(found);
+    else toast.error('Мастер не найден — выберите вручную');
+  }, [masters, myUserId]);
 
   const serviceNames = useMemo(() => {
     const set = new Set<string>();
@@ -439,6 +457,31 @@ function CabinetBookPage() {
       )}
 
       {selectedMaster && (
+        <div className="card" style={{ marginTop: 12 }}>
+          <details>
+            <summary style={{ cursor: 'pointer', fontWeight: 600 }}>
+              💇 Услуги и наборы мастера — цены и время
+            </summary>
+            <div style={{ marginTop: 8 }}>
+              {(servicesByMaster[selectedMaster.id] || []).map((s) => (
+                <div key={s.id} className="bundle-chip" style={{ margin: '0 6px 6px 0' }}>
+                  {s.name} · {s.duration_minutes} мин · {s.price} ₽
+                </div>
+              ))}
+              {(servicesByMaster[selectedMaster.id] || []).length === 0 && (
+                <p className="hint">Услуги уточняйте у мастера</p>
+              )}
+              {(bundlesByMaster[selectedMaster.id] || []).map((b) => (
+                <div key={`b-${b.id}`} className="bundle-chip" style={{ margin: '0 6px 6px 0' }}>
+                  🎁 {b.name} · {b.duration_total} мин · {b.effective_price} ₽
+                </div>
+              ))}
+            </div>
+          </details>
+        </div>
+      )}
+
+      {selectedMaster && (
         <div className="card" id="cabinet-schedule" ref={scheduleRef} style={{ marginTop: 16 }}>
           <div className="card-header">
             <h3>📅 {selectedMaster.name} — активное расписание</h3>
@@ -590,8 +633,11 @@ function CabinetBookPage() {
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Пожелания мастеру..."
-                maxLength={500}
+                maxLength={140}
               />
+              <span className="hint">
+                {notes.length}/140 — коротко, чтобы влезло в слот расписания
+              </span>
             </div>
             <div className="modal-actions">
               <button type="button" className="btn btn-ghost" onClick={() => setSlotHour(null)}>

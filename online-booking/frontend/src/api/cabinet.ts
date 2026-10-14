@@ -120,4 +120,21 @@ export const cabinetApi = {
   readAllNotifications() {
     return apiClient.post('/api/v1/client/notifications/read-all');
   },
+  clearNotifications() {
+    return apiClient.delete<{ deleted: number }>('/api/v1/client/notifications');
+  },
+  myReviews() {
+    return apiClient.get<
+      {
+        id: number;
+        appointment_id: number;
+        master_id: number;
+        rating: number;
+        comment?: string | null;
+      }[]
+    >('/api/v1/client/reviews/mine');
+  },
+  createReview(data: { appointment_id: number; rating: number; comment?: string }) {
+    return apiClient.post('/api/v1/client/reviews', data);
+  },
 };

@@ -265,7 +265,7 @@ class ClientBookingCreate(BaseModel):
     service_id: Optional[int] = Field(default=None)
     bundle_id: Optional[int] = Field(default=None)
     appointment_date: datetime
-    notes: Optional[str] = Field(default=None, max_length=500)
+    notes: Optional[str] = Field(default=None, max_length=140)
 
 
 @router.get("/booking/schedule")
@@ -485,3 +485,78 @@ async def read_all_notifications(
     db: AsyncSession = Depends(get_db),
 ):
     return await client_read_all(db, user)
+
+
+@router.delete("/notifications")
+async def clear_notifications(
+    user: User = Depends(require_client),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete all own bells (history cleanup)."""
+    from app.modules.admin.notifications import delete_own_notifications
+    return await delete_own_notifications(db, user)
+
+
+class ClientReviewCreate(BaseModel):
+    appointment_id: int
+    rating: float = Field(ge=1.0, le=5.0)
+    comment: Optional[str] = Field(default=None, max_length=1000)
+
+
+@router.get("/reviews/mine")
+async def my_reviews(
+    user: User = Depends(require_client),
+    db: AsyncSession = Depends(get_db),
+):
+    """Own reviews (to mark rated appointments in history)."""
+    from app.models.review import Review
+    profile = await _get_or_create_profile(db, user)
+    rows = (await db.execute(
+        select(Review).join(Appointment, Review.appointment_id == Appointment.id)
+        .where(Appointment.client_id == profile.id)
+        .order_by(Review.created_at.desc())
+    )).scalars().all()
+    from app.modules.review.router import _review_to_dict
+    return [_review_to_dict(r) for r in rows]
+
+
+@router.post("/reviews", status_code=201)
+async def create_own_review(
+    data: ClientReviewCreate,
+    user: User = Depends(require_client),
+    db: AsyncSession = Depends(get_db),
+):
+    """Rate a completed own appointment (one review per appointment)."""
+    from app.models.review import Review
+    profile = await _get_or_create_profile(db, user)
+    appt = (await db.execute(
+        select(Appointment)
+        .options(selectinload(Appointment.client_profile).joinedload(ClientProfile.user))
+        .where(Appointment.id == data.appointment_id)
+    )).scalar_one_or_none()
+    if appt is None:
+        raise HTTPException(status_code=404, detail="Запись не найдена")
+    # Legacy rows may store the user id instead of the profile id.
+    if appt.client_id != profile.id and appt.client_id != user.id:
+        raise HTTPException(status_code=403, detail="Чужая запись")
+    if appt.status != "completed":
+        raise HTTPException(status_code=400,
+                            detail="Оценить можно только завершённую услугу")
+    existing = (await db.execute(
+        select(Review).where(Review.appointment_id == appt.id)
+    )).scalar_one_or_none()
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="Отзыв уже оставлен")
+    review = Review(
+        appointment_id=appt.id, master_id=appt.master_id,
+        client_name=user.name or "Клиент", client_phone=user.phone or "",
+        rating=data.rating, comment=(data.comment or "").strip() or None,
+        is_published=True,
+    )
+    db.add(review)
+    await log_action(db, user.id, "create", "review", None,
+                     f"Оценка {data.rating} мастеру {appt.master_id}", level="info")
+    await db.commit()
+    await db.refresh(review)
+    from app.modules.review.router import _review_to_dict
+    return _review_to_dict(review)

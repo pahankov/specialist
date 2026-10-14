@@ -162,8 +162,10 @@
 | `GET` | `/admin/notifications/inbox` | Свои входящие (панели): `unread_only`, пагинация, счётчик `unread` |
 | `GET` | `/admin/notifications/unread-count` | Бейдж колокольчика (панели) |
 | `POST` | `/admin/notifications/{id}/read`, `/admin/notifications/read-all` | Отметить прочитанным |
+| `DELETE` | `/admin/notifications` | Очистить свои входящие (панели) |
 | `GET` | `/client/notifications/inbox`, `/client/notifications/unread-count` | Входящие и бейдж кабинета |
 | `POST` | `/client/notifications/{id}/read`, `/client/notifications/read-all` | Прочитанное в кабинете |
+| `DELETE` | `/client/notifications` | Очистить уведомления кабинета |
 
 ### Superadmin (JWT required, is_admin=true)
 | Метод | Endpoint | Описание |
@@ -213,6 +215,8 @@
 | `POST` | `/api/v1/reviews/` | Создать отзыв (только на completed appointment) |
 | `PATCH` | `/api/v1/reviews/{id}` | Обновить отзыв (comment, publish) |
 | `DELETE` | `/api/v1/reviews/{id}` | Удалить отзыв |
+| `GET` | `/client/reviews/mine` | Свои отзывы кабинета (для пометок в Истории) |
+| `POST` | `/client/reviews` | Оценить свою завершённую запись (`appointment_id`, `rating` 1–5, `comment?` ≤1000; 403 чужая, 409 повтор) |
 
 ### Admin No-Show
 | Метод | Endpoint | Описание |

@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { Navigation, Autoplay } from 'swiper/modules';
 import { toast } from 'sonner';
@@ -32,14 +32,36 @@ function pickRandom<T>(array: T[], count: number): T[] {
 
 function HomePage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [allMasters, setAllMasters] = useState<Master[]>([]);
   const [allServices, setAllServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showLogin, setShowLogin] = useState(false);
+  // Carousel "Записаться": guests authorize first, then continue booking.
+  const [postLoginTo, setPostLoginTo] = useState<string | null>(null);
   const [authName, setAuthName] = useState<string | null>(null);
   const [authRole, setAuthRole] = useState<string | null>(null);
   const swiperInstance = useRef<any>(null);
+
+  const bookMaster = (masterId: number) => {
+    const to = `/cabinet/book?master_id=${masterId}`;
+    if (getCookie('access_token')) {
+      navigate(to);
+    } else {
+      setPostLoginTo(to);
+      setShowLogin(true);
+    }
+  };
+
+  // Guard redirect (RequireClient drops guests here with state.from).
+  useEffect(() => {
+    const from = (location.state as { from?: string } | null)?.from;
+    if (from && !getCookie('access_token')) {
+      setPostLoginTo(from);
+      setShowLogin(true);
+    }
+  }, []);
 
   const refreshAuth = () => {
     try {
@@ -174,12 +196,13 @@ function HomePage() {
                           <span className="duration">⏱️ {service.duration_minutes} мин</span>
                           <span className="price">₽{service.price}</span>
                         </div>
-                        <Link
-                          to={`/booking?master_id=${service.master_id}`}
+                        <button
+                          type="button"
                           className="btn btn-primary"
+                          onClick={() => bookMaster(service.master_id)}
                         >
                           Записаться
-                        </Link>
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -200,9 +223,13 @@ function HomePage() {
                         <h3>{master.name}</h3>
                         {master.description && <p>{master.description}</p>}
                         {master.phone && <p className="phone">📱 {master.phone}</p>}
-                        <Link to={`/booking?master_id=${master.id}`} className="btn btn-primary">
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          onClick={() => bookMaster(master.id)}
+                        >
                           Записаться
-                        </Link>
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -232,7 +259,14 @@ function HomePage() {
       </div>
 
       {/* Login Modal */}
-      <LoginModal isOpen={showLogin} onClose={() => setShowLogin(false)} />
+      <LoginModal
+        isOpen={showLogin}
+        onClose={() => {
+          setShowLogin(false);
+          setPostLoginTo(null);
+        }}
+        redirectTo={postLoginTo}
+      />
 
       <PublicFooter />
     </div>

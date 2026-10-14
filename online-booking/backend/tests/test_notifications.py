@@ -327,3 +327,21 @@ class TestClientInboxIsolation:
         assert r.status_code == 200, r.text
         assert all(i["text"] != "client chatter" for i in r.json()["items"])
         assert r.json()["unread"] == 0
+
+    async def test_clear_deletes_only_own(self, client, session):
+        from app.models.notification import Notification
+
+        ha, a = await self._client_headers(session, "IsoC", "isoc@example.com",
+                                           "+79990009004")
+        hb, b = await self._client_headers(session, "IsoD", "isod@example.com",
+                                           "+79990009005")
+        session.add(Notification(sender_id=None, recipient_id=a.id, text="mine"))
+        session.add(Notification(sender_id=None, recipient_id=b.id, text="theirs"))
+        await session.commit()
+
+        d = await client.delete("/api/v1/client/notifications", headers=ha)
+        assert d.status_code == 200, d.text
+        assert d.json()["deleted"] == 1
+
+        rb = await client.get("/api/v1/client/notifications/inbox", headers=hb)
+        assert [i["text"] for i in rb.json()["items"]] == ["theirs"]

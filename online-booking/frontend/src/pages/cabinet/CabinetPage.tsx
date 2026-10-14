@@ -31,17 +31,35 @@ function CabinetPage() {
   const [cancellingId, setCancellingId] = useState<number | null>(null);
   // City was already given at registration — show it, edit only on demand.
   const [changingCity, setChangingCity] = useState(false);
+  // Own reviews: appointment_id → stars (to prompt only unrated visits).
+  const [ratedByAppt, setRatedByAppt] = useState<Record<number, number>>({});
+  const [reviewFor, setReviewFor] = useState<number | null>(null);
+  const [stars, setStars] = useState(5);
+  const [reviewText, setReviewText] = useState('');
+  const [sendingReview, setSendingReview] = useState(false);
+  // History filter chips, like the master panel.
+  const [histFilter, setHistFilter] = useState('');
 
   const fetchData = async () => {
     try {
-      const [meResp, apptsResp, statsResp] = await Promise.all([
+      // Reviews are optional: an older mock without myReviews must not
+      // break the whole cabinet.
+      const reviewsPromise =
+        typeof cabinetApi.myReviews === 'function'
+          ? cabinetApi
+              .myReviews()
+              .catch(() => ({ data: [] as { appointment_id: number; rating: number }[] }))
+          : Promise.resolve({ data: [] as { appointment_id: number; rating: number }[] });
+      const [meResp, apptsResp, statsResp, revResp] = await Promise.all([
         cabinetApi.me(),
         cabinetApi.myAppointments(),
         cabinetApi.stats(),
+        reviewsPromise,
       ]);
       setMe(meResp.data);
       setAppointments(apptsResp.data);
       setStats(statsResp.data);
+      setRatedByAppt(Object.fromEntries(revResp.data.map((r) => [r.appointment_id, r.rating])));
     } catch (err: unknown) {
       if (getApiErrorStatus(err) === 401) {
         navigate('/', { replace: true });
@@ -101,9 +119,111 @@ function CabinetPage() {
     );
   const history = appointments
     .filter((a) => !upcoming.includes(a))
+    .filter((a) => !histFilter || a.status === histFilter)
     .sort(
       (a, b) => new Date(b.appointment_date).getTime() - new Date(a.appointment_date).getTime(),
     );
+
+  const submitReview = async (appointmentId: number) => {
+    setSendingReview(true);
+    try {
+      const { data } = await cabinetApi.createReview({
+        appointment_id: appointmentId,
+        rating: stars,
+        comment: reviewText.trim() || undefined,
+      });
+      setRatedByAppt((prev) => ({ ...prev, [appointmentId]: data.rating }));
+      setReviewFor(null);
+      setReviewText('');
+      setStars(5);
+      toast.success('Спасибо! Оценка учтена в рейтинге мастера ⭐');
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Не удалось отправить отзыв'));
+    } finally {
+      setSendingReview(false);
+    }
+  };
+
+  const renderHistoryCard = (a: Appointment) => {
+    const myStars = ratedByAppt[a.id];
+    const canRate = a.status === 'completed' && myStars === undefined;
+    return (
+      <div key={a.id} className="cabinet-card">
+        <div className="cabinet-card-main">
+          <strong>{a.service_name || 'Услуга'}</strong>
+          <span className="cabinet-card-master">{a.master_name || ''}</span>
+          <span className="cabinet-card-date">{formatDate(a.appointment_date)}</span>
+          {myStars !== undefined && (
+            <span className="cabinet-card-master" title="Ваша оценка">
+              Ваша оценка: {'★'.repeat(Math.round(myStars))}☆
+            </span>
+          )}
+          {reviewFor === a.id && (
+            <div style={{ marginTop: 8 }}>
+              <div style={{ display: 'flex', gap: 4, fontSize: 24 }}>
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setStars(n)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: n <= stars ? '#f5a623' : '#ddd',
+                    }}
+                    aria-label={`Оценка ${n}`}
+                  >
+                    ★
+                  </button>
+                ))}
+              </div>
+              <input
+                value={reviewText}
+                onChange={(e) => setReviewText(e.target.value)}
+                placeholder="Пара слов о визите (необязательно)"
+                maxLength={500}
+                style={{ marginTop: 6, width: '100%' }}
+              />
+              <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                <button
+                  className="btn btn-sm btn-primary"
+                  disabled={sendingReview}
+                  onClick={() => submitReview(a.id)}
+                >
+                  {sendingReview ? 'Отправляем…' : 'Отправить отзыв'}
+                </button>
+                <button
+                  className="btn btn-sm btn-ghost"
+                  onClick={() => {
+                    setReviewFor(null);
+                    setReviewText('');
+                  }}
+                >
+                  Позже
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="cabinet-card-side">
+          <StatusBadge status={a.status} />
+          {canRate && reviewFor !== a.id && (
+            <button
+              className="btn btn-sm btn-ghost"
+              onClick={() => {
+                setReviewFor(a.id);
+                setStars(5);
+                setReviewText('');
+              }}
+            >
+              ⭐ Оценить
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   const renderCard = (a: Appointment) => {
     const cancellable = a.status === 'pending' || a.status === 'confirmed';
@@ -187,10 +307,27 @@ function CabinetPage() {
       )}
 
       <h2 className="cabinet-section">История</h2>
+      <div className="filters-bar" style={{ marginBottom: 12 }}>
+        {[
+          { value: '', label: 'Все' },
+          { value: 'confirmed', label: '✅ Подтверждена' },
+          { value: 'completed', label: '🏁 Завершена' },
+          { value: 'cancelled', label: '❌ Отменена' },
+        ].map((f) => (
+          <button
+            key={f.value}
+            type="button"
+            className={`filter-btn ${histFilter === f.value ? 'active' : ''}`}
+            onClick={() => setHistFilter(f.value)}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
       {history.length === 0 ? (
         <EmptyState title="История пуста" />
       ) : (
-        <div className="cabinet-list">{history.map(renderCard)}</div>
+        <div className="cabinet-list">{history.map(renderHistoryCard)}</div>
       )}
 
       <ConfirmDialog

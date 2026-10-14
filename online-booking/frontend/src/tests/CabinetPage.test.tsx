@@ -12,6 +12,8 @@ vi.mock('../api/client', () => ({
     myAppointments: vi.fn(),
     cancelAppointment: vi.fn(),
     updateMe: vi.fn(),
+    myReviews: vi.fn().mockResolvedValue({ data: [] }),
+    createReview: vi.fn(),
     stats: vi.fn().mockResolvedValue({
       data: {
         total_spent: 0,
@@ -102,5 +104,22 @@ describe('CabinetPage', () => {
     vi.mocked(mocked.myAppointments).mockResolvedValue({ data: [] } as never);
     renderCabinet();
     expect(await screen.findByText('Нет предстоящих записей')).toBeInTheDocument();
+  });
+
+  it('rates a completed visit from history', async () => {
+    vi.mocked(mocked.me).mockResolvedValue({
+      data: { id: 1, name: 'Клиент', phone: '+7', is_verified: false },
+    } as never);
+    vi.mocked(mocked.myAppointments).mockResolvedValue({ data: APPTS } as never);
+    vi.mocked(mocked.createReview).mockResolvedValue({ data: { rating: 5 } } as never);
+    renderCabinet();
+    await screen.findByText('История');
+    fireEvent.click(screen.getByText('⭐ Оценить'));
+    fireEvent.click(screen.getByText('Отправить отзыв'));
+    await vi.waitFor(() => {
+      expect(vi.mocked(mocked.createReview)).toHaveBeenCalledWith(
+        expect.objectContaining({ appointment_id: 2, rating: 5 }),
+      );
+    });
   });
 });
