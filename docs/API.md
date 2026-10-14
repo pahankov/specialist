@@ -12,6 +12,7 @@
 | `POST` | `/api/v1/auth/login` | Вход мастера (JWT + refresh token в cookies) |
 | `POST` | `/api/v1/auth/login-unified` | Вход по email ИЛИ телефону (мастера и клиенты; пишет login в аудит) |
 | `POST` | `/api/v1/auth/register-unified` | Регистрация с выбором роли (имя+фамилия, адрес; город выводится из адреса) — сразу входит: access_token + cookies |
+| `POST` | `/api/v1/auth/become-master` | Клиент → мастер одной кнопкой (роль + профиль + свежие токены/куки; клиентский доступ сохраняется — dual-role) |
 | `POST` | `/api/v1/auth/send-otp` | Отправка SMS-кода клиенту |
 | `POST` | `/api/v1/auth/verify-otp` | Проверка кода, вход/регистрация клиента |
 | `POST` | `/api/v1/auth/refresh` | Обновление access token (refresh token rotation) |
@@ -82,7 +83,7 @@
 | `POST` | `/api/v1/clients/` | Создать клиента |
 | `DELETE` | `/api/v1/clients/{id}` | Удалить клиента |
 
-### Cabinet (JWT CLIENT required — личный кабинет)
+### Cabinet (JWT CLIENT or MASTER — dual-role: masters book as clients)
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
 | `GET` | `/api/v1/client/me` | Свой профиль (имя/фамилия/телефон/город/адрес) |

@@ -52,6 +52,7 @@ export const authApi = {
   logout: () => apiClient.post('/api/v1/auth/logout'),
   loginUnified: (identifier: string, password: string) =>
     apiClient.post<LoginResponse>('/api/v1/auth/login-unified', { identifier, password }),
+  becomeMaster: () => apiClient.post<LoginResponse>('/api/v1/auth/become-master'),
   registerUnified: (data: UnifiedRegisterData) =>
     apiClient.post<UnifiedRegisterResponse>('/api/v1/auth/register-unified', data),
   maxStart: (phone: string) =>

@@ -65,16 +65,13 @@ function RequireMasterSection({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-/** Client cabinet: CLIENT role only (masters/admins have their own homes). */
+/** Client cabinet: CLIENT and MASTER roles (dual-role: masters book as clients). */
 function RequireClient({ children }: { children: React.ReactNode }) {
   if (!getIsAuthenticated()) {
     return <Navigate to="/" replace />;
   }
   if (getIsAdmin()) {
     return <Navigate to={`${SUPER_PREFIX}/dashboard`} replace />;
-  }
-  if (getUserRole() !== 'CLIENT') {
-    return <Navigate to={`${ADMIN_PREFIX}/dashboard`} replace />;
   }
   return <>{children}</>;
 }

@@ -20,6 +20,7 @@ from app.logging_config import get_logger
 from app.services.audit import log_action
 from app.modules.auth import service
 from app.modules.auth.token import create_access_token, create_refresh_token_payload
+from app.dependencies.auth import get_current_user
 from app.middleware.rate_limit import limiter
 from app.utils.cookies_http import set_auth_cookies
 
@@ -372,3 +373,46 @@ async def register_unified(
     except Exception as e:
         logger.error("Unified register failed (unexpected): name=%s, error=%s", req.name, e, exc_info=True)
         raise HTTPException(status_code=500, detail="Ошибка регистрации")
+
+
+# ─── Become master (client upgrades to a dual client+master account) ──
+
+@router.post("/become-master", response_model=TokenResponse)
+@limiter.limit("10/minute")
+async def become_master(
+    request: Request,
+    response: Response,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upgrade a CLIENT account to master (one-way, keeps client access).
+
+    Creates the MasterProfile, flips the role and reissues tokens + cookies
+    so the session continues as master. Masters keep full client-cabinet
+    access (dual-role).
+    """
+    if user.role != UserRole.CLIENT:
+        raise HTTPException(status_code=400, detail="Вы уже мастер")
+    existing = (await db.execute(
+        select(MasterProfile).where(MasterProfile.user_id == user.id)
+    )).scalar_one_or_none()
+    if existing is None:
+        db.add(MasterProfile(user_id=user.id))
+        await db.flush()
+    user.role = UserRole.MASTER
+    access_token = create_access_token({
+        "sub": str(user.id),
+        "role": UserRole.MASTER.value,
+        "name": user.name,
+        "is_admin": False,
+    })
+    refresh_value, expires_at = create_refresh_token_payload(
+        user.id, user.email or "")
+    db.add(RefreshToken(user_id=user.id, token=refresh_value,
+                        expires_at=expires_at))
+    _set_auth_cookies(response, access_token, refresh_value)
+    await log_action(db, user.id, "upgrade", "auth", user.id,
+                     "Клиент стал мастером", level="info")
+    await db.commit()
+    logger.info("User %s upgraded to master", user.id)
+    return {"access_token": access_token, "token_type": "bearer"}

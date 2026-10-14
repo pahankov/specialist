@@ -138,7 +138,12 @@ async def get_current_client(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: AsyncSession = Depends(get_db)
 ) -> User:
-    """Extract and validate JWT token, return current client."""
+    """Extract and validate JWT token, return current client.
+
+    Dual-role: MASTER users are welcome too (a master can book other
+    masters as a client). Their ClientProfile is created on first visit
+    by the callers (_get_or_create_profile).
+    """
     token = credentials.credentials
 
     try:
@@ -150,9 +155,9 @@ async def get_current_client(
         user_id: int = int(payload.get("sub"))
         token_role = payload.get("role")
 
-        if user_id is None or token_role != "CLIENT":
+        if user_id is None or token_role not in ("CLIENT", "MASTER"):
             logger.warning(
-                "Client auth failed: user_id=%s, token_role=%s (expected CLIENT)",
+                "Client auth failed: user_id=%s, token_role=%s (expected CLIENT or MASTER)",
                 user_id, token_role
             )
             raise HTTPException(

@@ -1,0 +1,31 @@
+/* Segmented Клиент/Мастер switch. */
+.role-switch {
+  display: flex;
+  gap: 0;
+  background: #f2f4f8;
+  border: 1px solid #e3e8f0;
+  border-radius: 10px;
+  padding: 3px;
+  margin-bottom: 16px;
+}
+
+.role-switch-btn {
+  flex: 1;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  padding: 9px 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #666;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.role-switch-btn.active {
+  background: #fff;
+  color: #1a1a2e;
+  box-shadow: 0 1px 4px rgba(16, 24, 40, 0.12);
+}

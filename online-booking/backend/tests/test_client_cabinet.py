@@ -90,9 +90,10 @@ class TestClientMe:
         assert resp.status_code == 200
         assert resp.json()["phone"] == "+79990001111"
 
-    async def test_me_master_rejected(self, client, auth_headers):
+    async def test_me_master_allowed_dual_role(self, client, auth_headers):
+        """Dual-role: a master opens the client cabinet (profile created)."""
         resp = await client.get("/api/v1/client/me", headers=auth_headers)
-        assert resp.status_code == 401
+        assert resp.status_code == 200, resp.text
 
     async def test_me_no_token_rejected(self, client):
         assert (await client.get("/api/v1/client/me")).status_code in (401, 403)
@@ -149,13 +150,14 @@ class TestCancelAppointment:
             "/api/v1/client/appointments/999999/cancel", headers=headers)
         assert resp.status_code == 404
 
-    async def test_cancel_master_rejected(
+    async def test_cancel_master_cannot_touch_foreign(
         self, client, auth_headers, seeded_appointments
     ):
+        """Dual-role: master admitted, but чужую запись отменить не может."""
         resp = await client.post(
             f"/api/v1/client/appointments/{seeded_appointments['pending_id']}/cancel",
             headers=auth_headers)
-        assert resp.status_code == 401
+        assert resp.status_code == 404
 
 
 class TestClientStats:

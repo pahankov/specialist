@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
+import { toast } from 'sonner';
 import { adminApi, authApi, cabinetApi } from '../../api/client';
 import { Breadcrumb, KeyboardShortcutsHint, NotificationBell } from '../../components/common';
-import { getCookie, decodeJwtPayload, clearAuthCookies } from '../../utils/cookies';
+import { getCookie, decodeJwtPayload, getUserRole, clearAuthCookies } from '../../utils/cookies';
 import { getImpersonation, stopImpersonation } from '../../utils/impersonation';
 import { SUPER_PREFIX } from '../../utils/section';
 import './AdminLayout.css';
@@ -159,6 +160,23 @@ function BaseLayout({
     navigate('/');
   };
 
+  // Dual-role switch: masters move between their panel and the client
+  // cabinet; plain clients get a one-click upgrade to master.
+  const role = getUserRole();
+  const inCabinet = location.pathname.startsWith('/cabinet');
+  const inMasterSection =
+    location.pathname.startsWith('/admin') && !location.pathname.startsWith(SUPER_PREFIX);
+
+  const handleBecomeMaster = async () => {
+    try {
+      await authApi.becomeMaster();
+      toast.success('Профиль мастера создан — добро пожаловать!');
+      navigate('/admin/dashboard');
+    } catch {
+      toast.error('Не удалось стать мастером');
+    }
+  };
+
   const isActive = (path: string) => location.pathname === path;
 
   // Build breadcrumb from current path
@@ -232,6 +250,36 @@ function BaseLayout({
           ))}
         </nav>
         <div className="sidebar-footer">
+          {role === 'MASTER' && inMasterSection && (
+            <button
+              className="btn btn-ghost"
+              onClick={() => navigate('/cabinet')}
+              title="Записаться к другому мастеру как клиент"
+            >
+              <span className="nav-icon">👤</span>
+              {!sidebarCollapsed && <span className="nav-label">Кабинет клиента</span>}
+            </button>
+          )}
+          {role === 'MASTER' && inCabinet && (
+            <button
+              className="btn btn-ghost"
+              onClick={() => navigate('/admin/dashboard')}
+              title="Вернуться в панель мастера"
+            >
+              <span className="nav-icon">💼</span>
+              {!sidebarCollapsed && <span className="nav-label">Панель мастера</span>}
+            </button>
+          )}
+          {role === 'CLIENT' && inCabinet && (
+            <button
+              className="btn btn-ghost"
+              onClick={handleBecomeMaster}
+              title="Создать профиль мастера и принимать записи"
+            >
+              <span className="nav-icon">✨</span>
+              {!sidebarCollapsed && <span className="nav-label">Стать мастером</span>}
+            </button>
+          )}
           <button className="btn btn-ghost btn-logout" onClick={handleLogout} title="Выйти">
             <span className="nav-icon">🚪</span>
             {!sidebarCollapsed && <span className="nav-label">Выйти</span>}

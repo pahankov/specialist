@@ -8,7 +8,9 @@ import AddressSelect from './common/AddressSelect';
 import type { MaxStartResponse } from '../api/auth';
 import PhoneInput, { maskPhone, isCompletePhone, PHONE_MAX_DIGITS } from './common/PhoneInput';
 import { getCookie, decodeJwtPayload, getUserRole } from '../utils/cookies';
+import { getApiErrorMessage } from '../utils/apiError';
 import { ADMIN_PREFIX, SUPER_PREFIX } from '../utils/section';
+import RoleSwitch, { type RoleChoice } from './common/RoleSwitch';
 import Modal from './common/Modal';
 import './LoginModal.css';
 
@@ -22,7 +24,8 @@ type ModalMode = 'login' | 'register' | 'max';
 interface LoginFormState {
   identifier: string; // email or phone
   password: string;
-  isMaster: boolean;
+  /** Segmented switch: which cabinet to enter (replaces the dead checkbox). */
+  loginAs: RoleChoice;
   isRegister: boolean;
 }
 
@@ -46,7 +49,7 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
   const [loginForm, setLoginForm] = useState<LoginFormState>({
     identifier: '',
     password: '',
-    isMaster: false,
+    loginAs: 'client',
     isRegister: false,
   });
   const [registerForm, setRegisterForm] = useState<RegisterFormState>({
@@ -70,23 +73,39 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
   const [maxOffer, setMaxOffer] = useState<MaxStartResponse | null>(null);
   const [maxCodeInput, setMaxCodeInput] = useState('');
 
-  const landByRole = () => {
+  const landByRole = (loginAs: RoleChoice = 'client') => {
     setTimeout(() => {
       onClose();
-      // Role-based landing: admins and masters get their sections,
-      // clients land in their cabinet.
       const role = getUserRole();
-      let home = '/cabinet';
+      // Admins always land in their section; everyone else follows
+      // the segmented switch (dual-role: masters open the client cabinet).
       try {
         if (decodeJwtPayload(getCookie('access_token') ?? '')?.is_admin === true) {
-          home = `${SUPER_PREFIX}/dashboard`;
-        } else if (role === 'MASTER') {
-          home = `${ADMIN_PREFIX}/dashboard`;
+          navigate(`${SUPER_PREFIX}/dashboard`, { replace: true });
+          return;
         }
       } catch {
-        /* default to booking */
+        /* fall through to role landing */
       }
-      navigate(home, { replace: true });
+      if (loginAs === 'client') {
+        navigate('/cabinet', { replace: true });
+        return;
+      }
+      if (role === 'MASTER') {
+        navigate(`${ADMIN_PREFIX}/dashboard`, { replace: true });
+        return;
+      }
+      // A client entering "as master" upgrades to a dual account on the fly.
+      (async () => {
+        try {
+          await authApi.becomeMaster();
+          toast.success('Профиль мастера создан — добро пожаловать!');
+          navigate(`${ADMIN_PREFIX}/dashboard`, { replace: true });
+        } catch (err: unknown) {
+          toast.error(getApiErrorMessage(err, 'Не удалось стать мастером'));
+          navigate('/cabinet', { replace: true });
+        }
+      })();
     }, 800);
   };
 
@@ -150,7 +169,7 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
     try {
       await authApi.loginUnified(identifier, loginForm.password);
       toast.success('Вход выполнен!');
-      landByRole();
+      landByRole(loginForm.loginAs);
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Ошибка входа');
     } finally {
@@ -240,7 +259,7 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
     setLoginForm({
       identifier: '',
       password: '',
-      isMaster: false,
+      loginAs: 'client',
       isRegister: false,
     });
     setRegisterForm({
@@ -407,15 +426,13 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
             </div>
           </div>
 
-          <div className="checkbox-group">
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={loginForm.isMaster}
-                onChange={(e) => setLoginForm((prev) => ({ ...prev, isMaster: e.target.checked }))}
-              />
-              <span>Я мастер / специалист</span>
-            </label>
+          <div className="login-group">
+            <label>Войти как</label>
+            <RoleSwitch
+              value={loginForm.loginAs}
+              onChange={(v) => setLoginForm((prev) => ({ ...prev, loginAs: v }))}
+              labels={{ client: '👤 Клиент', master: '💼 Мастер' }}
+            />
           </div>
 
           <button type="submit" className="btn btn-primary btn-submit" disabled={loading}>
@@ -574,18 +591,14 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
             />
           </div>
 
-          {/* Register as master */}
-          <div className="checkbox-group">
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={registerForm.isMaster}
-                onChange={(e) =>
-                  setRegisterForm((prev) => ({ ...prev, isMaster: e.target.checked }))
-                }
-              />
-              <span>Зарегистрироваться как мастер</span>
-            </label>
+          {/* Register as client or master */}
+          <div className="login-group">
+            <label>Регистрируюсь как</label>
+            <RoleSwitch
+              value={registerForm.isMaster ? 'master' : 'client'}
+              onChange={(v) => setRegisterForm((prev) => ({ ...prev, isMaster: v === 'master' }))}
+              labels={{ client: '👤 Клиент', master: '💼 Мастер' }}
+            />
           </div>
 
           {/* 152-ФЗ + оферта: explicit consent, blocks submit */}
