@@ -129,20 +129,40 @@ def _to_item(n: Notification, sender_name: Optional[str] = None) -> dict:
     }
 
 
+async def _sender_role_filter(exclude: frozenset):
+    """SQL fragment: drop bells sent by these roles (NULL senders kept).
+
+    Dual-role users receive both master-bound bells (bookings from clients)
+    and client-bound bells (cancels, blocks from masters). Each cabinet
+    shows only its own side; the badge counts use the same filter.
+    """
+    from sqlalchemy import or_ as sa_or
+    if not exclude:
+        return None
+    sub = select(User.id).where(User.role.in_(list(exclude)))
+    return sa_or(Notification.sender_id.is_(None),
+                 ~Notification.sender_id.in_(sub))
+
+
 async def _inbox(db: AsyncSession, user: User, unread_only: bool,
-                 page: int, page_size: int) -> dict:
+                 page: int, page_size: int,
+                 exclude_sender_roles: frozenset = frozenset()) -> dict:
     base = select(Notification).where(Notification.recipient_id == user.id)
+    scope = await _sender_role_filter(exclude_sender_roles)
+    if scope is not None:
+        base = base.where(scope)
     if unread_only:
         base = base.where(Notification.is_read == False)  # noqa: E712
     total = (await db.execute(
         select(func.count()).select_from(base.subquery())
     )).scalar() or 0
-    unread = (await db.execute(
-        select(func.count(Notification.id)).where(
-            Notification.recipient_id == user.id,
-            Notification.is_read == False,  # noqa: E712
-        )
-    )).scalar() or 0
+    unread_q = select(func.count(Notification.id)).where(
+        Notification.recipient_id == user.id,
+        Notification.is_read == False,  # noqa: E712
+    )
+    if scope is not None:
+        unread_q = unread_q.where(scope)
+    unread = (await db.execute(unread_q)).scalar() or 0
     rows = (await db.execute(
         base.order_by(Notification.created_at.desc(), Notification.id.desc())
         .offset((page - 1) * page_size).limit(page_size)
@@ -275,8 +295,13 @@ async def admin_inbox(
     user: User = Depends(require_master),
     db: AsyncSession = Depends(get_db),
 ):
-    """Own inbox for master/super panels."""
-    return await _inbox(db, user, unread_only, page, page_size)
+    """Own inbox for master/super panels (client-side bells excluded).
+
+    Superadmins have no client side, so their inbox stays unfiltered.
+    """
+    exclude = (frozenset() if user.role == UserRole.ADMIN
+               else frozenset({UserRole.MASTER}))
+    return await _inbox(db, user, unread_only, page, page_size, exclude)
 
 
 @router.get("/notifications/unread-count")
@@ -284,13 +309,15 @@ async def admin_unread_count(
     user: User = Depends(require_master),
     db: AsyncSession = Depends(get_db),
 ):
-    """Lightweight bell badge poll."""
-    unread = (await db.execute(
-        select(func.count(Notification.id)).where(
-            Notification.recipient_id == user.id,
-            Notification.is_read == False,  # noqa: E712
-        )
-    )).scalar() or 0
+    """Lightweight bell badge poll (same scope as the panel inbox)."""
+    scope = await _sender_role_filter(frozenset({UserRole.MASTER}))
+    q = select(func.count(Notification.id)).where(
+        Notification.recipient_id == user.id,
+        Notification.is_read == False,  # noqa: E712
+    )
+    if scope is not None:
+        q = q.where(scope)
+    unread = (await db.execute(q)).scalar() or 0
     return {"unread": unread}
 
 
@@ -324,7 +351,9 @@ async def admin_read_all(
 
 async def client_inbox(db: AsyncSession, user: User, unread_only: bool,
                        page: int, page_size: int) -> dict:
-    return await _inbox(db, user, unread_only, page, page_size)
+    """Cabinet inbox: master-side bells (bookings to her-as-master) excluded."""
+    return await _inbox(db, user, unread_only, page, page_size,
+                        frozenset({UserRole.CLIENT}))
 
 
 async def client_mark_read(db: AsyncSession, user: User, notif_id: int) -> dict:
@@ -345,12 +374,14 @@ async def client_read_all(db: AsyncSession, user: User) -> dict:
 
 
 async def client_unread_count(db: AsyncSession, user: User) -> dict:
-    unread = (await db.execute(
-        select(func.count(Notification.id)).where(
-            Notification.recipient_id == user.id,
-            Notification.is_read == False,  # noqa: E712
-        )
-    )).scalar() or 0
+    scope = await _sender_role_filter(frozenset({UserRole.CLIENT}))
+    q = select(func.count(Notification.id)).where(
+        Notification.recipient_id == user.id,
+        Notification.is_read == False,  # noqa: E712
+    )
+    if scope is not None:
+        q = q.where(scope)
+    unread = (await db.execute(q)).scalar() or 0
     return {"unread": unread}
 
 

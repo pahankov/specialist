@@ -257,6 +257,9 @@ async def public_booking(booking: PublicBookingCreate, db: AsyncSession = Depend
         if await is_client_blocked(db, booking.master_id, client.id):
             raise HTTPException(status_code=404,
                                 detail="Master not found or inactive")
+        if client.user_id == master_profile.user_id:
+            raise HTTPException(status_code=400,
+                                detail="Нельзя записаться к самому себе")
 
     # Create appointment
     client_note = (booking.notes or "").strip()

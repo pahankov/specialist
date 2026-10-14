@@ -109,6 +109,8 @@ function CabinetBookPage() {
   const [aboutMaster, setAboutMaster] = useState<Master | null>(null);
 
   // Own city first (trip? pick another — masters reload).
+  // Own user id too: a master-as-client never sees (or books) themselves.
+  const [myUserId, setMyUserId] = useState<number | null>(null);
   useEffect(() => {
     cabinetApi
       .me()
@@ -117,6 +119,7 @@ function CabinetBookPage() {
           setCityId(resp.data.city_id);
           setCityName(resp.data.city_name || '');
         }
+        setMyUserId(resp.data.id);
       })
       .catch(() => {
         /* public flow without a city */
@@ -167,12 +170,14 @@ function CabinetBookPage() {
   const visibleMasters = useMemo(() => {
     const q = masterQuery.trim().toLowerCase();
     return masters.filter((m) => {
+      // No self-booking: hide your own master profile (backend also 400s).
+      if (myUserId !== null && m.user_id === myUserId) return false;
       if (q && !m.name.toLowerCase().includes(q)) return false;
       if (serviceFilter && !(servicesByMaster[m.id] || []).some((s) => s.name === serviceFilter))
         return false;
       return true;
     });
-  }, [masters, masterQuery, serviceFilter, servicesByMaster]);
+  }, [masters, masterQuery, serviceFilter, servicesByMaster, myUserId]);
 
   // Complexes of the chosen master (booking modal only — never a
   // standalone list: complexes belong to their master).
@@ -268,9 +273,13 @@ function CabinetBookPage() {
       const b = modalBundles.find((x) => x.id === Number(value.slice(7))) ?? null;
       setModalBundle(b);
       setModalServiceId('');
+    } else if (value.startsWith('service:')) {
+      setModalBundle(null);
+      const id = Number(value.slice(8));
+      setModalServiceId(value === '' || Number.isNaN(id) ? '' : id);
     } else {
       setModalBundle(null);
-      setModalServiceId(value === '' ? '' : Number(value));
+      setModalServiceId('');
     }
   };
 

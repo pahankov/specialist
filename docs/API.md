@@ -84,6 +84,11 @@
 | `DELETE` | `/api/v1/clients/{id}` | Удалить клиента |
 
 ### Cabinet (JWT CLIENT or MASTER — dual-role: masters book as clients)
+
+> Inbox scoping for dual accounts: the cabinet shows only client-side bells
+> (cancels, blocks, broadcasts from masters); booking bells from clients stay
+> in the master panel. Badges use the same scope. Self-booking is rejected
+> (400) and hidden from the wizard.
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
 | `GET` | `/api/v1/client/me` | Свой профиль (имя/фамилия/телефон/город/адрес) |

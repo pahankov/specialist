@@ -368,6 +368,9 @@ async def book_my_appointment(
     )).scalar_one_or_none()
     if mp_user is None or mp_user.is_active is False or mp.status != "active":
         raise HTTPException(status_code=404, detail="Мастер недоступен")
+    if mp.user_id == user.id:
+        raise HTTPException(status_code=400,
+                            detail="Нельзя записаться к самому себе")
 
     from app.services.client_visibility import is_client_blocked
     if await is_client_blocked(db, mp.id, profile.id):
