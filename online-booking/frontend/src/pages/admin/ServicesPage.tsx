@@ -539,6 +539,9 @@ function ServicesPage() {
               </div>
               <div className="form-group">
                 <label>Услуги в комплексе (минимум 2)</label>
+                <div className="hint" style={{ marginBottom: 6 }}>
+                  Отметьте услуги и задайте минуты каждой справа — время суммируется в итог ниже
+                </div>
                 <div className="bundle-pick-list">
                   {allServices.map((s) => (
                     <label key={s.id} className="bundle-pick">
@@ -551,22 +554,24 @@ function ServicesPage() {
                         <strong>{s.name}</strong> · {s.duration_minutes} мин ·{' '}
                         {formatPrice(s.price)} ₽
                       </span>
-                      {picked.has(s.id) && (
-                        <span className="bundle-pick-mins">
-                          <input
-                            type="number"
-                            min={5}
-                            max={480}
-                            value={effDur(s)}
-                            aria-label={`Минут на услугу ${s.name} в комплексе`}
-                            onChange={(e) =>
-                              setDurMap((prev) => ({ ...prev, [s.id]: Number(e.target.value) }))
-                            }
-                            onClick={(e) => e.preventDefault()}
-                          />
-                          мин
-                        </span>
-                      )}
+                      <span
+                        className="bundle-pick-mins"
+                        title="Минут на услугу в комплексе (можно менять)"
+                      >
+                        <input
+                          type="number"
+                          min={5}
+                          max={480}
+                          value={effDur(s)}
+                          disabled={!picked.has(s.id)}
+                          aria-label={`Минут на услугу ${s.name} в комплексе`}
+                          onChange={(e) =>
+                            setDurMap((prev) => ({ ...prev, [s.id]: Number(e.target.value) }))
+                          }
+                          onClick={(e) => e.preventDefault()}
+                        />
+                        мин
+                      </span>
                     </label>
                   ))}
                 </div>
