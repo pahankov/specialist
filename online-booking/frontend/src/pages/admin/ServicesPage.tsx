@@ -212,7 +212,7 @@ function ServicesPage() {
       setError('Введите название комплекса');
       return;
     }
-    if (picked.size < 2) {
+    if (pickedServices.length < 2) {
       setError('Выберите минимум 2 услуги');
       return;
     }
@@ -571,7 +571,8 @@ function ServicesPage() {
                   ))}
                 </div>
                 <span style={{ fontSize: 12, color: '#666' }}>
-                  Выбрано: {picked.size} · ⏱ {pickedDuration} мин · Σ {formatPrice(pickedSum)} ₽
+                  Выбрано: {pickedServices.length} · ⏱ {pickedDuration} мин · Σ{' '}
+                  {formatPrice(pickedSum)} ₽
                 </span>
               </div>
               <div className="form-actions">

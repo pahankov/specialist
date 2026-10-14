@@ -300,13 +300,10 @@ function AppointmentsPage() {
   });
 
   const filteredAppointments = sortedAppointments.filter((a) => {
+    // Completed live under the "show completed" toggle; everything else
+    // stays visible — overdue pending/confirmed need actions (confirm /
+    // complete), hiding them orphaned past bookings.
     if (a.status === 'completed' && !showCompleted) return false;
-    if (
-      a.status !== 'completed' &&
-      a.status !== 'cancelled' &&
-      isAppointmentTimePassed(a.appointment_date)
-    )
-      return false;
     return true;
   });
 
@@ -361,7 +358,7 @@ function AppointmentsPage() {
             />
           );
         },
-        meta: { defaultWidth: 40, hideable: false, resizable: false, label: '✓' },
+        meta: { defaultWidth: 48, hideable: false, resizable: false, label: '✓' },
       },
       {
         id: 'date',
@@ -422,12 +419,23 @@ function AppointmentsPage() {
         header: () => sortHead('status', 'Статус'),
         accessorFn: (a) => a.status,
         cell: ({ row }) => (
-          <Tooltip
-            content={statusLabels[row.original.status] || row.original.status}
-            position="top"
-          >
-            <StatusBadge status={row.original.status} />
-          </Tooltip>
+          <>
+            <Tooltip
+              content={statusLabels[row.original.status] || row.original.status}
+              position="top"
+            >
+              <StatusBadge status={row.original.status} />
+            </Tooltip>
+            {(row.original.status === 'pending' || row.original.status === 'confirmed') &&
+              isAppointmentTimePassed(row.original.appointment_date) && (
+                <span
+                  title="Время записи прошло — подтвердите или завершите"
+                  style={{ marginLeft: 4 }}
+                >
+                  ⏰
+                </span>
+              )}
+          </>
         ),
         meta: { minWidth: 120, label: 'Статус' },
       },

@@ -278,7 +278,7 @@ function MastersPage() {
             onChange={() => toggleSelect(row.original.id)}
           />
         ),
-        meta: { defaultWidth: 40, hideable: false, resizable: false, label: '✓' },
+        meta: { defaultWidth: 48, hideable: false, resizable: false, label: '✓' },
       },
       {
         id: 'name',

@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   flexRender,
   getCoreRowModel,
@@ -105,6 +105,26 @@ export default function DataTable<T>({
   const fittedSig = useRef<string>('');
   const dragMoved = useRef(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const menuAnchorRef = useRef<HTMLDivElement>(null);
+
+  // The menu has no other dismissal: close on outside click and on Escape.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (menuAnchorRef.current && !menuAnchorRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [menuOpen]);
 
   const [columnSizing, setColumnSizing] = useState<Record<string, number>>(() =>
     readStored<Record<string, number>>(widthsKey, {}),
@@ -148,12 +168,12 @@ export default function DataTable<T>({
     const next: Record<string, number> = {};
     for (const col of table.getAllLeafColumns()) {
       if (!col.getIsVisible()) continue;
-      if (userSized.current.has(col.id)) continue;
       const meta = (col.columnDef as FitColumnDef<T>).meta ?? {};
       if (meta.resizable === false) {
         next[col.id] = meta.defaultWidth ?? meta.minWidth ?? FALLBACK_DEFAULT;
         continue;
       }
+      if (userSized.current.has(col.id)) continue;
       const min = meta.minWidth ?? FALLBACK_MIN;
       const max = meta.maxWidth ?? FALLBACK_MAX;
       const fallback = meta.defaultWidth ?? FALLBACK_DEFAULT;
@@ -226,7 +246,7 @@ export default function DataTable<T>({
   return (
     <div className="datatable-wrap" ref={wrapRef}>
       <div className="datatable-toolbar">
-        <div className="datatable-menu-anchor">
+        <div className="datatable-menu-anchor" ref={menuAnchorRef}>
           <button
             type="button"
             className="btn btn-sm btn-ghost"

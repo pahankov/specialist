@@ -67,4 +67,38 @@ describe('DataTable', () => {
     const th = screen.getByText('Имя').closest('th')!;
     expect(th.style.width).toBe('250px');
   });
+
+  it('closes the columns menu on outside click and on Escape', () => {
+    render(
+      <div>
+        <button>outside</button>
+        <DataTable tableId={TABLE} columns={columns} data={data} />
+      </div>,
+    );
+    fireEvent.click(screen.getByText('🧾 Столбцы'));
+    expect(screen.getByLabelText('Телефон')).toBeTruthy();
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByLabelText('Телефон')).toBeNull();
+
+    fireEvent.click(screen.getByText('🧾 Столбцы'));
+    expect(screen.getByLabelText('Телефон')).toBeTruthy();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByLabelText('Телефон')).toBeNull();
+  });
+
+  it('pins non-resizable columns and hides their handle', () => {
+    const cols: FitColumnDef<Row>[] = [
+      {
+        id: 'check',
+        header: '✓',
+        cell: () => null,
+        meta: { defaultWidth: 48, hideable: false, resizable: false },
+      },
+      ...columns,
+    ];
+    render(<DataTable tableId={TABLE} columns={cols} data={data} />);
+    const th = screen.getByText('✓').closest('th')!;
+    expect(th.style.width).toBe('48px');
+    expect(th.querySelector('.col-resizer')).toBeNull();
+  });
 });

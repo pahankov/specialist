@@ -13,7 +13,7 @@
 .form-group {
   margin-bottom: 16px;
 }
-.form-group label {
+.form-group label:not(.bundle-pick) {
   display: block;
   margin-bottom: 6px;
   font-weight: 600;

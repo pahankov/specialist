@@ -54,6 +54,23 @@ table.datatable {
   border-collapse: collapse;
 }
 
+/* Checkbox column: fixed 48px, centered — never resizable, never clipped. */
+.datatable th[data-col='check'],
+.datatable td[data-col='check'] {
+  text-align: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.datatable td[data-col='check'] input[type='checkbox'],
+.datatable th[data-col='check'] input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #667eea;
+  vertical-align: middle;
+}
+
 .datatable thead th {
   position: sticky;
   top: 0;
