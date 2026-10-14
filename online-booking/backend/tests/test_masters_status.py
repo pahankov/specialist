@@ -57,6 +57,61 @@ class TestToggleMasterActive:
         assert "себя" in resp.json()["detail"]
 
 
+class TestPanelAccess:
+    """Panel guard: explicit admin states block, auto-inactive does not."""
+
+    async def _master_headers(self, session, user_id, name="M"):
+        from app.modules.auth.token import create_access_token
+        token = create_access_token({
+            "sub": str(user_id), "role": "MASTER", "name": name,
+            "is_admin": False,
+        })
+        return {"Authorization": f"Bearer {token}"}
+
+    async def test_auto_inactive_keeps_panel(self, client, session,
+                                             created_master_id):
+        """No future hours → status auto-inactive, but panel stays open."""
+        from sqlalchemy import select
+        from app.models.master_profile import MasterProfile
+        from app.models.user import User
+
+        mp = (await session.execute(
+            select(MasterProfile).where(MasterProfile.id == created_master_id)
+        )).scalar_one()
+        mp.status = "inactive"
+        await session.commit()
+        user = (await session.execute(
+            select(User).where(User.id == mp.user_id))).scalar_one()
+        h = await self._master_headers(session, user.id, user.name)
+        r = await client.get("/api/v1/admin/profile", headers=h)
+        assert r.status_code == 200, r.text
+
+    async def test_suspended_and_toggled_lose_panel(
+        self, client, session, created_master_id,
+    ):
+        from sqlalchemy import select
+        from app.models.master_profile import MasterProfile
+        from app.models.user import User
+
+        mp = (await session.execute(
+            select(MasterProfile).where(MasterProfile.id == created_master_id)
+        )).scalar_one()
+        user = (await session.execute(
+            select(User).where(User.id == mp.user_id))).scalar_one()
+        h = await self._master_headers(session, user.id, user.name)
+
+        mp.status = "suspended"
+        await session.commit()
+        r = await client.get("/api/v1/admin/profile", headers=h)
+        assert r.status_code == 401
+
+        mp.status = "active"
+        mp.is_active = False
+        await session.commit()
+        r = await client.get("/api/v1/admin/profile", headers=h)
+        assert r.status_code == 401
+
+
 class TestSuspendMaster:
     """Tests for suspend endpoint."""
 

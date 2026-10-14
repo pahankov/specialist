@@ -75,8 +75,7 @@ function writeStored(key: string, value: object) {
 function measureText(text: string): number {
   // jsdom has no canvas: its "not implemented" error pollutes test output,
   // so estimate by length there (auto-fit measures real DOM in browsers).
-  const isJsdom =
-    typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent ?? '');
+  const isJsdom = typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent ?? '');
   if (!isJsdom) {
     try {
       const canvas = document.createElement('canvas');
