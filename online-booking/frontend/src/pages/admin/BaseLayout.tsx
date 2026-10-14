@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
-import { toast } from 'sonner';
 import { adminApi, authApi, cabinetApi } from '../../api/client';
 import { Breadcrumb, KeyboardShortcutsHint, NotificationBell } from '../../components/common';
 import { getCookie, decodeJwtPayload, getUserRole, clearAuthCookies } from '../../utils/cookies';
@@ -161,21 +160,11 @@ function BaseLayout({
   };
 
   // Dual-role switch: masters move between their panel and the client
-  // cabinet; plain clients get a one-click upgrade to master.
+  // cabinet; plain clients get an application page (verified by admin).
   const role = getUserRole();
   const inCabinet = location.pathname.startsWith('/cabinet');
   const inMasterSection =
     location.pathname.startsWith('/admin') && !location.pathname.startsWith(SUPER_PREFIX);
-
-  const handleBecomeMaster = async () => {
-    try {
-      await authApi.becomeMaster();
-      toast.success('Профиль мастера создан — добро пожаловать!');
-      navigate('/admin/dashboard');
-    } catch {
-      toast.error('Не удалось стать мастером');
-    }
-  };
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -273,8 +262,8 @@ function BaseLayout({
           {role === 'CLIENT' && inCabinet && (
             <button
               className="btn btn-ghost"
-              onClick={handleBecomeMaster}
-              title="Создать профиль мастера и принимать записи"
+              onClick={() => navigate('/cabinet/become-master')}
+              title="Оставить заявку — профиль откроется после проверки"
             >
               <span className="nav-icon">✨</span>
               {!sidebarCollapsed && <span className="nav-label">Стать мастером</span>}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cabinetApi, mastersApi, servicesApi, assetUrl } from '../../api/client';
@@ -107,6 +107,15 @@ function CabinetBookPage() {
   const [bookingLoading, setBookingLoading] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [aboutMaster, setAboutMaster] = useState<Master | null>(null);
+  const scheduleRef = useRef<HTMLDivElement>(null);
+
+  const pickMaster = (m: Master) => {
+    setSelectedMaster(m);
+    // The schedule renders below a long list — bring it into view at once.
+    requestAnimationFrame(() => {
+      scheduleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
 
   // Own city first (trip? pick another — masters reload).
   // Own user id too: a master-as-client never sees (or books) themselves.
@@ -380,7 +389,7 @@ function CabinetBookPage() {
                 type="radio"
                 name="cabinet-master"
                 checked={selectedMaster?.id === m.id}
-                onChange={() => setSelectedMaster(m)}
+                onChange={() => pickMaster(m)}
               />
               {m.avatar_preset ? (
                 <span
@@ -425,7 +434,7 @@ function CabinetBookPage() {
       )}
 
       {selectedMaster && (
-        <div className="card" id="cabinet-schedule" style={{ marginTop: 16 }}>
+        <div className="card" id="cabinet-schedule" ref={scheduleRef} style={{ marginTop: 16 }}>
           <div className="card-header">
             <h3>📅 {selectedMaster.name} — активное расписание</h3>
           </div>
@@ -659,7 +668,7 @@ function CabinetBookPage() {
                 type="button"
                 className="btn btn-primary"
                 onClick={() => {
-                  setSelectedMaster(aboutMaster);
+                  if (aboutMaster) pickMaster(aboutMaster);
                   setAboutMaster(null);
                 }}
               >

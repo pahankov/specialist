@@ -73,6 +73,9 @@ async def toggle_master_active(
     if mp.is_active:
         mp.status = "active"
         status_str = "включён"
+        # Application approved: a client applicant becomes a master now.
+        if mp.user.role != UserRole.ADMIN:
+            mp.user.role = UserRole.MASTER
     else:
         mp.status = "inactive"
         status_str = "отключён"

@@ -1,6 +1,8 @@
 """Authentication API endpoints — register, login, OTP, refresh, logout."""
+from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends, status, Response, Request
 from fastapi.security import HTTPBearer
+from pydantic import BaseModel, Field
 import jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -375,44 +377,44 @@ async def register_unified(
         raise HTTPException(status_code=500, detail="Ошибка регистрации")
 
 
-# ─── Become master (client upgrades to a dual client+master account) ──
+# ─── Become master (client applies, admin activates) ──────────────
 
-@router.post("/become-master", response_model=TokenResponse)
+class BecomeMasterRequest(BaseModel):
+    cabinet_address: Optional[str] = Field(default=None, max_length=500)
+    description: Optional[str] = None
+    experience_years: Optional[int] = Field(default=None, ge=0, le=80)
+
+
+@router.post("/become-master", response_model=dict)
 @limiter.limit("10/minute")
 async def become_master(
     request: Request,
-    response: Response,
+    data: BecomeMasterRequest,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Upgrade a CLIENT account to master (one-way, keeps client access).
+    """Apply for a master profile (strict verification, no instant access).
 
-    Creates the MasterProfile, flips the role and reissues tokens + cookies
-    so the session continues as master. Masters keep full client-cabinet
-    access (dual-role).
+    Creates an INACTIVE MasterProfile; the account stays CLIENT until a
+    superadmin activates it (toggle flips the role too). Nothing is
+    published, no panel access — this closes the one-click self-promotion.
     """
     if user.role != UserRole.CLIENT:
         raise HTTPException(status_code=400, detail="Вы уже мастер")
     existing = (await db.execute(
         select(MasterProfile).where(MasterProfile.user_id == user.id)
     )).scalar_one_or_none()
-    if existing is None:
-        db.add(MasterProfile(user_id=user.id))
-        await db.flush()
-    user.role = UserRole.MASTER
-    access_token = create_access_token({
-        "sub": str(user.id),
-        "role": UserRole.MASTER.value,
-        "name": user.name,
-        "is_admin": False,
-    })
-    refresh_value, expires_at = create_refresh_token_payload(
-        user.id, user.email or "")
-    db.add(RefreshToken(user_id=user.id, token=refresh_value,
-                        expires_at=expires_at))
-    _set_auth_cookies(response, access_token, refresh_value)
-    await log_action(db, user.id, "upgrade", "auth", user.id,
-                     "Клиент стал мастером", level="info")
+    if existing is not None:
+        raise HTTPException(status_code=400,
+                            detail="Заявка уже подана, дождитесь проверки")
+    db.add(MasterProfile(
+        user_id=user.id, status="inactive", is_active=False,
+        cabinet_address=(data.cabinet_address or "").strip() or None,
+        description=(data.description or "").strip() or None,
+        experience_years=data.experience_years,
+    ))
+    await log_action(db, user.id, "apply", "auth", user.id,
+                     "Заявка на мастера", level="info")
     await db.commit()
-    logger.info("User %s upgraded to master", user.id)
-    return {"access_token": access_token, "token_type": "bearer"}
+    logger.info("User %s applied for master", user.id)
+    return {"detail": "Заявка отправлена, профиль появится после проверки"}

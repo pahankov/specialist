@@ -8,7 +8,6 @@ import AddressSelect from './common/AddressSelect';
 import type { MaxStartResponse } from '../api/auth';
 import PhoneInput, { maskPhone, isCompletePhone, PHONE_MAX_DIGITS } from './common/PhoneInput';
 import { getCookie, decodeJwtPayload, getUserRole } from '../utils/cookies';
-import { getApiErrorMessage } from '../utils/apiError';
 import { ADMIN_PREFIX, SUPER_PREFIX } from '../utils/section';
 import RoleSwitch, { type RoleChoice } from './common/RoleSwitch';
 import Modal from './common/Modal';
@@ -95,17 +94,9 @@ function LoginModal({ isOpen, onClose }: LoginModalProps) {
         navigate(`${ADMIN_PREFIX}/dashboard`, { replace: true });
         return;
       }
-      // A client entering "as master" upgrades to a dual account on the fly.
-      (async () => {
-        try {
-          await authApi.becomeMaster();
-          toast.success('Профиль мастера создан — добро пожаловать!');
-          navigate(`${ADMIN_PREFIX}/dashboard`, { replace: true });
-        } catch (err: unknown) {
-          toast.error(getApiErrorMessage(err, 'Не удалось стать мастером'));
-          navigate('/cabinet', { replace: true });
-        }
-      })();
+      // A client entering "as master" goes to the application form —
+      // no instant access, the profile opens after admin approval.
+      navigate('/cabinet/become-master', { replace: true });
     }, 800);
   };
 

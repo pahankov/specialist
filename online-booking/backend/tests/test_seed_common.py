@@ -5,8 +5,9 @@ import backend/*.py scripts, so nothing caught it. Importing here (module
 level) plus behavior checks closes that hole (plus the py_compile CI gate).
 """
 import seed_common
-from seed_common import (ensure_geography, ensure_master_cities,
-                         ensure_reviews, infer_category)
+from sqlalchemy import select
+from seed_common import (ensure_avatar_presets, ensure_geography,
+                         ensure_master_cities, ensure_reviews, infer_category)
 
 
 class TestInferCategory:
@@ -47,6 +48,29 @@ class TestEnsureGeography:
 class TestEnsureReviews:
     async def test_skips_without_appointments(self, session):
         assert await ensure_reviews(session) == 0
+
+
+class TestEnsureAvatarPresets:
+    async def test_replaces_pravatar_only(self, session):
+        from app.models.master_profile import MasterProfile
+        from app.models.user import User, UserRole
+
+        u = User(name="P", email="p@example.com", phone="+79990003333",
+                 role=UserRole.MASTER)
+        session.add(u)
+        await session.flush()
+        session.add_all([
+            MasterProfile(user_id=u.id,
+                          avatar_url="https://i.pravatar.cc/150?img=5"),
+        ])
+        await session.commit()
+        assert await ensure_avatar_presets(session) == 1
+        mp = (await session.execute(
+            select(MasterProfile)
+        )).scalar_one()
+        assert mp.avatar_url is None
+        assert mp.avatar_preset in seed_common.AVATAR_PRESETS
+        assert await ensure_avatar_presets(session) == 0
 
 
 class TestEnsureMasterCities:

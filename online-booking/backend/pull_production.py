@@ -132,25 +132,45 @@ class ProdClient:
 
 
 async def upsert_country(session: AsyncSession, row: dict, counts: dict) -> None:
-    obj = await session.get(Country, row["id"])
+    """Match by natural key (code): local geo ids differ from prod ones.
+
+    Matching by prod id corrupts local rows (UNIQUE code violation) —
+    pulled users keep city_id=None anyway, geo is reference data only.
+    """
+    obj = (await session.execute(
+        select(Country).where(Country.code == row["code"])
+    )).scalar_one_or_none()
     if obj is None:
         session.add(Country(
-            id=row["id"], code=row["code"], name_ru=row["name_ru"],
+            code=row["code"], name_ru=row["name_ru"],
             name_en=row.get("name_en"), phone_prefix=row.get("phone_prefix", ""),
             is_active=row.get("is_active", True),
         ))
         counts["created"] += 1
     else:
-        obj.code, obj.name_ru = row["code"], row["name_ru"]
+        obj.name_ru = row["name_ru"]
         obj.name_en = row.get("name_en", obj.name_en)
         counts["updated"] += 1
 
 
-async def upsert_city(session: AsyncSession, row: dict, counts: dict) -> None:
-    obj = await session.get(City, row["id"])
+async def upsert_city(session: AsyncSession, row: dict, counts: dict,
+                      country_code: str | None = None) -> None:
+    obj = (await session.execute(
+        select(City).where(City.name_ru == row["name_ru"])
+    )).scalars().first()
     if obj is None:
+        country = None
+        if country_code:
+            country = (await session.execute(
+                select(Country).where(Country.code == country_code)
+            )).scalar_one_or_none()
+        if country is None:
+            counts.setdefault("skipped_no_country", 0)
+            counts["skipped_no_country"] += 1
+            return
         session.add(City(
-            id=row["id"], country_id=row["country_id"], name_ru=row["name_ru"],
+            country_id=country.id,
+            name_ru=row["name_ru"],
             name_en=row.get("name_en"), slug=row.get("slug") or row["name_ru"],
             is_active=row.get("is_active", True),
         ))
@@ -206,6 +226,15 @@ async def upsert_master(session: AsyncSession, row: dict, dev_password_hash: str
 
     profile = await session.get(MasterProfile, row["id"])
     if profile is None:
+        dup = await session.execute(
+            select(MasterProfile.id).where(
+                MasterProfile.user_id == user.id)
+        )
+        if dup.scalar_one_or_none() is not None:
+            print(f"  SKIP master profile id={row['id']}: local user already "
+                  f"has another profile")
+            counts["skipped"] += 1
+            return
         session.add(MasterProfile(
             id=row["id"], user_id=user.id,
             description=row.get("description"),
@@ -357,8 +386,11 @@ async def run(api: str, email: str, password: str, db_path: str,
             c = {"created": 0, "updated": 0}
             for row in fetched["countries"]:
                 await upsert_country(session, row, c)
+            prod_ccode = {cc.get("id"): cc.get("code")
+                          for cc in fetched["countries"]}
             for row in fetched["cities"]:
-                await upsert_city(session, row, c)
+                await upsert_city(session, row, c,
+                                  prod_ccode.get(row.get("country_id")))
             summary["geo"] = c
         if "masters" in entities:
             c = {"created": 0, "updated": 0, "users_created": 0,
@@ -436,6 +468,14 @@ def main() -> None:
     ap.add_argument("--quiet", action="store_true", help="summary only (for scheduler)")
     ap.add_argument("--keep-backups", type=int, default=5,
                     help="local .db backups to keep (default 5)")
+    ap.add_argument("--retries", type=int, default=0,
+                    help="retry failed syncs this many times (backoff x2)")
+    ap.add_argument("--retry-wait", type=int, default=60,
+                    help="first retry delay, seconds (doubles each attempt)")
+    ap.add_argument("--loop", action="store_true",
+                    help="run forever every --interval seconds (scheduler daemon)")
+    ap.add_argument("--interval", type=int, default=10800,
+                    help="loop period, seconds (default 10800 = 3h)")
     args = ap.parse_args()
 
     entities = [e.strip() for e in args.entities.split(",") if e.strip()]
@@ -458,12 +498,51 @@ def main() -> None:
                 return
         backup_db(args.db, keep=args.keep_backups)
 
-    summary = asyncio.run(run(args.api, email, password, args.db, entities,
-                              args.dry_run, dev_password, quiet=args.quiet))
+    summary = _sync_with_retries(args, email, password, dev_password,
+                                   entities)
+    if summary is None:
+        raise SystemExit(1)
+    if args.loop:
+        import time as _time
+        while True:
+            _time.sleep(args.interval)
+            if not args.dry_run:
+                backup_db(args.db, keep=args.keep_backups)
+            summary = _sync_with_retries(args, email, password,
+                                         dev_password, entities)
+            # Loop never exits nonzero: a dead side just waits for the next
+            # round (logged each time).
     print("Summary:")
     for entity, counts in summary.items():
         if isinstance(counts, dict):
             print(f"  {entity}: " + ", ".join(f"{k}={v}" for k, v in counts.items()))
+
+
+def _sync_with_retries(args, email, password, dev_password, entities):
+    """One sync with backoff retries. Returns summary or None (all failed)."""
+    import time as _time
+    import traceback
+
+    attempt = 0
+    wait = max(1, args.retry_wait)
+    while True:
+        try:
+            return asyncio.run(run(args.api, email, password, args.db,
+                                   entities, args.dry_run, dev_password,
+                                   quiet=args.quiet))
+        except KeyboardInterrupt:
+            raise
+        except Exception as e:
+            attempt += 1
+            print(f"Sync attempt {attempt} failed: {type(e).__name__}: {e}")
+            if not args.quiet:
+                traceback.print_exc()
+            if attempt > args.retries:
+                print(f"Giving up after {attempt} attempt(s).")
+                return None
+            print(f"Retrying in {wait}s…")
+            _time.sleep(wait)
+            wait *= 2
 
 
 if __name__ == "__main__":

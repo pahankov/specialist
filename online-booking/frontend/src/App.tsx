@@ -19,6 +19,7 @@ import ProfilePage from './pages/admin/ProfilePage';
 import CabinetPage from './pages/cabinet/CabinetPage';
 import CabinetBookPage from './pages/cabinet/CabinetBookPage';
 import ClientProfilePage from './pages/cabinet/ClientProfilePage';
+import BecomeMasterPage from './pages/cabinet/BecomeMasterPage';
 import ClientLayout from './pages/cabinet/ClientLayout';
 import ErrorBoundary from './components/ErrorBoundary';
 import { getCookie, decodeJwtPayload, getUserRole } from './utils/cookies';
@@ -112,6 +113,7 @@ function App() {
             <Route index element={<CabinetPage />} />
             <Route path="book" element={<CabinetBookPage />} />
             <Route path="profile" element={<ClientProfilePage />} />
+            <Route path="become-master" element={<BecomeMasterPage />} />
           </Route>
 
           {/* Logins happen via modal on home */}

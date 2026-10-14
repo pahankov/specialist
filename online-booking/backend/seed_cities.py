@@ -21,7 +21,8 @@ from app.database import Base, engine
 
 # ─── Data ─────────────────────────────────────────────────────────────
 
-from seed_common import COUNTRIES, ensure_geography, ensure_master_cities
+from seed_common import (COUNTRIES, ensure_avatar_presets,
+                         ensure_geography, ensure_master_cities)
 
 async def seed():
     async with engine.begin() as conn:
@@ -31,6 +32,7 @@ async def seed():
     async with AsyncSession(engine) as session:
         new_c, new_t = await ensure_geography(session)
         await ensure_master_cities(session)
+        await ensure_avatar_presets(session)
 
     print(f"  Seeded {len(COUNTRIES)} countries ({new_c} new) and {new_t} new cities (idempotent top-up)")
 

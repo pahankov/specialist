@@ -127,6 +127,18 @@ async def get_current_master(
             detail="Master profile not found"
         )
 
+    # Unverified applicants, deactivated and suspended masters stay out
+    # of the panel (client cabinet remains available — dual-role).
+    if (user.role == UserRole.MASTER and user.master_profile is not None
+            and (user.master_profile.is_active is False
+                 or user.master_profile.status != "active")):
+        logger.warning("Inactive master panel access denied: user_id=%s",
+                       user.id)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Профиль мастера неактивен"
+        )
+
     if user.master_profile is not None:
         logger.info("Master authenticated: id=%s, profile_id=%s", user.id, user.master_profile.id)
     else:

@@ -76,47 +76,73 @@ class TestBecomeMaster:
         assert r.status_code == 201, r.text
         return r.json()["access_token"]
 
-    async def test_upgrade_flow(self, client, session):
+    async def test_application_flow(self, client, session):
         from sqlalchemy import select
         from app.models.user import User, UserRole
         from app.models.master_profile import MasterProfile
 
         token = await self._register_client(client)
         r = await client.post("/api/v1/auth/become-master",
-                              headers=_auth(token))
+                              headers=_auth(token),
+                              json={"cabinet_address": "ул. Тестовая, 1"})
         assert r.status_code == 200, r.text
-        assert "access_token" in r.json()
 
+        # Still a client: no panel, invisible publicly.
         user = (await session.execute(
             select(User).where(User.email == "soon_master@example.com")
         )).scalar_one()
-        assert user.role == UserRole.MASTER
+        assert user.role == UserRole.CLIENT
         mp = (await session.execute(
             select(MasterProfile).where(MasterProfile.user_id == user.id)
-        )).scalar_one_or_none()
-        assert mp is not None
+        )).scalar_one()
+        assert mp.is_active is False and mp.status == "inactive"
+        assert mp.cabinet_address == "ул. Тестовая, 1"
 
-        # New master token opens the master panel…
-        new_token = r.json()["access_token"]
-        r = await client.get("/api/v1/admin/profile",
-                             headers=_auth(new_token))
-        assert r.status_code == 200, r.text
-        # …and still the client cabinet (dual-role).
-        r = await client.get("/api/v1/client/me", headers=_auth(new_token))
-        assert r.status_code == 200, r.text
+        pub = await client.get("/api/v1/masters/")
+        assert all(m["user_id"] != user.id for m in pub.json())
 
-    async def test_double_upgrade_rejected(self, client):
+        panel = await client.get("/api/v1/admin/profile",
+                                 headers=_auth(token))
+        assert panel.status_code == 401
+
+    async def test_double_apply_rejected(self, client):
         token = await self._register_client(client)
         assert (await client.post("/api/v1/auth/become-master",
-                                  headers=_auth(token))).status_code == 200
-        # Same (client-role) token now resolves to a MASTER user in DB.
+                                  headers=_auth(token),
+                                  json={})).status_code == 200
         r = await client.post("/api/v1/auth/become-master",
-                              headers=_auth(token))
+                              headers=_auth(token), json={})
         assert r.status_code == 400, r.text
 
+    async def test_admin_activation_opens_panel(
+        self, client, session, super_admin_headers,
+    ):
+        from sqlalchemy import select
+        from app.models.user import User, UserRole
+        from app.models.master_profile import MasterProfile
+
+        token = await self._register_client(client)
+        await client.post("/api/v1/auth/become-master",
+                          headers=_auth(token), json={})
+        user = (await session.execute(
+            select(User).where(User.email == "soon_master@example.com")
+        )).scalar_one()
+        mp = (await session.execute(
+            select(MasterProfile).where(MasterProfile.user_id == user.id)
+        )).scalar_one()
+
+        r = await client.post(f"/api/v1/admin/masters/{mp.id}/toggle-active",
+                              headers=super_admin_headers)
+        assert r.status_code == 200, r.text
+
+        await session.refresh(user)
+        assert user.role == UserRole.MASTER
+        pub = await client.get("/api/v1/masters/")
+        assert any(m["user_id"] == user.id for m in pub.json())
+
     async def test_unauthorized_rejected(self, client):
-        assert (await client.post("/api/v1/auth/become-master")).status_code in (
-            401, 403)
+        assert (await client.post("/api/v1/auth/become-master",
+                                  json={})).status_code in (401, 403)
 
 
 class TestInboxScoping:

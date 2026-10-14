@@ -55,6 +55,10 @@ MASTER_TELEGRAM = [
     "@vladimir_master", "@alexey_stylist", "@pavel_nail", "@victor_master",
 ]
 
+# Neutral built-in avatars (mirror of backend AVATAR_PRESETS) — no external
+# faces: pravatar gave random strangers (a bearded man for Ольга и т.п.).
+AVATAR_PRESETS = ["🐱", "🐶", "🐥", "🦅", "🦊", "🐼", "🐸", "🦁"]
+
 CLIENT_FIRST_NAMES = [
     "Анна", "Мария", "Елена", "Ольга", "Наталья", "Ирина", "Татьяна", "Екатерина",
     "Светлана", "Юлия", "Людмила", "Вера", "Надежда", "Лариса", "Галина", "Тамара",
@@ -161,7 +165,8 @@ async def create_seed_data():
             mp = MasterProfile(
                 user_id=user.id,
                 description=random.choice(MASTER_DESCRIPTIONS),
-                avatar_url=f"https://i.pravatar.cc/150?img={i+10}",
+                avatar_url=None,
+                avatar_preset=AVATAR_PRESETS[i % len(AVATAR_PRESETS)],
                 telegram_username=MASTER_TELEGRAM[i],
                 experience_years=random.randint(1, 15),
                 status="active" if random.random() > 0.1 else "inactive",

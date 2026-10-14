@@ -73,14 +73,20 @@ function writeStored(key: string, value: object) {
 
 /** Canvas text measurement for header fallback (jsdom-safe). */
 function measureText(text: string): number {
-  try {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return text.length * 8;
-    return ctx.measureText(text).width;
-  } catch {
-    return text.length * 8;
+  // jsdom has no canvas: its "not implemented" error pollutes test output,
+  // so estimate by length there (auto-fit measures real DOM in browsers).
+  const isJsdom =
+    typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent ?? '');
+  if (!isJsdom) {
+    try {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (ctx) return ctx.measureText(text).width;
+    } catch {
+      /* fall through to estimate */
+    }
   }
+  return text.length * 8;
 }
 
 export default function DataTable<T>({

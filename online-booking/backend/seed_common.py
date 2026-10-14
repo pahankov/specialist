@@ -218,8 +218,6 @@ async def ensure_master_cities(session: AsyncSession) -> int:
     keeps prior assignments. Masters without a city never match the
     booking wizard (matching key is users.city_id).
     """
-    import random
-
     city_ids = (await session.execute(
         select(City.id).where(City.name_ru.in_(
             ["Москва", "Санкт-Петербург", "Краснодар"]))
@@ -236,6 +234,30 @@ async def ensure_master_cities(session: AsyncSession) -> int:
         u.city_id = random.choice(city_ids)
     await session.commit()
     print(f"  Master cities assigned: {len(rows)}")
+    return len(rows)
+
+
+AVATAR_PRESETS = ["🐱", "🐶", "🐥", "🦅", "🦊", "🐼", "🐸", "🦁"]
+
+
+async def ensure_avatar_presets(session: AsyncSession) -> int:
+    """Replace external placeholder faces with neutral emoji presets.
+
+    Old seeds used pravatar.cc (random strangers, incl. mismatched gender).
+    Only rows whose avatar_url points at pravatar are touched — real user
+    uploads are never modified. Idempotent.
+    """
+    from app.models.master_profile import MasterProfile
+
+    rows = (await session.execute(
+        select(MasterProfile).where(
+            MasterProfile.avatar_url.like("%pravatar%"))
+    )).scalars().all()
+    for mp in rows:
+        mp.avatar_url = None
+        mp.avatar_preset = AVATAR_PRESETS[mp.id % len(AVATAR_PRESETS)]
+    await session.commit()
+    print(f"  Avatar presets assigned: {len(rows)}")
     return len(rows)
 
 
