@@ -91,14 +91,19 @@ Write-Ok "Backup done"
 # --- Sync production DB ---
 # Pulls prod masters/clients/schedule into local DB (creds from backend/.env).
 # Best-effort: never blocks startup (offline/prod down => warning only).
+# Runs with backend/ as CWD: app settings read .env relative to it.
 Write-Step 4 "Syncing production DB"
 $PyExe = Join-Path $BackendDir "venv\Scripts\python.exe"
 if (Test-Path $PyExe) {
     try {
-        & $PyExe (Join-Path $BackendDir "pull_production.py") --yes --quiet --db (Join-Path $BackendDir "online_booking.db")
-        if ($LASTEXITCODE -eq 0) { Write-Ok "Synced with production" }
-        else { Write-Warn "Sync failed (exit $LASTEXITCODE), continuing with local DB" }
+        Push-Location $BackendDir
+        & $PyExe "pull_production.py" --yes --quiet --db "online_booking.db"
+        $SyncExit = $LASTEXITCODE
+        Pop-Location
+        if ($SyncExit -eq 0) { Write-Ok "Synced with production" }
+        else { Write-Warn "Sync failed (exit $SyncExit), continuing with local DB" }
     } catch {
+        try { Pop-Location } catch {}
         Write-Warn "Sync failed, continuing with local DB"
     }
 } else {
@@ -132,11 +137,12 @@ if (Test-Path $PyExe) {
     try {
         Push-Location $BackendDir
         & $PyExe -m alembic upgrade head 2>$null
+        $AlembicExit = $LASTEXITCODE
         Pop-Location
-        if ($LASTEXITCODE -eq 0) { Write-Ok "DB migrated to head" }
+        if ($AlembicExit -eq 0) { Write-Ok "DB migrated to head" }
         else { Write-Warn "alembic upgrade failed, backend may 500" }
     } catch {
-        Pop-Location
+        try { Pop-Location } catch {}
         Write-Warn "alembic upgrade failed, backend may 500"
     }
 }

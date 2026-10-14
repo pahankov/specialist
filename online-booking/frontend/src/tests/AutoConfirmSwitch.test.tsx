@@ -22,10 +22,10 @@ describe('AutoConfirmSwitch', () => {
     mocked.updateProfile.mockResolvedValue({ data: {} } as never);
 
     render(<AutoConfirmSwitch />);
-    const box = (await screen.findByRole('checkbox')) as HTMLInputElement;
-    expect(box.checked).toBe(false);
+    const btn = await screen.findByRole('button', { name: /автоподтверждение/i });
+    expect(btn.textContent).toMatch(/выкл/i);
 
-    fireEvent.click(box);
+    fireEvent.click(btn);
     await waitFor(() => {
       expect(mocked.updateProfile).toHaveBeenCalledWith({ auto_confirm: true });
     });

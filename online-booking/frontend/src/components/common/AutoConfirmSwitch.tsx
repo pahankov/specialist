@@ -47,18 +47,52 @@ export default function AutoConfirmSwitch() {
   };
 
   return (
-    <label
+    <button
+      type="button"
+      onClick={flip}
+      disabled={saving}
+      title="Новые заявки из кабинета и с сайта сразу станут подтверждёнными"
       style={{
         display: 'inline-flex',
         alignItems: 'center',
         gap: 8,
-        fontSize: 13,
-        cursor: 'pointer',
+        padding: '8px 16px',
+        borderRadius: 999,
+        border: `2px solid ${value ? '#667eea' : '#e0e0e0'}`,
+        background: value ? '#667eea' : '#fff',
+        color: value ? '#fff' : '#555',
+        fontSize: 14,
+        fontWeight: 600,
+        cursor: saving ? 'wait' : 'pointer',
+        opacity: saving ? 0.7 : 1,
       }}
-      title="Новые заявки из кабинета и с сайта сразу станут подтверждёнными"
     >
-      <input type="checkbox" checked={value} disabled={saving} onChange={flip} />⚡
-      Автоподтверждение
-    </label>
+      <span
+        aria-hidden
+        style={{
+          display: 'inline-block',
+          width: 34,
+          height: 20,
+          borderRadius: 999,
+          background: value ? '#fff' : '#cfd4de',
+          position: 'relative',
+          flexShrink: 0,
+        }}
+      >
+        <span
+          style={{
+            position: 'absolute',
+            top: 2,
+            left: value ? 16 : 2,
+            width: 16,
+            height: 16,
+            borderRadius: '50%',
+            background: value ? '#667eea' : '#fff',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+          }}
+        />
+      </span>
+      ⚡ Автоподтверждение {value ? 'вкл' : 'выкл'}
+    </button>
   );
 }
