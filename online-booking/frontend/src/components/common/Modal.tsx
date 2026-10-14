@@ -13,6 +13,28 @@ interface ModalProps {
   wide?: boolean;
 }
 
+/**
+ * Ref-counted body scroll lock. Stacked modals (e.g. confirm-over-booking)
+ * each used to save/restore `body.overflow` on their own; closing two in one
+ * commit left the page permanently unscrollable. Now the first opener saves
+ * the value and only the last closer restores it.
+ */
+let scrollLocks = 0;
+let savedOverflow = '';
+
+function lockScroll() {
+  if (scrollLocks === 0) {
+    savedOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+  }
+  scrollLocks += 1;
+}
+
+function unlockScroll() {
+  scrollLocks = Math.max(0, scrollLocks - 1);
+  if (scrollLocks === 0) document.body.style.overflow = savedOverflow;
+}
+
 /** Single modal implementation: portal, Esc, overlay click, scroll lock, aria. */
 export default function Modal({
   open,
@@ -36,15 +58,14 @@ export default function Modal({
       if (e.key === 'Escape') onCloseRef.current();
     };
     document.addEventListener('keydown', onKey);
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    lockScroll();
     // Focus the dialog ONCE when it opens (never on re-renders, or typing
     // in form fields would lose focus after every keystroke).
     if (!wasOpen.current) boxRef.current?.focus();
     wasOpen.current = true;
     return () => {
       document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = prevOverflow;
+      unlockScroll();
     };
   }, [open]);
 

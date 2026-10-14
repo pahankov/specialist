@@ -29,30 +29,8 @@ function CabinetPage() {
   const [stats, setStats] = useState<ClientStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [cancellingId, setCancellingId] = useState<number | null>(null);
-  const [notes, setNotes] = useState<
-    {
-      id: number;
-      text: string;
-      sender_name?: string | null;
-      link?: string | null;
-      is_read: boolean;
-      created_at?: string | null;
-    }[]
-  >([]);
-  const [notesUnread, setNotesUnread] = useState(0);
   // City was already given at registration — show it, edit only on demand.
   const [changingCity, setChangingCity] = useState(false);
-
-  const fetchNotes = async () => {
-    try {
-      const { data } = await cabinetApi.notificationsInbox({ page: 1, page_size: 10 });
-      setNotes(data.items);
-      setNotesUnread(data.unread);
-    } catch (err) {
-      // Inbox is optional — cabinet works without it, but log for diagnosis.
-      console.warn('[Cabinet] inbox failed', err);
-    }
-  };
 
   const fetchData = async () => {
     try {
@@ -77,8 +55,6 @@ function CabinetPage() {
 
   useEffect(() => {
     fetchData();
-    fetchNotes();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleCityChange = async (city: CityOption | null) => {
@@ -196,60 +172,6 @@ function CabinetPage() {
             <span className="stat-mini-label">любимый мастер</span>
           </div>
         </div>
-      )}
-
-      {notes.length > 0 && (
-        <>
-          <h2 className="cabinet-section">
-            🔔 Уведомления{notesUnread > 0 ? ` (${notesUnread} новых)` : ''}
-          </h2>
-          <div className="cabinet-list">
-            {notes.map((n) => (
-              <div
-                key={n.id}
-                className="cabinet-card"
-                onClick={() => {
-                  if (n.link === 'appointments') navigate('/cabinet');
-                }}
-                style={n.link ? { cursor: 'pointer' } : undefined}
-                title={n.link === 'appointments' ? 'Открыть мои записи →' : undefined}
-              >
-                <div className="cabinet-card-main">
-                  <span style={{ whiteSpace: 'pre-wrap' }}>{n.text}</span>
-                  <span className="cabinet-card-date">
-                    {[
-                      n.sender_name ? `от ${n.sender_name}` : null,
-                      n.created_at ? new Date(n.created_at).toLocaleString('ru-RU') : null,
-                    ]
-                      .filter(Boolean)
-                      .join(' · ')}
-                  </span>
-                </div>
-                <div className="cabinet-card-side">
-                  {!n.is_read && (
-                    <button
-                      className="btn btn-sm btn-ghost"
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        try {
-                          await cabinetApi.readNotification(n.id);
-                          setNotes((prev) =>
-                            prev.map((x) => (x.id === n.id ? { ...x, is_read: true } : x)),
-                          );
-                          setNotesUnread((u) => Math.max(0, u - 1));
-                        } catch (err) {
-                          console.warn('[Cabinet] mark-read failed', n.id, err);
-                        }
-                      }}
-                    >
-                      ✓ Прочитано
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </>
       )}
 
       <h2 className="cabinet-section">Предстоящие</h2>

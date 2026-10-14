@@ -242,3 +242,88 @@ class TestClientInbox:
 
         u = await client.get("/api/v1/client/notifications/unread-count", headers=headers)
         assert u.json()["unread"] == 0
+
+
+class TestClientInboxIsolation:
+    """Cabinet bells: each client sees only her own booking bells."""
+
+    async def _master_headers(self, u):
+        from app.modules.auth.token import create_access_token
+        token = create_access_token({"sub": str(u.id), "role": "MASTER",
+                                     "name": u.name, "is_admin": False})
+        return {"Authorization": f"Bearer {token}"}
+
+    async def _client_headers(self, session, name, email, phone):
+        from app.models.user import User, UserRole
+        from app.utils.security import hash_password
+        from app.modules.auth.token import create_access_token
+
+        u = User(name=name, email=email,
+                 hashed_password=hash_password("SecurePass123!"),
+                 phone=phone, role=UserRole.CLIENT, is_active=True)
+        session.add(u)
+        await session.commit()
+        token = create_access_token({"sub": str(u.id), "role": "CLIENT",
+                                     "name": u.name, "is_admin": False})
+        return {"Authorization": f"Bearer {token}"}, u
+
+    async def test_confirm_bell_reaches_only_booking_client(self, client, session):
+        from datetime import datetime, timedelta
+        from sqlalchemy import select
+        from app.models.master_profile import MasterProfile
+        from app.models.service import Service
+
+        m = await _mk_user(session, "IsoMaster", "isomaster@example.com", "MASTER")
+        session.add(MasterProfile(user_id=m.id, status="active"))
+        await session.flush()
+        mp = (await session.execute(
+            select(MasterProfile).where(MasterProfile.user_id == m.id))).scalar_one()
+        s = Service(master_id=mp.id, name="IsoCut", duration_minutes=60,
+                    price=1000, is_active=True)
+        session.add(s)
+        await session.commit()
+
+        ha, _a = await self._client_headers(session, "IsoA", "isoa@example.com",
+                                            "+79990009001")
+        hb, _b = await self._client_headers(session, "IsoB", "isob@example.com",
+                                            "+79990009002")
+
+        day = (datetime.now() + timedelta(days=3)).replace(
+            hour=10, minute=0, second=0, microsecond=0).isoformat()
+        r = await client.post(
+            "/api/v1/client/appointments",
+            json={"master_id": mp.id, "service_id": s.id, "appointment_date": day},
+            headers=ha,
+        )
+        assert r.status_code == 201, r.text
+        appt_id = r.json()["id"]
+
+        c = await client.patch(f"/api/v1/admin/appointments/{appt_id}/confirm",
+                               headers=await self._master_headers(m))
+        assert c.status_code == 200, c.text
+
+        ia = await client.get("/api/v1/client/notifications/inbox", headers=ha)
+        assert ia.status_code == 200, ia.text
+        texts_a = [i["text"] for i in ia.json()["items"]]
+        assert any("IsoMaster" in t and "IsoCut" in t for t in texts_a), texts_a
+
+        ib = await client.get("/api/v1/client/notifications/inbox", headers=hb)
+        assert ib.status_code == 200, ib.text
+        assert ib.json()["items"] == []
+        assert ib.json()["unread"] == 0
+
+    async def test_client_sender_bells_hidden_in_cabinet(self, client, session):
+        from app.models.notification import Notification
+
+        hx, x = await self._client_headers(session, "IsoX", "isox@example.com",
+                                           "+79990009003")
+        other = await _mk_user(session, "IsoClient", "isoclient@example.com", "CLIENT")
+        await session.commit()
+        session.add(Notification(sender_id=other.id, recipient_id=x.id,
+                                 text="client chatter", audience="booking"))
+        await session.commit()
+
+        r = await client.get("/api/v1/client/notifications/inbox", headers=hx)
+        assert r.status_code == 200, r.text
+        assert all(i["text"] != "client chatter" for i in r.json()["items"])
+        assert r.json()["unread"] == 0

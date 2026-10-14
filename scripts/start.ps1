@@ -2,6 +2,11 @@
 # For GigaCode worktrees use run_backend.bat / run_frontend.bat (they auto-detect worktree).
 # NOTE: this file is pure ASCII on purpose - powershell.exe 5.1 reads
 # BOM-less scripts as ANSI, and any multibyte char breaks parsing.
+#
+# Prod sync is OFF by default: it hangs startup for minutes when the
+# server is down (SSL timeouts + retries). Pass -Sync to pull prod data:
+#   start.bat sync   (or powershell -File start.ps1 -Sync)
+param([switch]$Sync)
 $ErrorActionPreference = "Stop"
 # Script lives in scripts/ - repo root is one level up.
 $ProjectDir = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
@@ -88,11 +93,14 @@ if (Test-Path $DbFile) {
 }
 Write-Ok "Backup done"
 
-# --- Sync production DB ---
+# --- Sync production DB (opt-in via -Sync) ---
 # Pulls prod masters/clients/schedule into local DB (creds from backend/.env).
 # Best-effort: never blocks startup (offline/prod down => warning only).
 # Runs with backend/ as CWD: app settings read .env relative to it.
 Write-Step 4 "Syncing production DB"
+if (-not $Sync) {
+    Write-Skip "disabled by default, use 'start.bat sync' to pull prod"
+} else {
 $PyExe = Join-Path $BackendDir "venv\Scripts\python.exe"
 if (Test-Path $PyExe) {
     try {
@@ -109,6 +117,7 @@ if (Test-Path $PyExe) {
 } else {
     Write-Skip "No venv python"
 }
+} # end -Sync opt-in
 
 # --- Start MAX poller (dev bridge) ---
 # Forwards MAX bot events to the local backend (localhost is unreachable

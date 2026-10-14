@@ -4,6 +4,7 @@ import './ClientLayout.css';
 const CLIENT_NAV = [
   { path: '/cabinet', label: '📅 Мои записи' },
   { path: '/cabinet/book', label: '💅 Записаться' },
+  { path: '/cabinet/notifications', label: '🔔 Уведомления' },
   { path: '/cabinet/profile', label: '👤 Профиль' },
 ];
 

@@ -78,6 +78,34 @@ describe('Modal', () => {
     expect(document.activeElement).toBe(input);
     expect(input.value).toBe('Да');
   });
+
+  it('restores scroll when stacked modals close in one commit', () => {
+    function Harness() {
+      const [a, setA] = useState(true);
+      const [b, setB] = useState(true);
+      return (
+        <>
+          <Modal open={a} onClose={() => setA(false)} title="A">
+            <span>first</span>
+          </Modal>
+          <Modal open={b} onClose={() => setB(false)} title="B">
+            <button
+              onClick={() => {
+                setA(false);
+                setB(false);
+              }}
+            >
+              close both
+            </button>
+          </Modal>
+        </>
+      );
+    }
+    render(<Harness />);
+    expect(document.body.style.overflow).toBe('hidden');
+    fireEvent.click(screen.getByText('close both'));
+    expect(document.body.style.overflow).toBe('');
+  });
 });
 
 describe('ConfirmDialog', () => {

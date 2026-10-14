@@ -253,9 +253,16 @@
   border-left-color: #e94560;
 }
 
-/* Drag-to-reorder: drop target highlight + grab cursor. */
+/* Drag-to-reorder: dashed frame shows items can be pulled. */
 .nav-item[draggable='true'] {
   cursor: grab;
+  outline: 1px dashed rgba(255, 255, 255, 0.3);
+  outline-offset: -4px;
+  border-radius: 8px;
+}
+
+.nav-item[draggable='true']:hover {
+  outline-color: rgba(255, 255, 255, 0.65);
 }
 
 .nav-item[draggable='true']:active {

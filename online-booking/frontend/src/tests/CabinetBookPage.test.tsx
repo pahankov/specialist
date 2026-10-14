@@ -197,4 +197,45 @@ describe('CabinetBookPage', () => {
     });
     expect(await screen.findByText('cabinet home')).toBeInTheDocument();
   });
+
+  it('toasts "confirmed" at once for auto-confirm masters', async () => {
+    const { toast } = await import('sonner');
+    const future = new Date();
+    future.setDate(future.getDate() + 5);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const dateStr = `${future.getFullYear()}-${pad(future.getMonth() + 1)}-${pad(future.getDate())}`;
+    const monthStr = dateStr.slice(0, 7);
+    getBookSchedule.mockResolvedValue({
+      data: {
+        master_id: 1,
+        window: { start_hour: 9, end_hour: 12 },
+        working_hours: [{ date: dateStr, start: '09:00', end: '12:00' }],
+        busy: [],
+      },
+    });
+    bookAppointment.mockResolvedValue({ data: { id: 103, status: 'confirmed' } });
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getAllByText(/Елена/).length).toBeGreaterThan(0);
+    });
+    fireEvent.click(screen.getByText(/Елена/, { selector: 'strong' }));
+    if (monthStr !== new Date().toISOString().slice(0, 7)) {
+      fireEvent.click(screen.getByText('→'));
+    }
+    fireEvent.click(
+      await screen.findByText(String(future.getDate()), {
+        selector: '.calendar-day-number',
+      }),
+    );
+    const bookButtons = await screen.findAllByText('+ Записаться');
+    fireEvent.click(bookButtons[0]);
+    expect(await screen.findByText(/Подтвердите запись/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Записаться', { selector: '.modal-actions .btn-primary' }));
+    await waitFor(() => {
+      expect(bookAppointment).toHaveBeenCalled();
+    });
+    expect(toast.success).toHaveBeenCalledWith(expect.stringMatching(/подтверждена/));
+    expect(toast.success).not.toHaveBeenCalledWith(expect.stringMatching(/подтвердит/));
+  });
 });

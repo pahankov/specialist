@@ -300,13 +300,18 @@ function CabinetBookPage() {
     const d = String(selectedDate.getDate()).padStart(2, '0');
     setBookingLoading(true);
     try {
-      await cabinetApi.bookAppointment({
+      const { data } = await cabinetApi.bookAppointment({
         master_id: selectedMaster.id,
         ...(modalBundle ? { bundle_id: modalBundle.id } : { service_id: Number(modalServiceId) }),
         appointment_date: `${y}-${m}-${d}T${String(slotHour).padStart(2, '0')}:00:00`,
         notes: notes.trim() || undefined,
       });
-      toast.success('Заявка отправлена! Мастер подтвердит запись 🔔');
+      // The server decides: auto-confirm masters return confirmed at once.
+      if (data.status === 'confirmed') {
+        toast.success('Запись подтверждена ✅ Ждём вас!');
+      } else {
+        toast.success('Заявка отправлена! Мастер подтвердит запись 🔔');
+      }
       setSlotHour(null);
       setModalBundle(null);
       navigate('/cabinet');

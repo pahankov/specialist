@@ -61,7 +61,7 @@ function BaseLayout({
     ? `${SUPER_PREFIX}/notifications`
     : location.pathname.startsWith('/admin')
       ? '/admin/notifications'
-      : '/cabinet';
+      : '/cabinet/notifications';
 
   // Bell badge: panels hit the admin counter, cabinet the client one.
   // No token → skip quietly. After 3 straight failures the interval stops
@@ -249,7 +249,7 @@ function BaseLayout({
             <NotificationBell
               unread={unread}
               bellLink={bellLink}
-              scope={bellLink === '/cabinet' ? 'cabinet' : 'panel'}
+              scope={bellLink === '/cabinet/notifications' ? 'cabinet' : 'panel'}
               onRead={refreshUnread}
             />
           </div>

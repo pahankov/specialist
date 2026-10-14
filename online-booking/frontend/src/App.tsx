@@ -18,6 +18,7 @@ import NotificationsPage from './pages/admin/NotificationsPage';
 import ProfilePage from './pages/admin/ProfilePage';
 import CabinetPage from './pages/cabinet/CabinetPage';
 import CabinetBookPage from './pages/cabinet/CabinetBookPage';
+import CabinetNotificationsPage from './pages/cabinet/CabinetNotificationsPage';
 import ClientProfilePage from './pages/cabinet/ClientProfilePage';
 import BecomeMasterPage from './pages/cabinet/BecomeMasterPage';
 import ClientLayout from './pages/cabinet/ClientLayout';
@@ -112,6 +113,7 @@ function App() {
           >
             <Route index element={<CabinetPage />} />
             <Route path="book" element={<CabinetBookPage />} />
+            <Route path="notifications" element={<CabinetNotificationsPage />} />
             <Route path="profile" element={<ClientProfilePage />} />
             <Route path="become-master" element={<BecomeMasterPage />} />
           </Route>
