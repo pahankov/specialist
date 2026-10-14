@@ -146,6 +146,29 @@ class TestAvatarUpload:
         )
         assert r.status_code == 400
 
+    async def test_upload_downscales_big_photo(self, client, auth_headers):
+        from io import BytesIO
+        from PIL import Image
+        import os as _os
+
+        img = Image.new("RGB", (2000, 1500), (200, 50, 50))
+        buf = BytesIO()
+        img.save(buf, format="JPEG", quality=95)
+        r = await client.post(
+            "/api/v1/admin/profile/avatar",
+            files={"file": ("big.jpg", buf.getvalue(), "image/jpeg")},
+            headers=auth_headers,
+        )
+        assert r.status_code == 200, r.text
+        url = r.json()["avatar_url"]
+        path = _os.path.join("app", "static", "avatars",
+                             _os.path.basename(url))
+        try:
+            with Image.open(path) as saved:
+                assert max(saved.size) <= 1024, saved.size
+        finally:
+            _os.remove(path)
+
 
 class TestAvatarPreset:
     async def test_set_preset_clears_upload(self, client, auth_headers):

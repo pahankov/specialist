@@ -211,6 +211,34 @@ async def ensure_geography(session: AsyncSession) -> tuple:
     return new_countries, new_cities
 
 
+async def ensure_master_cities(session: AsyncSession) -> int:
+    """Backfill city for masters without one (random of the 3 launch cities).
+
+    Idempotent: only users.city_id IS NULL are touched, so every deploy
+    keeps prior assignments. Masters without a city never match the
+    booking wizard (matching key is users.city_id).
+    """
+    import random
+
+    city_ids = (await session.execute(
+        select(City.id).where(City.name_ru.in_(
+            ["Москва", "Санкт-Петербург", "Краснодар"]))
+    )).scalars().all()
+    if not city_ids:
+        print("  Master cities: no launch cities found, skipping.")
+        return 0
+    from app.models.user import User, UserRole
+    rows = (await session.execute(
+        select(User).where(User.role == UserRole.MASTER,
+                           User.city_id.is_(None))
+    )).scalars().all()
+    for u in rows:
+        u.city_id = random.choice(city_ids)
+    await session.commit()
+    print(f"  Master cities assigned: {len(rows)}")
+    return len(rows)
+
+
 async def ensure_reviews(session: AsyncSession, seed: int = 42) -> int:
     """Create reviews for completed appointments (idempotent). Returns count.
 

@@ -213,8 +213,13 @@ async def upload_avatar(
         raise HTTPException(status_code=400, detail="Пустой файл")
     if len(data) > MAX_AVATAR_BYTES:
         raise HTTPException(status_code=400, detail="Файл больше 5 МБ")
+    from app.utils.images import downscale_image
+    try:
+        data, ext = downscale_image(data, file.content_type)
+    except Exception:
+        logger.warning("Image downscale failed, storing as-is")
+        ext = EXT_BY_TYPE[file.content_type]
     os.makedirs(AVATAR_DIR, exist_ok=True)
-    ext = EXT_BY_TYPE[file.content_type]
     filename = f"user_{master.id}_{uuid.uuid4().hex[:8]}{ext}"
     with open(os.path.join(AVATAR_DIR, filename), "wb") as f:
         f.write(data)
