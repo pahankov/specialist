@@ -10,6 +10,7 @@ import {
   ConfirmDialog,
   MasterSelect,
   DataTable,
+  AutoConfirmSwitch,
   Pager,
   StatusBadge,
 } from '../../components/common';
@@ -726,6 +727,7 @@ function AppointmentsPage() {
           />
           Показать завершённые
         </label>
+        {!isSuperSection && <AutoConfirmSwitch />}
       </div>
 
       {loading ? (

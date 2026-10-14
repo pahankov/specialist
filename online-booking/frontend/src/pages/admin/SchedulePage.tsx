@@ -13,7 +13,7 @@ import type { Bundle } from '../../api/cabinet';
 import { Calendar } from '../../components/schedule/Calendar';
 import { TimeSlots } from '../../components/schedule/TimeSlots';
 import { BookingModal } from '../../components/schedule/BookingModal';
-import { ConfirmDialog, MasterSelect } from '../../components/common';
+import { ConfirmDialog, MasterSelect, AutoConfirmSwitch } from '../../components/common';
 import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError';
 import { getCookie, decodeJwtPayload } from '../../utils/cookies';
 import { MonthlyStatsComponent } from '../../components/schedule/MonthlyStats';
@@ -497,6 +497,11 @@ function SchedulePage() {
         <p style={{ margin: '4px 0 0', color: '#666', fontSize: 14 }}>
           Нажмите на день чтобы увидеть бронирования
         </p>
+        {!isSuperAdmin && (
+          <div style={{ marginTop: 8, display: 'flex', justifyContent: 'center' }}>
+            <AutoConfirmSwitch />
+          </div>
+        )}
       </div>
 
       {/* Master filter (superadmin only) */}

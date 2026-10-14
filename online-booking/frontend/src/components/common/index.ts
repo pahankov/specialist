@@ -8,6 +8,7 @@ export type { RecipientOption } from './RecipientPicker';
 export { default as CitySelect } from './CitySelect';
 export { default as PhoneInput } from './PhoneInput';
 export { default as DataTable } from './DataTable';
+export { default as AutoConfirmSwitch } from './AutoConfirmSwitch';
 export { default as RoleSwitch } from './RoleSwitch';
 export type { RoleChoice } from './RoleSwitch';
 export type { FitColumnDef, FitColumnMeta } from './DataTable';
