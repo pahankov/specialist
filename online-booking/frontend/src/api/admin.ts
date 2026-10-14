@@ -25,6 +25,7 @@ export const adminApi = {
       experience_years?: number | null;
       cabinet_address?: string | null;
       certificates?: { name: string; url?: string }[];
+      auto_confirm?: boolean | null;
     }>('/api/v1/admin/profile');
   },
   updateProfile(data: {
@@ -37,6 +38,7 @@ export const adminApi = {
     cabinet_address?: string | null;
     certificates?: { name: string; url?: string }[];
     avatar_preset?: string | null;
+    auto_confirm?: boolean | null;
   }) {
     return apiClient.patch('/api/v1/admin/profile', data);
   },

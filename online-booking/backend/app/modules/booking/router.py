@@ -58,11 +58,27 @@ async def create_appointment(
                        master.master_profile.id, appointment.master_id)
         raise HTTPException(status_code=403, detail="Not your master")
 
-    # Check or create client
+    # Check or create client. A dual-role master booking by own phone
+    # reuses their account (profile attached on the fly) instead of
+    # cloning a second user row for the same phone number.
+    from app.utils.phone import normalize_phone
+    try:
+        lookup_phone = normalize_phone(appointment.client_phone)
+    except ValueError:
+        lookup_phone = appointment.client_phone
     client_result = await db.execute(
-        select(ClientProfile).join(ClientProfile.user).where(User.phone == appointment.client_phone)
+        select(ClientProfile).join(ClientProfile.user).where(User.phone == lookup_phone)
     )
     client = client_result.scalar_one_or_none()
+    if client is None:
+        owner = (await db.execute(
+            select(User).where(User.phone == lookup_phone)
+        )).scalar_one_or_none()
+        if owner is not None:
+            client = ClientProfile(user_id=owner.id)
+            db.add(client)
+            await db.flush()
+            await db.refresh(client)
 
     if not client:
         logger.info("Создание нового клиента для записи: %s", appointment.client_phone)
@@ -268,7 +284,7 @@ async def public_booking(booking: PublicBookingCreate, db: AsyncSession = Depend
         service_id=booking.service_id,
         client_id=client.id,
         appointment_date=booking.appointment_date,
-        status="pending",
+        status="confirmed" if master_profile.auto_confirm else "pending",
         notes=client_note or None,
     )
 

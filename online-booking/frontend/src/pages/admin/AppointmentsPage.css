@@ -199,7 +199,8 @@
 }
 
 .modal-actions .btn {
-  min-width: 100px;
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .modal .btn-ghost {

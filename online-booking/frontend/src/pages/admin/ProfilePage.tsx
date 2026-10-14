@@ -42,6 +42,7 @@ function ProfilePage() {
   const [avatar, setAvatar] = useState<string | null>(null);
   const [preset, setPreset] = useState<string | null>(null);
   const [certs, setCerts] = useState<Cert[]>([]);
+  const [autoConfirm, setAutoConfirm] = useState(false);
   const [newCertName, setNewCertName] = useState('');
   const [newCertUrl, setNewCertUrl] = useState<string | undefined>(undefined);
   const [uploadingCert, setUploadingCert] = useState(false);
@@ -67,6 +68,7 @@ function ProfilePage() {
         setAvatar(data.avatar_url || null);
         setPreset(data.avatar_preset || null);
         setCerts(data.certificates || []);
+        setAutoConfirm(data.auto_confirm === true);
       } catch (err: unknown) {
         toast.error(getApiErrorMessage(err, 'Не удалось загрузить профиль'));
       } finally {
@@ -161,6 +163,7 @@ function ProfilePage() {
         cabinet_address: address.trim() || null,
         certificates: list,
         avatar_preset: preset,
+        auto_confirm: autoConfirm,
       });
       // Converge with the server (it echoes the saved profile).
       setCerts(data?.certificates || list);
@@ -411,6 +414,31 @@ function ProfilePage() {
             <button type="button" className="btn btn-secondary btn-sm" onClick={addCert}>
               + Добавить
             </button>
+          </div>
+        </div>
+
+        <div className="card" style={{ marginBottom: 16 }}>
+          <h3>⚡ Приём записей</h3>
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              fontSize: 14,
+              cursor: 'pointer',
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={autoConfirm}
+              onChange={(e) => setAutoConfirm(e.target.checked)}
+            />
+            Автоподтверждение записей
+          </label>
+          <div className="hint">
+            {autoConfirm
+              ? 'Новые заявки из кабинета и с сайта сразу станут подтверждёнными'
+              : 'Новые заявки приходят ожидающими — подтверждаете вы (не забудьте сохранить)'}
           </div>
         </div>
 

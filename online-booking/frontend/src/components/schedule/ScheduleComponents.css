@@ -557,6 +557,12 @@
   margin-top: 20px;
 }
 
+/* Action buttons share the width equally (no narrow/wide pairs). */
+.modal-actions .btn {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
 .btn {
   padding: 8px 16px;
   border-radius: 8px;

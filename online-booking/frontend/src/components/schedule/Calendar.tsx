@@ -42,8 +42,8 @@ export function Calendar({
 
   const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pressDateRef = useRef<Date | null>(null);
-  // Long-press also produces a click on release — swallow that click so the
-  // day toggles without opening its slots.
+  // Long-press also produces a click on release — swallow that click; the
+  // long-press itself both toggles the day AND selects it (navigates to it).
   const longPressFiredRef = useRef(false);
 
   const handlePointerDown = useCallback(
@@ -62,11 +62,12 @@ export function Calendar({
         if (pressDateRef.current) {
           longPressFiredRef.current = true;
           onToggleDay(pressDateRef.current);
+          onSelectDate(pressDateRef.current);
           pressDateRef.current = null;
         }
       }, LONG_PRESS_MS);
     },
-    [onToggleDay, interactive],
+    [onToggleDay, onSelectDate, interactive],
   );
 
   const handlePointerUp = useCallback(() => {
@@ -102,7 +103,7 @@ export function Calendar({
 
       <div className="calendar-hint">
         {interactive
-          ? '👆 Удерживайте день, чтобы включить/выключить рабочий день'
+          ? '👆 Удерживайте день: вкл/выкл рабочего дня + переход к нему'
           : '👆 Нажмите на день, чтобы увидеть свободные часы'}
       </div>
 

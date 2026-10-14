@@ -99,7 +99,7 @@ export function openBookingForm(
     clientId: null,
     serviceId: null,
     bundleId: null,
-    status: 'pending',
+    status: 'confirmed',
     notes: '',
   }));
 }
@@ -115,7 +115,7 @@ export function closeBookingForm(
     clientId: null,
     serviceId: null,
     bundleId: null,
-    status: 'pending',
+    status: 'confirmed',
     notes: '',
   }));
   setBookingClients([]);

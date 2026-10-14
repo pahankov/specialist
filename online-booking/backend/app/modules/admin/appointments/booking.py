@@ -115,7 +115,8 @@ async def book_appointment(
         select(User).options(joinedload(User.client_profile)).where(User.id == data.client_id)
     )
     user = client_result.scalar_one_or_none()
-    if not user or user.role.value != "CLIENT":
+    # Dual-role: masters book as clients too; only ADMINs have no client side.
+    if not user or user.role.value not in ("CLIENT", "MASTER"):
         raise HTTPException(status_code=404, detail="Клиент не найден")
     if user.client_profile is None:
         user.client_profile = ClientProfile(user_id=user.id)

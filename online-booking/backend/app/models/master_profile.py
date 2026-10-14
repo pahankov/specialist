@@ -26,6 +26,9 @@ class MasterProfile(Base):
     experience_years = Column(Integer, nullable=True)
     status = Column(String(20), default="active", nullable=False)  # 'active', 'inactive', 'suspended'
     is_active = Column(Boolean, default=True)  # soft-delete flag
+    # Client-initiated bookings (cabinet wizard, public form) land as
+    # "confirmed" instead of "pending". Master toggles it in profile.
+    auto_confirm = Column(Boolean, default=False, nullable=False)
     # Billing foundation (no charges yet): every master sits on a tariff.
     # Default 'trial' with trial_ends_at assigned at creation (+180 days).
     tariff = Column(String(20), default="trial", nullable=False)

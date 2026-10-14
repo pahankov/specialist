@@ -392,7 +392,8 @@ async def book_my_appointment(
         master_id=mp.id, service_id=item["service_id"], client_id=profile.id,
         bundle_id=item["bundle_id"], bundle_name=item["bundle_name"],
         duration_minutes=item["duration_minutes"], price=item["price"],
-        appointment_date=appt_dt, status="pending",
+        appointment_date=appt_dt,
+        status="confirmed" if mp.auto_confirm else "pending",
         notes=(data.notes or "").strip() or None,
     )
     db.add(appointment)

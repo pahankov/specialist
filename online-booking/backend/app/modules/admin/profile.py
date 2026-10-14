@@ -91,6 +91,7 @@ async def get_my_profile(
                 "experience_years": mp.experience_years,
                 "cabinet_address": mp.cabinet_address,
                 "certificates": mp.certificates or [],
+                "auto_confirm": bool(mp.auto_confirm),
             })
     return out
 
@@ -104,6 +105,8 @@ class ProfileUpdate(BaseModel):
     experience_years: Optional[int] = Field(default=None, ge=0, le=80)
     cabinet_address: Optional[str] = Field(default=None, max_length=500)
     certificates: Optional[List[Certificate]] = Field(default=None, max_length=20)
+    # Auto-confirm client-initiated bookings (switch in profile).
+    auto_confirm: Optional[bool] = Field(default=None)
     # Built-in avatar emoji (validated against AVATAR_PRESETS). Explicit null
     # clears it; absent key = no change (checked via model_fields_set).
     avatar_preset: Optional[str] = Field(default=None, max_length=12)
@@ -158,6 +161,8 @@ async def update_my_profile(
             mp.cabinet_address = data.cabinet_address.strip() or None
         if data.certificates is not None:
             mp.certificates = [c.model_dump(exclude_none=True) for c in data.certificates]
+        if data.auto_confirm is not None:
+            mp.auto_confirm = bool(data.auto_confirm)
         if "avatar_preset" in data.model_fields_set:
             if data.avatar_preset is not None and data.avatar_preset not in AVATAR_PRESETS:
                 raise HTTPException(status_code=400, detail="Неизвестный стандартный аватар")

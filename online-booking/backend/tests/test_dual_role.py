@@ -145,6 +145,74 @@ class TestBecomeMaster:
                                   json={})).status_code in (401, 403)
 
 
+class TestAutoConfirm:
+    async def test_cabinet_booking_confirmed_when_enabled(
+        self, client, session,
+    ):
+        from sqlalchemy import select
+        from app.models.master_profile import MasterProfile
+        from app.models.service import Service
+        from app.models.user import User, UserRole
+        from app.modules.auth.token import create_access_token
+        from app.utils.security import hash_password
+        from datetime import datetime, timedelta, timezone
+
+        mu = User(name="AC Master", email="ac_master@example.com",
+                  phone="+7 (999) 111-22-33",
+                  hashed_password=hash_password("Password1!"),
+                  role=UserRole.MASTER, is_active=True)
+        session.add(mu)
+        await session.flush()
+        session.add(MasterProfile(user_id=mu.id, auto_confirm=True))
+        await session.flush()
+        mp_id = (await session.execute(
+            select(MasterProfile.id).where(MasterProfile.user_id == mu.id)
+        )).scalar_one()
+        svc = Service(master_id=mp_id, name="Cut",
+                      duration_minutes=60, price=500)
+        session.add(svc)
+        cu = User(name="AC Client", email="ac_client@example.com",
+                  phone="+7 (999) 111-44-55",
+                  hashed_password=hash_password("Password1!"),
+                  role=UserRole.CLIENT, is_active=True)
+        session.add(cu)
+        await session.commit()
+        token = create_access_token({"sub": str(cu.id), "role": "CLIENT",
+                                     "name": cu.name, "is_admin": False})
+        dt = (datetime.now(timezone.utc) + timedelta(days=5)).isoformat()
+        r = await client.post(
+            "/api/v1/client/appointments",
+            headers={"Authorization": f"Bearer {token}"}, json={
+                "master_id": mp_id, "service_id": svc.id,
+                "appointment_date": dt,
+            })
+        assert r.status_code == 201, r.text
+        assert r.json()["status"] == "confirmed"
+
+    async def test_profile_toggle_roundtrip(self, client, session):
+        from sqlalchemy import select
+        from app.models.master_profile import MasterProfile
+        from app.models.user import User, UserRole
+        from app.modules.auth.token import create_access_token
+        from app.utils.security import hash_password
+
+        mu = User(name="AC Master 2", email="ac_master2@example.com",
+                  phone="+7 (999) 111-66-77",
+                  hashed_password=hash_password("Password1!"),
+                  role=UserRole.MASTER, is_active=True)
+        session.add(mu)
+        await session.flush()
+        session.add(MasterProfile(user_id=mu.id))
+        await session.commit()
+        token = create_access_token({"sub": str(mu.id), "role": "MASTER",
+                                     "name": mu.name, "is_admin": False})
+        h = {"Authorization": f"Bearer {token}"}
+        r = await client.patch("/api/v1/admin/profile",
+                               json={"auto_confirm": True}, headers=h)
+        assert r.status_code == 200, r.text
+        assert r.json()["auto_confirm"] is True
+
+
 class TestInboxScoping:
     """Dual-role inbox: each cabinet sees only its own side."""
 
