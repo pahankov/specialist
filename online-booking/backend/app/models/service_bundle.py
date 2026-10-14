@@ -23,6 +23,9 @@ class ServiceBundle(Base):
     durations = Column(JSON, nullable=True)
     # Custom price; NULL = sum of services at booking time.
     price = Column(Numeric(10, 2), nullable=True)
+    # Manual total time (a complex often takes less than the sum);
+    # NULL = sum of member minutes.
+    duration_override = Column(Integer, nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),

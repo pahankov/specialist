@@ -34,6 +34,7 @@ class BundleCreate(BaseModel):
     service_ids: List[int] = Field(min_length=2, max_length=20)
     durations: Optional[Dict[int, int]] = Field(default=None)
     price: Optional[float] = Field(default=None, ge=0)
+    duration_override: Optional[int] = Field(default=None)
 
 
 class BundleUpdate(BaseModel):
@@ -41,6 +42,7 @@ class BundleUpdate(BaseModel):
     service_ids: Optional[List[int]] = Field(default=None, min_length=2, max_length=20)
     durations: Optional[Dict[int, int]] = Field(default=None)
     price: Optional[float] = Field(default=None, ge=0)
+    duration_override: Optional[int] = Field(default=None)
     is_active: Optional[bool] = None
 
 
@@ -48,6 +50,13 @@ def effective_durations(bundle: ServiceBundle) -> Dict[int, int]:
     """Member durations with per-service overrides applied (keys may be str)."""
     raw = bundle.durations or {}
     return {int(k): int(v) for k, v in raw.items()}
+
+
+def bundle_total_minutes(bundle: ServiceBundle, members_sum: int) -> int:
+    """Manual total wins; otherwise the member sum (complexes are faster)."""
+    if bundle.duration_override is not None:
+        return int(bundle.duration_override)
+    return members_sum
 
 
 def validate_durations(service_ids: list[int],
@@ -94,7 +103,8 @@ async def _bundle_to_dict(db: AsyncSession, b: ServiceBundle) -> dict:
          "price": float(s.price or 0)}
         for s in services
     ]
-    duration_total = sum(i["duration_minutes"] for i in items)
+    duration_total = bundle_total_minutes(
+        b, sum(i["duration_minutes"] for i in items))
     price_total = sum(float(s.price or 0) for s in services)
     return {
         "id": b.id,
@@ -104,6 +114,7 @@ async def _bundle_to_dict(db: AsyncSession, b: ServiceBundle) -> dict:
         "durations": {str(k): v for k, v in overrides.items()},
         "services": items,
         "duration_total": duration_total,
+        "duration_override": b.duration_override,
         "price_total": round(price_total, 2),
         # Custom price wins; NULL = sum at booking time.
         "price": float(b.price) if b.price is not None else None,
@@ -133,10 +144,17 @@ async def create_bundle(
     mp_id = await get_master_profile_id(db, master)
     services = await _own_services(db, mp_id, data.service_ids)
     ids = [s.id for s in services]
+    if data.duration_override is not None and not (
+            MIN_DURATION <= data.duration_override <= MAX_DURATION):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Время комплекса — от {MIN_DURATION} до {MAX_DURATION} мин",
+        )
     b = ServiceBundle(
         master_id=mp_id, name=data.name.strip(),
         service_ids=ids,
         durations=validate_durations(ids, data.durations),
+        duration_override=data.duration_override,
         price=data.price, is_active=True,
     )
     db.add(b)
@@ -195,6 +213,14 @@ async def update_bundle(
         b.durations = validate_durations(b.service_ids or [], data.durations)
     if "price" in data.model_fields_set:
         b.price = data.price
+    if "duration_override" in data.model_fields_set:
+        ov = data.duration_override
+        if ov is not None and not (MIN_DURATION <= ov <= MAX_DURATION):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Время комплекса — от {MIN_DURATION} до {MAX_DURATION} мин",
+            )
+        b.duration_override = ov
     if data.is_active is not None:
         b.is_active = data.is_active
     await log_action(db, master.id, "update", "bundle", b.id, b.name, level="info")

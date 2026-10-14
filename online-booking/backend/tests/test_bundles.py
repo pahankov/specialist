@@ -339,3 +339,41 @@ class TestAdminBundleBooking:
             headers=h,
         )
         assert bad2.status_code in (400, 422)
+
+
+class TestBundleDurationOverride:
+    async def test_override_wins_over_sum(self, client, session):
+        user, mp = await _mk_master(session)
+        s1, s2 = await _mk_services(session, mp)
+        h = await _master_headers(session, user)
+
+        r = await client.post(
+            '/api/v1/admin/bundles',
+            json={'name': 'Fast set', 'service_ids': [s1.id, s2.id],
+                  'duration_override': 90},
+            headers=h,
+        )
+        assert r.status_code == 201, r.text
+        body = r.json()
+        assert body['duration_total'] == 90
+        assert body['duration_override'] == 90
+
+        # Booking spans the override, not the 150-min sum.
+        ch, _ = await _client_headers(session)
+        day = (datetime.now() + timedelta(days=3)).isoformat()
+        b = await client.post(
+            '/api/v1/client/appointments',
+            json={'master_id': mp.id, 'bundle_id': body['id'],
+                  'appointment_date': day},
+            headers=ch,
+        )
+        assert b.status_code == 201, b.text
+
+        # Out-of-range override rejected.
+        bad = await client.post(
+            '/api/v1/admin/bundles',
+            json={'name': 'Bad', 'service_ids': [s1.id, s2.id],
+                  'duration_override': 3},
+            headers=h,
+        )
+        assert bad.status_code == 400

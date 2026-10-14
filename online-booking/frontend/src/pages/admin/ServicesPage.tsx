@@ -38,6 +38,9 @@ function ServicesPage() {
   const [deletingBundleId, setDeletingBundleId] = useState<number | null>(null);
   const [bundleName, setBundleName] = useState('');
   const [bundlePrice, setBundlePrice] = useState('');
+  // Manual total time: a complex often takes less than the member sum.
+  // Empty = sum of per-service minutes above.
+  const [bundleTime, setBundleTime] = useState('');
   const [picked, setPicked] = useState<Set<number>>(new Set());
   // Per-service minutes inside the complex (default = service's own time).
   const [durMap, setDurMap] = useState<Record<number, number>>({});
@@ -177,6 +180,7 @@ function ServicesPage() {
       setEditingBundleId(b.id);
       setBundleName(b.name);
       setBundlePrice(b.price != null ? String(b.price) : '');
+      setBundleTime(b.duration_override != null ? String(b.duration_override) : '');
       setPicked(new Set(b.service_ids));
       const dm: Record<number, number> = {};
       for (const s of b.services) dm[s.id] = s.duration_minutes;
@@ -185,6 +189,7 @@ function ServicesPage() {
       setEditingBundleId(null);
       setBundleName('');
       setBundlePrice('');
+      setBundleTime('');
       setPicked(new Set());
       setDurMap({});
     }
@@ -221,6 +226,11 @@ function ServicesPage() {
       setError('Некорректная цена');
       return;
     }
+    const time = bundleTime.trim() === '' ? undefined : Math.round(Number(bundleTime));
+    if (time !== undefined && !(time >= 5 && time <= 480)) {
+      setError('Время комплекса — от 5 до 480 мин (или пусто = сумма)');
+      return;
+    }
     // Per-service minutes (clamped); backend re-validates.
     const durations: Record<number, number> = {};
     for (const s of pickedServices) {
@@ -235,10 +245,17 @@ function ServicesPage() {
           service_ids: [...picked],
           durations,
           price: bundlePrice.trim() === '' ? null : Number(bundlePrice),
+          duration_override: bundleTime.trim() === '' ? null : Number(bundleTime),
         });
         toast.success('Комплекс обновлён');
       } else {
-        await adminApi.createBundle({ name, service_ids: [...picked], durations, price });
+        await adminApi.createBundle({
+          name,
+          service_ids: [...picked],
+          durations,
+          price,
+          duration_override: time,
+        });
         toast.success('Комплекс собран');
       }
       setShowBundleForm(false);
@@ -536,6 +553,17 @@ function ServicesPage() {
                     placeholder={`Сумма: ${formatPrice(pickedSum)} ₽`}
                   />
                 </div>
+                <div className="form-group">
+                  <label>Своё время, мин (пусто = сумма услуг)</label>
+                  <input
+                    type="number"
+                    min={5}
+                    max={480}
+                    value={bundleTime}
+                    onChange={(e) => setBundleTime(e.target.value)}
+                    placeholder={`Сумма: ${pickedDuration} мин`}
+                  />
+                </div>
               </div>
               <div className="form-group">
                 <label>Услуги в комплексе (минимум 2)</label>
@@ -617,7 +645,10 @@ function ServicesPage() {
                   ))}
                 </div>
                 <div className="bundle-totals">
-                  ⏱ {b.duration_total} мин ·{' '}
+                  ⏱ {b.duration_total} мин
+                  {b.duration_override != null ? (
+                    <span title="Задано вручную, а не суммой услуг"> (своё)</span>
+                  ) : null}{' '}
                   {b.price != null ? (
                     <>
                       <s>{formatPrice(b.price_total)} ₽</s>{' '}

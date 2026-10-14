@@ -38,6 +38,8 @@ export interface Bundle {
   durations: Record<string, number>;
   services: BundleService[];
   duration_total: number;
+  /** Manual total (NULL = member sum). */
+  duration_override?: number | null;
   price_total: number;
   price: number | null;
   effective_price: number;

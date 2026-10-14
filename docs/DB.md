@@ -369,8 +369,9 @@
 | 19 | 0f1a2b3c4d5e | 0f101a2b3c4d | `master_hidden_clients.hidden_reason` (причина архива: moved/left/inactive/deceased/other) | 2026-10-13 |
 | 20 | 10a1b2c3d4e5 | 0f1a2b3c4d5e | `master_hidden_clients.block_reason/block_note` (причина блока + текст) | 2026-10-13 |
 | 21 | 11a1b2c3d4e5 | 10a1b2c3d4e5 | `master_profiles.auto_confirm` (автоподтверждение заявок) | 2026-10-14 |
+| 22 | 12a1b2c3d4e5 | 11a1b2c3d4e5 | `service_bundles.duration_override` (ручное время комплекса) | 2026-10-14 |
 
-**Head:** `11a1b2c3d4e5`
+**Head:** `12a1b2c3d4e5`
 
 > Старая цепочка из 12 миграций (`9a9c2edb` → `b2c3d4e5f6a7`) удалена после squash —
 > история сохранена в git (`git log -- alembic/versions/`). Прод-БД со старым head

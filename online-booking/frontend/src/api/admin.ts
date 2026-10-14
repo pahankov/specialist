@@ -236,6 +236,7 @@ export const adminApi = {
     service_ids: number[];
     durations?: Record<number, number>;
     price?: number;
+    duration_override?: number;
   }) {
     return apiClient.post<Bundle>('/api/v1/admin/bundles', data);
   },
@@ -246,6 +247,7 @@ export const adminApi = {
       service_ids?: number[];
       durations?: Record<number, number>;
       price?: number | null;
+      duration_override?: number | null;
       is_active?: boolean;
     },
   ) {
