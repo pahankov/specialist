@@ -22,6 +22,8 @@ class Service(Base):
     # Percentage discount 0-90 (0 = none). Clients always pay the
     # effective price; the full price shows struck through.
     discount_percent = Column(Integer, nullable=True, default=0)
+    # Fixed RUB off, applied after the percentage (floored at zero).
+    discount_fixed = Column(Numeric(10, 2), nullable=True, default=0)
     # Optional expiry (naive UTC): after it the discount silently stops.
     discount_until = Column(DateTime(timezone=True), nullable=True)
     is_active = Column(Boolean, default=True)
@@ -35,4 +37,4 @@ class Service(Base):
     def effective_price(self) -> float:
         from app.services.pricing import apply_discount
         return apply_discount(self.price, self.discount_percent,
-                              self.discount_until)
+                              self.discount_until, self.discount_fixed)

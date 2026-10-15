@@ -204,9 +204,19 @@ function CabinetPage() {
     }
   };
 
+  // Past visits rate without waiting for the master to press "complete".
+  const visitPassed = (a: Appointment) => {
+    const dur = Number(a.service_duration) || 60;
+    return new Date(a.appointment_date).getTime() + dur * 60000 <= Date.now();
+  };
+  const needsRating = (a: Appointment) =>
+    ratedByAppt[a.id] === undefined &&
+    (a.status === 'completed' ||
+      ((a.status === 'pending' || a.status === 'confirmed') && visitPassed(a)));
+
   const renderHistoryCard = (a: Appointment) => {
     const myStars = ratedByAppt[a.id];
-    const canRate = a.status === 'completed' && myStars === undefined;
+    const canRate = needsRating(a);
     return (
       <div key={a.id} className="cabinet-card">
         <div className="cabinet-card-main">
@@ -399,7 +409,7 @@ function CabinetPage() {
         ) : (
           <div className="cabinet-list">
             {unified.map((a) =>
-              a.status === 'completed' || ratedByAppt[a.id] !== undefined
+              a.status === 'completed' || needsRating(a) || ratedByAppt[a.id] !== undefined
                 ? renderHistoryCard(a)
                 : renderCard(a),
             )}

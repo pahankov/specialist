@@ -36,7 +36,8 @@ async def create_admin_service(
         duration_minutes=data.duration_minutes, price=data.price,
         category=data.category,
         discount_percent=data.discount_percent or 0,
-        discount_until=data.discount_until, is_active=True
+        discount_until=data.discount_until,
+        discount_fixed=data.discount_fixed or 0, is_active=True
     )
     db.add(new_service)
     await db.flush()

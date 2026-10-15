@@ -216,13 +216,20 @@ export function BookingModal({
                       }}
                     >
                       <strong>{s.name}</strong> — {s.duration_minutes} мин,{' '}
-                      {s.discount_percent ? (
+                      {s.discount_percent || Number(s.discount_fixed) > 0 ? (
                         <>
                           <s style={{ color: '#999' }}>{formatPrice(s.price)} ₽</s>{' '}
                           <strong style={{ color: '#e5484d' }}>
                             {formatPrice(s.effective_price ?? s.price)} ₽
                           </strong>{' '}
-                          (−{s.discount_percent}%)
+                          (
+                          {[
+                            s.discount_percent ? `−${s.discount_percent}%` : '',
+                            Number(s.discount_fixed) > 0 ? `−${s.discount_fixed} ₽` : '',
+                          ]
+                            .filter(Boolean)
+                            .join(' ')}
+                          )
                         </>
                       ) : (
                         <>{formatPrice(s.price)} ₽</>

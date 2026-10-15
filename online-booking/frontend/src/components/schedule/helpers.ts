@@ -164,6 +164,8 @@ export function getFilteredServices(
     price: number | string;
     discount_percent?: number | null;
     effective_price?: number | string | null;
+    discount_fixed?: number | string | null;
+    discount_until?: string | null;
   }[],
   search: string,
 ): {
@@ -173,6 +175,8 @@ export function getFilteredServices(
   price: number | string;
   discount_percent?: number | null;
   effective_price?: number | string | null;
+  discount_fixed?: number | string | null;
+  discount_until?: string | null;
 }[] {
   if (!search) return services;
   const lower = search.toLowerCase();
@@ -184,13 +188,18 @@ export function formatPrice(price: number | string): string {
   return num.toLocaleString('ru-RU');
 }
 
-/** Short discount tag: "−20%" or "−20% до 20.10". Empty when none. */
+/** Short discount tag: "−20%", "−500 ₽", "−20% до 20.10". Empty when none. */
 export function formatDiscountTag(
   discountPercent?: number | null,
   discountUntil?: string | null,
+  discountFixed?: number | string | null,
 ): string {
-  if (!discountPercent) return '';
-  let tag = `−${discountPercent}%`;
+  const parts: string[] = [];
+  if (discountPercent) parts.push(`−${discountPercent}%`);
+  const fixed = Number(discountFixed) || 0;
+  if (fixed > 0) parts.push(`−${fixed} ₽`);
+  if (parts.length === 0) return '';
+  let tag = parts.join(' ');
   if (discountUntil) {
     try {
       const d = new Date(discountUntil);

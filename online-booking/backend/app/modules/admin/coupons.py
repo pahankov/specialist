@@ -131,7 +131,8 @@ async def create_coupon(
             f"Введите его в поле «Промокод» при записи.")
     for u in targets:
         await notify_user(db, recipient_id=u.id, text=text,
-                          sender_id=master.id, audience="coupon", link="book")
+                          sender_id=master.id, audience="coupon",
+                          link=f"book:{mp_id}")
     await log_action(db, master.id, "create", "coupon", c.id,
                      f"{code} {describe_coupon(c)} получателей={len(targets)}",
                      level="info")

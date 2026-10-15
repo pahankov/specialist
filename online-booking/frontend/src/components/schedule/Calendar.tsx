@@ -22,6 +22,8 @@ interface CalendarProps {
   onToggleDay: (date: Date) => void;
   /** Client booking view: no day toggling, click only selects a date. */
   interactive?: boolean;
+  /** Master history: past days are selectable (read-only day view). */
+  selectablePast?: boolean;
 }
 
 const LONG_PRESS_MS = 500;
@@ -36,6 +38,7 @@ export function Calendar({
   onSelectDate,
   onToggleDay,
   interactive = true,
+  selectablePast = false,
 }: CalendarProps) {
   const monthDays = getMonthDays(currentMonth);
   const monthName = currentMonth.toLocaleString('ru-RU', { month: 'long', year: 'numeric' });
@@ -84,9 +87,9 @@ export function Calendar({
         longPressFiredRef.current = false;
         return;
       }
-      if (isCurrentMonth && !past) onSelectDate(date);
+      if (isCurrentMonth && (!past || selectablePast)) onSelectDate(date);
     },
-    [onSelectDate],
+    [onSelectDate, selectablePast],
   );
 
   return (

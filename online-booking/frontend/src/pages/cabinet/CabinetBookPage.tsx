@@ -29,14 +29,27 @@ function PriceTag({
   effective,
   discount,
   until,
+  fixed,
 }: {
   full: number;
   effective: number;
   discount?: number | null;
   until?: string | null;
+  fixed?: number | string | null;
 }) {
-  if (discount && effective < full) {
-    const tag = `−${discount}%${until ? ` (до ${new Date(until).toLocaleDateString('ru-RU', { day: 'numeric', month: 'numeric' })})` : ''}`;
+  const hasDisc = !!discount || Number(fixed) > 0;
+  if (hasDisc && effective < full) {
+    const bits: string[] = [];
+    if (discount) bits.push(`−${discount}%`);
+    if (Number(fixed) > 0) bits.push(`−${fixed} ₽`);
+    let tag = bits.join(' ');
+    if (until) {
+      try {
+        tag += ` (до ${new Date(until).toLocaleDateString('ru-RU', { day: 'numeric', month: 'numeric' })})`;
+      } catch {
+        /* ignore */
+      }
+    }
     return (
       <span
         style={{ whiteSpace: 'nowrap' }}
@@ -54,11 +67,15 @@ function serviceLabel(s: Service): string {
   const full = Number(s.price) || 0;
   const eff = Number(s.effective_price ?? s.price) || 0;
   const base = `${s.name} — ${s.duration_minutes} мин, ${eff} ₽`;
-  if (!s.discount_percent || !(eff < full)) return base;
+  if (!(eff < full)) return base;
+  const bits: string[] = [];
+  if (s.discount_percent) bits.push(`−${s.discount_percent}%`);
+  if (Number(s.discount_fixed) > 0) bits.push(`−${s.discount_fixed} ₽`);
+  if (bits.length === 0) return base;
   const until = s.discount_until
     ? ` до ${new Date(s.discount_until).toLocaleDateString('ru-RU', { day: 'numeric', month: 'numeric' })}`
     : '';
-  return `${base} (−${s.discount_percent}%${until})`;
+  return `${base} (${bits.join(' ')}${until})`;
 }
 
 /** Read-only granules for clients: free ones open the booking modal. */
@@ -323,6 +340,13 @@ function CabinetBookPage() {
     setPromoResult(null);
     setPromoError('');
     setSlotHour(hour);
+    // Own usable codes of this master (datalist under the promo field).
+    if (selectedMaster) {
+      cabinetApi
+        .myCoupons(selectedMaster.id)
+        .then((r) => setPromoOptions((r.data || []).map((c) => ({ code: c.code, terms: c.terms }))))
+        .catch(() => setPromoOptions([]));
+    }
   };
 
   const modalServices = selectedMaster ? servicesByMaster[selectedMaster.id] || [] : [];
@@ -356,6 +380,7 @@ function CabinetBookPage() {
 
   // Promo code: preview against the current pick, applied on booking.
   const [promo, setPromo] = useState('');
+  const [promoOptions, setPromoOptions] = useState<{ code: string; terms: string }[]>([]);
   const [promoResult, setPromoResult] = useState<{
     code: string;
     terms: string;
@@ -552,6 +577,7 @@ function CabinetBookPage() {
                     effective={Number(s.effective_price ?? s.price) || 0}
                     discount={s.discount_percent}
                     until={s.discount_until}
+                    fixed={s.discount_fixed}
                   />
                 </div>
               ))}
@@ -566,6 +592,7 @@ function CabinetBookPage() {
                     effective={b.effective_price}
                     discount={b.discount_percent}
                     until={b.discount_until}
+                    fixed={b.discount_fixed}
                   />
                 </div>
               ))}
@@ -663,6 +690,7 @@ function CabinetBookPage() {
                         effective={modalBundle.effective_price}
                         discount={modalBundle.discount_percent}
                         until={modalBundle.discount_until}
+                        fixed={modalBundle.discount_fixed}
                       />
                     </div>
                   </div>
@@ -689,18 +717,28 @@ function CabinetBookPage() {
                   </option>
                   {modalBundles.length > 0 && (
                     <optgroup label="🎁 Комплексы">
-                      {modalBundles.map((b) => (
-                        <option key={b.id} value={`bundle:${b.id}`}>
-                          🎁 {b.name} — {b.duration_total} мин, {b.effective_price} ₽
-                          {b.discount_percent
-                            ? ` (−${b.discount_percent}%${
-                                b.discount_until
-                                  ? ` до ${new Date(b.discount_until).toLocaleDateString('ru-RU', { day: 'numeric', month: 'numeric' })}`
-                                  : ''
-                              })`
-                            : ''}
-                        </option>
-                      ))}
+                      {modalBundles.map((b) => {
+                        const bits: string[] = [];
+                        if (b.discount_percent) bits.push(`−${b.discount_percent}%`);
+                        if (Number(b.discount_fixed) > 0) bits.push(`−${b.discount_fixed} ₽`);
+                        let suffix = '';
+                        if (bits.length > 0) {
+                          suffix = ` (${bits.join(' ')}`;
+                          if (b.discount_until) {
+                            try {
+                              suffix += ` до ${new Date(b.discount_until).toLocaleDateString('ru-RU', { day: 'numeric', month: 'numeric' })}`;
+                            } catch {
+                              /* ignore */
+                            }
+                          }
+                          suffix += ')';
+                        }
+                        return (
+                          <option key={b.id} value={`bundle:${b.id}`}>
+                            🎁 {b.name} — {b.duration_total} мин, {b.effective_price} ₽{suffix}
+                          </option>
+                        );
+                      })}
                     </optgroup>
                   )}
                   <optgroup label="Услуги">
@@ -760,7 +798,15 @@ function CabinetBookPage() {
                   placeholder="XXXX-XXXX"
                   style={{ textTransform: 'uppercase' }}
                   maxLength={24}
+                  list="promo-codes"
                 />
+                <datalist id="promo-codes">
+                  {promoOptions.map((o) => (
+                    <option key={o.code} value={o.code}>
+                      {o.terms}
+                    </option>
+                  ))}
+                </datalist>
                 <button
                   type="button"
                   className="btn btn-sm btn-ghost"

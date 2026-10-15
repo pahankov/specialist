@@ -14,22 +14,57 @@ import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError';
 import '../../styles/tables.css';
 import './ServicesPage.css';
 
-/** 🏷 Inline discount editor: click the badge, set % + expiry right in the row.
+/** 🏷 Inline discount editor: click the badge, set % or ₽ + expiry in the row.
  * Closes on ✓, ✕, Escape or a click outside. */
 function DiscountBadge({
   pct,
+  fixed,
   until,
   onSave,
 }: {
   pct?: number | null;
+  fixed?: number | string | null;
   until?: string | null;
-  onSave: (pct: number | null, until: string | null) => Promise<void> | void;
+  onSave: (pct: number | null, fixed: number | null, until: string | null) => Promise<void> | void;
 }) {
   const [open, setOpen] = useState(false);
-  const [v, setV] = useState(pct ? String(pct) : '');
-  const [u, setU] = useState(until ? String(until).slice(0, 16) : '');
+  const [kind, setKind] = useState<'percent' | 'fixed'>('percent');
+  const [v, setV] = useState('');
+  const [u, setU] = useState('');
   const [saving, setSaving] = useState(false);
   const boxRef = useRef<HTMLSpanElement>(null);
+
+  const reopen = () => {
+    setKind(Number(fixed) > 0 ? 'fixed' : 'percent');
+    setV(Number(fixed) > 0 ? String(fixed) : pct ? String(pct) : '');
+    setU(until ? String(until).slice(0, 16) : '');
+    setOpen(true);
+  };
+
+  const save = async () => {
+    const num = v.trim() === '' ? null : Math.round(Number(v));
+    if (num !== null && !(num >= 0)) {
+      toast.error('Скидка не может быть отрицательной');
+      return;
+    }
+    if (kind === 'percent' && num !== null && num > 90) {
+      toast.error('Процент — максимум 90');
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSave(
+        kind === 'percent' ? num : null,
+        kind === 'fixed' ? num : null,
+        u.trim() === '' ? null : new Date(u).toISOString(),
+      );
+      setOpen(false);
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Не удалось сохранить скидку'));
+    } finally {
+      setSaving(false);
+    }
+  };
 
   // Escape + outside click close the editor (inputs keep working inside).
   useEffect(() => {
@@ -48,38 +83,18 @@ function DiscountBadge({
     };
   }, [open]);
 
-  const save = async () => {
-    const num = v.trim() === '' ? null : Math.round(Number(v));
-    if (num !== null && !(num >= 0 && num <= 90)) {
-      toast.error('Скидка — от 0 до 90%');
-      return;
-    }
-    setSaving(true);
-    try {
-      await onSave(num, u.trim() === '' ? null : new Date(u).toISOString());
-      setOpen(false);
-    } catch (err: unknown) {
-      toast.error(getApiErrorMessage(err, 'Не удалось сохранить скидку'));
-    } finally {
-      setSaving(false);
-    }
-  };
-
+  const tag = formatDiscountTag(pct, until, fixed);
   if (!open) {
     return (
       <button
         type="button"
         className="btn btn-sm btn-ghost"
-        onClick={() => {
-          setV(pct ? String(pct) : '');
-          setU(until ? String(until).slice(0, 16) : '');
-          setOpen(true);
-        }}
-        title={pct ? `Скидка −${pct}% — нажать, чтобы изменить` : 'Назначить скидку'}
+        onClick={reopen}
+        title={tag ? `Скидка ${tag} — нажать, чтобы изменить` : 'Назначить скидку'}
         aria-label="Скидка"
-        style={pct ? { borderColor: '#e5484d', color: '#e5484d' } : undefined}
+        style={tag ? { borderColor: '#e5484d', color: '#e5484d' } : undefined}
       >
-        🏷️{pct ? ` −${pct}%` : ''}
+        🏷️{tag ? ` ${tag}` : ''}
       </button>
     );
   }
@@ -88,15 +103,35 @@ function DiscountBadge({
       ref={boxRef}
       style={{ display: 'inline-flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}
     >
+      <span className="segmented" style={{ display: 'inline-flex' }}>
+        <button
+          type="button"
+          className={`segmented-btn${kind === 'percent' ? ' active' : ''}`}
+          onClick={() => setKind('percent')}
+          title="Скидка в процентах"
+          style={{ padding: '4px 10px', fontSize: 13 }}
+        >
+          %
+        </button>
+        <button
+          type="button"
+          className={`segmented-btn${kind === 'fixed' ? ' active' : ''}`}
+          onClick={() => setKind('fixed')}
+          title="Скидка в рублях"
+          style={{ padding: '4px 10px', fontSize: 13 }}
+        >
+          ₽
+        </button>
+      </span>
       <input
         type="number"
         min={0}
-        max={90}
+        max={kind === 'percent' ? 90 : undefined}
         value={v}
         onChange={(e) => setV(e.target.value)}
-        placeholder="%"
-        aria-label="Скидка, %"
-        style={{ width: 64 }}
+        placeholder={kind === 'percent' ? '%' : '₽'}
+        aria-label={kind === 'percent' ? 'Скидка, %' : 'Скидка, ₽'}
+        style={{ width: 72 }}
       />
       <input
         type="datetime-local"
@@ -160,6 +195,8 @@ function ServicesPage() {
   const [price, setPrice] = useState(1000);
   // Discount % (empty = none, 0-90).
   const [discount, setDiscount] = useState('');
+  // Fixed RUB off (empty = none).
+  const [discountFixed, setDiscountFixed] = useState('');
   // Discount expiry, datetime-local value (empty = no expiry).
   const [discountUntil, setDiscountUntil] = useState('');
   const [lastCategory, setLastCategory] = usePersistentState('services.lastCategory', '');
@@ -175,6 +212,7 @@ function ServicesPage() {
   const [bundleName, setBundleName] = useState('');
   const [bundlePrice, setBundlePrice] = useState('');
   const [bundleDiscount, setBundleDiscount] = useState('');
+  const [bundleDiscountFixed, setBundleDiscountFixed] = useState('');
   const [bundleDiscountUntil, setBundleDiscountUntil] = useState('');
   // Manual total time: a complex often takes less than the member sum.
   // Empty = sum of per-service minutes above.
@@ -229,6 +267,7 @@ function ServicesPage() {
     setDuration(30);
     setPrice(1000);
     setDiscount('');
+    setDiscountFixed('');
     setDiscountUntil('');
     setCategory('');
     setCategoryCustom(false);
@@ -246,6 +285,7 @@ function ServicesPage() {
     setDuration(30);
     setPrice(1000);
     setDiscount('');
+    setDiscountFixed('');
     setDiscountUntil('');
     setCategory(lastCategory);
     // Stale memory (category was deleted meanwhile) → free input, not a lie.
@@ -268,6 +308,16 @@ function ServicesPage() {
     return v;
   };
 
+  const parseFixed = (): number | undefined => {
+    if (discountFixed.trim() === '') return undefined;
+    const v = Math.round(Number(discountFixed));
+    if (!(v >= 0)) {
+      setError('Скидка в рублях — от 0');
+      return undefined;
+    }
+    return v;
+  };
+
   const parseUntil = (raw: string): string | null | undefined => {
     // undefined = leave as is (create: none); null = clear on edit.
     if (raw.trim() === '') return null;
@@ -284,9 +334,11 @@ function ServicesPage() {
     setError('');
     const disc = parseDiscount();
     if (discount.trim() !== '' && disc === undefined) return;
+    const fixed = parseFixed();
+    if (discountFixed.trim() !== '' && fixed === undefined) return;
     const until = parseUntil(discountUntil);
     if (discountUntil.trim() !== '' && until === undefined) return;
-    const wantDiscount = disc !== undefined || discountUntil.trim() !== '';
+    const wantDiscount = disc !== undefined || fixed !== undefined || discountUntil.trim() !== '';
     try {
       if (editingId) {
         await adminApi.updateService(editingId, {
@@ -296,6 +348,7 @@ function ServicesPage() {
           price,
           category: category || undefined,
           ...(disc !== undefined ? { discount_percent: disc } : {}),
+          ...(fixed !== undefined ? { discount_fixed: fixed } : {}),
           ...(discountUntil.trim() !== '' ? { discount_until: until as string } : {}),
         });
         toast.success('Услуга обновлена');
@@ -308,6 +361,7 @@ function ServicesPage() {
           price,
           category: category || undefined,
           ...(disc !== undefined ? { discount_percent: disc } : {}),
+          ...(fixed !== undefined ? { discount_fixed: fixed } : {}),
           ...(wantDiscount && until ? { discount_until: until } : {}),
         });
         toast.success('Услуга создана');
@@ -326,6 +380,7 @@ function ServicesPage() {
     setDuration(s.duration_minutes);
     setPrice(Number(s.price));
     setDiscount(s.discount_percent ? String(s.discount_percent) : '');
+    setDiscountFixed(Number(s.discount_fixed) > 0 ? String(s.discount_fixed) : '');
     setDiscountUntil(s.discount_until ? String(s.discount_until).slice(0, 16) : '');
     setCategory(s.category || '');
     // Category from another page (pagination) isn't in the visible list.
@@ -366,6 +421,7 @@ function ServicesPage() {
       setBundlePrice(b.price != null ? String(b.price) : '');
       setBundleTime(b.duration_override != null ? String(b.duration_override) : '');
       setBundleDiscount(b.discount_percent ? String(b.discount_percent) : '');
+      setBundleDiscountFixed(Number(b.discount_fixed) > 0 ? String(b.discount_fixed) : '');
       setBundleDiscountUntil(b.discount_until ? String(b.discount_until).slice(0, 16) : '');
       setPicked(new Set(b.service_ids));
       const dm: Record<number, number> = {};
@@ -377,6 +433,7 @@ function ServicesPage() {
       setBundlePrice('');
       setBundleTime('');
       setBundleDiscount('');
+      setBundleDiscountFixed('');
       setBundleDiscountUntil('');
       setPicked(new Set());
       setDurMap({});
@@ -424,6 +481,12 @@ function ServicesPage() {
       setError('Скидка — от 0 до 90% (или пусто)');
       return;
     }
+    const discFixed =
+      bundleDiscountFixed.trim() === '' ? undefined : Math.round(Number(bundleDiscountFixed));
+    if (discFixed !== undefined && !(discFixed >= 0)) {
+      setError('Скидка в рублях — от 0 (или пусто)');
+      return;
+    }
     const discUntil =
       bundleDiscountUntil.trim() === '' ? null : new Date(bundleDiscountUntil).toISOString();
     if (
@@ -450,6 +513,7 @@ function ServicesPage() {
           price: bundlePrice.trim() === '' ? null : Number(bundlePrice),
           duration_override: bundleTime.trim() === '' ? null : Number(bundleTime),
           discount_percent: disc ?? null,
+          discount_fixed: discFixed ?? null,
           discount_until: discUntil,
         });
         toast.success('Комплекс обновлён');
@@ -461,6 +525,7 @@ function ServicesPage() {
           price,
           duration_override: time,
           discount_percent: disc,
+          discount_fixed: discFixed,
           ...(discUntil ? { discount_until: discUntil } : {}),
         });
         toast.success('Комплекс собран');
@@ -626,23 +691,25 @@ function ServicesPage() {
         cell: ({ row }) => {
           const s = row.original;
           const eff = Number(s.effective_price ?? s.price);
-          const tag = formatDiscountTag(s.discount_percent, s.discount_until);
+          const tag = formatDiscountTag(s.discount_percent, s.discount_until, s.discount_fixed);
           return (
             <span
               style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}
             >
               <DiscountBadge
                 pct={s.discount_percent}
+                fixed={s.discount_fixed}
                 until={s.discount_until}
-                onSave={async (pct, until) => {
+                onSave={async (pct, fixed, until) => {
                   await adminApi.updateService(s.id, {
                     discount_percent: pct ?? 0,
+                    discount_fixed: fixed ?? 0,
                     discount_until: until,
                   });
                   fetchData();
                 }}
               />
-              {s.discount_percent ? (
+              {tag !== '' ? (
                 <span style={{ whiteSpace: 'nowrap' }}>
                   <s style={{ color: '#999' }}>{formatPrice(s.price)} ₽</s>{' '}
                   <strong style={{ color: '#e5484d' }}>{formatPrice(eff)} ₽</strong>{' '}
@@ -812,6 +879,16 @@ function ServicesPage() {
                 />
               </div>
               <div className="form-group">
+                <label>Скидка, ₽ (пусто = нет)</label>
+                <input
+                  type="number"
+                  value={discountFixed}
+                  onChange={(e) => setDiscountFixed(e.target.value)}
+                  placeholder="500"
+                  min="0"
+                />
+              </div>
+              <div className="form-group">
                 <label>Скидка до (пусто = бессрочно)</label>
                 <input
                   type="datetime-local"
@@ -936,6 +1013,16 @@ function ServicesPage() {
                   />
                 </div>
                 <div className="form-group">
+                  <label>Скидка, ₽ (пусто = нет)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={bundleDiscountFixed}
+                    onChange={(e) => setBundleDiscountFixed(e.target.value)}
+                    placeholder="500"
+                  />
+                </div>
+                <div className="form-group">
                   <label>Скидка до (пусто = бессрочно)</label>
                   <input
                     type="datetime-local"
@@ -1026,10 +1113,12 @@ function ServicesPage() {
                 <div className="bundle-totals">
                   <DiscountBadge
                     pct={b.discount_percent}
+                    fixed={b.discount_fixed}
                     until={b.discount_until}
-                    onSave={async (pct, until) => {
+                    onSave={async (pct, fixed, until) => {
                       await adminApi.updateBundle(b.id, {
                         discount_percent: pct ?? null,
+                        discount_fixed: fixed ?? null,
                         discount_until: until,
                       });
                       fetchData();
@@ -1039,14 +1128,14 @@ function ServicesPage() {
                   {b.duration_override != null ? (
                     <span title="Задано вручную, а не суммой услуг"> (своё)</span>
                   ) : null}{' '}
-                  {b.discount_percent ? (
+                  {b.discount_percent || Number(b.discount_fixed) > 0 ? (
                     <>
                       <s>{formatPrice(b.price != null ? b.price : b.price_total)} ₽</s>{' '}
                       <strong style={{ color: '#e5484d' }}>
                         {formatPrice(b.effective_price)} ₽
                       </strong>{' '}
                       <span title="Скидка комплекса">
-                        {formatDiscountTag(b.discount_percent, b.discount_until)}
+                        {formatDiscountTag(b.discount_percent, b.discount_until, b.discount_fixed)}
                       </span>
                     </>
                   ) : b.price != null ? (

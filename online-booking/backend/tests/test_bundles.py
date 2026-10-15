@@ -398,6 +398,8 @@ class TestDiscounts:
         assert not discount_active(past)
         assert apply_discount(1000, 20, future) == 800.0
         assert apply_discount(1000, 20, past) == 1000.0
+        assert apply_discount(1000, 10, None, 50) == 850.0
+        assert apply_discount(100, 0, None, 500) == 0.0
 
     async def test_expired_discount_ignored_in_booking(self, client, session):
         from datetime import datetime, timedelta, timezone
@@ -414,6 +416,29 @@ class TestDiscounts:
         assert s.status_code == 201, s.text
         assert s.json()['discount_percent'] == 50
         assert s.json()['effective_price'] == 1000.0
+
+    async def test_fixed_discount_flows_to_booking(self, client, session):
+        user, mp = await _mk_master(session)
+        h = await _master_headers(session, user)
+        s = await client.post(
+            '/api/v1/admin/services',
+            json={'name': 'Fix', 'duration_minutes': 60, 'price': 1000,
+                  'discount_fixed': 300},
+            headers=h,
+        )
+        assert s.status_code == 201, s.text
+        assert s.json()['effective_price'] == 700.0
+
+        ch, _ = await _client_headers(session)
+        day = (datetime.now() + timedelta(days=3)).isoformat()
+        b = await client.post(
+            '/api/v1/client/appointments',
+            json={'master_id': mp.id, 'service_id': s.json()['id'],
+                  'appointment_date': day},
+            headers=ch,
+        )
+        assert b.status_code == 201, b.text
+        assert b.json()['service_price'] == 700.0
 
     async def test_service_discount_flows_to_booking(self, client, session):
         user, mp = await _mk_master(session)

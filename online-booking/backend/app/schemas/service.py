@@ -12,6 +12,7 @@ class ServiceCreate(BaseModel):
     category: Optional[str] = None
     discount_percent: Optional[int] = Field(default=None, ge=0, le=90)
     discount_until: Optional[datetime] = Field(default=None)
+    discount_fixed: Optional[Decimal] = Field(default=None, ge=0)
 
 class ServiceUpdate(BaseModel):
     name: Optional[str] = None
@@ -21,6 +22,7 @@ class ServiceUpdate(BaseModel):
     category: Optional[str] = None
     discount_percent: Optional[int] = Field(default=None, ge=0, le=90)
     discount_until: Optional[datetime] = Field(default=None)
+    discount_fixed: Optional[Decimal] = Field(default=None, ge=0)
 
 class ServiceResponse(BaseModel):
     id: int
@@ -35,6 +37,7 @@ class ServiceResponse(BaseModel):
     is_active: bool = True
     discount_percent: int = 0
     discount_until: Optional[datetime] = None
+    discount_fixed: float = 0
     effective_price: float = 0
 
     model_config = ConfigDict(from_attributes=True)

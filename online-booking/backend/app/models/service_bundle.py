@@ -25,6 +25,8 @@ class ServiceBundle(Base):
     price = Column(Numeric(10, 2), nullable=True)
     # Percentage discount 0-90 on the bundle total (custom or member sum).
     discount_percent = Column(Integer, nullable=True, default=0)
+    # Fixed RUB off, applied after the percentage (floored at zero).
+    discount_fixed = Column(Numeric(10, 2), nullable=True, default=0)
     # Optional expiry (naive UTC): after it the discount silently stops.
     discount_until = Column(DateTime(timezone=True), nullable=True)
     # Manual total time (a complex often takes less than the sum);

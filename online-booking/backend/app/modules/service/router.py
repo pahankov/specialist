@@ -24,6 +24,7 @@ def _service_to_dict(s):
         "price": s.price,
         "discount_percent": s.discount_percent or 0,
         "discount_until": s.discount_until.isoformat() if s.discount_until else None,
+        "discount_fixed": float(s.discount_fixed or 0),
         "effective_price": s.effective_price,
         "category": s.category,
         "is_active": s.is_active,
@@ -72,6 +73,7 @@ async def create_service(service: ServiceCreate, db: AsyncSession = Depends(get_
         category=service.category,
         discount_percent=service.discount_percent or 0,
         discount_until=service.discount_until,
+        discount_fixed=service.discount_fixed or 0,
         is_active=True
     )
     db.add(new_service)

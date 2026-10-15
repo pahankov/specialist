@@ -44,6 +44,8 @@ export interface Bundle {
   discount_percent?: number | null;
   /** Discount expiry ISO (null = no expiry). */
   discount_until?: string | null;
+  /** Fixed RUB off, applied after the percentage. */
+  discount_fixed?: number | null;
   price_total: number;
   price: number | null;
   effective_price: number;
@@ -102,6 +104,23 @@ export const cabinetApi = {
       discount: number;
       new_price: number;
     }>('/api/v1/client/coupons/preview', data);
+  },
+  myCoupons(masterId?: number) {
+    return apiClient.get<
+      {
+        id: number;
+        code: string;
+        kind: string;
+        value: number;
+        uses_left: number | null;
+        valid_until: string | null;
+        is_active: boolean;
+        terms: string;
+        master_id: number;
+      }[]
+    >('/api/v1/client/coupons/mine', {
+      params: masterId ? { master_id: masterId } : undefined,
+    });
   },
   bundles(masterId: number) {
     return apiClient.get<Bundle[]>('/api/v1/client/bundles', {

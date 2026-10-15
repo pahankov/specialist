@@ -451,6 +451,47 @@ class CouponPreview(BaseModel):
     code: str = Field(min_length=1, max_length=24)
 
 
+@router.get("/coupons/mine")
+async def my_coupons(
+    master_id: Optional[int] = Query(default=None),
+    user: User = Depends(require_client),
+    db: AsyncSession = Depends(get_db),
+):
+    """Coupons issued to me (optionally of one master): code + terms.
+
+    Personal (user_ids) plus broadcast ones from masters I visit.
+    Spent/expired/inactive are excluded — the list is always usable.
+    """
+    from app.models.coupon import Coupon
+    from app.modules.admin.coupons import coupon_to_dict, describe_coupon
+    from app.utils import utcnow_naive
+
+    profile = await _get_or_create_profile(db, user)
+    my_master_ids = set((await db.execute(
+        select(Appointment.master_id).where(Appointment.client_id == profile.id)
+    )).scalars().all())
+    q = select(Coupon).where(Coupon.is_active == True)  # noqa: E712
+    if master_id is not None:
+        q = q.where(Coupon.master_id == master_id)
+    rows = (await db.execute(q.order_by(Coupon.id.desc()))).scalars().all()
+    now = utcnow_naive()
+    out = []
+    for c in rows:
+        if c.valid_until is not None and now >= c.valid_until.replace(tzinfo=None):
+            continue
+        if c.max_uses and (c.used_count or 0) >= c.max_uses:
+            continue
+        if c.user_ids:
+            if user.id not in c.user_ids:
+                continue
+        elif c.master_id not in my_master_ids:
+            continue
+        d = coupon_to_dict(c)
+        d["terms"] = describe_coupon(c)
+        out.append(d)
+    return out
+
+
 @router.post("/coupons/preview")
 async def preview_coupon(
     data: CouponPreview,
@@ -580,7 +621,12 @@ async def create_own_review(
     user: User = Depends(require_client),
     db: AsyncSession = Depends(get_db),
 ):
-    """Rate a completed own appointment (one review per appointment)."""
+    """Rate an own visit: completed, or past its end even if not confirmed.
+
+    Masters that never press "complete" must not block client feedback;
+    the rating still counts once the visit time has passed.
+    """
+    from datetime import timedelta
     from app.models.review import Review
     profile = await _get_or_create_profile(db, user)
     appt = (await db.execute(
@@ -593,9 +639,18 @@ async def create_own_review(
     # Legacy rows may store the user id instead of the profile id.
     if appt.client_id != profile.id and appt.client_id != user.id:
         raise HTTPException(status_code=403, detail="Чужая запись")
-    if appt.status != "completed":
+    if appt.status == "cancelled":
         raise HTTPException(status_code=400,
-                            detail="Оценить можно только завершённую услугу")
+                            detail="Отменённую запись оценить нельзя")
+    if appt.status != "completed":
+        dur = appt.duration_minutes or 60
+        try:
+            end = appt.appointment_date.replace(tzinfo=None) + timedelta(minutes=int(dur))
+        except Exception:
+            end = None
+        if end is None or end > utcnow_naive():
+            raise HTTPException(status_code=400,
+                                detail="Оценить можно после визита")
     existing = (await db.execute(
         select(Review).where(Review.appointment_id == appt.id)
     )).scalar_one_or_none()

@@ -338,6 +338,67 @@ class TestClientReviews:
                               headers=hb)
         assert r.status_code == 403
 
+    async def test_rate_past_pending_without_complete(self, client, session):
+        from datetime import datetime, timedelta, timezone
+        from sqlalchemy import select
+        from app.models.appointment import Appointment
+        from app.models.client_profile import ClientProfile
+        from app.models.master_profile import MasterProfile
+        from app.models.service import Service
+        from app.models.user import User, UserRole
+        from app.utils.security import hash_password
+        from app.modules.auth.token import create_access_token
+
+        m = User(name="PastM", email="pastm@example.com",
+                 hashed_password=hash_password("SecurePass123!"),
+                 phone="+79990009401", role=UserRole.MASTER, is_active=True)
+        session.add(m)
+        await session.flush()
+        session.add(MasterProfile(user_id=m.id, status="active"))
+        await session.flush()
+        mp = (await session.execute(
+            select(MasterProfile).where(MasterProfile.user_id == m.id))).scalar_one()
+        s = Service(master_id=mp.id, name="Past", duration_minutes=60,
+                    price=1000, is_active=True)
+        session.add(s)
+        await session.flush()
+        c = User(name="PastC", email="pastc@example.com",
+                 hashed_password=hash_password("SecurePass123!"),
+                 phone="+79990009402", role=UserRole.CLIENT, is_active=True)
+        session.add(c)
+        await session.flush()
+        cp = ClientProfile(user_id=c.id)
+        session.add(cp)
+        await session.flush()
+        old = Appointment(master_id=mp.id, service_id=s.id, client_id=cp.id,
+                          duration_minutes=60,
+                          appointment_date=datetime.now(timezone.utc).replace(tzinfo=None)
+                          - timedelta(hours=2),
+                          status="confirmed")
+        session.add(old)
+        await session.commit()
+        token = create_access_token({"sub": str(c.id), "role": "CLIENT",
+                                     "name": c.name, "is_admin": False})
+        h = {"Authorization": f"Bearer {token}"}
+
+        r = await client.post("/api/v1/client/reviews",
+                              json={"appointment_id": old.id, "rating": 5},
+                              headers=h)
+        assert r.status_code == 201, r.text
+
+        # Cancelled past visits stay unratable.
+        old2 = Appointment(master_id=mp.id, service_id=s.id, client_id=cp.id,
+                           duration_minutes=60,
+                           appointment_date=datetime.now(timezone.utc).replace(tzinfo=None)
+                           - timedelta(hours=5),
+                           status="cancelled")
+        session.add(old2)
+        await session.commit()
+        r2 = await client.post("/api/v1/client/reviews",
+                               json={"appointment_id": old2.id, "rating": 5},
+                               headers=h)
+        assert r2.status_code == 400
+
 
 class TestAutoComplete:
     """Auto-complete switch + background sweep."""

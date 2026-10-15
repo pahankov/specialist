@@ -19,6 +19,7 @@ import ProfilePage from './pages/admin/ProfilePage';
 import CabinetPage from './pages/cabinet/CabinetPage';
 import CabinetBookPage from './pages/cabinet/CabinetBookPage';
 import CabinetNotificationsPage from './pages/cabinet/CabinetNotificationsPage';
+import ClientCouponsPage from './pages/cabinet/ClientCouponsPage';
 import ClientProfilePage from './pages/cabinet/ClientProfilePage';
 import BecomeMasterPage from './pages/cabinet/BecomeMasterPage';
 import ClientLayout from './pages/cabinet/ClientLayout';
@@ -43,8 +44,9 @@ function getIsAdmin() {
 
 /** Superadmin section: non-admins are sent to their own home. */
 function RequireSuperAdmin({ children }: { children: React.ReactNode }) {
+  const location = useLocation();
   if (!getIsAuthenticated()) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/" replace state={{ from: location.pathname + location.search }} />;
   }
   if (!getIsAdmin()) {
     return <Navigate to={`${ADMIN_PREFIX}/dashboard`} replace />;
@@ -55,8 +57,10 @@ function RequireSuperAdmin({ children }: { children: React.ReactNode }) {
 /** Master section: superadmins have their own section under /super,
     clients land on booking (no master UI for CLIENT role). */
 function RequireMasterSection({ children }: { children: React.ReactNode }) {
+  const location = useLocation();
   if (!getIsAuthenticated()) {
-    return <Navigate to="/" replace />;
+    // Guests bounce to home, which opens login and continues to `from`.
+    return <Navigate to="/" replace state={{ from: location.pathname + location.search }} />;
   }
   if (getIsAdmin()) {
     return <Navigate to={`${SUPER_PREFIX}/dashboard`} replace />;
@@ -115,6 +119,7 @@ function App() {
           >
             <Route index element={<CabinetPage />} />
             <Route path="book" element={<CabinetBookPage />} />
+            <Route path="coupons" element={<ClientCouponsPage />} />
             <Route path="notifications" element={<CabinetNotificationsPage />} />
             <Route path="profile" element={<ClientProfilePage />} />
             <Route path="become-master" element={<BecomeMasterPage />} />

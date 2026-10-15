@@ -736,6 +736,7 @@ function SchedulePage() {
             onNextMonth={handleNextMonth}
             onSelectDate={handleSelectDate}
             onToggleDay={handleToggleDay}
+            selectablePast
           />
 
           {monthError && (
