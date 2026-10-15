@@ -24,7 +24,7 @@ function formatDate(iso: string): string {
 function CabinetPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const historyRef = useRef<HTMLHeadingElement>(null);
+  const historyRef = useRef<HTMLDivElement>(null);
   const [me, setMe] = useState<ClientMe | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [stats, setStats] = useState<ClientStats | null>(null);
@@ -35,7 +35,8 @@ function CabinetPage() {
   // Own reviews: appointment_id → stars (to prompt only unrated visits).
   const [ratedByAppt, setRatedByAppt] = useState<Record<number, number>>({});
   const [reviewFor, setReviewFor] = useState<number | null>(null);
-  const [stars, setStars] = useState(5);
+  // 0 = not picked yet (stars start empty, send is disabled until picked).
+  const [stars, setStars] = useState(0);
   const [reviewText, setReviewText] = useState('');
   const [sendingReview, setSendingReview] = useState(false);
 
@@ -154,7 +155,7 @@ function CabinetPage() {
       setRatedByAppt((prev) => ({ ...prev, [appointmentId]: data.rating }));
       setReviewFor(null);
       setReviewText('');
-      setStars(5);
+      setStars(0);
       toast.success('Спасибо! Оценка учтена в рейтинге мастера ⭐');
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'Не удалось отправить отзыв'));
@@ -179,7 +180,7 @@ function CabinetPage() {
           )}
           {reviewFor === a.id && (
             <div style={{ marginTop: 8 }}>
-              <div style={{ display: 'flex', gap: 6, fontSize: 34, lineHeight: 1 }}>
+              <div style={{ display: 'flex', gap: 8, fontSize: 64, lineHeight: 1 }}>
                 {[1, 2, 3, 4, 5].map((n) => (
                   <button
                     key={n}
@@ -190,7 +191,7 @@ function CabinetPage() {
                       border: 'none',
                       cursor: 'pointer',
                       padding: 2,
-                      color: n <= stars ? '#f5a623' : '#ddd',
+                      color: n <= stars ? '#f5a623' : '#d8dce3',
                     }}
                     aria-label={`Оценка ${n}`}
                   >
@@ -198,6 +199,7 @@ function CabinetPage() {
                   </button>
                 ))}
               </div>
+              {stars === 0 && <span className="hint">Поставьте оценку — нажмите на звезду</span>}
               <input
                 value={reviewText}
                 onChange={(e) => setReviewText(e.target.value)}
@@ -211,21 +213,22 @@ function CabinetPage() {
                   padding: '10px 12px',
                 }}
               />
-              <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                 <button
                   className="btn btn-sm btn-primary"
-                  style={{ whiteSpace: 'nowrap' }}
-                  disabled={sendingReview}
+                  style={{ flex: 1, whiteSpace: 'nowrap' }}
+                  disabled={sendingReview || stars === 0}
                   onClick={() => submitReview(a.id)}
                 >
                   {sendingReview ? 'Отправляем…' : 'Отправить отзыв'}
                 </button>
                 <button
                   className="btn btn-sm btn-ghost"
-                  style={{ whiteSpace: 'nowrap' }}
+                  style={{ flex: 1, whiteSpace: 'nowrap' }}
                   onClick={() => {
                     setReviewFor(null);
                     setReviewText('');
+                    setStars(0);
                   }}
                 >
                   Позже
@@ -241,7 +244,7 @@ function CabinetPage() {
               className="btn btn-sm btn-ghost"
               onClick={() => {
                 setReviewFor(a.id);
-                setStars(5);
+                setStars(0);
                 setReviewText('');
               }}
             >
@@ -316,26 +319,7 @@ function CabinetPage() {
         </div>
       )}
 
-      {!histFilter && (
-        <>
-          <h2 className="cabinet-section">Предстоящие</h2>
-          {upcoming.length === 0 ? (
-            <EmptyState
-              title="Нет предстоящих записей"
-              description="Выберите мастера и время — это займёт минуту"
-              actionLabel="Записаться"
-              onAction={() => navigate('/cabinet/book')}
-            />
-          ) : (
-            <div className="cabinet-list">{upcoming.map(renderCard)}</div>
-          )}
-        </>
-      )}
-
-      <h2 className="cabinet-section" ref={historyRef}>
-        {histFilter ? 'Записи по фильтру' : 'История'}
-      </h2>
-      <div className="filters-bar" style={{ marginBottom: 12 }}>
+      <div className="filters-bar" style={{ marginBottom: 12 }} ref={historyRef}>
         {[
           { value: '', label: 'Все' },
           { value: 'upcoming', label: '📅 Предстоящие' },
@@ -366,10 +350,18 @@ function CabinetPage() {
             )}
           </div>
         )
-      ) : history.length === 0 ? (
-        <EmptyState title="История пуста" />
+      ) : upcoming.length === 0 && history.length === 0 ? (
+        <EmptyState
+          title="Нет записей"
+          description="Выберите мастера и время — это займёт минуту"
+          actionLabel="Записаться"
+          onAction={() => navigate('/cabinet/book')}
+        />
       ) : (
-        <div className="cabinet-list">{history.map(renderHistoryCard)}</div>
+        <div className="cabinet-list">
+          {upcoming.map(renderCard)}
+          {history.map(renderHistoryCard)}
+        </div>
       )}
 
       <ConfirmDialog

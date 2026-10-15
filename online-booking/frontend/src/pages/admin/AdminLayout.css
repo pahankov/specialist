@@ -217,6 +217,44 @@
   text-overflow: ellipsis;
 }
 
+/* Master tariff + rating under the name (panel only). */
+.sidebar-master-meta {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.tariff-badge,
+.rating-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.tariff-badge {
+  background: linear-gradient(135deg, #8b5cf6, #ec4899);
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(139, 92, 246, 0.45);
+}
+
+.rating-badge {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffd76a;
+  text-decoration: none;
+  border: 1px solid rgba(255, 215, 106, 0.4);
+}
+
+.rating-badge:hover {
+  background: rgba(255, 255, 255, 0.24);
+  color: #ffe08a;
+}
+
 /* ─── Sidebar nav ─────────────────────────────────────────── */
 
 .sidebar-nav {

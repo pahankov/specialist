@@ -400,16 +400,16 @@ function NotificationsPage() {
         </div>
       ) : tab === 'inbox' ? (
         <div className="card">
-          <div className="card-header">
+          <div className="inbox-head">
             <h3>Входящие {unread > 0 && <span className="client-count">({unread} новых)</span>}</h3>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div className="inbox-actions">
               {unread > 0 && (
-                <button className="btn btn-ghost" onClick={handleReadAll}>
+                <button className="btn btn-sm btn-ghost" onClick={handleReadAll}>
                   ✓ Прочитать все
                 </button>
               )}
               {inbox.length > 0 && (
-                <button className="btn btn-ghost" onClick={() => setConfirmClear(true)}>
+                <button className="btn btn-sm btn-ghost" onClick={() => setConfirmClear(true)}>
                   🗑 Очистить
                 </button>
               )}
@@ -460,14 +460,16 @@ function NotificationsPage() {
         </div>
       ) : (
         <div className="card">
-          <div className="card-header">
+          <div className="inbox-head">
             <h3>
               Отправленные {sentTotal > 0 && <span className="client-count">({sentTotal})</span>}
             </h3>
             {sent.length > 0 && (
-              <button className="btn btn-ghost" onClick={() => setConfirmClearSent(true)}>
-                🗑 Очистить
-              </button>
+              <div className="inbox-actions">
+                <button className="btn btn-sm btn-ghost" onClick={() => setConfirmClearSent(true)}>
+                  🗑 Очистить
+                </button>
+              </div>
             )}
           </div>
           {sentLoading ? (

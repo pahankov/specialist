@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { adminApi, assetUrl, authApi } from '../../api/client';
 import {
@@ -14,6 +14,7 @@ import type { CityOption } from '../../components/common/CitySelect';
 import { getApiErrorMessage } from '../../utils/apiError';
 import { clearAuthCookies } from '../../utils/cookies';
 import { capitalizeWords, splitFullName } from '../../utils/names';
+import { MasterReviews } from '../../components/reviews';
 import './ProfilePage.css';
 
 interface Cert {
@@ -27,6 +28,7 @@ const AVATAR_PRESETS = ['🐱', '🐶', '🐥', '🦅', '🦊', '🐼', '🐸', 
 /** Master personal data: photo, names, contacts, city, cabinet, certificates. */
 function ProfilePage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -42,6 +44,7 @@ function ProfilePage() {
   const [avatar, setAvatar] = useState<string | null>(null);
   const [preset, setPreset] = useState<string | null>(null);
   const [certs, setCerts] = useState<Cert[]>([]);
+  const [profileId, setProfileId] = useState<number | null>(null);
   const [newCertName, setNewCertName] = useState('');
   const [newCertUrl, setNewCertUrl] = useState<string | undefined>(undefined);
   const [uploadingCert, setUploadingCert] = useState(false);
@@ -67,6 +70,7 @@ function ProfilePage() {
         setAvatar(data.avatar_url || null);
         setPreset(data.avatar_preset || null);
         setCerts(data.certificates || []);
+        setProfileId(data.profile_id ?? null);
       } catch (err: unknown) {
         toast.error(getApiErrorMessage(err, 'Не удалось загрузить профиль'));
       } finally {
@@ -74,6 +78,16 @@ function ProfilePage() {
       }
     })();
   }, []);
+
+  // Sidebar rating badge jumps here (#reviews).
+  useEffect(() => {
+    if (location.hash === '#reviews') {
+      const t = setTimeout(() => {
+        document.getElementById('reviews')?.scrollIntoView({ behavior: 'smooth' });
+      }, 300);
+      return () => clearTimeout(t);
+    }
+  }, [location.hash, loading]);
 
   const uploadFile = async (file: File, kind: 'avatar' | 'cert'): Promise<string | null> => {
     if (!/^image\/(jpeg|png|webp)$/.test(file.type)) {
@@ -421,8 +435,17 @@ function ProfilePage() {
         </div>
       </form>
 
+      <div className="card" id="reviews" style={{ marginTop: 16, scrollMarginTop: 12 }}>
+        <h3>⭐ Мои отзывы и оценки</h3>
+        <p style={{ fontSize: 13, color: '#666' }}>
+          Средний рейтинг виден клиентам при записи. Отзыв появляется здесь сразу после оценки
+          визита.
+        </p>
+        <MasterReviews profileId={profileId} />
+      </div>
+
       <div className="card" style={{ marginTop: 16, borderColor: '#e5484d' }}>
-        <h3>🗑️ Удаление аккаунта</h3>
+        <h3>🗑️ Удаление аккаунта</h3>{' '}
         <p style={{ fontSize: 13, color: '#666' }}>
           Профиль снимется с публикации, контакты сотрутся, будущие записи клиентов отменятся.
           История хранится обезличенной 3 года согласно политике обработки данных.

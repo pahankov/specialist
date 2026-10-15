@@ -27,6 +27,9 @@ export const adminApi = {
       certificates?: { name: string; url?: string }[];
       auto_confirm?: boolean | null;
       auto_complete?: boolean | null;
+      profile_id?: number | null;
+      tariff?: string | null;
+      trial_ends_at?: string | null;
     }>('/api/v1/admin/profile');
   },
   updateProfile(data: {

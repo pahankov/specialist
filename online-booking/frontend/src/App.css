@@ -81,6 +81,45 @@
   background: #e0e0e0;
 }
 
+/* ─── Shared button scale (single copy — the design system) ───
+ * .btn        primary action (big, pink gradient)
+ * .btn-sm     compact action: always content-sized, never full-width
+ * .btn-ghost  quiet action: white, gray border
+ * .btn-delete destructive: soft red
+ * Page CSS may refine these, never redefine sizes from scratch. */
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 13px;
+  border-radius: 8px;
+  font-weight: 600;
+  width: auto;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.btn-ghost {
+  background: #fff;
+  color: #555;
+  border: 2px solid #e0e0e0;
+}
+
+.btn-ghost:hover {
+  border-color: #667eea;
+  color: #667eea;
+  transform: translateY(-1px);
+}
+
+.btn-delete {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 2px solid transparent;
+}
+
+.btn-delete:hover {
+  background: #fecaca;
+  transform: translateY(-1px);
+}
+
 .input {
   width: 100%;
   padding: 0.75rem;
@@ -110,7 +149,8 @@
     padding: 1rem;
   }
 
-  .btn {
+  /* Full-width only for big buttons; compact ones stay inline. */
+  .btn:not(.btn-sm) {
     width: 100%;
   }
 }

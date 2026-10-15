@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
-import { adminApi, authApi, cabinetApi } from '../../api/client';
+import { adminApi, authApi, cabinetApi, reviewsApi } from '../../api/client';
 import { Breadcrumb, KeyboardShortcutsHint, NotificationBell } from '../../components/common';
 import { getCookie, decodeJwtPayload, getUserRole, clearAuthCookies } from '../../utils/cookies';
 import { getImpersonation, stopImpersonation } from '../../utils/impersonation';
@@ -168,6 +168,46 @@ function BaseLayout({
 
   const isActive = (path: string) => location.pathname === path;
 
+  // Master meta for the sidebar: tariff badge + live rating.
+  const [masterMeta, setMasterMeta] = useState<{
+    tariff: string;
+    trialEnds: string | null;
+    rating: number | null;
+    reviews: number;
+  } | null>(null);
+  useEffect(() => {
+    if (role !== 'MASTER' || !inMasterSection) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await adminApi.getProfile();
+        if (!data.profile_id) return;
+        let rating: number | null = null;
+        let reviews = 0;
+        try {
+          const avg = await reviewsApi.getAverage(data.profile_id);
+          rating = avg.data.average_rating ?? null;
+          reviews = avg.data.review_count ?? 0;
+        } catch {
+          /* rating stays hidden */
+        }
+        if (!cancelled) {
+          setMasterMeta({
+            tariff: data.tariff || 'trial',
+            trialEnds: data.trial_ends_at ?? null,
+            rating,
+            reviews,
+          });
+        }
+      } catch {
+        /* sidebar works without meta */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [role, inMasterSection]);
+
   // Drag-to-reorder nav (order persists per section in localStorage).
   const navSection = location.pathname.startsWith(SUPER_PREFIX)
     ? 'super'
@@ -254,6 +294,30 @@ function BaseLayout({
             />
           </div>
           {user && !sidebarCollapsed && <p className="sidebar-user">👤 {user.name}</p>}
+          {masterMeta && !sidebarCollapsed && (
+            <div className="sidebar-master-meta">
+              <span
+                className="tariff-badge"
+                title={
+                  masterMeta.trialEnds
+                    ? `Тариф «${masterMeta.tariff}» до ${new Date(masterMeta.trialEnds).toLocaleDateString('ru-RU')}`
+                    : `Тариф «${masterMeta.tariff}»`
+                }
+              >
+                💎 {masterMeta.tariff}
+              </span>
+              {masterMeta.rating !== null && (
+                <Link
+                  to="/admin/profile#reviews"
+                  className="rating-badge"
+                  title="Мои отзывы и оценки — открыть"
+                >
+                  ★ {masterMeta.rating.toFixed(1)}
+                  {masterMeta.reviews > 0 ? ` (${masterMeta.reviews})` : ''}
+                </Link>
+              )}
+            </div>
+          )}
         </div>
         <nav className="sidebar-nav">
           {orderedNav.map((item, idx) => (

@@ -93,6 +93,32 @@
   gap: 10px;
 }
 
+/* Section head: title left, normal-size actions right (never full-width). */
+.notifications-page .inbox-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.notifications-page .inbox-head h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.notifications-page .inbox-actions {
+  display: inline-flex;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.notifications-page .inbox-actions .btn {
+  flex: 0 0 auto;
+  width: auto;
+}
+
 .notifications-page .inbox-item {
   border: 1px solid #eee;
   border-radius: 10px;

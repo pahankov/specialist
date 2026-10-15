@@ -93,6 +93,9 @@ async def get_my_profile(
                 "certificates": mp.certificates or [],
                 "auto_confirm": bool(mp.auto_confirm),
                 "auto_complete": bool(mp.auto_complete),
+                "profile_id": mp.id,
+                "tariff": mp.tariff or "trial",
+                "trial_ends_at": mp.trial_ends_at.isoformat() if mp.trial_ends_at else None,
             })
     return out
 

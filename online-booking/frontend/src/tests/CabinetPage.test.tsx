@@ -76,8 +76,10 @@ describe('CabinetPage', () => {
     } as never);
     vi.mocked(mocked.myAppointments).mockResolvedValue({ data: APPTS } as never);
     renderCabinet();
-    expect(await screen.findByText('Предстоящие')).toBeInTheDocument();
-    expect(screen.getByText('История')).toBeInTheDocument();
+    // One united list: upcoming first, chips on top, no section titles.
+    expect(await screen.findByText('Все')).toBeInTheDocument();
+    expect(screen.getByText('📅 Предстоящие')).toBeInTheDocument();
+    expect(screen.queryByText('История')).not.toBeInTheDocument();
     expect(screen.getByText('Мои записи')).toBeInTheDocument();
   });
 
@@ -88,7 +90,7 @@ describe('CabinetPage', () => {
     vi.mocked(mocked.myAppointments).mockResolvedValue({ data: APPTS } as never);
     vi.mocked(mocked.cancelAppointment).mockResolvedValue({ data: {} } as never);
     renderCabinet();
-    await screen.findByText('Предстоящие');
+    await screen.findByText('Все');
     fireEvent.click(screen.getByText('Отменить'));
     fireEvent.click(screen.getByText('Отменить запись'));
     await vi.waitFor(() => {
@@ -103,7 +105,7 @@ describe('CabinetPage', () => {
     } as never);
     vi.mocked(mocked.myAppointments).mockResolvedValue({ data: [] } as never);
     renderCabinet();
-    expect(await screen.findByText('Нет предстоящих записей')).toBeInTheDocument();
+    expect(await screen.findByText('Нет записей')).toBeInTheDocument();
   });
 
   it('rates a completed visit from history', async () => {
@@ -113,8 +115,11 @@ describe('CabinetPage', () => {
     vi.mocked(mocked.myAppointments).mockResolvedValue({ data: APPTS } as never);
     vi.mocked(mocked.createReview).mockResolvedValue({ data: { rating: 5 } } as never);
     renderCabinet();
-    await screen.findByText('История');
+    await screen.findByText('Все');
     fireEvent.click(screen.getByText('⭐ Оценить'));
+    // Stars start empty: send is disabled until picked.
+    expect(screen.getByText('Отправить отзыв')).toBeDisabled();
+    fireEvent.click(screen.getByLabelText('Оценка 5'));
     fireEvent.click(screen.getByText('Отправить отзыв'));
     await vi.waitFor(() => {
       expect(vi.mocked(mocked.createReview)).toHaveBeenCalledWith(

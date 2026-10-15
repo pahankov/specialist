@@ -9,6 +9,16 @@ class TestAdminProfile:
         assert body["name"]
         assert body["city_id"] is None
 
+    async def test_master_profile_sidebar_meta(self, client, auth_headers):
+        """Sidebar needs profile_id (rating) + tariff badge fields."""
+        r = await client.get("/api/v1/admin/profile", headers=auth_headers)
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert isinstance(body["profile_id"], int)
+        assert body["tariff"] == "trial"
+        assert body["trial_ends_at"]
+        assert body["auto_complete"] is False
+
     async def test_master_profile_with_city(self, client, session, auth_headers):
         from sqlalchemy import select
         from app.models.city import City
