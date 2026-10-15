@@ -24,6 +24,8 @@ class Appointment(Base):
     # Snapshots at booking time (bundles only; service flow uses live joins).
     duration_minutes = Column(Integer, nullable=True)
     price = Column(Numeric(10, 2), nullable=True)
+    # Discount provenance snapshot ("-20%", "-500 ₽", "купон XXXX −200 ₽").
+    discount_label = Column(String(200), nullable=True)
     appointment_date = Column(DateTime(timezone=True), nullable=False, index=True)
     status = Column(String(20), default="pending", index=True)
     notes = Column(Text)

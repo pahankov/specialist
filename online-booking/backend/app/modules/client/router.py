@@ -396,11 +396,17 @@ async def book_my_appointment(
         coupon = await resolve_coupon(db, mp.id, data.coupon_code, user)
         coupon_off = coupon_discount(item["price"], coupon)
 
+    label_parts = [item.get("discount_label") or ""]
+    if coupon is not None:
+        label_parts.append(f"купон {coupon.code} −{coupon_off:g} ₽")
+    discount_label = " + ".join(p for p in label_parts if p) or None
+
     appointment = Appointment(
         master_id=mp.id, service_id=item["service_id"], client_id=profile.id,
         bundle_id=item["bundle_id"], bundle_name=item["bundle_name"],
         duration_minutes=item["duration_minutes"],
         price=round(float(item["price"]) - coupon_off, 2),
+        discount_label=discount_label,
         appointment_date=appt_dt,
         status="confirmed" if mp.auto_confirm else "pending",
         notes=(data.notes or "").strip() or None,

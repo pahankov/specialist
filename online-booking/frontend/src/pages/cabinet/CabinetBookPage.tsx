@@ -418,6 +418,22 @@ function CabinetBookPage() {
     const y = selectedDate.getFullYear();
     const m = String(selectedDate.getMonth() + 1).padStart(2, '0');
     const d = String(selectedDate.getDate()).padStart(2, '0');
+    // Typed but never applied: validate silently so the code still counts.
+    let coupon = promoResult;
+    if (!coupon && promo.trim()) {
+      try {
+        const { data } = await cabinetApi.previewCoupon({
+          master_id: selectedMaster.id,
+          ...(modalBundle ? { bundle_id: modalBundle.id } : { service_id: Number(modalServiceId) }),
+          code: promo.trim(),
+        });
+        coupon = data;
+        setPromoResult(data);
+      } catch (err: unknown) {
+        toast.error(getApiErrorMessage(err, 'Купон не подошёл — запись без скидки?'));
+        return;
+      }
+    }
     setBookingLoading(true);
     try {
       const { data } = await cabinetApi.bookAppointment({
@@ -425,7 +441,7 @@ function CabinetBookPage() {
         ...(modalBundle ? { bundle_id: modalBundle.id } : { service_id: Number(modalServiceId) }),
         appointment_date: `${y}-${m}-${d}T${String(slotHour).padStart(2, '0')}:00:00`,
         notes: notes.trim() || undefined,
-        ...(promoResult ? { coupon_code: promoResult.code } : {}),
+        ...(coupon ? { coupon_code: coupon.code } : {}),
       });
       // The server decides: auto-confirm masters return confirmed at once.
       if (data.status === 'confirmed') {

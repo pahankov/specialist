@@ -76,7 +76,7 @@ async def resolve_booking_item(
                 detail="Комплекс изменился — попросите мастера обновить его",
             )
         from app.modules.admin.bundles import bundle_total_minutes, effective_durations
-        from app.services.pricing import apply_discount
+        from app.services.pricing import apply_discount, discount_tag
         overrides = effective_durations(b)
         duration = bundle_total_minutes(
             b, sum(overrides.get(s.id, s.duration_minutes or 0)
@@ -85,9 +85,17 @@ async def resolve_booking_item(
         base = float(b.price) if b.price is not None else members_effective
         price = apply_discount(base, b.discount_percent,
                                b.discount_until, b.discount_fixed)
+        own_tag = discount_tag(b.discount_percent, b.discount_fixed, b.discount_until)
+        if own_tag:
+            label = own_tag
+        else:
+            member_tags = [discount_tag(m.discount_percent, m.discount_fixed,
+                                        m.discount_until) for m in members]
+            label = " + ".join(t for t in member_tags if t)
         return {
             "service_id": None, "bundle_id": b.id, "bundle_name": b.name,
             "name": b.name, "duration_minutes": duration, "price": price,
+            "discount_label": label,
         }
     service = (await db.execute(
         select(Service).where(Service.id == service_id,
@@ -95,10 +103,14 @@ async def resolve_booking_item(
     )).scalar_one_or_none()
     if service is None or service.is_active is False:
         raise HTTPException(status_code=404, detail="Услуга не найдена")
+    from app.services.pricing import discount_tag
     return {
         "service_id": service.id, "bundle_id": None, "bundle_name": None,
         "name": service.name, "duration_minutes": service.duration_minutes,
         "price": service.effective_price,
+        "discount_label": discount_tag(service.discount_percent,
+                                       service.discount_fixed,
+                                       service.discount_until),
     }
 
 

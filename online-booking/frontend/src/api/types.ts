@@ -121,6 +121,10 @@ export interface Appointment {
   client_phone?: string;
   service_name?: string;
   service_price?: number | string;
+  /** Coupon code used for this booking (master panel visibility). */
+  coupon_code?: string | null;
+  /** Discount provenance snapshot ("−20%", "купон XXXX −200 ₽"). */
+  discount_label?: string | null;
   /** Duration minutes (by-date endpoint) — drives granule spans */
   service_duration?: number | null;
   master_name?: string | null;

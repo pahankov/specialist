@@ -6,6 +6,7 @@ import type { Client } from '../../api/types';
 import { PHONE_PLACEHOLDER, EMAIL_PLACEHOLDER } from '../../constants';
 import { isCompletePhone } from '../../components/common/PhoneInput';
 import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError';
+import { goLogin } from '../../utils/redirect';
 import { downloadCsv } from '../../api/export';
 import { usePersistentState } from '../../utils/persistentState';
 import { useAdminSort } from '../../utils/useAdminSort';
@@ -103,7 +104,7 @@ function ClientsPage() {
       setTotalPages(c.data.total_pages || 1);
     } catch (err: unknown) {
       if (getApiErrorStatus(err) === 401) {
-        window.location.href = '/admin/login';
+        goLogin();
       } else toast.error('Ошибка загрузки');
     } finally {
       setLoading(false);

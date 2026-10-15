@@ -38,6 +38,8 @@ class AppointmentWithDetails(BaseModel):
     # float on the wire (Decimal serializes as a string in JSON).
     service_price: Optional[float]
     master_name: Optional[str] = None
+    coupon_code: Optional[str] = None
+    discount_label: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 class AvailableDay(BaseModel):

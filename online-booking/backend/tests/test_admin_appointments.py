@@ -528,7 +528,7 @@ class TestExactOverlapAndBells:
         )).scalars().all()
         assert len(notes) == 1
         assert "подтвердил" in notes[0].text
-        assert notes[0].link == "appointments"
+        assert notes[0].link == f"appointments:{appt_id}"
 
     async def test_cancel_bells_the_client(self, client, session, auth_headers):
         """Master cancel lands in the client's bell, with the reason."""
@@ -559,4 +559,4 @@ class TestExactOverlapAndBells:
         assert len(notes) == 1
         assert "отменил" in notes[0].text
         assert "Заболел" in notes[0].text
-        assert notes[0].link == "appointments"
+        assert notes[0].link == f"appointments:{appt_id}"

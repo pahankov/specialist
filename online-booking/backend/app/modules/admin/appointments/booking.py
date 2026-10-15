@@ -141,6 +141,7 @@ async def book_appointment(
         client_id=user.client_profile.id,
         bundle_id=item["bundle_id"], bundle_name=item["bundle_name"],
         duration_minutes=item["duration_minutes"], price=item["price"],
+        discount_label=item.get("discount_label") or None,
         appointment_date=data.appointment_date, status=data.status, notes=notes
     )
     db.add(new_appointment)

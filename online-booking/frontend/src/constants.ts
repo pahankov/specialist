@@ -10,4 +10,4 @@ export const EMAIL_PLACEHOLDER = 'name@example.com';
 export const TELEGRAM_PLACEHOLDER = '@username';
 
 /** Frontend bundle version (bump with package.json — lets screenshots prove the build). */
-export const APP_VERSION = '1.56.0';
+export const APP_VERSION = '1.57.0';

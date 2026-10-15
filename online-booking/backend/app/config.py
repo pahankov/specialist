@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = Field(default_factory=_get_default_db_url)
     SECRET_KEY: str = ""
     REFRESH_SECRET_KEY: str = ""
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30  # shortened from 1440
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     ALGORITHM: str = "HS256"
     APP_NAME: str = "Online Booking API"

@@ -375,8 +375,9 @@
 | 25 | 15a1b2c3d4e5 | 14a1b2c3d4e5 | `services.discount_until`, `service_bundles.discount_until` (срок скидки) | 2026-10-15 |
 | 26 | 16a1b2c3d4e5 | 15a1b2c3d4e5 | `coupons`, `coupon_uses` (персональные коды −%/−₽ своим клиентам) | 2026-10-15 |
 | 27 | 17a1b2c3d4e5 | 16a1b2c3d4e5 | `services.discount_fixed`, `service_bundles.discount_fixed` (−₽ после %) | 2026-10-15 |
+| 28 | 18a1b2c3d4e5 | 17a1b2c3d4e5 | `appointments.discount_label` (слепок скидки на записи) | 2026-10-15 |
 
-**Head:** `17a1b2c3d4e5`
+**Head:** `18a1b2c3d4e5`
 
 > Старая цепочка из 12 миграций (`9a9c2edb` → `b2c3d4e5f6a7`) удалена после squash —
 > история сохранена в git (`git log -- alembic/versions/`). Прод-БД со старым head

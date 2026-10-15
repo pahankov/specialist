@@ -45,12 +45,14 @@ function SchedulePage() {
     new Date().toISOString().slice(0, 7),
   );
   const currentMonth = new Date(`${currentMonthISO}-01T00:00:00`);
+  // Functional update from the FRESH state: handlers are useCallback([]) and
+  // must never compute from a stale render closure (that froze month flips).
   const setCurrentMonth = (d: Date | ((p: Date) => Date)) => {
-    setCurrentMonthISO(
-      typeof d === 'function'
-        ? d(currentMonth).toISOString().slice(0, 7)
-        : d.toISOString().slice(0, 7),
-    );
+    setCurrentMonthISO((prevISO) => {
+      const prev = new Date(`${prevISO}-01T00:00:00`);
+      const next = typeof d === 'function' ? d(prev) : d;
+      return next.toISOString().slice(0, 7);
+    });
   };
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -492,6 +494,53 @@ function SchedulePage() {
     [appointments, currentMonthISO, selectedMasterId],
   );
 
+  // Single-day apply: without the month checkbox the window lands only on
+  // the selected working day (days with live bookings are skipped).
+  const applyWindowToDay = useCallback(
+    async (date: Date, start: number, end: number): Promise<string> => {
+      const pad = (h: number) => `${String(h).padStart(2, '0')}:00`;
+      const masterParam = selectedMasterId !== '' ? selectedMasterId : undefined;
+      const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+      let rows: { id: number; schedule_date: string }[] = [];
+      try {
+        rows = (await adminApi.getWorkingHours(masterParam)).data.filter(
+          (h: any) => String(h.schedule_date) === dateStr,
+        );
+      } catch {
+        return ' День не обновлён (нет связи)';
+      }
+      if (rows.length === 0) {
+        return ' День нерабочий — время сохранилось только как диапазон по умолчанию';
+      }
+      const live = appointments.some(
+        (a) => a.status !== 'cancelled' && String(a.appointment_date).slice(0, 10) === dateStr,
+      );
+      if (live) {
+        return ' В дне есть брони — часы не тронуты';
+      }
+      try {
+        await adminApi.updateWorkingHour(rows[0].id, {
+          schedule_date: dateStr,
+          start_time: pad(start),
+          end_time: pad(end),
+        });
+      } catch {
+        return ' День не обновлён (ошибка)';
+      }
+      setSchedule((prev) => ({ ...prev, [dateStr]: { start, end } }));
+      setActiveHours((prev) => {
+        const next = { ...prev };
+        for (const k of Object.keys(next)) {
+          if (k.startsWith(`${dateStr}-`)) delete next[k];
+        }
+        for (let h = start; h < end; h++) next[`${dateStr}-${h}`] = true;
+        return next;
+      });
+      return ` День ${date.toLocaleDateString('ru-RU')}: ${start}:00–${end}:00`;
+    },
+    [appointments, selectedMasterId],
+  );
+
   if (loading)
     return <div style={{ padding: 60, textAlign: 'center', color: '#666' }}>Загрузка...</div>;
 
@@ -645,6 +694,14 @@ function SchedulePage() {
                           : applied.skipped > 0
                             ? ` Все дни с бронями — часы не тронуты (${applied.skipped})`
                             : ' Рабочих дней в месяце пока нет';
+                    } else if (selectedDate) {
+                      // No checkbox: the window lands on the selected day only.
+                      const applied = await applyWindowToDay(
+                        selectedDate,
+                        data.start_hour,
+                        data.end_hour,
+                      );
+                      suffix = applied;
                     }
                     toast.success(
                       `Рабочее время сохранено: ${data.start_hour}:00–${data.end_hour}:00.${suffix}`,
@@ -672,7 +729,7 @@ function SchedulePage() {
                   fontSize: 13,
                   color: '#555',
                 }}
-                title="Выставить это время всем рабочим дням текущего месяца (дни с записями пропускаются)"
+                title="Без галочки время встанет только на выбранный день (и запомнится диапазоном). С галочкой — всем рабочим дням текущего месяца (дни с записями пропускаются)"
               >
                 <input
                   type="checkbox"

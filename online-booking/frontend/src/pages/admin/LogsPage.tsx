@@ -9,6 +9,7 @@ import { usePersistentState } from '../../utils/persistentState';
 import '../../styles/tables.css';
 import './LogsPage.css';
 import { entityLabels, actionLabels, levelLabels } from '../../constants/statusLabels';
+import { goLogin } from '../../utils/redirect';
 
 function getIsAdmin(): boolean {
   const token = getCookie('access_token');
@@ -47,7 +48,7 @@ function LogsPage() {
       setTotal(resp.data.total);
     } catch (err: unknown) {
       if (getApiErrorStatus(err) === 401) {
-        window.location.href = '/admin/login';
+        goLogin();
       } else {
         const detail = getApiErrorMessage(err, 'Ошибка загрузки логов');
         setError(typeof detail === 'string' ? detail : JSON.stringify(detail));

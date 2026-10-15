@@ -19,6 +19,7 @@ import type { FitColumnDef } from '../../components/common';
 import { downloadCsv } from '../../api/export';
 import { usePersistentState } from '../../utils/persistentState';
 import { useSectionPrefix, SUPER_PREFIX } from '../../utils/section';
+import { goLogin } from '../../utils/redirect';
 import { getApiErrorMessage } from '../../utils/apiError';
 import '../../styles/filters.css';
 import '../../styles/tables.css';
@@ -143,7 +144,7 @@ function AppointmentsPage() {
       setTotalPages(resp.data.total_pages);
     } catch (err: any) {
       if (err.response?.status === 401) {
-        window.location.href = '/admin/login';
+        goLogin();
       } else setError('Ошибка загрузки');
     } finally {
       setLoading(false);
@@ -454,9 +455,28 @@ function AppointmentsPage() {
         accessorFn: (a) => a.service_price ?? 0,
         cell: ({ row }) => {
           const p = row.original.service_price;
-          return p ? `${Number(p).toLocaleString('ru-RU')} ₽` : '—';
+          const coupon = row.original.coupon_code;
+          const label = row.original.discount_label;
+          const titleBits = [
+            coupon ? `Промокод: ${coupon}` : '',
+            label && (!coupon || !label.includes(coupon)) ? `Скидка: ${label}` : '',
+          ].filter(Boolean);
+          return (
+            <span title={titleBits.length > 0 ? titleBits.join(' · ') : undefined}>
+              {p ? `${Number(p).toLocaleString('ru-RU')} ₽` : '—'}
+              {label ? (
+                <span style={{ marginLeft: 6, whiteSpace: 'nowrap' }} title={`Скидка: ${label}`}>
+                  🏷 {label}
+                </span>
+              ) : coupon ? (
+                <span title={`Промокод: ${coupon}`} style={{ marginLeft: 6, whiteSpace: 'nowrap' }}>
+                  🎟 {coupon}
+                </span>
+              ) : null}
+            </span>
+          );
         },
-        meta: { minWidth: 80, maxWidth: 140, label: 'Сумма' },
+        meta: { minWidth: 80, maxWidth: 200, label: 'Сумма' },
       },
       {
         id: 'status',

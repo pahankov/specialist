@@ -90,6 +90,11 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
       }
       // Deep-link continue (e.g. carousel "Записаться" → cabinet booking).
       if (redirectTo) {
+        try {
+          sessionStorage.removeItem('postLoginTo');
+        } catch {
+          /* ignore */
+        }
         navigate(redirectTo, { replace: true });
         return;
       }

@@ -96,8 +96,15 @@ apiClient.interceptors.response.use(
         return apiClient(originalRequest);
       } catch (refreshError) {
         processQueue(refreshError, null);
-        // Not refreshed — logout
+        // Not refreshed — logout, but remember where we were: home opens
+        // the login modal and continues straight back after auth.
         clearAuthCookies();
+        try {
+          const target = window.location.pathname + window.location.search;
+          if (target && target !== '/') sessionStorage.setItem('postLoginTo', target);
+        } catch {
+          /* ignore */
+        }
         window.location.href = '/admin/login';
         return Promise.reject(refreshError);
       } finally {

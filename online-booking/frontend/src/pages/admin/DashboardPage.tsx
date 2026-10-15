@@ -4,9 +4,9 @@ import { adminApi } from '../../api/client';
 import type { DashboardStats, AdminStats } from '../../api/types';
 import { Skeleton, EmptyState, StatusBadge } from '../../components/common';
 import { getApiErrorMessage } from '../../utils/apiError';
+import { goLogin } from '../../utils/redirect';
 import { useSectionPrefix, SUPER_PREFIX } from '../../utils/section';
 import './DashboardPage.css';
-import { statusLabels } from '../../constants/statusLabels';
 
 function DashboardPage() {
   const navigate = useNavigate();
@@ -26,7 +26,7 @@ function DashboardPage() {
       .catch((err: any) => {
         console.error('Dashboard error:', err);
         if (err.response?.status === 401) {
-          window.location.href = '/admin/login';
+          goLogin();
         } else {
           const detail = getApiErrorMessage(err, 'Неизвестная ошибка');
           setError(`Ошибка загрузки: ${detail}`);
@@ -244,26 +244,9 @@ function DashboardPage() {
             </div>
           </div>
 
-          {/* ─── Bottom grid ─── */}
-          <div className="dashboard-grid">
-            <div className="card">
-              <h3>Статусы записей</h3>
-              <div className="status-list">
-                {Object.entries(statusCounts).map(([s, c]) => (
-                  <div key={s} className="status-row">
-                    <span>{statusLabels[s] || s}</span>
-                    <span className="status-count">{c}</span>
-                  </div>
-                ))}
-                {Object.keys(statusCounts).length === 0 && (
-                  <EmptyState
-                    icon="📅"
-                    title="Нет записей"
-                    description="Записи появятся после бронирования"
-                  />
-                )}
-              </div>
-            </div>
+          {/* ─── Bottom grid: statuses live in the funnel above,
+              so upcoming takes the full width ─── */}
+          <div className="dashboard-grid dashboard-grid-single">
             <div className="card">
               <div className="card-header">
                 <h3>Ближайшие записи</h3>

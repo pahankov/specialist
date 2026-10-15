@@ -279,6 +279,7 @@ async def public_booking(booking: PublicBookingCreate, db: AsyncSession = Depend
 
     # Create appointment
     client_note = (booking.notes or "").strip()
+    from app.services.pricing import discount_tag
     appointment = Appointment(
         master_id=booking.master_id,
         service_id=booking.service_id,
@@ -287,6 +288,9 @@ async def public_booking(booking: PublicBookingCreate, db: AsyncSession = Depend
         status="confirmed" if master_profile.auto_confirm else "pending",
         duration_minutes=service.duration_minutes,
         price=service.effective_price,
+        discount_label=discount_tag(service.discount_percent,
+                                    service.discount_fixed,
+                                    service.discount_until) or None,
         notes=client_note or None,
     )
 

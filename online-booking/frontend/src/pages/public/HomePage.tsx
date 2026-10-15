@@ -9,6 +9,7 @@ import LoginModal from '../../components/LoginModal';
 import { PublicFooter } from '../../components/common';
 import { ReviewsSection } from '../../components/reviews';
 import { getCookie, decodeJwtPayload, clearAuthCookies } from '../../utils/cookies';
+import { takeReturnUrl } from '../../utils/redirect';
 import { ADMIN_PREFIX, SUPER_PREFIX } from '../../utils/section';
 import 'swiper/css';
 import 'swiper/css/navigation';
@@ -55,12 +56,14 @@ function HomePage() {
   };
 
   // Guard redirect (RequireClient drops guests here with state.from).
+  // Dead sessions also stash the target in sessionStorage (postLoginTo).
   useEffect(() => {
-    const from = (location.state as { from?: string } | null)?.from;
+    const from = (location.state as { from?: string } | null)?.from ?? takeReturnUrl();
     if (from && !getCookie('access_token')) {
       setPostLoginTo(from);
       setShowLogin(true);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const refreshAuth = () => {

@@ -11,6 +11,7 @@ import type { Service } from '../../api/types';
 import type { Bundle } from '../../api/cabinet';
 import { formatPrice, formatDiscountTag } from '../../components/schedule/helpers';
 import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError';
+import { goLogin } from '../../utils/redirect';
 import '../../styles/tables.css';
 import './ServicesPage.css';
 
@@ -243,7 +244,7 @@ function ServicesPage() {
       setTotalPages(s.data.total_pages || 1);
     } catch (err: unknown) {
       if (getApiErrorStatus(err) === 401) {
-        window.location.href = '/admin/login';
+        goLogin();
       } else setError('Ошибка загрузки');
     } finally {
       setLoading(false);

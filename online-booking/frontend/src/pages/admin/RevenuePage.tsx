@@ -4,6 +4,7 @@ import { adminApi, superAdminApi } from '../../api/client';
 import type { DashboardStats, AdminStats } from '../../api/types';
 import { Skeleton, EmptyState, MasterSelect } from '../../components/common';
 import { getApiErrorMessage } from '../../utils/apiError';
+import { goLogin } from '../../utils/redirect';
 import { useSectionPrefix } from '../../utils/section';
 import { usePersistentState } from '../../utils/persistentState';
 import '../../styles/filters.css';
@@ -42,7 +43,7 @@ function RevenuePage() {
       })
       .catch((err: any) => {
         if (err.response?.status === 401) {
-          window.location.href = '/admin/login';
+          goLogin();
         } else setError(getApiErrorMessage(err, 'Ошибка загрузки'));
       })
       .finally(() => setLoading(false));

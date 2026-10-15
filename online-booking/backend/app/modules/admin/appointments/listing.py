@@ -156,6 +156,17 @@ async def get_admin_appointments(
         from app.models.master_hidden_client import DELETED_CLIENT_NAME
 
     items = []
+    # Coupon codes per appointment (one query for the page).
+    coupon_map: dict = {}
+    page_ids = [row[0].id for row in rows]
+    if page_ids:
+        from app.models.coupon import Coupon, CouponUse
+        cu = (await db.execute(
+            select(CouponUse.appointment_id, Coupon.code)
+            .join(Coupon, CouponUse.coupon_id == Coupon.id)
+            .where(CouponUse.appointment_id.in_(page_ids))
+        )).all()
+        coupon_map = {aid: code for aid, code in cu}
     for row in rows:
         appt = row[0]
         client_name, client_phone = row[1], row[2]
@@ -172,7 +183,9 @@ async def get_admin_appointments(
             service_price=(float(appt.price) if appt.price is not None
                            else (float(row[4]) if row[4] is not None else None)),
             # Admin branch selects master_name as 6th column; master branch has none
-            master_name=row[5] if is_admin and len(row) > 5 else None
+            master_name=row[5] if is_admin and len(row) > 5 else None,
+            coupon_code=coupon_map.get(appt.id),
+            discount_label=appt.discount_label,
         ))
 
     return PaginatedResponse(
@@ -247,6 +260,7 @@ async def get_appointments_by_date(
          "service_duration": (a.duration_minutes if a.duration_minutes is not None
                               else (a.service.duration_minutes if a.service else None)),
          "appointment_date": a.appointment_date.isoformat(), "status": a.status,
+         "discount_label": a.discount_label,
          "notes": a.notes}
         for a in appointments
     ]
