@@ -453,7 +453,7 @@ function MastersPage() {
                   className="btn btn-sm btn-danger"
                   onClick={() => setDeleteConfirm(master.id)}
                 >
-                  🗑️
+                  ✖
                 </button>
               </Tooltip>
             </span>
@@ -585,7 +585,7 @@ function MastersPage() {
       <ConfirmDialog
         open={deleteConfirm !== null}
         onClose={() => setDeleteConfirm(null)}
-        title="🗑️ Удалить мастера?"
+        title="🗑 Удалить мастера?"
         message="Мастер будет удалён вместе со всеми данными. Это действие нельзя отменить."
         confirmLabel="Удалить"
         danger

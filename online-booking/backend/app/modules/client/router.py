@@ -419,7 +419,8 @@ async def book_my_appointment(
         db, recipient_id=mp.user_id,
         text=f"Новая запись: {user.name} — {item['name']}, {format_slot(appt_dt)}"
              + (f" — «{client_note[:120]}»" if client_note else ""),
-        sender_id=user.id, audience="booking", link="appointments",
+        sender_id=user.id, audience="booking",
+        link=f"appointments:{appointment.id}",
     )
     await log_action(
         db, user.id, "create", "appointment", None,

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { adminApi } from '../../api/client';
 import { ConfirmDialog, DataTable, Skeleton, EmptyState, Pager } from '../../components/common';
@@ -13,7 +14,8 @@ import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError';
 import '../../styles/tables.css';
 import './ServicesPage.css';
 
-/** 🏷 Inline discount editor: click the badge, set % + expiry right in the row. */
+/** 🏷 Inline discount editor: click the badge, set % + expiry right in the row.
+ * Closes on ✓, ✕, Escape or a click outside. */
 function DiscountBadge({
   pct,
   until,
@@ -27,6 +29,24 @@ function DiscountBadge({
   const [v, setV] = useState(pct ? String(pct) : '');
   const [u, setU] = useState(until ? String(until).slice(0, 16) : '');
   const [saving, setSaving] = useState(false);
+  const boxRef = useRef<HTMLSpanElement>(null);
+
+  // Escape + outside click close the editor (inputs keep working inside).
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    const onDown = (e: PointerEvent) => {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('pointerdown', onDown);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('pointerdown', onDown);
+    };
+  }, [open]);
 
   const save = async () => {
     const num = v.trim() === '' ? null : Math.round(Number(v));
@@ -64,7 +84,10 @@ function DiscountBadge({
     );
   }
   return (
-    <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+    <span
+      ref={boxRef}
+      style={{ display: 'inline-flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}
+    >
       <input
         type="number"
         min={0}
@@ -119,6 +142,8 @@ interface CouponRow {
 }
 
 function ServicesPage() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -484,12 +509,12 @@ function ServicesPage() {
     fetchCoupons();
   }, []);
 
-  const openCouponForm = async () => {
+  const openCouponForm = async (prefillIds?: number[]) => {
     setCouponKind('percent');
     setCouponValue('');
     setCouponUses('1');
     setCouponUntil('');
-    setCouponPicked(new Set());
+    setCouponPicked(new Set(prefillIds ?? []));
     try {
       const { data } = await adminApi.getClients({ page: 1, page_size: 200 });
       setCouponClients(
@@ -504,6 +529,20 @@ function ServicesPage() {
     }
     setShowCouponForm(true);
   };
+
+  // Deep jump from Clients ("выдать купон"): form opens pre-addressed.
+  useEffect(() => {
+    const state = location.state as { couponFor?: { id: number; name: string } } | null;
+    if (state?.couponFor) {
+      const target = state.couponFor;
+      navigate(location.pathname, { replace: true });
+      openCouponForm([target.id]);
+      toast.success(`Купон для клиента: ${target.name}`);
+      requestAnimationFrame(() => {
+        document.getElementById('coupons-card')?.scrollIntoView({ behavior: 'smooth' });
+      });
+    }
+  }, []);
 
   const handleCouponSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -588,25 +627,10 @@ function ServicesPage() {
           const s = row.original;
           const eff = Number(s.effective_price ?? s.price);
           const tag = formatDiscountTag(s.discount_percent, s.discount_until);
-          return s.discount_percent ? (
-            <span style={{ whiteSpace: 'nowrap' }}>
-              <s style={{ color: '#999' }}>{formatPrice(s.price)} ₽</s>{' '}
-              <strong style={{ color: '#e5484d' }}>{formatPrice(eff)} ₽</strong>{' '}
-              <span title="Скидка">{tag}</span>
-            </span>
-          ) : (
-            `${formatPrice(s.price)} ₽`
-          );
-        },
-        meta: { minWidth: 120, maxWidth: 200, label: 'Цена' },
-      },
-      {
-        id: 'actions',
-        header: 'Действия',
-        cell: ({ row }) => {
-          const s = row.original;
           return (
-            <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+            <span
+              style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}
+            >
               <DiscountBadge
                 pct={s.discount_percent}
                 until={s.discount_until}
@@ -618,6 +642,27 @@ function ServicesPage() {
                   fetchData();
                 }}
               />
+              {s.discount_percent ? (
+                <span style={{ whiteSpace: 'nowrap' }}>
+                  <s style={{ color: '#999' }}>{formatPrice(s.price)} ₽</s>{' '}
+                  <strong style={{ color: '#e5484d' }}>{formatPrice(eff)} ₽</strong>{' '}
+                  <span title="Скидка">{tag}</span>
+                </span>
+              ) : (
+                `${formatPrice(s.price)} ₽`
+              )}
+            </span>
+          );
+        },
+        meta: { minWidth: 220, maxWidth: 320, label: 'Цена' },
+      },
+      {
+        id: 'actions',
+        header: 'Действия',
+        cell: ({ row }) => {
+          const s = row.original;
+          return (
+            <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
               <button
                 className="btn btn-sm btn-edit"
                 onClick={() => handleEdit(s)}
@@ -979,6 +1024,17 @@ function ServicesPage() {
                   ))}
                 </div>
                 <div className="bundle-totals">
+                  <DiscountBadge
+                    pct={b.discount_percent}
+                    until={b.discount_until}
+                    onSave={async (pct, until) => {
+                      await adminApi.updateBundle(b.id, {
+                        discount_percent: pct ?? null,
+                        discount_until: until,
+                      });
+                      fetchData();
+                    }}
+                  />{' '}
                   ⏱ {b.duration_total} мин
                   {b.duration_override != null ? (
                     <span title="Задано вручную, а не суммой услуг"> (своё)</span>
@@ -1003,17 +1059,6 @@ function ServicesPage() {
                   )}
                 </div>
                 <div className="bundle-actions">
-                  <DiscountBadge
-                    pct={b.discount_percent}
-                    until={b.discount_until}
-                    onSave={async (pct, until) => {
-                      await adminApi.updateBundle(b.id, {
-                        discount_percent: pct ?? null,
-                        discount_until: until,
-                      });
-                      fetchData();
-                    }}
-                  />
                   <button
                     className="btn btn-sm btn-ghost"
                     onClick={() => toggleBundleActive(b)}
@@ -1043,7 +1088,7 @@ function ServicesPage() {
       <div className="card" id="coupons-card" style={{ marginTop: 16 }}>
         <div className="card-header">
           <h3>🎟 Купоны ({coupons.filter((c) => c.is_active).length})</h3>
-          <button className="btn btn-primary" onClick={openCouponForm}>
+          <button className="btn btn-primary" onClick={() => openCouponForm()}>
             + Выдать купон
           </button>
         </div>
@@ -1170,7 +1215,7 @@ function ServicesPage() {
       <ConfirmDialog
         open={!!deletingId}
         onClose={() => setDeletingId(null)}
-        title="🗑️ Удалить услугу?"
+        title="🗑 Удалить услугу?"
         message="Это действие нельзя отменить. Услуга будет скрыта из списка."
         confirmLabel="Удалить"
         danger
@@ -1180,7 +1225,7 @@ function ServicesPage() {
       <ConfirmDialog
         open={deletingBundleId !== null}
         onClose={() => setDeletingBundleId(null)}
-        title="🗑️ Удалить комплекс?"
+        title="🗑 Удалить комплекс?"
         message="Прошлые записи сохранят название комплекса."
         confirmLabel="Удалить"
         danger

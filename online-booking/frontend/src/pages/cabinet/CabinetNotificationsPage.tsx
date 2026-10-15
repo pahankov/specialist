@@ -128,7 +128,7 @@ function CabinetNotificationsPage() {
               onClick={() => {
                 if (n.link === 'reviews') navigate('/cabinet', { state: { scrollTo: 'history' } });
                 else if (n.link === 'book') navigate('/cabinet/book');
-                else if (n.link === 'appointments') navigate('/cabinet');
+                else if (n.link && n.link.startsWith('appointments')) navigate('/cabinet');
               }}
               style={n.link ? { cursor: 'pointer' } : undefined}
               title={
@@ -136,7 +136,7 @@ function CabinetNotificationsPage() {
                   ? 'Открыть историю и оценить →'
                   : n.link === 'book'
                     ? 'Перейти к записи →'
-                    : n.link === 'appointments'
+                    : n.link && n.link.startsWith('appointments')
                       ? 'Открыть мои записи →'
                       : undefined
               }

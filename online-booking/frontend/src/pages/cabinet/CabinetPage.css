@@ -150,6 +150,22 @@
   color: white;
 }
 
+.cabinet-page .filter-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #555;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.cabinet-page .filter-check input[type='checkbox'] {
+  width: 15px;
+  height: 15px;
+  accent-color: #0d7a6f;
+}
+
 /* Status badges: one width everywhere, like the master panel. */
 .cabinet-page .status-badge {
   display: inline-flex;

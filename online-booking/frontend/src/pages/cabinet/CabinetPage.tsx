@@ -32,6 +32,43 @@ function CabinetPage() {
   const [cancellingId, setCancellingId] = useState<number | null>(null);
   // History filter chips, like the master panel.
   const [histFilter, setHistFilter] = useState('');
+  // Toggles for done/cancelled (persisted, like the master panel).
+  const [showCompleted, setShowCompleted] = useState(() => {
+    try {
+      const v = localStorage.getItem('cabinet.showCompleted');
+      return v === null ? true : v === '1';
+    } catch {
+      return true;
+    }
+  });
+  const [showCancelled, setShowCancelled] = useState(() => {
+    try {
+      const v = localStorage.getItem('cabinet.showCancelled');
+      return v === null ? true : v === '1';
+    } catch {
+      return true;
+    }
+  });
+  const toggleCompleted = () => {
+    setShowCompleted((p) => {
+      try {
+        localStorage.setItem('cabinet.showCompleted', p ? '0' : '1');
+      } catch {
+        /* ignore */
+      }
+      return !p;
+    });
+  };
+  const toggleCancelled = () => {
+    setShowCancelled((p) => {
+      try {
+        localStorage.setItem('cabinet.showCancelled', p ? '0' : '1');
+      } catch {
+        /* ignore */
+      }
+      return !p;
+    });
+  };
   // Own reviews: appointment_id → stars (to prompt only unrated visits).
   const [ratedByAppt, setRatedByAppt] = useState<Record<number, number>>({});
   const [reviewFor, setReviewFor] = useState<number | null>(null);
@@ -131,6 +168,8 @@ function CabinetPage() {
     );
 
   // A picked chip unites upcoming + history into one list.
+  const hideByToggle = (a: Appointment) =>
+    (a.status === 'completed' && !showCompleted) || (a.status === 'cancelled' && !showCancelled);
   const unified = [...appointments]
     .filter((a) => {
       if (histFilter === 'upcoming')
@@ -140,6 +179,7 @@ function CabinetPage() {
         );
       return a.status === histFilter;
     })
+    .filter((a) => !hideByToggle(a))
     .sort(
       (a, b) => new Date(a.appointment_date).getTime() - new Date(b.appointment_date).getTime(),
     );
@@ -344,6 +384,14 @@ function CabinetPage() {
             {f.label}
           </button>
         ))}
+        <label className="filter-check" style={{ marginLeft: 'auto' }}>
+          <input type="checkbox" checked={showCompleted} onChange={toggleCompleted} />
+          Завершённые
+        </label>
+        <label className="filter-check">
+          <input type="checkbox" checked={showCancelled} onChange={toggleCancelled} />
+          Отменённые
+        </label>
       </div>
       {histFilter ? (
         unified.length === 0 ? (
@@ -366,8 +414,8 @@ function CabinetPage() {
         />
       ) : (
         <div className="cabinet-list">
-          {upcoming.map(renderCard)}
-          {history.map(renderHistoryCard)}
+          {upcoming.filter((a) => !hideByToggle(a)).map(renderCard)}
+          {history.filter((a) => !hideByToggle(a)).map(renderHistoryCard)}
         </div>
       )}
 

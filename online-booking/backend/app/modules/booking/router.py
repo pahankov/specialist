@@ -297,7 +297,8 @@ async def public_booking(booking: PublicBookingCreate, db: AsyncSession = Depend
         text=f"Новая запись: {booking.client_name} — "
              f"{service.name}, {format_slot(booking.appointment_date)}"
              + (f" — «{client_note[:120]}»" if client_note else ""),
-        sender_id=client.user_id, audience="booking", link="appointments",
+        sender_id=client.user_id, audience="booking",
+        link=f"appointments:{appointment.id}",
     )
     await db.commit()
     await db.refresh(appointment)

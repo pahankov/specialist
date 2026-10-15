@@ -238,9 +238,14 @@ function NotificationsPage() {
     }
   };
 
-  // Deep link: booking notices jump straight to the appointments list.
+  // Deep link: booking notices jump straight to the appointments list,
+  // flashing the exact row ("appointments:42" from new-booking bells).
   const openLinked = (n: InboxItem) => {
-    if (n.link === 'appointments') navigate(`${section}/appointments`);
+    if (!n.link) return;
+    if (n.link.startsWith('appointments')) {
+      const id = n.link.split(':')[1];
+      navigate(`${section}/appointments${id ? `?highlight=${id}` : ''}`);
+    }
   };
 
   const handleReadAll = async () => {
@@ -435,7 +440,9 @@ function NotificationsPage() {
                         }
                       : undefined
                   }
-                  title={n.link === 'appointments' ? 'Перейти к записям →' : undefined}
+                  title={
+                    n.link && n.link.startsWith('appointments') ? 'Перейти к записи →' : undefined
+                  }
                 >
                   <div className="inbox-text">{n.text}</div>
                   <div className="inbox-meta">

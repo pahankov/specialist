@@ -55,7 +55,8 @@ async def _bell_client(
             text += f" ({extra})"
         await notify_user(
             db, recipient_id=cp.user_id, text=text,
-            sender_id=master.id, audience="booking", link="appointments",
+            sender_id=master.id, audience="booking",
+            link=f"appointments:{appointment.id}",
         )
     except Exception as e:
         logger.warning("Bell to client failed (non-fatal): %s", e)

@@ -36,6 +36,21 @@
   padding: 0 16px;
 }
 
+/* Bell deep-link: the target row flashes so the eye lands on it. */
+.row-flash td {
+  animation: row-flash-bg 3.5s ease-out;
+}
+
+@keyframes row-flash-bg {
+  0%,
+  40% {
+    background: #fef3c7;
+  }
+  100% {
+    background: transparent;
+  }
+}
+
 .appointments-page .page-header {
   display: flex;
   justify-content: space-between;

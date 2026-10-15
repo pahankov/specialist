@@ -79,6 +79,8 @@ function AppointmentsPage() {
     'asc',
   );
   const [totalPages, setTotalPages] = useState(1);
+  // Row flashed when jumping from a bell (?highlight=id).
+  const [highlightId, setHighlightId] = useState<number | null>(null);
   const [allClients, setAllClients] = useState<{ id: number; name: string }[]>([]);
   const [allServices, setAllServices] = useState<{ id: number; name: string }[]>([]);
   const pageSize = 20;
@@ -169,11 +171,22 @@ function AppointmentsPage() {
     ) {
       setStatusFilter(sp);
     }
+    const hl = searchParams.get('highlight');
+    if (hl !== null && hl !== '') {
+      const id = Number(hl);
+      if (Number.isFinite(id)) {
+        // Cancelled/completed targets must be visible for the flash.
+        setShowCompleted(true);
+        setShowCancelled(true);
+        setHighlightId(id);
+      }
+    }
     // consume once so back/forward stays clean
     if (
       searchParams.has('client_id') ||
       searchParams.has('master_id') ||
-      searchParams.has('status')
+      searchParams.has('status') ||
+      searchParams.has('highlight')
     ) {
       // A drill-down promises "everything matching": reveal completed rows
       // (hidden by default) so counts match the card that was clicked
@@ -201,6 +214,21 @@ function AppointmentsPage() {
     dateTo,
     allTime,
   ]);
+
+  // Bell deep-link: scroll to the row and flash it, then let go.
+  useEffect(() => {
+    if (highlightId === null || loading) return;
+    const t = setTimeout(() => {
+      const el = document.querySelector(`[data-row-id="${highlightId}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('row-flash');
+        setTimeout(() => el.classList.remove('row-flash'), 3500);
+      }
+      setHighlightId(null);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [highlightId, loading, appointments]);
 
   const showError = (err: unknown) => {
     setError(getApiErrorMessage(err, 'Ошибка сервера'));
@@ -523,7 +551,7 @@ function AppointmentsPage() {
               )}
               <Tooltip content="Удалить запись">
                 <button className="btn btn-sm btn-delete" onClick={() => setDeletingId(a.id)}>
-                  🗑️
+                  ✖
                 </button>
               </Tooltip>
             </span>
@@ -790,7 +818,12 @@ function AppointmentsPage() {
       ) : (
         <div className="card">
           <div className="appointments-table-wrapper">
-            <DataTable tableId="appointments" columns={columns} data={filteredAppointments} />
+            <DataTable
+              tableId="appointments"
+              columns={columns}
+              data={filteredAppointments}
+              rowId={(a) => a.id}
+            />
           </div>
         </div>
       )}
@@ -799,7 +832,7 @@ function AppointmentsPage() {
       <ConfirmDialog
         open={deletingId !== null}
         onClose={() => setDeletingId(null)}
-        title="🗑️ Удалить запись?"
+        title="🗑 Удалить запись?"
         message="Это действие нельзя отменить."
         confirmLabel="Удалить"
         danger

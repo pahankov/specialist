@@ -379,7 +379,7 @@ function ProfilePage() {
                     onClick={() => setCerts((prev) => prev.filter((_, j) => j !== i))}
                     title="Убрать сертификат"
                   >
-                    🗑️
+                    ✖
                   </button>
                 </div>
               ))}
@@ -445,7 +445,7 @@ function ProfilePage() {
       </div>
 
       <div className="card" style={{ marginTop: 16, borderColor: '#e5484d' }}>
-        <h3>🗑️ Удаление аккаунта</h3>{' '}
+        <h3>🗑 Удаление аккаунта</h3>{' '}
         <p style={{ fontSize: 13, color: '#666' }}>
           Профиль снимется с публикации, контакты сотрутся, будущие записи клиентов отменятся.
           История хранится обезличенной 3 года согласно политике обработки данных.

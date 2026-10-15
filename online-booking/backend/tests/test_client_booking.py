@@ -171,7 +171,7 @@ class TestClientBook:
         )).scalars().all()
         assert len(notes) == 1
         assert "Новая запись" in notes[0].text
-        assert notes[0].link == "appointments"
+        assert notes[0].link == f"appointments:{r.json()['id']}"
         assert notes[0].sender_id == me.id
 
 

@@ -43,6 +43,15 @@ describe('DataTable', () => {
     expect(screen.getAllByRole('row')).toHaveLength(3); // header + 2
   });
 
+  it('exposes data-row-id for bell deep-links', () => {
+    const { container } = render(
+      <DataTable tableId={TABLE} columns={columns} data={data} rowId={(r) => r.phone} />,
+    );
+    const rows = container.querySelectorAll('tbody tr[data-row-id]');
+    expect(rows).toHaveLength(2);
+    expect(rows[0].getAttribute('data-row-id')).toBe('+7 (999) 111-22-33');
+  });
+
   it('hides a column via the Столбцы menu and persists it', () => {
     render(<DataTable tableId={TABLE} columns={columns} data={data} />);
     fireEvent.click(screen.getByText('☰ Столбцы'));

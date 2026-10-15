@@ -47,6 +47,8 @@ interface DataTableProps<T> {
   data: T[];
   /** Rows sampled per column for auto-fit (default 50). */
   fitSample?: number;
+  /** DOM id per row (data-row-id) — for deep-link highlight from bells. */
+  rowId?: (row: T) => string | number;
 }
 
 const FALLBACK_MIN = 64;
@@ -93,6 +95,7 @@ export default function DataTable<T>({
   columns,
   data,
   fitSample = 50,
+  rowId,
 }: DataTableProps<T>) {
   const widthsKey = `colwidths:${tableId}`;
   const visKey = `colvis:${tableId}`;
@@ -345,7 +348,7 @@ export default function DataTable<T>({
           </thead>
           <tbody>
             {table.getRowModel().rows.map((row) => (
-              <tr key={row.id}>
+              <tr key={row.id} data-row-id={rowId ? rowId(row.original) : row.id}>
                 {row.getVisibleCells().map((cell) => (
                   <td
                     key={cell.id}

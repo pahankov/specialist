@@ -517,9 +517,21 @@ function ClientsPage() {
                   ✏️
                 </button>
               </Tooltip>
+              <Tooltip content="Выдать персональный купон (−% / −₽)">
+                <button
+                  className="btn btn-sm btn-ghost"
+                  onClick={() =>
+                    navigate(`${section}/services`, {
+                      state: { couponFor: { id: c.id, name: c.name } },
+                    })
+                  }
+                >
+                  🎟
+                </button>
+              </Tooltip>
               <Tooltip content="Удалить">
                 <button className="btn btn-sm btn-delete" onClick={() => setDeletingId(c.id)}>
-                  🗑️
+                  ✖
                 </button>
               </Tooltip>
             </span>
@@ -755,7 +767,7 @@ function ClientsPage() {
       <ConfirmDialog
         open={deletingId !== null}
         onClose={() => setDeletingId(null)}
-        title={isSuperSection ? '🗑️ Заблокировать клиента у всех?' : '🗑️ Убрать клиента в архив?'}
+        title={isSuperSection ? '🗑 Заблокировать клиента у всех?' : '🗑 Убрать клиента в архив?'}
         message={
           isSuperSection
             ? 'Клиент будет заблокирован у ВСЕХ мастеров (обратимо, разблокировка одной кнопкой). Полное стирание из базы — только по запросу, через API ?purge=true.'
