@@ -268,6 +268,11 @@ function SchedulePage() {
       if (result) {
         setSchedule(result.newSchedule);
         setActiveHours(result.newActiveHours);
+        // Day went off: the editor falls back to the saved global window.
+        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        if (!result.newSchedule[key]) {
+          setWindowDraft({ start: String(windowStart), end: String(windowEnd) });
+        }
       }
     },
     [schedule, activeHours, appointments, selectedMasterId, isSuperAdmin, windowStart, windowEnd],

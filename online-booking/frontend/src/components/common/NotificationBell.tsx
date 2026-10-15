@@ -47,6 +47,10 @@ export function resolveTarget(bellLink: string, link: string | null | undefined)
     const master = link.split(':')[1];
     return `/cabinet/book${master ? `?master_id=${master}` : ''}`;
   }
+  if (link.startsWith('coupons')) {
+    const id = link.split(':')[1];
+    return `/cabinet/coupons${id ? `?highlight=${id}` : ''}`;
+  }
   return bellLink;
 }
 

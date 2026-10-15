@@ -92,6 +92,17 @@ export function Calendar({
     [onSelectDate, selectablePast],
   );
 
+  // Desktop shortcut: double-click toggles the working day (long-press
+  // stays for touch). Past days never toggle.
+  const handleDayDoubleClick = useCallback(
+    (date: Date, isCurrentMonth: boolean, past: boolean) => {
+      if (!interactive || !isCurrentMonth || past) return;
+      onToggleDay(date);
+      onSelectDate(date);
+    },
+    [interactive, onToggleDay, onSelectDate],
+  );
+
   return (
     <div className="schedule-calendar">
       <div className="calendar-header">
@@ -106,7 +117,7 @@ export function Calendar({
 
       <div className="calendar-hint">
         {interactive
-          ? '👆 Удерживайте день: вкл/выкл рабочего дня + переход к нему'
+          ? '👆 День: клик — выбрать · даблклик — вкл/выкл рабочего дня (на телефоне — удерживайте)'
           : '👆 Нажмите на день, чтобы увидеть свободные часы'}
       </div>
 
@@ -163,6 +174,7 @@ export function Calendar({
               data-date={day.date.toISOString()}
               className={`calendar-day ${day.isCurrentMonth ? '' : 'other-month'} ${active ? 'active' : 'inactive'} ${today ? 'today' : ''} ${selected ? 'selected' : ''} ${past ? 'past' : ''} ${liveIds.size > 0 && !past ? 'has-bookings' : ''} ${holdsOnly && !past ? 'has-holds' : ''}`}
               onClick={() => handleDayClick(day.date, day.isCurrentMonth, past)}
+              onDoubleClick={() => handleDayDoubleClick(day.date, day.isCurrentMonth, past)}
               onPointerDown={(e) => handlePointerDown(e, day.date)}
               onPointerUp={handlePointerUp}
               onPointerCancel={handlePointerUp}

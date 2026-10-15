@@ -166,6 +166,21 @@
   accent-color: #0d7a6f;
 }
 
+/* Bell deep-link flash (coupons, like master rows). */
+.cabinet-card.card-flash {
+  animation: card-flash-bg 3.5s ease-out;
+}
+
+@keyframes card-flash-bg {
+  0%,
+  40% {
+    background: #fef3c7;
+  }
+  100% {
+    background: #fff;
+  }
+}
+
 /* Status badges: one width everywhere, like the master panel. */
 .cabinet-page .status-badge {
   display: inline-flex;

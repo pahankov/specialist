@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cabinetApi, type ClientMe, type ClientStats } from '../../api/client';
 import type { Appointment } from '../../api/types';
-import { ConfirmDialog, EmptyState, Skeleton, StatusBadge } from '../../components/common';
+import { ConfirmDialog, EmptyState, Skeleton, StatusBadge, Pager } from '../../components/common';
 import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError';
 import './CabinetPage.css';
 
@@ -32,6 +32,9 @@ function CabinetPage() {
   const [cancellingId, setCancellingId] = useState<number | null>(null);
   // History filter chips, like the master panel.
   const [histFilter, setHistFilter] = useState('');
+  // Cabinet pager: 20 per page, like everywhere else.
+  const CABINET_PAGE = 20;
+  const [cabPage, setCabPage] = useState(0);
   // Toggles for done/cancelled (persisted, like the master panel).
   const [showCompleted, setShowCompleted] = useState(() => {
     try {
@@ -58,6 +61,7 @@ function CabinetPage() {
       }
       return !p;
     });
+    setCabPage(0);
   };
   const toggleCancelled = () => {
     setShowCancelled((p) => {
@@ -68,6 +72,7 @@ function CabinetPage() {
       }
       return !p;
     });
+    setCabPage(0);
   };
   // Own reviews: appointment_id → stars (to prompt only unrated visits).
   const [ratedByAppt, setRatedByAppt] = useState<Record<number, number>>({});
@@ -389,7 +394,10 @@ function CabinetPage() {
             key={f.value}
             type="button"
             className={`filter-btn ${histFilter === f.value ? 'active' : ''}`}
-            onClick={() => setHistFilter(f.value)}
+            onClick={() => {
+              setHistFilter(f.value);
+              setCabPage(0);
+            }}
           >
             {f.label}
           </button>
@@ -407,13 +415,22 @@ function CabinetPage() {
         unified.length === 0 ? (
           <EmptyState title="Ничего не найдено" />
         ) : (
-          <div className="cabinet-list">
-            {unified.map((a) =>
-              a.status === 'completed' || needsRating(a) || ratedByAppt[a.id] !== undefined
-                ? renderHistoryCard(a)
-                : renderCard(a),
-            )}
-          </div>
+          <>
+            <div className="cabinet-list">
+              {unified
+                .slice(cabPage * CABINET_PAGE, cabPage * CABINET_PAGE + CABINET_PAGE)
+                .map((a) =>
+                  a.status === 'completed' || needsRating(a) || ratedByAppt[a.id] !== undefined
+                    ? renderHistoryCard(a)
+                    : renderCard(a),
+                )}
+            </div>
+            <Pager
+              page={cabPage}
+              totalPages={Math.max(1, Math.ceil(unified.length / CABINET_PAGE))}
+              onChange={setCabPage}
+            />
+          </>
         )
       ) : upcoming.length === 0 && history.length === 0 ? (
         <EmptyState
@@ -423,10 +440,28 @@ function CabinetPage() {
           onAction={() => navigate('/cabinet/book')}
         />
       ) : (
-        <div className="cabinet-list">
-          {upcoming.filter((a) => !hideByToggle(a)).map(renderCard)}
-          {history.filter((a) => !hideByToggle(a)).map(renderHistoryCard)}
-        </div>
+        <>
+          <div className="cabinet-list">
+            {[
+              ...upcoming.filter((a) => !hideByToggle(a)),
+              ...history.filter((a) => !hideByToggle(a)),
+            ]
+              .slice(cabPage * CABINET_PAGE, cabPage * CABINET_PAGE + CABINET_PAGE)
+              .map((a) => (upcoming.includes(a) ? renderCard(a) : renderHistoryCard(a)))}
+          </div>
+          <Pager
+            page={cabPage}
+            totalPages={Math.max(
+              1,
+              Math.ceil(
+                (upcoming.filter((a) => !hideByToggle(a)).length +
+                  history.filter((a) => !hideByToggle(a)).length) /
+                  CABINET_PAGE,
+              ),
+            )}
+            onChange={setCabPage}
+          />
+        </>
       )}
 
       <ConfirmDialog

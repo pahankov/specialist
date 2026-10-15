@@ -127,7 +127,10 @@ function CabinetNotificationsPage() {
               className="cabinet-card"
               onClick={() => {
                 if (n.link === 'reviews') navigate('/cabinet', { state: { scrollTo: 'history' } });
-                else if (n.link && n.link.startsWith('book:'))
+                else if (n.link && n.link.startsWith('coupons')) {
+                  const id = n.link.split(':')[1];
+                  navigate(`/cabinet/coupons${id ? `?highlight=${id}` : ''}`);
+                } else if (n.link && n.link.startsWith('book:'))
                   navigate(`/cabinet/book?master_id=${n.link.split(':')[1]}`);
                 else if (n.link === 'book') navigate('/cabinet/book');
                 else if (n.link && n.link.startsWith('appointments')) navigate('/cabinet');
@@ -136,11 +139,13 @@ function CabinetNotificationsPage() {
               title={
                 n.link === 'reviews'
                   ? 'Открыть историю и оценить →'
-                  : n.link && n.link.startsWith('book')
-                    ? 'Перейти к записи →'
-                    : n.link && n.link.startsWith('appointments')
-                      ? 'Открыть мои записи →'
-                      : undefined
+                  : n.link && n.link.startsWith('coupons')
+                    ? 'Открыть мои купоны →'
+                    : n.link && n.link.startsWith('book')
+                      ? 'Перейти к записи →'
+                      : n.link && n.link.startsWith('appointments')
+                        ? 'Открыть мои записи →'
+                        : undefined
               }
             >
               <div className="cabinet-card-main">

@@ -41,7 +41,8 @@
 | `GET` | `/api/v1/cities/` | Список городов (пагинация, поиск, фильтр по стране) |
 | `GET` | `/api/v1/cities/search/?q=&limit=` | Поиск городов для автокомплита (фолбэк DaData) |
 | `GET` | `/api/v1/cities/{id}` | Город по ID |
-| `POST` | `/api/v1/cities/resolve` | Get-or-create города по точному имени (выбор из DaData; master+) |
+| `POST` | `/api/v1/cities/resolve` | Get-or-create города по имени (сначала ищет семью дублей DaData; master+) |
+| `POST` | `/api/v1/cities/merge-duplicates` | Супер: слить города-дубли (dry-run; `?apply=true` — оставить старший id, перепривязать юзеров) |
 
 ### DaData (backend proxy, секрет не покидает сервер)
 | Метод | Endpoint | Описание |
@@ -51,7 +52,7 @@
 ### Masters
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
-| `GET` | `/api/v1/masters/?city_id=` | Активные мастера (+`city_id/city_name/avg_rating/avatar_preset` в ответе; фильтр по городу) |
+| `GET` | `/api/v1/masters/?city_id=` | Активные мастера (+`city_id/city_name/avg_rating/avatar_preset` в ответе; фильтр по семье города-дублей) |
 | `GET` | `/api/v1/masters/{id}` | Мастер по ID |
 | `POST` | `/api/v1/masters/` | Создать мастера |
 | `PATCH` | `/api/v1/masters/{id}` | Обновить мастера |
@@ -111,24 +112,25 @@
 ### Admin (JWT required, master-scoped)
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
-| `GET` | `/admin/dashboard` | Статистика (записи, клиенты, доход) |
-| `GET` | `/admin/monthly-stats` | Статистика за месяц |
-| `GET` | `/admin/appointments` | Список записей (пагинация, фильтрация) |
+| `GET` | `/admin/dashboard` | Статистика (записи, клиенты, доход, `top_clients` топ-5 по тратам; `recent_appointments` — ближайшие живые) |
+| `GET` | `/admin/monthly-stats` | Статистика за месяц (есть `cancelled_appointments`) |
+| `GET` | `/admin/appointments` | Список записей (пагинация, фильтрация; `show_completed`/`show_cancelled` — пейджер считает показанное) |
 | `POST` | `/admin/appointments` | Создать запись |
 | `POST` | `/admin/appointments/book` | Админская запись (выбор клиента из БД; услуга ИЛИ комплекс; суперадмин шлёт `master_id`) |
 | `GET` | `/admin/appointments/by-date` | Записи по дате (есть `service_id/service_duration` для спанов гранул) |
 | `PATCH` | `/admin/appointments/{id}/confirm` | Подтвердить запись (клиенту падает в колокольчик) |
 | `PATCH` | `/admin/appointments/{id}/cancel` | Отменить запись (клиенту падает в колокольчик с причиной) |
 | `PATCH` | `/admin/appointments/{id}/complete` | Завершить запись |
+| `PATCH` | `/admin/appointments/{id}/reopen` | Вернуть завершённую в работу (confirmed + колокол клиенту) |
 | `DELETE` | `/admin/appointments/{id}` | Удалить запись |
 | `GET` | `/admin/services` | Список активных услуг |
 | `GET` | `/admin/services/all` | Все услуги (включая неактивные; суперадмин: `?master_id=`) |
-| `POST` | `/admin/services` | Создать услугу |
-| `PATCH` | `/admin/services/{id}` | Обновить услугу |
+| `POST` | `/admin/services` | Создать услугу (`discount_percent?` 0–90, `discount_fixed?` ₽, `discount_until?`) |
+| `PATCH` | `/admin/services/{id}` | Обновить услугу (те же поля скидок) |
 | `DELETE` | `/admin/services/{id}` | Soft-delete услуги |
 | `GET` | `/admin/bundles` | Свои комплексы (состав, суммы времени/цены, своя цена); админ `?master_id=` — комплексы выбранного мастера |
-| `POST` | `/admin/bundles` | Собрать комплекс (`name`, `service_ids` ≥2 своих услуг, `durations?` {id: мин}, `price?`, `duration_override?` — ручное время вместо суммы, `discount_percent?` 0–90) |
-| `PATCH` | `/admin/bundles/{id}` | Обновить комплекс (состав/время/цена/`is_active`; `price: null` — сброс к сумме; `duration_override: null` — сброс к сумме; `discount_percent` 0–90) |
+| `POST` | `/admin/bundles` | Собрать комплекс (`name`, `service_ids` ≥2 своих услуг, `durations?` {id: мин}, `price?`, `duration_override?` — ручное время вместо суммы, `discount_percent?` 0–90, `discount_fixed?` ₽, `discount_until?`) |
+| `PATCH` | `/admin/bundles/{id}` | Обновить комплекс (состав/время/цена/`is_active`; `price: null` — сброс к сумме; `duration_override: null` — сброс к сумме; `discount_percent` 0–90, `discount_fixed` ₽, `discount_until`) |
 | `DELETE` | `/admin/bundles/{id}` | Удалить комплекс (прошлые записи хранят `bundle_name`) |
 | `GET` | `/admin/clients` | Свои клиенты (мастер: с записями у него или созданные им; супер: все). Пагинация, `city_id`/`city_name`, `address` |
 | `POST` | `/admin/clients` | Создать клиента (адрес одним полем + `city_name` для подбора; `city_id` тоже можно) |
@@ -218,7 +220,8 @@
 | `PATCH` | `/api/v1/reviews/{id}` | Обновить отзыв (comment, publish) |
 | `DELETE` | `/api/v1/reviews/{id}` | Удалить отзыв |
 | `GET` | `/client/reviews/mine` | Свои отзывы кабинета (для пометок в Истории) |
-| `POST` | `/client/reviews` | Оценить свою завершённую запись (`appointment_id`, `rating` 1–5, `comment?` ≤1000; 403 чужая, 409 повтор) |
+| `POST` | `/client/reviews` | Оценить свой визит: completed или прошедший по времени (отменённые нельзя; 403 чужая, 409 повтор); мастеру летит ⭐-колокол |
+| `GET` | `/client/coupons/mine` | Свои годные купоны (`?master_id=` — одного мастера): код, условия, срок, остаток |
 | `POST` | `/client/coupons/preview` | Проверить промокод до записи (`master_id`, `service_id?`/`bundle_id?`, `code`) → новая цена или понятная ошибка |
 | `POST` | `/admin/coupons` | Выдать купон своим (`kind` percent/fixed, `value`, `max_uses?`, `user_ids?` свои, `valid_until?`; код авто; колокол получателям) |
 | `GET` | `/admin/coupons` | Свои купоны (использования, остатки) |

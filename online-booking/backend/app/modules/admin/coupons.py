@@ -132,7 +132,7 @@ async def create_coupon(
     for u in targets:
         await notify_user(db, recipient_id=u.id, text=text,
                           sender_id=master.id, audience="coupon",
-                          link=f"book:{mp_id}")
+                          link=f"coupons:{c.id}")
     await log_action(db, master.id, "create", "coupon", c.id,
                      f"{code} {describe_coupon(c)} получателей={len(targets)}",
                      level="info")

@@ -135,7 +135,16 @@ function DashboardPage() {
 
             <div className="revenue-grid">
               {/* Completed revenue */}
-              <div className="revenue-card card">
+              <div
+                className="revenue-card card funnel-clickable"
+                role="button"
+                tabIndex={0}
+                title="Открыть завершённые →"
+                onClick={() => handleCardClick('/appointments?status=completed')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleCardClick('/appointments?status=completed');
+                }}
+              >
                 <div className="revenue-card-header">
                   <span className="revenue-card-icon">🏁</span>
                   <span className="revenue-card-title">Завершённые</span>
@@ -154,7 +163,16 @@ function DashboardPage() {
               </div>
 
               {/* Pending */}
-              <div className="revenue-card card">
+              <div
+                className="revenue-card card funnel-clickable"
+                role="button"
+                tabIndex={0}
+                title="Открыть ожидающие →"
+                onClick={() => handleCardClick('/appointments?status=pending')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleCardClick('/appointments?status=pending');
+                }}
+              >
                 <div className="revenue-card-header">
                   <span className="revenue-card-icon">⏳</span>
                   <span className="revenue-card-title">Ожидают</span>
@@ -164,7 +182,16 @@ function DashboardPage() {
               </div>
 
               {/* Confirmed */}
-              <div className="revenue-card card">
+              <div
+                className="revenue-card card funnel-clickable"
+                role="button"
+                tabIndex={0}
+                title="Открыть подтверждённые →"
+                onClick={() => handleCardClick('/appointments?status=confirmed')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleCardClick('/appointments?status=confirmed');
+                }}
+              >
                 <div className="revenue-card-header">
                   <span className="revenue-card-icon">✅</span>
                   <span className="revenue-card-title">Подтверждены</span>
@@ -174,7 +201,16 @@ function DashboardPage() {
               </div>
 
               {/* Cancelled */}
-              <div className="revenue-card card">
+              <div
+                className="revenue-card card funnel-clickable"
+                role="button"
+                tabIndex={0}
+                title="Открыть отменённые →"
+                onClick={() => handleCardClick('/appointments?status=cancelled')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleCardClick('/appointments?status=cancelled');
+                }}
+              >
                 <div className="revenue-card-header">
                   <span className="revenue-card-icon">❌</span>
                   <span className="revenue-card-title">Отменены</span>

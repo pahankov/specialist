@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cabinetApi } from '../../api/client';
 import { EmptyState, Skeleton } from '../../components/common';
@@ -20,8 +20,10 @@ interface MyCoupon {
 /** Client's coupon wallet: every usable code in one place. */
 function ClientCouponsPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [coupons, setCoupons] = useState<MyCoupon[]>([]);
   const [loading, setLoading] = useState(true);
+  const [flashId, setFlashId] = useState<number | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -35,6 +37,28 @@ function ClientCouponsPage() {
       }
     })();
   }, []);
+
+  // Bell deep-link (?highlight=id): scroll + flash, like master rows.
+  useEffect(() => {
+    if (loading) return;
+    const hl = searchParams.get('highlight');
+    if (hl === null || hl === '') return;
+    const id = Number(hl);
+    setSearchParams({}, { replace: true });
+    if (!Number.isFinite(id)) return;
+    const t = setTimeout(() => {
+      const el = document.querySelector(`[data-coupon-id="${id}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('card-flash');
+        setTimeout(() => el.classList.remove('card-flash'), 3500);
+      }
+      setFlashId(id);
+      setTimeout(() => setFlashId(null), 3600);
+    }, 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
 
   if (loading) {
     return (
@@ -57,7 +81,14 @@ function ClientCouponsPage() {
       ) : (
         <div className="cabinet-list">
           {coupons.map((c) => (
-            <div key={c.id} className="cabinet-card">
+            <div
+              key={c.id}
+              className="cabinet-card"
+              data-coupon-id={c.id}
+              style={
+                flashId === c.id ? { outline: '2px solid #e94560', outlineOffset: 2 } : undefined
+              }
+            >
               <div className="cabinet-card-main">
                 <strong>
                   {c.terms} · код {c.code}
