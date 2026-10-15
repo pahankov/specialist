@@ -8,3 +8,6 @@ export const PASSWORD_EDIT_PLACEHOLDER = 'Минимум 8 символов';
 
 export const EMAIL_PLACEHOLDER = 'name@example.com';
 export const TELEGRAM_PLACEHOLDER = '@username';
+
+/** Frontend bundle version (bump with package.json — lets screenshots prove the build). */
+export const APP_VERSION = '1.53.0';

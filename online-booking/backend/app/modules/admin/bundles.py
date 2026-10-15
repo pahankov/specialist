@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime
 
 from app.database import get_db
 from app.dependencies.auth import require_master
@@ -36,6 +37,7 @@ class BundleCreate(BaseModel):
     price: Optional[float] = Field(default=None, ge=0)
     duration_override: Optional[int] = Field(default=None)
     discount_percent: Optional[int] = Field(default=None, ge=0, le=90)
+    discount_until: Optional[datetime] = Field(default=None)
 
 
 class BundleUpdate(BaseModel):
@@ -45,6 +47,7 @@ class BundleUpdate(BaseModel):
     price: Optional[float] = Field(default=None, ge=0)
     duration_override: Optional[int] = Field(default=None)
     discount_percent: Optional[int] = Field(default=None, ge=0, le=90)
+    discount_until: Optional[datetime] = Field(default=None)
     is_active: Optional[bool] = None
 
 
@@ -127,7 +130,8 @@ async def _bundle_to_dict(db: AsyncSession, b: ServiceBundle) -> dict:
         # Custom price wins; NULL = sum of member effective prices.
         "price": float(b.price) if b.price is not None else None,
         "discount_percent": clamp_discount(b.discount_percent),
-        "effective_price": apply_discount(base, b.discount_percent),
+        "discount_until": b.discount_until.isoformat() if b.discount_until else None,
+        "effective_price": apply_discount(base, b.discount_percent, b.discount_until),
         "is_active": bool(b.is_active),
         "created_at": b.created_at.isoformat() if b.created_at else None,
     }
@@ -165,6 +169,7 @@ async def create_bundle(
         durations=validate_durations(ids, data.durations),
         duration_override=data.duration_override,
         discount_percent=data.discount_percent or 0,
+        discount_until=data.discount_until,
         price=data.price, is_active=True,
     )
     db.add(b)
@@ -225,6 +230,8 @@ async def update_bundle(
         b.price = data.price
     if "discount_percent" in data.model_fields_set:
         b.discount_percent = data.discount_percent or 0
+    if "discount_until" in data.model_fields_set:
+        b.discount_until = data.discount_until
     if "duration_override" in data.model_fields_set:
         ov = data.duration_override
         if ov is not None and not (MIN_DURATION <= ov <= MAX_DURATION):

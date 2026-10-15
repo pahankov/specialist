@@ -28,17 +28,22 @@ function PriceTag({
   full,
   effective,
   discount,
+  until,
 }: {
   full: number;
   effective: number;
   discount?: number | null;
+  until?: string | null;
 }) {
   if (discount && effective < full) {
+    const tag = `−${discount}%${until ? ` (до ${new Date(until).toLocaleDateString('ru-RU', { day: 'numeric', month: 'numeric' })})` : ''}`;
     return (
-      <span style={{ whiteSpace: 'nowrap' }}>
+      <span
+        style={{ whiteSpace: 'nowrap' }}
+        title={until ? `Скидка действует до ${new Date(until).toLocaleString('ru-RU')}` : 'Скидка'}
+      >
         <s style={{ color: '#999' }}>{full} ₽</s>{' '}
-        <strong style={{ color: '#e5484d' }}>{effective} ₽</strong>{' '}
-        <span title="Скидка">−{discount}%</span>
+        <strong style={{ color: '#e5484d' }}>{effective} ₽</strong> {tag}
       </span>
     );
   }
@@ -49,7 +54,11 @@ function serviceLabel(s: Service): string {
   const full = Number(s.price) || 0;
   const eff = Number(s.effective_price ?? s.price) || 0;
   const base = `${s.name} — ${s.duration_minutes} мин, ${eff} ₽`;
-  return s.discount_percent && eff < full ? `${base} (−${s.discount_percent}%)` : base;
+  if (!s.discount_percent || !(eff < full)) return base;
+  const until = s.discount_until
+    ? ` до ${new Date(s.discount_until).toLocaleDateString('ru-RU', { day: 'numeric', month: 'numeric' })}`
+    : '';
+  return `${base} (−${s.discount_percent}%${until})`;
 }
 
 /** Read-only granules for clients: free ones open the booking modal. */
@@ -499,6 +508,7 @@ function CabinetBookPage() {
                     full={Number(s.price) || 0}
                     effective={Number(s.effective_price ?? s.price) || 0}
                     discount={s.discount_percent}
+                    until={s.discount_until}
                   />
                 </div>
               ))}
@@ -512,6 +522,7 @@ function CabinetBookPage() {
                     full={b.price != null ? b.price : b.price_total}
                     effective={b.effective_price}
                     discount={b.discount_percent}
+                    until={b.discount_until}
                   />
                 </div>
               ))}
@@ -608,6 +619,7 @@ function CabinetBookPage() {
                         }
                         effective={modalBundle.effective_price}
                         discount={modalBundle.discount_percent}
+                        until={modalBundle.discount_until}
                       />
                     </div>
                   </div>
@@ -637,7 +649,13 @@ function CabinetBookPage() {
                       {modalBundles.map((b) => (
                         <option key={b.id} value={`bundle:${b.id}`}>
                           🎁 {b.name} — {b.duration_total} мин, {b.effective_price} ₽
-                          {b.discount_percent ? ` (−${b.discount_percent}%)` : ''}
+                          {b.discount_percent
+                            ? ` (−${b.discount_percent}%${
+                                b.discount_until
+                                  ? ` до ${new Date(b.discount_until).toLocaleDateString('ru-RU', { day: 'numeric', month: 'numeric' })}`
+                                  : ''
+                              })`
+                            : ''}
                         </option>
                       ))}
                     </optgroup>

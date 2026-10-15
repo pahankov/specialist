@@ -1,5 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional
+from datetime import datetime
 from decimal import Decimal
 
 class ServiceCreate(BaseModel):
@@ -10,6 +11,7 @@ class ServiceCreate(BaseModel):
     master_id: Optional[int] = None
     category: Optional[str] = None
     discount_percent: Optional[int] = Field(default=None, ge=0, le=90)
+    discount_until: Optional[datetime] = Field(default=None)
 
 class ServiceUpdate(BaseModel):
     name: Optional[str] = None
@@ -18,6 +20,7 @@ class ServiceUpdate(BaseModel):
     price: Optional[Decimal] = None
     category: Optional[str] = None
     discount_percent: Optional[int] = Field(default=None, ge=0, le=90)
+    discount_until: Optional[datetime] = Field(default=None)
 
 class ServiceResponse(BaseModel):
     id: int
@@ -31,6 +34,7 @@ class ServiceResponse(BaseModel):
     category: Optional[str] = None
     is_active: bool = True
     discount_percent: int = 0
+    discount_until: Optional[datetime] = None
     effective_price: float = 0
 
     model_config = ConfigDict(from_attributes=True)

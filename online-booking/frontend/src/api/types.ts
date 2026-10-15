@@ -75,6 +75,7 @@ export interface Service {
   is_active: boolean;
   discount_percent?: number | null;
   effective_price?: number | string | null;
+  discount_until?: string | null;
 }
 
 export interface Client {

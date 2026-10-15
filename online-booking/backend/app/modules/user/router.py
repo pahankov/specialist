@@ -47,7 +47,10 @@ async def get_masters(
         )
     )
     if city_id is not None:
-        query = query.where(User.city_id == city_id)
+        # DaData variants of one city are separate rows: match the family.
+        from app.services.cities import city_family_ids
+        query = query.where(
+            User.city_id.in_(await city_family_ids(db, city_id)))
     result = await db.execute(query.order_by(User.name).offset(offset).limit(limit))
     profiles = result.scalars().all()
     if not profiles:

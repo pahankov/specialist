@@ -5,6 +5,7 @@ import { Breadcrumb, KeyboardShortcutsHint, NotificationBell } from '../../compo
 import { getCookie, decodeJwtPayload, getUserRole, clearAuthCookies } from '../../utils/cookies';
 import { getImpersonation, stopImpersonation } from '../../utils/impersonation';
 import { SUPER_PREFIX } from '../../utils/section';
+import { APP_VERSION } from '../../constants';
 import './AdminLayout.css';
 
 export interface BaseNavItem {
@@ -393,6 +394,11 @@ function BaseLayout({
             <span className="nav-icon">⏻</span>
             {!sidebarCollapsed && <span className="nav-label">Выйти</span>}
           </button>
+          {!sidebarCollapsed && (
+            <div className="sidebar-version" title="Версия интерфейса (для проверки обновлений)">
+              v{APP_VERSION}
+            </div>
+          )}
         </div>
       </aside>
 

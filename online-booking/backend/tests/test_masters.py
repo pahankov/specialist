@@ -204,3 +204,49 @@ class TestMastersCityAndRating:
 
         resp = await client.get("/api/v1/masters/?city_id=999999")
         assert resp.json() == []
+
+
+class TestCityFamily:
+    """DaData duplicate rows of one city match as a family."""
+
+    async def test_key_normalizes_variants(self):
+        from app.services.cities import city_key, same_city
+
+        assert city_key("Краснодар") == "краснодар"
+        assert city_key("Россия, г Краснодар") == "краснодар"
+        assert city_key("Краснодар, пр-кт Чекистов, д 42") == "краснодар чекистов"
+        assert city_key("Москва") != "краснодар"
+        assert same_city("краснодар", "краснодар проспект чекистов")
+        assert not same_city("нижний новгород", "нижний тагил")
+
+    async def test_family_filter_returns_all_spellings(self, client, session):
+        from sqlalchemy import select
+        from app.models.country import Country
+        from app.models.city import City
+
+        session.add(Country(code="X2", name_ru="X", name_en="X", phone_prefix="+1"))
+        await session.flush()
+        c = (await session.execute(
+            select(Country).where(Country.code == "X2")
+        )).scalar_one()
+        session.add(City(country_id=c.id, name_ru="Гамма", slug="gamma"))
+        session.add(City(country_id=c.id, name_ru="Россия, г Гамма", slug="gamma-ru"))
+        await session.flush()
+        mk = TestMastersCityAndRating()
+        await mk._make_master(session, "G1", "g1-x@example.com",
+                              "+79990002001",
+                              (await session.execute(
+                                  select(City).where(City.slug == "gamma"))
+                               ).scalar_one().id)
+        await mk._make_master(session, "G2", "g2-x@example.com",
+                              "+79990002002",
+                              (await session.execute(
+                                  select(City).where(City.slug == "gamma-ru"))
+                               ).scalar_one().id)
+        await session.commit()
+
+        gamma = (await session.execute(
+            select(City).where(City.slug == "gamma"))).scalar_one()
+        resp = await client.get(f"/api/v1/masters/?city_id={gamma.id}")
+        assert resp.status_code == 200, resp.text
+        assert sorted(m["name"] for m in resp.json()) == ["G1", "G2"]

@@ -6,7 +6,7 @@ import type { FitColumnDef } from '../../components/common';
 import { usePersistentState } from '../../utils/persistentState';
 import type { Service } from '../../api/types';
 import type { Bundle } from '../../api/cabinet';
-import { formatPrice } from '../../components/schedule/helpers';
+import { formatPrice, formatDiscountTag } from '../../components/schedule/helpers';
 import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError';
 import '../../styles/tables.css';
 import './ServicesPage.css';
@@ -28,6 +28,8 @@ function ServicesPage() {
   const [price, setPrice] = useState(1000);
   // Discount % (empty = none, 0-90).
   const [discount, setDiscount] = useState('');
+  // Discount expiry, datetime-local value (empty = no expiry).
+  const [discountUntil, setDiscountUntil] = useState('');
   const [lastCategory, setLastCategory] = usePersistentState('services.lastCategory', '');
   const [category, setCategory] = useState('');
   const [categoryCustom, setCategoryCustom] = useState(false);
@@ -41,6 +43,7 @@ function ServicesPage() {
   const [bundleName, setBundleName] = useState('');
   const [bundlePrice, setBundlePrice] = useState('');
   const [bundleDiscount, setBundleDiscount] = useState('');
+  const [bundleDiscountUntil, setBundleDiscountUntil] = useState('');
   // Manual total time: a complex often takes less than the member sum.
   // Empty = sum of per-service minutes above.
   const [bundleTime, setBundleTime] = useState('');
@@ -84,6 +87,7 @@ function ServicesPage() {
     setDuration(30);
     setPrice(1000);
     setDiscount('');
+    setDiscountUntil('');
     setCategory('');
     setCategoryCustom(false);
     setEditingId(null);
@@ -100,6 +104,7 @@ function ServicesPage() {
     setDuration(30);
     setPrice(1000);
     setDiscount('');
+    setDiscountUntil('');
     setCategory(lastCategory);
     // Stale memory (category was deleted meanwhile) → free input, not a lie.
     setCategoryCustom(
@@ -121,11 +126,25 @@ function ServicesPage() {
     return v;
   };
 
+  const parseUntil = (raw: string): string | null | undefined => {
+    // undefined = leave as is (create: none); null = clear on edit.
+    if (raw.trim() === '') return null;
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) {
+      setError('Некорректная дата окончания скидки');
+      return undefined;
+    }
+    return d.toISOString();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     const disc = parseDiscount();
     if (discount.trim() !== '' && disc === undefined) return;
+    const until = parseUntil(discountUntil);
+    if (discountUntil.trim() !== '' && until === undefined) return;
+    const wantDiscount = disc !== undefined || discountUntil.trim() !== '';
     try {
       if (editingId) {
         await adminApi.updateService(editingId, {
@@ -135,6 +154,7 @@ function ServicesPage() {
           price,
           category: category || undefined,
           ...(disc !== undefined ? { discount_percent: disc } : {}),
+          ...(discountUntil.trim() !== '' ? { discount_until: until as string } : {}),
         });
         toast.success('Услуга обновлена');
         if (category) setLastCategory(category);
@@ -146,6 +166,7 @@ function ServicesPage() {
           price,
           category: category || undefined,
           ...(disc !== undefined ? { discount_percent: disc } : {}),
+          ...(wantDiscount && until ? { discount_until: until } : {}),
         });
         toast.success('Услуга создана');
         if (category) setLastCategory(category);
@@ -163,6 +184,7 @@ function ServicesPage() {
     setDuration(s.duration_minutes);
     setPrice(Number(s.price));
     setDiscount(s.discount_percent ? String(s.discount_percent) : '');
+    setDiscountUntil(s.discount_until ? String(s.discount_until).slice(0, 16) : '');
     setCategory(s.category || '');
     // Category from another page (pagination) isn't in the visible list.
     setCategoryCustom(
@@ -202,6 +224,7 @@ function ServicesPage() {
       setBundlePrice(b.price != null ? String(b.price) : '');
       setBundleTime(b.duration_override != null ? String(b.duration_override) : '');
       setBundleDiscount(b.discount_percent ? String(b.discount_percent) : '');
+      setBundleDiscountUntil(b.discount_until ? String(b.discount_until).slice(0, 16) : '');
       setPicked(new Set(b.service_ids));
       const dm: Record<number, number> = {};
       for (const s of b.services) dm[s.id] = s.duration_minutes;
@@ -212,6 +235,7 @@ function ServicesPage() {
       setBundlePrice('');
       setBundleTime('');
       setBundleDiscount('');
+      setBundleDiscountUntil('');
       setPicked(new Set());
       setDurMap({});
     }
@@ -258,6 +282,16 @@ function ServicesPage() {
       setError('Скидка — от 0 до 90% (или пусто)');
       return;
     }
+    const discUntil =
+      bundleDiscountUntil.trim() === '' ? null : new Date(bundleDiscountUntil).toISOString();
+    if (
+      bundleDiscountUntil.trim() !== '' &&
+      discUntil !== null &&
+      Number.isNaN(Date.parse(discUntil))
+    ) {
+      setError('Некорректная дата окончания скидки');
+      return;
+    }
     // Per-service minutes (clamped); backend re-validates.
     const durations: Record<number, number> = {};
     for (const s of pickedServices) {
@@ -274,6 +308,7 @@ function ServicesPage() {
           price: bundlePrice.trim() === '' ? null : Number(bundlePrice),
           duration_override: bundleTime.trim() === '' ? null : Number(bundleTime),
           discount_percent: disc ?? null,
+          discount_until: discUntil,
         });
         toast.success('Комплекс обновлён');
       } else {
@@ -284,6 +319,7 @@ function ServicesPage() {
           price,
           duration_override: time,
           discount_percent: disc,
+          ...(discUntil ? { discount_until: discUntil } : {}),
         });
         toast.success('Комплекс собран');
       }
@@ -354,11 +390,12 @@ function ServicesPage() {
         cell: ({ row }) => {
           const s = row.original;
           const eff = Number(s.effective_price ?? s.price);
+          const tag = formatDiscountTag(s.discount_percent, s.discount_until);
           return s.discount_percent ? (
             <span style={{ whiteSpace: 'nowrap' }}>
               <s style={{ color: '#999' }}>{formatPrice(s.price)} ₽</s>{' '}
               <strong style={{ color: '#e5484d' }}>{formatPrice(eff)} ₽</strong>{' '}
-              <span title="Скидка">−{s.discount_percent}%</span>
+              <span title="Скидка">{tag}</span>
             </span>
           ) : (
             `${formatPrice(s.price)} ₽`
@@ -521,6 +558,14 @@ function ServicesPage() {
                   max="90"
                 />
               </div>
+              <div className="form-group">
+                <label>Скидка до (пусто = бессрочно)</label>
+                <input
+                  type="datetime-local"
+                  value={discountUntil}
+                  onChange={(e) => setDiscountUntil(e.target.value)}
+                />
+              </div>
             </div>
             <div className="form-group">
               <label>Описание</label>
@@ -637,6 +682,14 @@ function ServicesPage() {
                     placeholder="0–90"
                   />
                 </div>
+                <div className="form-group">
+                  <label>Скидка до (пусто = бессрочно)</label>
+                  <input
+                    type="datetime-local"
+                    value={bundleDiscountUntil}
+                    onChange={(e) => setBundleDiscountUntil(e.target.value)}
+                  />
+                </div>
               </div>
               <div className="form-group">
                 <label>Услуги в комплексе (минимум 2)</label>
@@ -728,7 +781,9 @@ function ServicesPage() {
                       <strong style={{ color: '#e5484d' }}>
                         {formatPrice(b.effective_price)} ₽
                       </strong>{' '}
-                      <span title="Скидка комплекса">−{b.discount_percent}%</span>
+                      <span title="Скидка комплекса">
+                        {formatDiscountTag(b.discount_percent, b.discount_until)}
+                      </span>
                     </>
                   ) : b.price != null ? (
                     <>

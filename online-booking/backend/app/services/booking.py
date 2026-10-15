@@ -83,7 +83,7 @@ async def resolve_booking_item(
                    for s in members))
         members_effective = round(sum(m.effective_price for m in members), 2)
         base = float(b.price) if b.price is not None else members_effective
-        price = apply_discount(base, b.discount_percent)
+        price = apply_discount(base, b.discount_percent, b.discount_until)
         return {
             "service_id": None, "bundle_id": b.id, "bundle_name": b.name,
             "name": b.name, "duration_minutes": duration, "price": price,

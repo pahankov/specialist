@@ -184,6 +184,24 @@ export function formatPrice(price: number | string): string {
   return num.toLocaleString('ru-RU');
 }
 
+/** Short discount tag: "−20%" or "−20% до 20.10". Empty when none. */
+export function formatDiscountTag(
+  discountPercent?: number | null,
+  discountUntil?: string | null,
+): string {
+  if (!discountPercent) return '';
+  let tag = `−${discountPercent}%`;
+  if (discountUntil) {
+    try {
+      const d = new Date(discountUntil);
+      tag += ` до ${d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'numeric' })}`;
+    } catch {
+      /* date stays hidden */
+    }
+  }
+  return tag;
+}
+
 /** Generic Russian plural: pluralize(1,'запись','записи','записей'). */
 export function pluralize(n: number, one: string, few: string, many: string): string {
   const m10 = n % 10;

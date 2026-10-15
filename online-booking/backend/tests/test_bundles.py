@@ -381,7 +381,8 @@ class TestBundleDurationOverride:
 
 class TestDiscounts:
     async def test_pricing_math(self):
-        from app.services.pricing import apply_discount, clamp_discount
+        from datetime import datetime, timedelta, timezone
+        from app.services.pricing import apply_discount, clamp_discount, discount_active
 
         assert apply_discount(1000, 20) == 800.0
         assert apply_discount(1000, 0) == 1000.0
@@ -389,6 +390,30 @@ class TestDiscounts:
         assert apply_discount(999, 33) == round(999 * 0.67, 2)
         assert clamp_discount(91) == 90
         assert clamp_discount(-5) == 0
+
+        future = datetime.now(timezone.utc) + timedelta(days=1)
+        past = datetime.now(timezone.utc) - timedelta(days=1)
+        assert discount_active(None)
+        assert discount_active(future)
+        assert not discount_active(past)
+        assert apply_discount(1000, 20, future) == 800.0
+        assert apply_discount(1000, 20, past) == 1000.0
+
+    async def test_expired_discount_ignored_in_booking(self, client, session):
+        from datetime import datetime, timedelta, timezone
+
+        user, mp = await _mk_master(session)
+        h = await _master_headers(session, user)
+        past = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+        s = await client.post(
+            '/api/v1/admin/services',
+            json={'name': 'Old', 'duration_minutes': 60, 'price': 1000,
+                  'discount_percent': 50, 'discount_until': past},
+            headers=h,
+        )
+        assert s.status_code == 201, s.text
+        assert s.json()['discount_percent'] == 50
+        assert s.json()['effective_price'] == 1000.0
 
     async def test_service_discount_flows_to_booking(self, client, session):
         user, mp = await _mk_master(session)

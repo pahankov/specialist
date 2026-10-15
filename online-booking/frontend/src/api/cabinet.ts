@@ -42,6 +42,8 @@ export interface Bundle {
   duration_override?: number | null;
   /** Percentage discount 0-90 on the bundle total. */
   discount_percent?: number | null;
+  /** Discount expiry ISO (null = no expiry). */
+  discount_until?: string | null;
   price_total: number;
   price: number | null;
   effective_price: number;
