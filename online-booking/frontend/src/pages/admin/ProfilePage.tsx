@@ -372,7 +372,7 @@ function ProfilePage() {
         </div>
 
         <div className="card" style={{ marginBottom: 16 }}>
-          <h3>Сертификаты</h3>
+          <h3>Дипломы и сертификаты</h3>
           {certs.length === 0 ? (
             <EmptyState title="Пока нет сертификатов" icon="🎓" />
           ) : (

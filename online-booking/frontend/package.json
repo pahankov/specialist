@@ -2,7 +2,7 @@
   "name": "online-booking-frontend",
   "private": true,
   "license": "UNLICENSED",
-  "version": "1.62.0",
+  "version": "1.63.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

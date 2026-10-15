@@ -206,7 +206,17 @@ function AppointmentsPage() {
 
   useEffect(() => {
     setCurrentPage(0);
-  }, [statusFilter, masterIdFilter, clientIdFilter, serviceIdFilter, dateFrom, dateTo, allTime]);
+  }, [
+    statusFilter,
+    masterIdFilter,
+    clientIdFilter,
+    serviceIdFilter,
+    dateFrom,
+    dateTo,
+    allTime,
+    showCompleted,
+    showCancelled,
+  ]);
 
   useEffect(() => {
     fetch();
@@ -261,6 +271,16 @@ function AppointmentsPage() {
       await adminApi.completeAppointment(id);
       fetch();
       toast.success('Запись завершена');
+    } catch (err: unknown) {
+      showError(err);
+    }
+  };
+
+  const handleReopen = async (id: number) => {
+    try {
+      await adminApi.reopenAppointment(id);
+      fetch();
+      toast.success('Запись снова в работе');
     } catch (err: unknown) {
       showError(err);
     }
@@ -564,6 +584,13 @@ function AppointmentsPage() {
                 <Tooltip content="Отметить неявку">
                   <button className="btn btn-sm btn-no-show" onClick={() => setNoShowingId(a.id)}>
                     👤
+                  </button>
+                </Tooltip>
+              )}
+              {a.status === 'completed' && (
+                <Tooltip content="Вернуть в работу (снова подтверждена: доступны неявка и отмена)">
+                  <button className="btn btn-sm btn-ghost" onClick={() => handleReopen(a.id)}>
+                    ↩️
                   </button>
                 </Tooltip>
               )}

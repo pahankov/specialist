@@ -203,7 +203,9 @@ function SchedulePage() {
     if (!selectedDate) return;
     const key = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
     const day = schedule[key];
+    // Working day → its hours; inactive day → last saved (global default).
     if (day) setWindowDraft({ start: String(day.start), end: String(day.end) });
+    else setWindowDraft({ start: String(windowStart), end: String(windowEnd) });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate]);
 

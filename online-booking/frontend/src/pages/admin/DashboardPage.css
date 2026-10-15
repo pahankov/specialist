@@ -86,7 +86,7 @@
 .card-hint {
   font-size: 11px;
   color: #667eea;
-  opacity: 0;
+  opacity: 1;
   transition: opacity 0.2s;
   margin-top: 6px;
   font-weight: 500;

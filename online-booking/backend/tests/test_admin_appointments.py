@@ -561,6 +561,41 @@ class TestExactOverlapAndBells:
         assert "Заболел" in notes[0].text
         assert notes[0].link == f"appointments:{appt_id}"
 
+    async def test_reopen_completed_back_to_work(self, client, session, auth_headers):
+        """Completed (incl. auto) flips back to confirmed + client bell."""
+        from sqlalchemy import select
+        from app.models.notification import Notification
+
+        long_id, _, day = await self._setup(client, session, auth_headers)
+        created = await client.post(
+            "/api/v1/admin/clients",
+            json={"name": "Reopen", "phone": "+79990006699"},
+            headers=auth_headers,
+        )
+        cid = created.json()["id"]
+        booked = await client.post("/api/v1/admin/appointments/book", json={
+            "client_id": cid, "service_id": long_id,
+            "appointment_date": day.isoformat(), "status": "confirmed",
+        }, headers=auth_headers)
+        appt_id = booked.json()["id"]
+
+        c = await client.patch(f"/api/v1/admin/appointments/{appt_id}/complete",
+                               headers=auth_headers)
+        assert c.status_code == 200, c.text
+
+        bad = await client.patch(f"/api/v1/admin/appointments/{appt_id}/reopen",
+                                 headers=auth_headers)
+        # completed → reopen works; second reopen must 400 (not completed).
+        assert bad.status_code == 200, bad.text
+        again = await client.patch(f"/api/v1/admin/appointments/{appt_id}/reopen",
+                                   headers=auth_headers)
+        assert again.status_code == 400
+
+        notes = (await session.execute(
+            select(Notification).where(Notification.recipient_id == cid)
+        )).scalars().all()
+        assert any("в работу" in (n.text or "") for n in notes)
+
     async def test_show_toggles_filter_server_side(self, client, session,
                                                    created_master_id):
         """Pager totals match the actually returned rows (no client filter)."""

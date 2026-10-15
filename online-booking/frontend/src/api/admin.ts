@@ -95,6 +95,9 @@ export const adminApi = {
   completeAppointment(id: number) {
     return apiClient.patch(`/api/v1/admin/appointments/${id}/complete`);
   },
+  reopenAppointment(id: number) {
+    return apiClient.patch(`/api/v1/admin/appointments/${id}/reopen`);
+  },
   noShowAppointment(id: number) {
     return apiClient.patch(`/api/v1/admin/appointments/${id}/no-show`);
   },

@@ -1,5 +1,5 @@
 """Admin appointment status actions: confirm / cancel / complete / delete / no-show."""
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -111,6 +111,28 @@ async def complete_appointment(
     appointment = await get_appointment_for_master(db, appointment_id, master)
     appointment.status = "completed"
     await log_action(db, master.id, "complete", "appointment", appointment.id, level="info")
+    await db.commit()
+    await db.refresh(appointment)
+    return appointment
+
+
+@router.patch("/appointments/{appointment_id}/reopen")
+async def reopen_appointment(
+    appointment_id: int,
+    master: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db)
+):
+    """Return a completed appointment to work (e.g. auto-complete misfired).
+
+    Back to confirmed: no-show or cancel-with-reason work from there.
+    """
+    logger.info("Reopen appointment %s by master %s", appointment_id, master.id)
+    appointment = await get_appointment_for_master(db, appointment_id, master)
+    if appointment.status != "completed":
+        raise HTTPException(status_code=400, detail="Вернуть в работу можно только завершённую")
+    appointment.status = "confirmed"
+    await log_action(db, master.id, "reopen", "appointment", appointment.id, level="info")
+    await _bell_client(db, appointment, master, "вернул(а) в работу")
     await db.commit()
     await db.refresh(appointment)
     return appointment
