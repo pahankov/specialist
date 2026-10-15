@@ -556,23 +556,30 @@ async def unblock_client_endpoint(
         raise HTTPException(status_code=404, detail="Client not found")
     await _require_own_client(db, master, user)
 
-    from app.services.client_visibility import unblock_client
+    from app.services.client_visibility import unblock_client, restore_client_appointments
     from app.models.master_profile import MasterProfile
     cp = (await db.execute(
         select(ClientProfile).where(ClientProfile.user_id == user.id)
     )).scalar_one_or_none()
     if cp is None:
         return {"blocked": False, "was_blocked": False}
+    restored = skipped = 0
     if master.role == UserRole.ADMIN:
         mp_ids = ([master_id] if master_id is not None
                   else (await db.execute(select(MasterProfile.id))).scalars().all())
         lifted = False
         for mp_id in mp_ids:
             lifted = await unblock_client(db, mp_id, cp.id) or lifted
-        return {"blocked": False, "was_blocked": lifted}
+            r = await restore_client_appointments(db, mp_id, cp.id)
+            restored += r["restored"]
+            skipped += r["skipped"]
+        return {"blocked": False, "was_blocked": lifted,
+                "restored_appointments": restored, "skipped_slots": skipped}
     mp_id = await get_master_profile_id(db, master)
     existed = await unblock_client(db, mp_id, cp.id)
-    return {"blocked": False, "was_blocked": existed}
+    r = await restore_client_appointments(db, mp_id, cp.id)
+    return {"blocked": False, "was_blocked": existed,
+            "restored_appointments": r["restored"], "skipped_slots": r["skipped"]}
 
 
 @router.post("/clients/{client_id}/restore", status_code=200)
@@ -592,27 +599,34 @@ async def restore_client(
         raise HTTPException(status_code=404, detail="Client not found")
     await _require_own_client(db, master, user)
 
-    from app.services.client_visibility import unblock_client
+    from app.services.client_visibility import unblock_client, restore_client_appointments
     from app.models.master_profile import MasterProfile
     cp = (await db.execute(
         select(ClientProfile).where(ClientProfile.user_id == user.id)
     )).scalar_one_or_none()
     if cp is None:
         return {"restored": False}
+    restored = skipped = 0
     if master.role == UserRole.ADMIN:
         mp_ids = ([master_id] if master_id is not None
                   else (await db.execute(select(MasterProfile.id))).scalars().all())
         lifted = False
         for mp_id in mp_ids:
             lifted = await unblock_client(db, mp_id, cp.id) or lifted
+            r = await restore_client_appointments(db, mp_id, cp.id)
+            restored += r["restored"]
+            skipped += r["skipped"]
         await log_action(db, master.id, "restore", "client", client_id,
                          user.name, level="info")
-        return {"restored": lifted}
+        return {"restored": lifted,
+                "restored_appointments": restored, "skipped_slots": skipped}
     mp_id = await get_master_profile_id(db, master)
-    restored = await unblock_client(db, mp_id, cp.id)
+    restored_flag = await unblock_client(db, mp_id, cp.id)
+    r = await restore_client_appointments(db, mp_id, cp.id)
     await log_action(db, master.id, "restore", "client", client_id,
                      user.name, level="info")
-    return {"restored": restored}
+    return {"restored": restored_flag,
+            "restored_appointments": r["restored"], "skipped_slots": r["skipped"]}
 
 
 @router.delete("/clients/{client_id}", status_code=204)

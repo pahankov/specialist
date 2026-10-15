@@ -26,7 +26,7 @@ function CabinetNotificationsPage() {
 
   const fetchNotes = async () => {
     try {
-      const { data } = await cabinetApi.notificationsInbox({ page: 1, page_size: 50 });
+      const { data } = await cabinetApi.notificationsInbox({ page: 1, page_size: 20 });
       setNotes(data.items);
       setUnread(data.unread);
     } catch (err: unknown) {

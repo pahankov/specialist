@@ -62,19 +62,8 @@ function LogsPage() {
     fetchLogs();
   }, [entityFilter, masterFilter, currentPage]);
 
-  if (loading)
-    return (
-      <div>
-        <Skeleton rows={8} />
-      </div>
-    );
-  if (error)
-    return (
-      <div>
-        <div className="error-message">{error}</div>
-      </div>
-    );
-
+  // Hooks must run before any early return (loading/error): otherwise the
+  // hook count changes between renders and React unmounts the page.
   const columns: FitColumnDef<AuditLogEntry>[] = useMemo(
     () => [
       {
@@ -193,6 +182,19 @@ function LogsPage() {
     { value: 'master', label: '👨‍💼 Мастера' },
     { value: 'auth', label: '🔑 Входы/выходы' },
   ];
+
+  if (loading)
+    return (
+      <div>
+        <Skeleton rows={8} />
+      </div>
+    );
+  if (error)
+    return (
+      <div>
+        <div className="error-message">{error}</div>
+      </div>
+    );
 
   return (
     <div>

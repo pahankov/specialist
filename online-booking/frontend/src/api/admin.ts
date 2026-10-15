@@ -166,7 +166,11 @@ export const adminApi = {
     });
   },
   restoreClient(id: number, masterId?: number) {
-    return apiClient.post<{ restored: boolean }>(`/api/v1/admin/clients/${id}/restore`, null, {
+    return apiClient.post<{
+      restored: boolean;
+      restored_appointments?: number;
+      skipped_slots?: number;
+    }>(`/api/v1/admin/clients/${id}/restore`, null, {
       params: masterId ? { master_id: masterId } : undefined,
     });
   },
@@ -183,10 +187,14 @@ export const adminApi = {
     );
   },
   unblockClient(id: number, masterId?: number) {
-    return apiClient.delete<{ blocked: boolean; was_blocked: boolean }>(
-      `/api/v1/admin/clients/${id}/block`,
-      { params: masterId ? { master_id: masterId } : undefined },
-    );
+    return apiClient.delete<{
+      blocked: boolean;
+      was_blocked: boolean;
+      restored_appointments?: number;
+      skipped_slots?: number;
+    }>(`/api/v1/admin/clients/${id}/block`, {
+      params: masterId ? { master_id: masterId } : undefined,
+    });
   },
   toggleClientActive(id: number) {
     return apiClient.post(`/api/v1/admin/clients/${id}/toggle-active`);

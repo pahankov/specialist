@@ -126,6 +126,7 @@
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  margin: 12px 0;
 }
 
 .cabinet-page .filter-btn {

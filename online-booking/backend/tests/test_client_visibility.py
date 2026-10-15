@@ -364,6 +364,7 @@ class TestBlacklist:
         self, client, session, hide_setup,
     ):
         from sqlalchemy import select
+        from app.models.appointment import Appointment
         from app.models.service import Service
         from datetime import timedelta
 
@@ -371,9 +372,35 @@ class TestBlacklist:
         client_uid = s["c"]["id"]
         await client.post(f"/api/v1/admin/clients/{client_uid}/block",
                           headers=_auth(s["a"]))
+
+        # Block killed the future pending appointment with A.
+        killed = (await session.execute(
+            select(Appointment).where(
+                Appointment.master_id == s["mp_a"],
+                Appointment.client_id == s["cp"],
+                Appointment.status == "cancelled")
+        )).scalars().all()
+        assert len(killed) == 1
+
         r = await client.delete(f"/api/v1/admin/clients/{client_uid}/block",
                                 headers=_auth(s["a"]))
         assert r.status_code == 200, r.text
+        assert r.json()["restored_appointments"] == 1
+        assert r.json()["skipped_slots"] == 0
+
+        back = (await session.execute(
+            select(Appointment).where(
+                Appointment.master_id == s["mp_a"],
+                Appointment.client_id == s["cp"],
+                Appointment.status == "confirmed")
+        )).scalars().all()
+        assert len(back) == 1
+
+        # Client got the "blocking lifted" bell.
+        inbox = await client.get("/api/v1/client/notifications/inbox",
+                                 headers=_auth(s["c"]))
+        texts = [i["text"] for i in inbox.json()["items"]]
+        assert any("Блокировка снята" in t for t in texts), texts
 
         lst = await client.get("/api/v1/admin/clients", headers=_auth(s["a"]))
         row = [i for i in lst.json()["items"] if i["id"] == client_uid]

@@ -59,7 +59,7 @@ function ClientsPage() {
   const [totalClients, setTotalClients] = useState(0);
   const [currentPage, setCurrentPage] = usePersistentState('clients.page', 0);
   const [totalPages, setTotalPages] = useState(1);
-  const pageSize = 50;
+  const pageSize = 20;
   const { sortKey, sortDir, toggleSort, sortArrow } = useAdminSort<'name' | 'no_show'>('clients');
 
   // Debounce search input (400ms) — no request per keystroke
@@ -249,10 +249,17 @@ function ClientsPage() {
     }
   };
 
+  const restoredText = (d: { restored_appointments?: number; skipped_slots?: number }) => {
+    const parts: string[] = [];
+    if (d.restored_appointments) parts.push(`восстановлено записей: ${d.restored_appointments}`);
+    if (d.skipped_slots) parts.push(`слоты заняты: ${d.skipped_slots}`);
+    return parts.length > 0 ? ` (${parts.join(', ')})` : '';
+  };
+
   const handleUnblock = async (id: number) => {
     try {
-      await adminApi.unblockClient(id, scopedMasterId);
-      toast.success('Клиент разблокирован');
+      const { data } = await adminApi.unblockClient(id, scopedMasterId);
+      toast.success(`Клиент разблокирован${restoredText(data)}`);
       fetchData();
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'Не удалось разблокировать'));
@@ -261,8 +268,8 @@ function ClientsPage() {
 
   const handleRestore = async (id: number) => {
     try {
-      await adminApi.restoreClient(id, scopedMasterId);
-      toast.success('Клиент возвращён в списки');
+      const { data } = await adminApi.restoreClient(id, scopedMasterId);
+      toast.success(`Клиент возвращён в списки${restoredText(data)}`);
       fetchData();
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'Не удалось вернуть клиента'));

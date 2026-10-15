@@ -332,16 +332,26 @@ function ServicesPage() {
           const s = row.original;
           return (
             <span style={{ display: 'inline-flex', gap: 4 }}>
-              <button className="btn btn-sm btn-edit" onClick={() => handleEdit(s)}>
-                ✏️ Редактировать
+              <button
+                className="btn btn-sm btn-edit"
+                onClick={() => handleEdit(s)}
+                title="Редактировать услугу"
+                aria-label="Редактировать услугу"
+              >
+                ✏️
               </button>
-              <button className="btn btn-sm btn-delete" onClick={() => setDeletingId(s.id)}>
-                🗑️ Удалить
+              <button
+                className="btn btn-sm btn-delete"
+                onClick={() => setDeletingId(s.id)}
+                title="Удалить услугу"
+                aria-label="Удалить услугу"
+              >
+                ✖
               </button>
             </span>
           );
         },
-        meta: { minWidth: 200, hideable: false, label: 'Действия' },
+        meta: { minWidth: 110, hideable: false, label: 'Действия' },
       },
     ],
     [],

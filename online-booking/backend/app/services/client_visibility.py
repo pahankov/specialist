@@ -191,6 +191,54 @@ async def unblock_client(db: AsyncSession, master_profile_id: int,
     return True
 
 
+async def restore_client_appointments(db: AsyncSession, master_profile_id: int,
+                                      client_profile_id: int) -> dict:
+    """Bring back future appointments killed by a block/archive.
+
+    Only slots that are still free flip to confirmed (the unblock is an
+    explicit approval gesture); taken slots stay cancelled. Sends one bell
+    when anything was restored. Returns {"restored": n, "skipped": m}.
+    """
+    from datetime import timedelta
+    from app.services.booking import find_conflict, format_slot
+    from app.utils import utcnow_naive
+
+    now = utcnow_naive()
+    doomed = (await db.execute(
+        select(Appointment).where(
+            Appointment.master_id == master_profile_id,
+            Appointment.client_id == client_profile_id,
+            Appointment.status == "cancelled",
+            Appointment.appointment_date > now,
+        ).order_by(Appointment.appointment_date)
+    )).scalars().all()
+    restored = skipped = 0
+    for a in doomed:
+        dur = a.duration_minutes or 60
+        start = a.appointment_date.replace(tzinfo=None)
+        clash = await find_conflict(db, master_profile_id, start, int(dur))
+        if clash is not None and clash.id != a.id:
+            skipped += 1
+            continue
+        a.status = "confirmed"
+        restored += 1
+    if restored:
+        cp = (await db.execute(
+            select(ClientProfile).where(ClientProfile.id == client_profile_id)
+        )).scalar_one_or_none()
+        if cp is not None:
+            await notify_user(
+                db, recipient_id=cp.user_id,
+                text=(f"Блокировка снята: восстановлено записей: {restored}."
+                      + (f" Не влезло в занятые слоты: {skipped}." if skipped else "")),
+                audience="booking", link="appointments",
+            )
+    await db.commit()
+    logger.info("Unblock restore: master=%s client_profile=%s restored=%s skipped=%s",
+                master_profile_id, client_profile_id, restored, skipped)
+    return {"restored": restored, "skipped": skipped}
+
+
 async def is_client_blocked(db: AsyncSession, master_profile_id: int,
                             client_profile_id: int) -> bool:
     """True when this master blacklisted this client profile."""

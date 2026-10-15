@@ -142,7 +142,7 @@ function NotificationsPage() {
   const fetchInbox = async () => {
     setInboxLoading(true);
     try {
-      const { data } = await adminApi.getNotificationsInbox({ page: 1, page_size: 50 });
+      const { data } = await adminApi.getNotificationsInbox({ page: 1, page_size: 20 });
       setInbox(data.items);
       setUnread(data.unread);
     } catch (err: unknown) {
@@ -171,7 +171,7 @@ function NotificationsPage() {
   const fetchSent = async () => {
     setSentLoading(true);
     try {
-      const { data } = await adminApi.getSentBroadcasts({ page: 1, page_size: 50 });
+      const { data } = await adminApi.getSentBroadcasts({ page: 1, page_size: 20 });
       setSent(data.items);
       setSentTotal(data.total);
     } catch (err: unknown) {
