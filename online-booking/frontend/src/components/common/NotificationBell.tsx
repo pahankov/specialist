@@ -24,12 +24,28 @@ interface NotificationBellProps {
 
 const PAGE_SIZE = 10;
 
-function resolveTarget(bellLink: string, link: string | null | undefined): string {
+/** Exported for tests: every link shape must resolve to a real route. */
+export function resolveTarget(bellLink: string, link: string | null | undefined): string {
   if (!link) return bellLink;
-  // Panel inboxes live at <base>/notifications → linked rows jump to the
-  // sibling page (e.g. <base>/appointments). Cabinet root has no sibling.
-  if (bellLink.endsWith('/notifications')) {
-    return `${bellLink.slice(0, -'/notifications'.length)}/${link}`;
+  // Links carry payloads ("appointments:42", "book:23") — never glue them
+  // raw onto the URL ("/admin/appointments:42" matches no route and the
+  // catch-all dumps the user on home). Parse every shape explicitly.
+  const base = bellLink.endsWith('/notifications')
+    ? bellLink.slice(0, -'/notifications'.length)
+    : null;
+  const inCabinet = bellLink.startsWith('/cabinet');
+  if (link.startsWith('appointments')) {
+    const id = link.split(':')[1];
+    if (inCabinet || !base) return '/cabinet';
+    return `${base}/appointments${id ? `?highlight=${id}` : ''}`;
+  }
+  if (link === 'reviews') {
+    if (!inCabinet && base) return `${base}/profile#reviews`;
+    return '/cabinet';
+  }
+  if (link.startsWith('book')) {
+    const master = link.split(':')[1];
+    return `/cabinet/book${master ? `?master_id=${master}` : ''}`;
   }
   return bellLink;
 }
@@ -125,7 +141,14 @@ function NotificationBell({ unread, bellLink, scope, onRead }: NotificationBellP
       }
       onRead?.();
     }
-    if (item.link) closeAndGo(resolveTarget(bellLink, item.link));
+    if (!item.link) return;
+    setOpen(false);
+    // Cabinet review bells land straight in History (same as the inbox page).
+    if (item.link === 'reviews' && bellLink.startsWith('/cabinet')) {
+      navigate('/cabinet', { state: { scrollTo: 'history' } });
+      return;
+    }
+    closeAndGo(resolveTarget(bellLink, item.link));
   };
 
   const handleReadAll = async () => {
