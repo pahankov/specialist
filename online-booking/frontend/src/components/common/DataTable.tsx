@@ -253,7 +253,7 @@ export default function DataTable<T>({
             onClick={() => setMenuOpen((v) => !v)}
             title="Показать/скрыть столбцы"
           >
-            🧾 Столбцы
+            ☰ Столбцы
           </button>
           {menuOpen && (
             <div className="datatable-menu" role="menu">

@@ -390,7 +390,7 @@ function BaseLayout({
             </button>
           )}
           <button className="btn btn-ghost btn-logout" onClick={handleLogout} title="Выйти">
-            <span className="nav-icon">🚪</span>
+            <span className="nav-icon">⏻</span>
             {!sidebarCollapsed && <span className="nav-label">Выйти</span>}
           </button>
         </div>

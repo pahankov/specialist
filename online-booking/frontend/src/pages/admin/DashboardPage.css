@@ -317,6 +317,8 @@
   color: #333;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+  justify-self: end;
+  text-align: right;
 }
 
 .appt-status {

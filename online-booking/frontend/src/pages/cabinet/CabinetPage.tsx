@@ -180,7 +180,9 @@ function CabinetPage() {
           )}
           {reviewFor === a.id && (
             <div style={{ marginTop: 8 }}>
-              <div style={{ display: 'flex', gap: 8, fontSize: 64, lineHeight: 1 }}>
+              <div
+                style={{ display: 'flex', gap: 8, fontSize: 96, lineHeight: 1, flexWrap: 'wrap' }}
+              >
                 {[1, 2, 3, 4, 5].map((n) => (
                   <button
                     key={n}
@@ -311,7 +313,10 @@ function CabinetPage() {
             <span className="stat-mini-label">предстоящих</span>
           </div>
           <div className="stat-mini">
-            <span className="stat-mini-value">
+            <span
+              className="stat-mini-value stat-mini-wrap"
+              title={stats.favorite_master?.name ?? undefined}
+            >
               {stats.favorite_master ? stats.favorite_master.name : '—'}
             </span>
             <span className="stat-mini-label">любимый мастер</span>

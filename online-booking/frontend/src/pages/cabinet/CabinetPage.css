@@ -55,6 +55,15 @@
   text-overflow: ellipsis;
 }
 
+/* Favorite master name always fits fully (wraps instead of …). */
+.stat-mini-value.stat-mini-wrap {
+  white-space: normal;
+  overflow: visible;
+  font-size: 17px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
 .stat-mini-label {
   font-size: 12px;
   color: #666;

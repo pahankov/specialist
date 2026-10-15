@@ -45,7 +45,7 @@ describe('DataTable', () => {
 
   it('hides a column via the Столбцы menu and persists it', () => {
     render(<DataTable tableId={TABLE} columns={columns} data={data} />);
-    fireEvent.click(screen.getByText('🧾 Столбцы'));
+    fireEvent.click(screen.getByText('☰ Столбцы'));
     fireEvent.click(screen.getByLabelText('Телефон'));
     expect(screen.queryByText('+7 (999) 111-22-33')).toBeNull();
     expect(JSON.parse(localStorage.getItem(`colvis:${TABLE}`)!)).toMatchObject({
@@ -55,7 +55,7 @@ describe('DataTable', () => {
 
   it('reset restores hidden columns', () => {
     render(<DataTable tableId={TABLE} columns={columns} data={data} />);
-    fireEvent.click(screen.getByText('🧾 Столбцы'));
+    fireEvent.click(screen.getByText('☰ Столбцы'));
     fireEvent.click(screen.getByLabelText('Телефон'));
     fireEvent.click(screen.getByText('↺ Сбросить layout'));
     expect(screen.getByText('+7 (999) 111-22-33')).toBeTruthy();
@@ -75,12 +75,12 @@ describe('DataTable', () => {
         <DataTable tableId={TABLE} columns={columns} data={data} />
       </div>,
     );
-    fireEvent.click(screen.getByText('🧾 Столбцы'));
+    fireEvent.click(screen.getByText('☰ Столбцы'));
     expect(screen.getByLabelText('Телефон')).toBeTruthy();
     fireEvent.pointerDown(document.body);
     expect(screen.queryByLabelText('Телефон')).toBeNull();
 
-    fireEvent.click(screen.getByText('🧾 Столбцы'));
+    fireEvent.click(screen.getByText('☰ Столбцы'));
     expect(screen.getByLabelText('Телефон')).toBeTruthy();
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(screen.queryByLabelText('Телефон')).toBeNull();

@@ -60,6 +60,7 @@ function AppointmentsPage() {
   const [dateFrom, setDateFrom] = usePersistentState('appointments.from', '');
   const [dateTo, setDateTo] = usePersistentState('appointments.to', '');
   const [showCompleted, setShowCompleted] = usePersistentState('appointments.showCompleted', false);
+  const [showCancelled, setShowCancelled] = usePersistentState('appointments.showCancelled', true);
   const [allTime, setAllTime] = usePersistentState('appointments.allTime', true);
   const [showFilters, setShowFilters] = usePersistentState('appointments.showFilters', false);
   const [loading, setLoading] = useState(true);
@@ -307,6 +308,8 @@ function AppointmentsPage() {
     // complete), hiding them orphaned past bookings.
     // An explicit "completed" tab always shows them (the tab IS the opt-in).
     if (a.status === 'completed' && !showCompleted && statusFilter !== 'completed') return false;
+    // Cancelled live under their own toggle (same idea, on by default).
+    if (a.status === 'cancelled' && !showCancelled && statusFilter !== 'cancelled') return false;
     return true;
   });
 
@@ -432,23 +435,28 @@ function AppointmentsPage() {
         header: () => sortHead('status', 'Статус'),
         accessorFn: (a) => a.status,
         cell: ({ row }) => (
-          <>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <Tooltip
               content={statusLabels[row.original.status] || row.original.status}
               position="top"
             >
               <StatusBadge status={row.original.status} />
             </Tooltip>
-            {(row.original.status === 'pending' || row.original.status === 'confirmed') &&
-              isAppointmentTimePassed(row.original.appointment_date) && (
-                <span
-                  title="Время записи прошло — подтвердите или завершите"
-                  style={{ marginLeft: 4 }}
-                >
-                  ⏰
-                </span>
-              )}
-          </>
+            <span
+              title={
+                row.original.status === 'pending' || row.original.status === 'confirmed'
+                  ? isAppointmentTimePassed(row.original.appointment_date)
+                    ? 'Время записи прошло — подтвердите или завершите'
+                    : ''
+                  : ''
+              }
+              style={{ width: 18, textAlign: 'center' }}
+            >
+              {(row.original.status === 'pending' || row.original.status === 'confirmed') &&
+                isAppointmentTimePassed(row.original.appointment_date) &&
+                '⏰'}
+            </span>
+          </span>
         ),
         meta: { minWidth: 120, label: 'Статус' },
       },
@@ -586,9 +594,10 @@ function AppointmentsPage() {
             className={`filter-btn ${statusFilter === f.value ? 'active' : ''}`}
             onClick={() => {
               setStatusFilter(f.value);
-              // The completed tab promises completed rows — reveal them
-              // even if the toggle below is off.
+              // The completed/cancelled tabs promise those rows — reveal them
+              // even if the toggles below are off.
               if (f.value === 'completed') setShowCompleted(true);
+              if (f.value === 'cancelled') setShowCancelled(true);
             }}
           >
             {f.label}
@@ -743,6 +752,24 @@ function AppointmentsPage() {
             style={{ width: 16, height: 16, accentColor: '#667eea' }}
           />
           Показать завершённые
+        </label>
+        <label
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            cursor: 'pointer',
+            fontSize: 14,
+            color: '#666',
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={showCancelled}
+            onChange={() => setShowCancelled((p) => !p)}
+            style={{ width: 16, height: 16, accentColor: '#667eea' }}
+          />
+          Показать отменённые
         </label>
         {!isSuperSection && <AutoConfirmSwitch />}
         {!isSuperSection && <AutoCompleteSwitch />}

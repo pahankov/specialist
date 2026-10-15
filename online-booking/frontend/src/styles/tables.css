@@ -131,10 +131,11 @@ table.datatable {
   font-size: 13px;
 }
 
-/* Badges have fixed min-widths that fight manual shrinking — let them clip */
+/* Status badges keep one width in tables too (never content-sized). */
 .datatable .status-badge,
 .datatable .role-badge {
-  min-width: 0;
+  min-width: 140px;
+  justify-content: center;
 }
 
 .col-resizer {
