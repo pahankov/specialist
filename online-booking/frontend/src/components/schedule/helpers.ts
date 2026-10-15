@@ -188,6 +188,12 @@ export function formatPrice(price: number | string): string {
   return num.toLocaleString('ru-RU');
 }
 
+/** Local YYYY-MM (never toISOString().slice(): UTC midnight shifts the
+ * month back in UTC+3 — forward navigation silently no-ops). */
+export function monthISO(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
 /** Short discount tag: "−20%", "−500 ₽", "−20% до 20.10". Empty when none. */
 export function formatDiscountTag(
   discountPercent?: number | null,

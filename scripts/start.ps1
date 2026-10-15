@@ -81,7 +81,9 @@ Write-Ok "python + node present"
 Write-Step 2 "Freeing ports 8000/3000"
 Get-NetTCPConnection -LocalPort 8000 -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-Start-Sleep -Seconds 1
+# A killed backend releases the SQLite lock with a delay: without this wait
+# the alembic step below trips on "database is locked".
+Start-Sleep -Seconds 3
 Write-Ok "Ports free"
 
 # --- Backup DB ---
@@ -149,9 +151,15 @@ if (Test-Path $PyExe) {
     try {
         Push-Location $BackendDir
         # Capture to a variable first: a bare `> file` redirect can leave an
-        # empty log on failure, hiding the real cause.
-        $AlembicOut = & $PyExe -m alembic upgrade head 2>&1
-        $AlembicExit = $LASTEXITCODE
+        # empty log on failure, hiding the real cause. Retry: the DB lock
+        # from the just-killed backend can linger a few seconds.
+        $AlembicOut = $null
+        $AlembicExit = 1
+        for ($i = 1; $i -le 3 -and $AlembicExit -ne 0; $i++) {
+            if ($i -gt 1) { Start-Sleep -Seconds 3 }
+            $AlembicOut = & $PyExe -m alembic upgrade head 2>&1
+            $AlembicExit = $LASTEXITCODE
+        }
         Pop-Location
         $AlembicOut | Out-File $AlembicLog -Encoding utf8
         if ($AlembicExit -eq 0) { Write-Ok "DB migrated to head" }

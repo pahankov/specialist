@@ -14,6 +14,7 @@ import {
   getAppointmentsForSlot,
   getCoveringLive,
   isSlotPast,
+  monthISO as monthISOOf,
 } from '../../components/schedule/helpers';
 import { getApiErrorMessage } from '../../utils/apiError';
 import './CabinetBookPage.css';
@@ -150,7 +151,7 @@ function CabinetBookPage() {
   const [masterQuery, setMasterQuery] = useState('');
   const [selectedMaster, setSelectedMaster] = useState<Master | null>(null);
 
-  const [monthISO, setMonthISO] = useState(() => new Date().toISOString().slice(0, 7));
+  const [monthISO, setMonthISO] = useState(() => monthISOOf(new Date()));
   const currentMonth = useMemo(() => new Date(`${monthISO}-01T00:00:00`), [monthISO]);
   const [windowRange, setWindowRange] = useState({ start: 8, end: 22 });
   const [schedule, setSchedule] = useState<Record<string, { start: number; end: number }>>({});

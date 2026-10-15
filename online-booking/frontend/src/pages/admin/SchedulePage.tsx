@@ -22,7 +22,12 @@ import {
 import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError';
 import { getCookie, decodeJwtPayload } from '../../utils/cookies';
 import { MonthlyStatsComponent } from '../../components/schedule/MonthlyStats';
-import { getBlockingLive, monthRangeISO, formatDate } from '../../components/schedule/helpers';
+import {
+  getBlockingLive,
+  monthRangeISO,
+  formatDate,
+  monthISO,
+} from '../../components/schedule/helpers';
 import { usePersistentState } from '../../utils/persistentState';
 import {
   toggleDayWork,
@@ -42,16 +47,30 @@ function SchedulePage() {
   const [schedule, setSchedule] = useState<Record<string, DaySchedule>>({});
   const [currentMonthISO, setCurrentMonthISO] = usePersistentState(
     'schedule.month',
-    new Date().toISOString().slice(0, 7),
+    monthISO(new Date()),
   );
   const currentMonth = new Date(`${currentMonthISO}-01T00:00:00`);
+
+  // Self-heal a corrupt persisted month (e.g. ancient sessionStorage value):
+  // outside [-12, +36] months from now it can only be garbage.
+  useEffect(() => {
+    const m = new Date(`${currentMonthISO}-01T00:00:00`);
+    if (Number.isNaN(m.getTime())) {
+      setCurrentMonthISO(monthISO(new Date()));
+      return;
+    }
+    const diff =
+      (m.getFullYear() - new Date().getFullYear()) * 12 + (m.getMonth() - new Date().getMonth());
+    if (diff < -12 || diff > 36) setCurrentMonthISO(monthISO(new Date()));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Functional update from the FRESH state: handlers are useCallback([]) and
   // must never compute from a stale render closure (that froze month flips).
   const setCurrentMonth = (d: Date | ((p: Date) => Date)) => {
     setCurrentMonthISO((prevISO) => {
       const prev = new Date(`${prevISO}-01T00:00:00`);
       const next = typeof d === 'function' ? d(prev) : d;
-      return next.toISOString().slice(0, 7);
+      return monthISO(next);
     });
   };
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
