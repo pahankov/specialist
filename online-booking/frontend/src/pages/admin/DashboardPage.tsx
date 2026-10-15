@@ -244,9 +244,34 @@ function DashboardPage() {
             </div>
           </div>
 
-          {/* ─── Bottom grid: statuses live in the funnel above,
-              so upcoming takes the full width ─── */}
-          <div className="dashboard-grid dashboard-grid-single">
+          {/* ─── Bottom grid: top clients + upcoming ─── */}
+          <div className="dashboard-grid">
+            <div className="card">
+              <div className="card-header">
+                <h3>🏆 Топ клиентов</h3>
+                <Link to={`${section}/clients`} className="link">
+                  Все →
+                </Link>
+              </div>
+              <div className="upcoming-list">
+                {(g.top_clients || []).map((c) => (
+                  <div key={c.id} className="upcoming-row">
+                    <div className="upcoming-info">
+                      <span className="upcoming-client">{c.name || '—'}</span>
+                      <span className="upcoming-service">{c.visits} визитов</span>
+                    </div>
+                    <span className="upcoming-date">{c.spent.toLocaleString('ru-RU')} ₽</span>
+                  </div>
+                ))}
+                {(!g.top_clients || g.top_clients.length === 0) && (
+                  <EmptyState
+                    icon="👥"
+                    title="Пока пусто"
+                    description="Топ появится после завершённых визитов"
+                  />
+                )}
+              </div>
+            </div>
             <div className="card">
               <div className="card-header">
                 <h3>Ближайшие записи</h3>

@@ -38,6 +38,8 @@ async def get_admin_appointments(
     date_to: Optional[str] = Query(None, description="Filter by date to (YYYY-MM-DD)"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
+    show_completed: bool = Query(True, description="Include completed rows"),
+    show_cancelled: bool = Query(True, description="Include cancelled rows"),
     db: AsyncSession = Depends(get_db)
 ):
     """Get appointments with client and service details (paginated with total count)."""
@@ -101,6 +103,14 @@ async def get_admin_appointments(
     if status:
         query = query.where(Appointment.status == status)
         count_query = count_query.where(Appointment.status == status)
+    else:
+        # Toggles keep the pager truthful (filtering is server-side now).
+        if not show_completed:
+            query = query.where(Appointment.status != "completed")
+            count_query = count_query.where(Appointment.status != "completed")
+        if not show_cancelled:
+            query = query.where(Appointment.status != "cancelled")
+            count_query = count_query.where(Appointment.status != "cancelled")
 
     # Apply master_id filter (superadmin only)
     if master_id is not None:

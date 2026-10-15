@@ -129,7 +129,12 @@ function AppointmentsPage() {
   const fetch = async () => {
     setLoading(true);
     try {
-      const params: Record<string, any> = { page: currentPage + 1, page_size: pageSize };
+      const params: Record<string, any> = {
+        page: currentPage + 1,
+        page_size: pageSize,
+        show_completed: showCompleted,
+        show_cancelled: showCancelled,
+      };
       if (statusFilter) params.status = statusFilter;
       if (masterIdFilter !== '') params.master_id = masterIdFilter;
       if (clientIdFilter !== '') params.client_id = clientIdFilter;
@@ -214,6 +219,8 @@ function AppointmentsPage() {
     dateFrom,
     dateTo,
     allTime,
+    showCompleted,
+    showCancelled,
   ]);
 
   // Bell deep-link: scroll to the row and flash it, then let go.
@@ -331,16 +338,7 @@ function AppointmentsPage() {
     return 0;
   });
 
-  const filteredAppointments = sortedAppointments.filter((a) => {
-    // Completed live under the "show completed" toggle; everything else
-    // stays visible — overdue pending/confirmed need actions (confirm /
-    // complete), hiding them orphaned past bookings.
-    // An explicit "completed" tab always shows them (the tab IS the opt-in).
-    if (a.status === 'completed' && !showCompleted && statusFilter !== 'completed') return false;
-    // Cancelled live under their own toggle (same idea, on by default).
-    if (a.status === 'cancelled' && !showCancelled && statusFilter !== 'cancelled') return false;
-    return true;
-  });
+  const filteredAppointments = sortedAppointments;
 
   type Row = (typeof filteredAppointments)[number];
   const sortMark = (field: SortField) =>

@@ -290,11 +290,13 @@ describe('helpers', () => {
         total_minutes: 600,
         total_hours: 10,
         revenue: 15000,
+        cancelled_appointments: 3,
       };
       const result = buildMonthlyStats(stats);
-      expect(result).toHaveLength(3);
+      expect(result).toHaveLength(4);
       expect(result[0].value).toBe(10);
-      expect(result[1].label).toBe('Часов (подт.)');
+      expect(result[1].value).toBe(3);
+      expect(result[2].label).toBe('Часов (всего)');
     });
   });
 

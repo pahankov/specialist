@@ -160,6 +160,7 @@
 | `POST` | `/admin/notifications/broadcast` | Внутренняя рассылка в колокольчик (`audience`, `user_ids?`, `text` 1–4000). Супер: `all/masters/clients/selected`; мастер: `my_clients/selected` (только свои). Пишет по строке на получателя + строку в историю |
 | `GET` | `/admin/notifications/sent` | Свои отправленные: что/когда/кому (текст, аудитория, получатели, дата) |
 | `DELETE` | `/admin/notifications/sent` | Очистить историю отправленных (у получателей колокольчики остаются) |
+| `GET` | `/admin/appointments` | Записи (`show_completed`/`show_cancelled` — пейджер считает показанное) |
 | `GET` | `/admin/notifications/inbox` | Свои входящие (панели): `unread_only`, пагинация, счётчик `unread` |
 | `GET` | `/admin/notifications/unread-count` | Бейдж колокольчика (панели) |
 | `POST` | `/admin/notifications/{id}/read`, `/admin/notifications/read-all` | Отметить прочитанным |

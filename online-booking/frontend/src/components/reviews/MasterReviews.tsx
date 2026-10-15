@@ -3,6 +3,7 @@ import { reviewsApi } from '../../api/client';
 import type { AverageRating, Review } from '../../api/types';
 import { EmptyState, Skeleton } from '../common';
 import ReviewCard from './ReviewCard';
+import Stars from './Stars';
 import './ReviewsSection.css';
 
 /** Master panel: own rating summary + every published review. */
@@ -38,10 +39,7 @@ function MasterReviews({ profileId }: { profileId: number | null }) {
     <div>
       {avg && avg.average_rating !== null ? (
         <div className="reviews-summary" style={{ marginBottom: 12 }}>
-          <span className="reviews-average" style={{ fontSize: 28 }}>
-            {'★'.repeat(Math.round(avg.average_rating))}
-            {'☆'.repeat(5 - Math.round(avg.average_rating))}
-          </span>
+          <Stars value={avg.average_rating} size={28} />
           <span className="reviews-count">
             {avg.average_rating} · {avg.review_count} {avg.review_count === 1 ? 'оценка' : 'оценок'}
           </span>

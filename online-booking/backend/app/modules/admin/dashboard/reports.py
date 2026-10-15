@@ -38,7 +38,8 @@ async def get_monthly_stats(
     if master.role == UserRole.ADMIN:
         if master_id is None:
             return {"confirmed_appointments": 0, "total_minutes": 0.0,
-                    "total_hours": 0.0, "revenue": 0.0}
+                    "total_hours": 0.0, "revenue": 0.0,
+                    "cancelled_appointments": 0}
         target = await db.execute(
             select(MasterProfile).where(MasterProfile.id == master_id)
         )
@@ -74,11 +75,19 @@ async def get_monthly_stats(
     )
     month_revenue = revenue_result.scalar() or 0
 
+    cancelled_result = await db.execute(
+        select(func.count(Appointment.id))
+        .where(Appointment.master_id == mp_id, Appointment.appointment_date >= start_dt,
+               Appointment.appointment_date < end_dt, Appointment.status == "cancelled")
+    )
+    cancelled_count = cancelled_result.scalar() or 0
+
     return {
         "confirmed_appointments": confirmed_count,
         "total_minutes": float(total_minutes),
         "total_hours": round(total_minutes / 60, 1),
-        "revenue": float(month_revenue)
+        "revenue": float(month_revenue),
+        "cancelled_appointments": cancelled_count,
     }
 
 

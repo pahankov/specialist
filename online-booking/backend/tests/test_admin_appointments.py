@@ -560,3 +560,59 @@ class TestExactOverlapAndBells:
         assert "отменил" in notes[0].text
         assert "Заболел" in notes[0].text
         assert notes[0].link == f"appointments:{appt_id}"
+
+    async def test_show_toggles_filter_server_side(self, client, session,
+                                                   created_master_id):
+        """Pager totals match the actually returned rows (no client filter)."""
+        from datetime import datetime, timedelta, timezone
+        from sqlalchemy import select
+        from app.models.appointment import Appointment
+        from app.models.client_profile import ClientProfile
+        from app.models.service import Service
+        from app.models.user import User, UserRole
+        from app.utils.security import hash_password
+        from app.modules.auth.token import create_access_token
+
+        mu = (await session.execute(
+            select(User).where(User.role == UserRole.MASTER))).scalar_one()
+        mh = {"Authorization": f"Bearer {create_access_token({'sub': str(mu.id), 'role': 'MASTER', 'name': mu.name, 'is_admin': False})}"}
+
+        svc = Service(master_id=created_master_id, name="Pg", duration_minutes=60,
+                      price=1000, is_active=True)
+        session.add(svc)
+        await session.flush()
+        cu = User(name="PgC", email="pgc@example.com", phone="+79990009601",
+                  hashed_password=hash_password("SecurePass123!"),
+                  role=UserRole.CLIENT, is_active=True)
+        session.add(cu)
+        await session.flush()
+        cp = ClientProfile(user_id=cu.id)
+        session.add(cp)
+        await session.flush()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        session.add_all([
+            Appointment(master_id=created_master_id, service_id=svc.id,
+                        client_id=cp.id, duration_minutes=60,
+                        appointment_date=now + timedelta(days=1), status="confirmed"),
+            Appointment(master_id=created_master_id, service_id=svc.id,
+                        client_id=cp.id, duration_minutes=60,
+                        appointment_date=now + timedelta(days=2), status="completed"),
+            Appointment(master_id=created_master_id, service_id=svc.id,
+                        client_id=cp.id, duration_minutes=60,
+                        appointment_date=now + timedelta(days=3), status="cancelled"),
+        ])
+        await session.commit()
+
+        async def total(**params):
+            r = await client.get("/api/v1/admin/appointments",
+                                 params={"page": 1, "page_size": 20, **params},
+                                 headers=mh)
+            assert r.status_code == 200, r.text
+            body = r.json()
+            assert body["total"] == len(body["items"])
+            return body["total"]
+
+        assert await total() == 3
+        assert await total(show_completed="false") == 2
+        assert await total(show_cancelled="false") == 2
+        assert await total(show_completed="false", show_cancelled="false") == 1

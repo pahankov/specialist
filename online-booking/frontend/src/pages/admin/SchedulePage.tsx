@@ -22,7 +22,7 @@ import {
 import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError';
 import { getCookie, decodeJwtPayload } from '../../utils/cookies';
 import { MonthlyStatsComponent } from '../../components/schedule/MonthlyStats';
-import { getBlockingLive, monthRangeISO } from '../../components/schedule/helpers';
+import { getBlockingLive, monthRangeISO, formatDate } from '../../components/schedule/helpers';
 import { usePersistentState } from '../../utils/persistentState';
 import {
   toggleDayWork,
@@ -818,8 +818,10 @@ function SchedulePage() {
               onOpenBooking={handleOpenBooking}
               onCancelAppointment={handleCancelSlotAppointment}
               onConfirmAppointment={handleConfirmSlotAppointment}
-              windowStart={windowStart}
-              windowEnd={windowEnd}
+              windowStart={
+                (selectedDate && schedule[formatDate(selectedDate)]?.start) ?? windowStart
+              }
+              windowEnd={(selectedDate && schedule[formatDate(selectedDate)]?.end) ?? windowEnd}
             />
           )}
 

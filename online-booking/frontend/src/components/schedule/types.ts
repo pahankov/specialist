@@ -6,6 +6,7 @@ export interface MonthlyStats {
   total_minutes: number;
   total_hours: number;
   revenue: number;
+  cancelled_appointments?: number;
 }
 
 export interface CalendarDay {

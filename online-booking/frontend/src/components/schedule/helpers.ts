@@ -243,12 +243,14 @@ export function buildMonthlyStats(
     total_minutes: number;
     total_hours: number;
     revenue: number;
+    cancelled_appointments?: number;
   } | null,
 ): { value: string | number; label: string }[] {
   if (!stats) return [];
   return [
     { value: stats.confirmed_appointments, label: 'Подтверждено записей' },
-    { value: stats.total_hours, label: 'Часов (подт.)' },
+    { value: stats.cancelled_appointments ?? 0, label: 'Отменено записей' },
+    { value: stats.total_hours, label: 'Часов (всего)' },
     { value: `${formatPrice(stats.revenue)} ₽`, label: 'Доход (заверш.)' },
   ];
 }

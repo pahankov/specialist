@@ -148,9 +148,12 @@ if (Test-Path $PyExe) {
     $AlembicLog = Join-Path $ProjectDir "online-booking\backend\logs\alembic-last.log"
     try {
         Push-Location $BackendDir
-        & $PyExe -m alembic upgrade head > $AlembicLog 2>&1
+        # Capture to a variable first: a bare `> file` redirect can leave an
+        # empty log on failure, hiding the real cause.
+        $AlembicOut = & $PyExe -m alembic upgrade head 2>&1
         $AlembicExit = $LASTEXITCODE
         Pop-Location
+        $AlembicOut | Out-File $AlembicLog -Encoding utf8
         if ($AlembicExit -eq 0) { Write-Ok "DB migrated to head" }
         else {
             Write-Warn "alembic upgrade failed, backend may 500"

@@ -20,8 +20,9 @@ export async function toggleDayWork(
   const masterParam = masterId !== '' && masterId != null ? masterId : undefined;
 
   if (isActive) {
+    // Cancelled history doesn't block: only live bookings protect the day.
     const dayAppointments = appointments.filter(
-      (a) => a.appointment_date?.split('T')[0] === dateStr,
+      (a) => a.appointment_date?.split('T')[0] === dateStr && a.status !== 'cancelled',
     );
     if (dayAppointments.length > 0) {
       setError(

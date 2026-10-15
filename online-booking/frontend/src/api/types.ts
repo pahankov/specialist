@@ -192,6 +192,7 @@ export interface StatsBase {
   total_clients: number;
   total_services: number;
   total_revenue: number;
+  top_clients?: { id: number; name: string | null; visits: number; spent: number }[];
 }
 
 export interface DashboardStats extends StatsBase {

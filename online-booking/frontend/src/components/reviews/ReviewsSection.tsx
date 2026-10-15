@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { reviewsApi } from '../../api/client';
 import type { Review, AverageRating } from '../../api/types';
 import ReviewCard from './ReviewCard';
+import Stars from './Stars';
 import './ReviewsSection.css';
 
 // Helper: shuffle array (Fisher-Yates)
@@ -57,10 +58,7 @@ function ReviewsSection({ masterId }: ReviewsSectionProps) {
 
         {avgRating && avgRating.average_rating !== null && (
           <div className="reviews-summary">
-            <span className="reviews-average">
-              {'★'.repeat(Math.round(avgRating.average_rating!))}
-              {'☆'.repeat(5 - Math.round(avgRating.average_rating!))}
-            </span>
+            <Stars value={avgRating.average_rating} size={24} />
             <span className="reviews-count">
               {avgRating.average_rating} · {avgRating.review_count}{' '}
               {pluralize(avgRating.review_count, 'отзыв', 'отзыва', 'отзывов')}

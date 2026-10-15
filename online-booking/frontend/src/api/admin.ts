@@ -81,6 +81,8 @@ export const adminApi = {
     date_to?: string;
     page?: number;
     page_size?: number;
+    show_completed?: boolean;
+    show_cancelled?: boolean;
   }) {
     return apiClient.get('/api/v1/admin/appointments', { params });
   },

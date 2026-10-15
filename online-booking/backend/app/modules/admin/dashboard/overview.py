@@ -89,9 +89,13 @@ async def _get_master_stats(master: User, db: AsyncSession):
             selectinload(Appointment.client_profile).joinedload(ClientProfile.user),
             selectinload(Appointment.service),
         )
-        .where(Appointment.master_id == mp_id)
-        .order_by(Appointment.appointment_date.desc())
-        .limit(10)
+        .where(
+            Appointment.master_id == mp_id,
+            Appointment.appointment_date >= utcnow(),
+            Appointment.status.in_(["pending", "confirmed"]),
+        )
+        .order_by(Appointment.appointment_date.asc())
+        .limit(5)
     )
     recent_appointments = recent_result.scalars().all()
 
@@ -120,12 +124,34 @@ async def _get_master_stats(master: User, db: AsyncSession):
     )
     total_revenue = revenue_result.scalar() or 0
 
+    top_result = await db.execute(
+        select(
+            ClientProfile.id,
+            User.name,
+            func.count(Appointment.id).label("visits"),
+            func.sum(func.coalesce(Appointment.price, Service.price)).label("spent"),
+        )
+        .select_from(Appointment)
+        .join(ClientProfile, Appointment.client_id == ClientProfile.id)
+        .join(User, ClientProfile.user_id == User.id)
+        .outerjoin(Service, Appointment.service_id == Service.id)
+        .where(Appointment.master_id == mp_id, Appointment.status == "completed")
+        .group_by(ClientProfile.id, User.name)
+        .order_by(func.sum(func.coalesce(Appointment.price, Service.price)).desc())
+        .limit(5)
+    )
+    top_clients = [
+        {"id": r[0], "name": r[1], "visits": r[2], "spent": float(r[3] or 0)}
+        for r in top_result.all()
+    ]
+
     return {
         "total_appointments": total_appointments,
         "status_counts": status_counts,
         "total_clients": total_clients,
         "total_services": total_services,
         "total_revenue": float(total_revenue),
+        "top_clients": top_clients,
         "recent_appointments": [
             {
                 "id": a.id, "client_id": a.client_id,
@@ -195,7 +221,11 @@ async def _get_global_stats(db: AsyncSession):
             selectinload(Appointment.service),
             selectinload(Appointment.master_profile).joinedload(MasterProfile.user)
         )
-        .order_by(Appointment.appointment_date.desc())
+        .where(
+            Appointment.appointment_date >= utcnow(),
+            Appointment.status.in_(["pending", "confirmed"]),
+        )
+        .order_by(Appointment.appointment_date.asc())
         .limit(10)
     )
     recent_appointments = recent_result.scalars().all()
