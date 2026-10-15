@@ -83,26 +83,31 @@ function BaseLayout({
       if (mountedRef.current) setUnread(0);
       return;
     }
-    try {
-      const { data } = await adminApi.getNotificationsUnread();
-      failStreak.current = 0;
-      if (mountedRef.current) setUnread(data.unread || 0);
-      return;
-    } catch {
-      /* not a panel token — try the cabinet counter */
-    }
-    try {
-      const { data } = await cabinetApi.notificationsUnread();
-      failStreak.current = 0;
-      if (mountedRef.current) setUnread(data.unread || 0);
-    } catch {
-      /* logged out, dead token or dead backend — hide badge */
-      if (mountedRef.current) setUnread(0);
-      failStreak.current += 1;
-      if (failStreak.current >= 3 && timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
+    // Role-first: clients must not hammer the panel counter (401 + refresh
+    // storm on every poll) — and vice versa. Section decides for dual-role
+    // masters (panel badge in panel, cabinet badge in cabinet).
+    const inCabinetSection = window.location.pathname.startsWith('/cabinet');
+    const role = getUserRole();
+    const counters =
+      role === 'CLIENT' || inCabinetSection
+        ? [cabinetApi.notificationsUnread]
+        : [adminApi.getNotificationsUnread, cabinetApi.notificationsUnread];
+    for (const fetch of counters) {
+      try {
+        const { data } = await fetch();
+        failStreak.current = 0;
+        if (mountedRef.current) setUnread(data.unread || 0);
+        return;
+      } catch {
+        /* next scope */
       }
+    }
+    /* logged out, dead token or dead backend — hide badge */
+    if (mountedRef.current) setUnread(0);
+    failStreak.current += 1;
+    if (failStreak.current >= 3 && timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
     }
   }, []);
 
