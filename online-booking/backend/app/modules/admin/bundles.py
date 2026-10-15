@@ -35,6 +35,7 @@ class BundleCreate(BaseModel):
     durations: Optional[Dict[int, int]] = Field(default=None)
     price: Optional[float] = Field(default=None, ge=0)
     duration_override: Optional[int] = Field(default=None)
+    discount_percent: Optional[int] = Field(default=None, ge=0, le=90)
 
 
 class BundleUpdate(BaseModel):
@@ -43,6 +44,7 @@ class BundleUpdate(BaseModel):
     durations: Optional[Dict[int, int]] = Field(default=None)
     price: Optional[float] = Field(default=None, ge=0)
     duration_override: Optional[int] = Field(default=None)
+    discount_percent: Optional[int] = Field(default=None, ge=0, le=90)
     is_active: Optional[bool] = None
 
 
@@ -94,18 +96,24 @@ async def _own_services(db: AsyncSession, mp_id: int, service_ids: list[int]) ->
 
 
 async def _bundle_to_dict(db: AsyncSession, b: ServiceBundle) -> dict:
+    from app.services.pricing import apply_discount, clamp_discount
+
     services = await _own_services(db, b.master_id, b.service_ids or [])
     overrides = effective_durations(b)
     items = [
         {"id": s.id, "name": s.name,
          "duration_minutes": overrides.get(s.id, s.duration_minutes or 0),
          "base_duration_minutes": s.duration_minutes or 0,
-         "price": float(s.price or 0)}
+         "price": float(s.price or 0),
+         "discount_percent": clamp_discount(s.discount_percent),
+         "effective_price": s.effective_price}
         for s in services
     ]
     duration_total = bundle_total_minutes(
         b, sum(i["duration_minutes"] for i in items))
     price_total = sum(float(s.price or 0) for s in services)
+    members_effective = sum(i["effective_price"] for i in items)
+    base = float(b.price) if b.price is not None else round(members_effective, 2)
     return {
         "id": b.id,
         "master_id": b.master_id,
@@ -116,9 +124,10 @@ async def _bundle_to_dict(db: AsyncSession, b: ServiceBundle) -> dict:
         "duration_total": duration_total,
         "duration_override": b.duration_override,
         "price_total": round(price_total, 2),
-        # Custom price wins; NULL = sum at booking time.
+        # Custom price wins; NULL = sum of member effective prices.
         "price": float(b.price) if b.price is not None else None,
-        "effective_price": float(b.price) if b.price is not None else round(price_total, 2),
+        "discount_percent": clamp_discount(b.discount_percent),
+        "effective_price": apply_discount(base, b.discount_percent),
         "is_active": bool(b.is_active),
         "created_at": b.created_at.isoformat() if b.created_at else None,
     }
@@ -155,6 +164,7 @@ async def create_bundle(
         service_ids=ids,
         durations=validate_durations(ids, data.durations),
         duration_override=data.duration_override,
+        discount_percent=data.discount_percent or 0,
         price=data.price, is_active=True,
     )
     db.add(b)
@@ -213,6 +223,8 @@ async def update_bundle(
         b.durations = validate_durations(b.service_ids or [], data.durations)
     if "price" in data.model_fields_set:
         b.price = data.price
+    if "discount_percent" in data.model_fields_set:
+        b.discount_percent = data.discount_percent or 0
     if "duration_override" in data.model_fields_set:
         ov = data.duration_override
         if ov is not None and not (MIN_DURATION <= ov <= MAX_DURATION):

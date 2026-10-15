@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional
 from decimal import Decimal
 
@@ -9,6 +9,7 @@ class ServiceCreate(BaseModel):
     price: Decimal
     master_id: Optional[int] = None
     category: Optional[str] = None
+    discount_percent: Optional[int] = Field(default=None, ge=0, le=90)
 
 class ServiceUpdate(BaseModel):
     name: Optional[str] = None
@@ -16,6 +17,7 @@ class ServiceUpdate(BaseModel):
     duration_minutes: Optional[int] = None
     price: Optional[Decimal] = None
     category: Optional[str] = None
+    discount_percent: Optional[int] = Field(default=None, ge=0, le=90)
 
 class ServiceResponse(BaseModel):
     id: int
@@ -28,5 +30,7 @@ class ServiceResponse(BaseModel):
     price: float
     category: Optional[str] = None
     is_active: bool = True
+    discount_percent: int = 0
+    effective_price: float = 0
 
     model_config = ConfigDict(from_attributes=True)

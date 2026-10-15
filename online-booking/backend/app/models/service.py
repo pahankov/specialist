@@ -19,9 +19,17 @@ class Service(Base):
     description = Column(Text)
     duration_minutes = Column(Integer, nullable=False)
     price = Column(Numeric(10, 2), nullable=False)
+    # Percentage discount 0-90 (0 = none). Clients always pay the
+    # effective price; the full price shows struck through.
+    discount_percent = Column(Integer, nullable=True, default=0)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc))
     master_profile = relationship("MasterProfile", back_populates="services")
     appointments = relationship("Appointment", back_populates="service")
+
+    @property
+    def effective_price(self) -> float:
+        from app.services.pricing import apply_discount
+        return apply_discount(self.price, self.discount_percent)

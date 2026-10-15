@@ -157,9 +157,23 @@ export function getFilteredClients(
 }
 
 export function getFilteredServices(
-  services: { id: number; name: string; duration_minutes: number; price: number | string }[],
+  services: {
+    id: number;
+    name: string;
+    duration_minutes: number;
+    price: number | string;
+    discount_percent?: number | null;
+    effective_price?: number | string | null;
+  }[],
   search: string,
-): { id: number; name: string; duration_minutes: number; price: number | string }[] {
+): {
+  id: number;
+  name: string;
+  duration_minutes: number;
+  price: number | string;
+  discount_percent?: number | null;
+  effective_price?: number | string | null;
+}[] {
   if (!search) return services;
   const lower = search.toLowerCase();
   return services.filter((s) => s.name.toLowerCase().includes(lower));

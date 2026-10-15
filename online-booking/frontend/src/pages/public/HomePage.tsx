@@ -194,7 +194,17 @@ function HomePage() {
                         {service.description && <p>{service.description}</p>}
                         <div className="service-meta">
                           <span className="duration">⏱️ {service.duration_minutes} мин</span>
-                          <span className="price">₽{service.price}</span>
+                          {service.discount_percent ? (
+                            <span className="price">
+                              <s style={{ color: '#999' }}>₽{service.price}</s>{' '}
+                              <strong style={{ color: '#e5484d' }}>
+                                ₽{service.effective_price ?? service.price}
+                              </strong>{' '}
+                              −{service.discount_percent}%
+                            </span>
+                          ) : (
+                            <span className="price">₽{service.price}</span>
+                          )}
                         </div>
                         <button
                           type="button"

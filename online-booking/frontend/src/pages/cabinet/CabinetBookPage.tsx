@@ -23,6 +23,35 @@ function formatRating(rating?: number | null): string {
   return `★ ${rating.toFixed(1)}`;
 }
 
+/** Effective price (discount applied) with struck full price for chips. */
+function PriceTag({
+  full,
+  effective,
+  discount,
+}: {
+  full: number;
+  effective: number;
+  discount?: number | null;
+}) {
+  if (discount && effective < full) {
+    return (
+      <span style={{ whiteSpace: 'nowrap' }}>
+        <s style={{ color: '#999' }}>{full} ₽</s>{' '}
+        <strong style={{ color: '#e5484d' }}>{effective} ₽</strong>{' '}
+        <span title="Скидка">−{discount}%</span>
+      </span>
+    );
+  }
+  return <span>{effective} ₽</span>;
+}
+
+function serviceLabel(s: Service): string {
+  const full = Number(s.price) || 0;
+  const eff = Number(s.effective_price ?? s.price) || 0;
+  const base = `${s.name} — ${s.duration_minutes} мин, ${eff} ₽`;
+  return s.discount_percent && eff < full ? `${base} (−${s.discount_percent}%)` : base;
+}
+
 /** Read-only granules for clients: free ones open the booking modal. */
 function ClientSlots({
   date,
@@ -465,7 +494,12 @@ function CabinetBookPage() {
             <div style={{ marginTop: 8 }}>
               {(servicesByMaster[selectedMaster.id] || []).map((s) => (
                 <div key={s.id} className="bundle-chip" style={{ margin: '0 6px 6px 0' }}>
-                  {s.name} · {s.duration_minutes} мин · {s.price} ₽
+                  {s.name} · {s.duration_minutes} мин ·{' '}
+                  <PriceTag
+                    full={Number(s.price) || 0}
+                    effective={Number(s.effective_price ?? s.price) || 0}
+                    discount={s.discount_percent}
+                  />
                 </div>
               ))}
               {(servicesByMaster[selectedMaster.id] || []).length === 0 && (
@@ -473,7 +507,12 @@ function CabinetBookPage() {
               )}
               {(bundlesByMaster[selectedMaster.id] || []).map((b) => (
                 <div key={`b-${b.id}`} className="bundle-chip" style={{ margin: '0 6px 6px 0' }}>
-                  🎁 {b.name} · {b.duration_total} мин · {b.effective_price} ₽
+                  🎁 {b.name} · {b.duration_total} мин ·{' '}
+                  <PriceTag
+                    full={b.price != null ? b.price : b.price_total}
+                    effective={b.effective_price}
+                    discount={b.discount_percent}
+                  />
                 </div>
               ))}
             </div>
@@ -562,7 +601,14 @@ function CabinetBookPage() {
                       {modalBundle.services
                         .map((s) => `${s.name} (${s.duration_minutes} мин)`)
                         .join(' + ')}{' '}
-                      · ⏱ {modalBundle.duration_total} мин · {modalBundle.effective_price} ₽
+                      · ⏱ {modalBundle.duration_total} мин ·{' '}
+                      <PriceTag
+                        full={
+                          modalBundle.price != null ? modalBundle.price : modalBundle.price_total
+                        }
+                        effective={modalBundle.effective_price}
+                        discount={modalBundle.discount_percent}
+                      />
                     </div>
                   </div>
                   <button
@@ -591,6 +637,7 @@ function CabinetBookPage() {
                       {modalBundles.map((b) => (
                         <option key={b.id} value={`bundle:${b.id}`}>
                           🎁 {b.name} — {b.duration_total} мин, {b.effective_price} ₽
+                          {b.discount_percent ? ` (−${b.discount_percent}%)` : ''}
                         </option>
                       ))}
                     </optgroup>
@@ -598,7 +645,7 @@ function CabinetBookPage() {
                   <optgroup label="Услуги">
                     {modalServices.map((s) => (
                       <option key={s.id} value={`service:${s.id}`}>
-                        {s.name} — {s.duration_minutes} мин, {s.price} ₽
+                        {serviceLabel(s)}
                       </option>
                     ))}
                   </optgroup>

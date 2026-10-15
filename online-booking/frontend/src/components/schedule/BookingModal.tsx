@@ -199,6 +199,9 @@ export function BookingModal({
                     >
                       <strong>🎁 {b.name}</strong> — {b.duration_total} мин,{' '}
                       {formatPrice(b.effective_price)} ₽
+                      {(b as { discount_percent?: number | null }).discount_percent
+                        ? ` (−${(b as { discount_percent?: number | null }).discount_percent}%)`
+                        : ''}
                     </div>
                   ))}
                   {filteredServices.map((s) => (
@@ -212,7 +215,18 @@ export function BookingModal({
                         setServiceSearch('');
                       }}
                     >
-                      <strong>{s.name}</strong> — {s.duration_minutes} мин, {formatPrice(s.price)} ₽
+                      <strong>{s.name}</strong> — {s.duration_minutes} мин,{' '}
+                      {s.discount_percent ? (
+                        <>
+                          <s style={{ color: '#999' }}>{formatPrice(s.price)} ₽</s>{' '}
+                          <strong style={{ color: '#e5484d' }}>
+                            {formatPrice(s.effective_price ?? s.price)} ₽
+                          </strong>{' '}
+                          (−{s.discount_percent}%)
+                        </>
+                      ) : (
+                        <>{formatPrice(s.price)} ₽</>
+                      )}
                     </div>
                   ))}
                 </>

@@ -73,6 +73,8 @@ export interface Service {
   price: number | string;
   category?: string | null;
   is_active: boolean;
+  discount_percent?: number | null;
+  effective_price?: number | string | null;
 }
 
 export interface Client {

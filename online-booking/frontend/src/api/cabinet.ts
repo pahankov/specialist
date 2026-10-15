@@ -40,6 +40,8 @@ export interface Bundle {
   duration_total: number;
   /** Manual total (NULL = member sum). */
   duration_override?: number | null;
+  /** Percentage discount 0-90 on the bundle total. */
+  discount_percent?: number | null;
   price_total: number;
   price: number | null;
   effective_price: number;

@@ -377,3 +377,75 @@ class TestBundleDurationOverride:
             headers=h,
         )
         assert bad.status_code == 400
+
+
+class TestDiscounts:
+    async def test_pricing_math(self):
+        from app.services.pricing import apply_discount, clamp_discount
+
+        assert apply_discount(1000, 20) == 800.0
+        assert apply_discount(1000, 0) == 1000.0
+        assert apply_discount(1000, None) == 1000.0
+        assert apply_discount(999, 33) == round(999 * 0.67, 2)
+        assert clamp_discount(91) == 90
+        assert clamp_discount(-5) == 0
+
+    async def test_service_discount_flows_to_booking(self, client, session):
+        user, mp = await _mk_master(session)
+        h = await _master_headers(session, user)
+        s = await client.post(
+            '/api/v1/admin/services',
+            json={'name': 'Cut', 'duration_minutes': 60, 'price': 1000,
+                  'discount_percent': 25},
+            headers=h,
+        )
+        assert s.status_code == 201, s.text
+        assert s.json()['discount_percent'] == 25
+        assert s.json()['effective_price'] == 750.0
+
+        ch, _ = await _client_headers(session)
+        day = (datetime.now() + timedelta(days=3)).isoformat()
+        b = await client.post(
+            '/api/v1/client/appointments',
+            json={'master_id': mp.id, 'service_id': s.json()['id'],
+                  'appointment_date': day},
+            headers=ch,
+        )
+        assert b.status_code == 201, b.text
+        assert b.json()['service_price'] == 750.0
+
+        # Over-90 rejected.
+        bad = await client.post(
+            '/api/v1/admin/services',
+            json={'name': 'Bad', 'duration_minutes': 60, 'price': 1000,
+                  'discount_percent': 91},
+            headers=h,
+        )
+        assert bad.status_code == 422
+
+    async def test_bundle_discount(self, client, session):
+        user, mp = await _mk_master(session)
+        s1, s2 = await _mk_services(session, mp)
+        h = await _master_headers(session, user)
+
+        r = await client.post(
+            '/api/v1/admin/bundles',
+            json={'name': 'Sale set', 'service_ids': [s1.id, s2.id],
+                  'price': 2000, 'discount_percent': 10},
+            headers=h,
+        )
+        assert r.status_code == 201, r.text
+        body = r.json()
+        assert body['discount_percent'] == 10
+        assert body['effective_price'] == 1800.0
+
+        ch, _ = await _client_headers(session)
+        day = (datetime.now() + timedelta(days=3)).isoformat()
+        b = await client.post(
+            '/api/v1/client/appointments',
+            json={'master_id': mp.id, 'bundle_id': body['id'],
+                  'appointment_date': day},
+            headers=ch,
+        )
+        assert b.status_code == 201, b.text
+        assert b.json()['service_price'] == 1800.0

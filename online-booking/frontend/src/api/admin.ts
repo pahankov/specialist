@@ -219,6 +219,7 @@ export const adminApi = {
     duration_minutes: number;
     price: number;
     category?: string;
+    discount_percent?: number;
   }) {
     return apiClient.post<Service>('/api/v1/admin/services', data);
   },
@@ -230,6 +231,7 @@ export const adminApi = {
       duration_minutes?: number;
       price?: number;
       category?: string;
+      discount_percent?: number;
     },
   ) {
     return apiClient.patch<Service>(`/api/v1/admin/services/${id}`, data);
@@ -250,6 +252,7 @@ export const adminApi = {
     durations?: Record<number, number>;
     price?: number;
     duration_override?: number;
+    discount_percent?: number;
   }) {
     return apiClient.post<Bundle>('/api/v1/admin/bundles', data);
   },
@@ -261,6 +264,7 @@ export const adminApi = {
       durations?: Record<number, number>;
       price?: number | null;
       duration_override?: number | null;
+      discount_percent?: number | null;
       is_active?: boolean;
     },
   ) {

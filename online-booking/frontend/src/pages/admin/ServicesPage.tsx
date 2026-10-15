@@ -26,6 +26,8 @@ function ServicesPage() {
   const [description, setDescription] = useState('');
   const [duration, setDuration] = useState(30);
   const [price, setPrice] = useState(1000);
+  // Discount % (empty = none, 0-90).
+  const [discount, setDiscount] = useState('');
   const [lastCategory, setLastCategory] = usePersistentState('services.lastCategory', '');
   const [category, setCategory] = useState('');
   const [categoryCustom, setCategoryCustom] = useState(false);
@@ -38,6 +40,7 @@ function ServicesPage() {
   const [deletingBundleId, setDeletingBundleId] = useState<number | null>(null);
   const [bundleName, setBundleName] = useState('');
   const [bundlePrice, setBundlePrice] = useState('');
+  const [bundleDiscount, setBundleDiscount] = useState('');
   // Manual total time: a complex often takes less than the member sum.
   // Empty = sum of per-service minutes above.
   const [bundleTime, setBundleTime] = useState('');
@@ -80,6 +83,7 @@ function ServicesPage() {
     setDescription('');
     setDuration(30);
     setPrice(1000);
+    setDiscount('');
     setCategory('');
     setCategoryCustom(false);
     setEditingId(null);
@@ -95,6 +99,7 @@ function ServicesPage() {
     setDescription('');
     setDuration(30);
     setPrice(1000);
+    setDiscount('');
     setCategory(lastCategory);
     // Stale memory (category was deleted meanwhile) → free input, not a lie.
     setCategoryCustom(
@@ -106,9 +111,21 @@ function ServicesPage() {
     setError('');
   };
 
+  const parseDiscount = (): number | undefined => {
+    if (discount.trim() === '') return undefined;
+    const v = Math.round(Number(discount));
+    if (!(v >= 0 && v <= 90)) {
+      setError('Скидка — от 0 до 90%');
+      return undefined;
+    }
+    return v;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    const disc = parseDiscount();
+    if (discount.trim() !== '' && disc === undefined) return;
     try {
       if (editingId) {
         await adminApi.updateService(editingId, {
@@ -117,6 +134,7 @@ function ServicesPage() {
           duration_minutes: duration,
           price,
           category: category || undefined,
+          ...(disc !== undefined ? { discount_percent: disc } : {}),
         });
         toast.success('Услуга обновлена');
         if (category) setLastCategory(category);
@@ -127,6 +145,7 @@ function ServicesPage() {
           duration_minutes: duration,
           price,
           category: category || undefined,
+          ...(disc !== undefined ? { discount_percent: disc } : {}),
         });
         toast.success('Услуга создана');
         if (category) setLastCategory(category);
@@ -143,6 +162,7 @@ function ServicesPage() {
     setDescription(s.description || '');
     setDuration(s.duration_minutes);
     setPrice(Number(s.price));
+    setDiscount(s.discount_percent ? String(s.discount_percent) : '');
     setCategory(s.category || '');
     // Category from another page (pagination) isn't in the visible list.
     setCategoryCustom(
@@ -181,6 +201,7 @@ function ServicesPage() {
       setBundleName(b.name);
       setBundlePrice(b.price != null ? String(b.price) : '');
       setBundleTime(b.duration_override != null ? String(b.duration_override) : '');
+      setBundleDiscount(b.discount_percent ? String(b.discount_percent) : '');
       setPicked(new Set(b.service_ids));
       const dm: Record<number, number> = {};
       for (const s of b.services) dm[s.id] = s.duration_minutes;
@@ -190,6 +211,7 @@ function ServicesPage() {
       setBundleName('');
       setBundlePrice('');
       setBundleTime('');
+      setBundleDiscount('');
       setPicked(new Set());
       setDurMap({});
     }
@@ -231,6 +253,11 @@ function ServicesPage() {
       setError('Время комплекса — от 5 до 480 мин (или пусто = сумма)');
       return;
     }
+    const disc = bundleDiscount.trim() === '' ? undefined : Math.round(Number(bundleDiscount));
+    if (disc !== undefined && !(disc >= 0 && disc <= 90)) {
+      setError('Скидка — от 0 до 90% (или пусто)');
+      return;
+    }
     // Per-service minutes (clamped); backend re-validates.
     const durations: Record<number, number> = {};
     for (const s of pickedServices) {
@@ -246,6 +273,7 @@ function ServicesPage() {
           durations,
           price: bundlePrice.trim() === '' ? null : Number(bundlePrice),
           duration_override: bundleTime.trim() === '' ? null : Number(bundleTime),
+          discount_percent: disc ?? null,
         });
         toast.success('Комплекс обновлён');
       } else {
@@ -255,6 +283,7 @@ function ServicesPage() {
           durations,
           price,
           duration_override: time,
+          discount_percent: disc,
         });
         toast.success('Комплекс собран');
       }
@@ -321,9 +350,21 @@ function ServicesPage() {
       {
         id: 'price',
         header: 'Цена',
-        accessorFn: (s) => Number(s.price) || 0,
-        cell: ({ row }) => `${formatPrice(row.original.price)} ₽`,
-        meta: { minWidth: 80, maxWidth: 140, label: 'Цена' },
+        accessorFn: (s) => Number(s.effective_price ?? s.price) || 0,
+        cell: ({ row }) => {
+          const s = row.original;
+          const eff = Number(s.effective_price ?? s.price);
+          return s.discount_percent ? (
+            <span style={{ whiteSpace: 'nowrap' }}>
+              <s style={{ color: '#999' }}>{formatPrice(s.price)} ₽</s>{' '}
+              <strong style={{ color: '#e5484d' }}>{formatPrice(eff)} ₽</strong>{' '}
+              <span title="Скидка">−{s.discount_percent}%</span>
+            </span>
+          ) : (
+            `${formatPrice(s.price)} ₽`
+          );
+        },
+        meta: { minWidth: 120, maxWidth: 200, label: 'Цена' },
       },
       {
         id: 'actions',
@@ -469,6 +510,17 @@ function ServicesPage() {
                   min="0"
                 />
               </div>
+              <div className="form-group">
+                <label>Скидка, % (пусто = нет)</label>
+                <input
+                  type="number"
+                  value={discount}
+                  onChange={(e) => setDiscount(e.target.value)}
+                  placeholder="0–90"
+                  min="0"
+                  max="90"
+                />
+              </div>
             </div>
             <div className="form-group">
               <label>Описание</label>
@@ -574,6 +626,17 @@ function ServicesPage() {
                     placeholder={`Сумма: ${pickedDuration} мин`}
                   />
                 </div>
+                <div className="form-group">
+                  <label>Скидка, % (пусто = нет)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={90}
+                    value={bundleDiscount}
+                    onChange={(e) => setBundleDiscount(e.target.value)}
+                    placeholder="0–90"
+                  />
+                </div>
               </div>
               <div className="form-group">
                 <label>Услуги в комплексе (минимум 2)</label>
@@ -659,7 +722,15 @@ function ServicesPage() {
                   {b.duration_override != null ? (
                     <span title="Задано вручную, а не суммой услуг"> (своё)</span>
                   ) : null}{' '}
-                  {b.price != null ? (
+                  {b.discount_percent ? (
+                    <>
+                      <s>{formatPrice(b.price != null ? b.price : b.price_total)} ₽</s>{' '}
+                      <strong style={{ color: '#e5484d' }}>
+                        {formatPrice(b.effective_price)} ₽
+                      </strong>{' '}
+                      <span title="Скидка комплекса">−{b.discount_percent}%</span>
+                    </>
+                  ) : b.price != null ? (
                     <>
                       <s>{formatPrice(b.price_total)} ₽</s>{' '}
                       <strong>{formatPrice(b.effective_price)} ₽</strong>

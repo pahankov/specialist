@@ -127,8 +127,8 @@
 | `PATCH` | `/admin/services/{id}` | Обновить услугу |
 | `DELETE` | `/admin/services/{id}` | Soft-delete услуги |
 | `GET` | `/admin/bundles` | Свои комплексы (состав, суммы времени/цены, своя цена); админ `?master_id=` — комплексы выбранного мастера |
-| `POST` | `/admin/bundles` | Собрать комплекс (`name`, `service_ids` ≥2 своих услуг, `durations?` {id: мин}, `price?`, `duration_override?` — ручное время вместо суммы) |
-| `PATCH` | `/admin/bundles/{id}` | Обновить комплекс (состав/время/цена/`is_active`; `price: null` — сброс к сумме; `duration_override: null` — сброс к сумме) |
+| `POST` | `/admin/bundles` | Собрать комплекс (`name`, `service_ids` ≥2 своих услуг, `durations?` {id: мин}, `price?`, `duration_override?` — ручное время вместо суммы, `discount_percent?` 0–90) |
+| `PATCH` | `/admin/bundles/{id}` | Обновить комплекс (состав/время/цена/`is_active`; `price: null` — сброс к сумме; `duration_override: null` — сброс к сумме; `discount_percent` 0–90) |
 | `DELETE` | `/admin/bundles/{id}` | Удалить комплекс (прошлые записи хранят `bundle_name`) |
 | `GET` | `/admin/clients` | Свои клиенты (мастер: с записями у него или созданные им; супер: все). Пагинация, `city_id`/`city_name`, `address` |
 | `POST` | `/admin/clients` | Создать клиента (адрес одним полем + `city_name` для подбора; `city_id` тоже можно) |

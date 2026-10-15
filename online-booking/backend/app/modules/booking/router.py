@@ -285,6 +285,8 @@ async def public_booking(booking: PublicBookingCreate, db: AsyncSession = Depend
         client_id=client.id,
         appointment_date=booking.appointment_date,
         status="confirmed" if master_profile.auto_confirm else "pending",
+        duration_minutes=service.duration_minutes,
+        price=service.effective_price,
         notes=client_note or None,
     )
 

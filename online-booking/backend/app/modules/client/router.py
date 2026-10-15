@@ -64,7 +64,7 @@ def _to_details(a: Appointment) -> dict:
         "client_phone": a.client_profile.user.phone if a.client_profile else None,
         "service_name": a.bundle_name or (service.name if service else None),
         "service_price": (float(a.price) if a.price is not None
-                          else (float(service.price) if service and service.price is not None else None)),
+                          else (service.effective_price if service else None)),
         "master_name": a.master_profile.user.name if a.master_profile else None,
     }
 

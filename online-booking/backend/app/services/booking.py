@@ -76,12 +76,14 @@ async def resolve_booking_item(
                 detail="Комплекс изменился — попросите мастера обновить его",
             )
         from app.modules.admin.bundles import bundle_total_minutes, effective_durations
+        from app.services.pricing import apply_discount
         overrides = effective_durations(b)
         duration = bundle_total_minutes(
             b, sum(overrides.get(s.id, s.duration_minutes or 0)
                    for s in members))
-        price = float(b.price) if b.price is not None else \
-            round(sum(float(s.price or 0) for s in members), 2)
+        members_effective = round(sum(m.effective_price for m in members), 2)
+        base = float(b.price) if b.price is not None else members_effective
+        price = apply_discount(base, b.discount_percent)
         return {
             "service_id": None, "bundle_id": b.id, "bundle_name": b.name,
             "name": b.name, "duration_minutes": duration, "price": price,
@@ -95,7 +97,7 @@ async def resolve_booking_item(
     return {
         "service_id": service.id, "bundle_id": None, "bundle_name": None,
         "name": service.name, "duration_minutes": service.duration_minutes,
-        "price": float(service.price or 0),
+        "price": service.effective_price,
     }
 
 
