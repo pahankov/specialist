@@ -218,6 +218,10 @@
 | `DELETE` | `/api/v1/reviews/{id}` | Удалить отзыв |
 | `GET` | `/client/reviews/mine` | Свои отзывы кабинета (для пометок в Истории) |
 | `POST` | `/client/reviews` | Оценить свою завершённую запись (`appointment_id`, `rating` 1–5, `comment?` ≤1000; 403 чужая, 409 повтор) |
+| `POST` | `/client/coupons/preview` | Проверить промокод до записи (`master_id`, `service_id?`/`bundle_id?`, `code`) → новая цена или понятная ошибка |
+| `POST` | `/admin/coupons` | Выдать купон своим (`kind` percent/fixed, `value`, `max_uses?`, `user_ids?` свои, `valid_until?`; код авто; колокол получателям) |
+| `GET` | `/admin/coupons` | Свои купоны (использования, остатки) |
+| `DELETE` | `/admin/coupons/{id}` | Выключить купон (история хранится) |
 
 ### Admin No-Show
 | Метод | Endpoint | Описание |

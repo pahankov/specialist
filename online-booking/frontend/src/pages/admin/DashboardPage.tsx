@@ -271,17 +271,17 @@ function DashboardPage() {
                   Все →
                 </Link>
               </div>
-              <div className="appointment-list">
+              <div className="upcoming-list">
                 {(g.recent_appointments || []).slice(0, 5).map((a) => (
-                  <div key={a.id} className="appointment-row">
-                    <div className="appt-info">
+                  <div key={a.id} className="upcoming-row">
+                    <div className="upcoming-info">
                       {isGlobal && 'master_name' in a && (
-                        <span className="appt-master">{(a as any).master_name || '—'}</span>
+                        <span className="upcoming-master">{(a as any).master_name || '—'}</span>
                       )}
-                      <span className="appt-client">{a.client_name || '—'}</span>
-                      <span className="appt-service">{a.service_name || '—'}</span>
+                      <span className="upcoming-client">{a.client_name || '—'}</span>
+                      <span className="upcoming-service">{a.service_name || '—'}</span>
                     </div>
-                    <span className="appt-date">
+                    <span className="upcoming-date">
                       {new Date(a.appointment_date).toLocaleString('ru-RU', {
                         day: 'numeric',
                         month: 'short',
@@ -289,7 +289,7 @@ function DashboardPage() {
                         minute: '2-digit',
                       })}
                     </span>
-                    <StatusBadge status={a.status} className="appt-status" />
+                    <StatusBadge status={a.status} className="upcoming-status" />
                   </div>
                 ))}
                 {(!g.recent_appointments || g.recent_appointments.length === 0) && (

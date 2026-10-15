@@ -11,7 +11,7 @@ from app.models.country import Country
 from app.models.city import City
 from app.schemas.country import CountryResponse, CountryCreate, CountryUpdate
 from app.schemas.city import CityResponse, CityCreate, CityUpdate
-from app.dependencies.auth import get_current_user, require_master
+from app.dependencies.auth import get_current_user, require_master, require_admin
 from app.models.user import User
 from app.logging_config import get_logger
 
@@ -142,11 +142,18 @@ async def resolve_city(
     # Case-insensitive match in Python: SQL lower() is ASCII-only in
     # SQLite and would miss Cyrillic duplicates. Per-country city counts
     # are small (hundreds), so this is cheap.
-    existing = await db.execute(
+    # Family first: DaData variants of one city share one row from now on.
+    from app.services.cities import city_key, same_city
+    all_rows = (await db.execute(
         select(City).where(City.country_id == country.id)
-    )
-    wanted = name.lower()
-    city = next((c for c in existing.scalars().all() if (c.name_ru or "").lower() == wanted), None)
+    )).scalars().all()
+    wanted = city_key(name)
+    family = [c for c in all_rows
+              if (c.name_ru or "") and same_city(wanted, city_key(c.name_ru or ""))]
+    if family:
+        return min(family, key=lambda c: c.id)
+    wanted_lower = name.lower()
+    city = next((c for c in all_rows if (c.name_ru or "").lower() == wanted_lower), None)
     if city:
         return city
 
@@ -168,3 +175,72 @@ async def resolve_city(
     await db.refresh(city)
     logger.info("Пользователь %s добавил город %s (id=%s)", user.email, name, city.id)
     return city
+
+
+@router.post("/cities/merge-duplicates")
+async def merge_duplicate_cities(
+    apply: bool = Query(default=False, description="false = dry run, true = merge"),
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Collapse DaData duplicate city rows (superadmin).
+
+    Groups rows by family (same physical city), keeps the oldest id,
+    remaps users.city_id, deletes the rest. Dry run by default.
+    """
+    from sqlalchemy import update as sa_update, delete as sa_delete
+    from app.models.user import User
+    from app.services.cities import city_key, same_city
+
+    rows = (await db.execute(select(City))).scalars().all()
+    parent: dict = {}
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    for c in rows:
+        parent[c.id] = c.id
+    for i, a in enumerate(rows):
+        ka = city_key(a.name_ru or "")
+        if not ka:
+            continue
+        for b in rows[i + 1:]:
+            kb = city_key(b.name_ru or "")
+            if kb and same_city(ka, kb):
+                ra, rb = find(a.id), find(b.id)
+                if ra != rb:
+                    parent[max(ra, rb)] = min(ra, rb)
+
+    groups: dict = {}
+    for c in rows:
+        groups.setdefault(find(c.id), []).append(c)
+    plan = []
+    for keeper, members in groups.items():
+        if len(members) > 1:
+            dupes = sorted(m.id for m in members if m.id != keeper)
+            plan.append({
+                "keeper_id": keeper,
+                "keeper_name": next(m.name_ru for m in members if m.id == keeper),
+                "merged_ids": dupes,
+                "merged_names": [m.name_ru for m in members if m.id != keeper],
+            })
+    if not apply:
+        return {"apply": False, "groups": plan}
+
+    remapped = 0
+    for g in plan:
+        res = await db.execute(
+            sa_update(User).where(User.city_id.in_(g["merged_ids"]))
+            .values(city_id=g["keeper_id"])
+        )
+        remapped += res.rowcount or 0
+        await db.execute(
+            sa_delete(City).where(City.id.in_(g["merged_ids"]))
+        )
+    await db.commit()
+    logger.info("Cities merged: groups=%s remapped_users=%s", len(plan), remapped)
+    return {"apply": True, "groups_merged": len(plan),
+            "remapped_users": remapped, "groups": plan}

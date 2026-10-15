@@ -127,15 +127,18 @@ function CabinetNotificationsPage() {
               className="cabinet-card"
               onClick={() => {
                 if (n.link === 'reviews') navigate('/cabinet', { state: { scrollTo: 'history' } });
+                else if (n.link === 'book') navigate('/cabinet/book');
                 else if (n.link === 'appointments') navigate('/cabinet');
               }}
               style={n.link ? { cursor: 'pointer' } : undefined}
               title={
                 n.link === 'reviews'
                   ? 'Открыть историю и оценить →'
-                  : n.link === 'appointments'
-                    ? 'Открыть мои записи →'
-                    : undefined
+                  : n.link === 'book'
+                    ? 'Перейти к записи →'
+                    : n.link === 'appointments'
+                      ? 'Открыть мои записи →'
+                      : undefined
               }
             >
               <div className="cabinet-card-main">

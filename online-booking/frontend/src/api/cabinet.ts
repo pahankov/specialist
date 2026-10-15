@@ -84,8 +84,24 @@ export const cabinetApi = {
     bundle_id?: number;
     appointment_date: string;
     notes?: string;
+    coupon_code?: string;
   }) {
     return apiClient.post<Appointment>('/api/v1/client/appointments', data);
+  },
+  previewCoupon(data: {
+    master_id: number;
+    service_id?: number;
+    bundle_id?: number;
+    code: string;
+  }) {
+    return apiClient.post<{
+      ok: boolean;
+      code: string;
+      terms: string;
+      base_price: number;
+      discount: number;
+      new_price: number;
+    }>('/api/v1/client/coupons/preview', data);
   },
   bundles(masterId: number) {
     return apiClient.get<Bundle[]>('/api/v1/client/bundles', {

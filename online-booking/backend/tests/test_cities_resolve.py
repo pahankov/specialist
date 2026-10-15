@@ -60,3 +60,60 @@ class TestResolveCity:
         await self._seed_ru(session)
         r = await client.post("/api/v1/cities/resolve", json={"name": "Гвардейск"})
         assert r.status_code in (401, 403)
+
+    async def test_resolve_reuses_family_spelling(self, client, session,
+                                                 super_admin_headers):
+        await self._seed_ru(session)
+        r1 = await client.post(
+            "/api/v1/cities/resolve", json={"name": "Гвардейск"},
+            headers=super_admin_headers,
+        )
+        assert r1.status_code == 200, r1.text
+        r2 = await client.post(
+            "/api/v1/cities/resolve", json={"name": "Россия, г Гвардейск"},
+            headers=super_admin_headers,
+        )
+        assert r2.status_code == 200, r2.text
+        assert r2.json()["id"] == r1.json()["id"]
+
+    async def test_merge_duplicates(self, client, session, super_admin_headers):
+        from sqlalchemy import select
+        from app.models.country import Country
+        from app.models.city import City
+        from app.models.user import User
+
+        await self._seed_ru(session)
+        co = (await session.execute(
+            select(Country).where(Country.code == "RU"))).scalar_one()
+        session.add(City(country_id=co.id, name_ru="Дельта", slug="delta"))
+        session.add(City(country_id=co.id, name_ru="Россия, г Дельта", slug="delta-ru"))
+        await session.flush()
+        delta = (await session.execute(
+            select(City).where(City.slug == "delta"))).scalar_one()
+        delta_id = delta.id
+        other = (await session.execute(
+            select(City).where(City.slug == "delta-ru"))).scalar_one()
+        u = (await session.execute(select(User).limit(1))).scalar_one()
+        uid = u.id
+        u.city_id = other.id
+        await session.commit()
+
+        dry = await client.post("/api/v1/cities/merge-duplicates",
+                                headers=super_admin_headers)
+        assert dry.status_code == 200, dry.text
+        assert dry.json()["apply"] is False
+        assert any(delta.id in (g["keeper_id"], *g["merged_ids"])
+                   for g in dry.json()["groups"])
+
+        go = await client.post("/api/v1/cities/merge-duplicates?apply=true",
+                               headers=super_admin_headers)
+        assert go.status_code == 200, go.text
+        assert go.json()["remapped_users"] >= 1
+
+        session.expire_all()
+        left = (await session.execute(
+            select(City).where(City.slug == "delta-ru"))).scalar_one_or_none()
+        assert left is None
+        uu = (await session.execute(
+            select(User).where(User.id == uid))).scalar_one()
+        assert uu.city_id == delta_id

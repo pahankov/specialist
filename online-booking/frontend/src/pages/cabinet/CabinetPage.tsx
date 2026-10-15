@@ -175,8 +175,9 @@ function CabinetPage() {
           <span className="cabinet-card-date">{formatDate(a.appointment_date)}</span>
           {myStars !== undefined && (
             <span className="cabinet-card-master" title={`Ваша оценка: ${myStars} из 5`}>
-              Ваша оценка: {'★'.repeat(Math.round(myStars))}
-              {'☆'.repeat(5 - Math.round(myStars))}
+              Ваша оценка:{' '}
+              <span style={{ color: '#f5a623' }}>{'★'.repeat(Math.round(myStars))}</span>
+              <span style={{ color: '#d8dce3' }}>{'☆'.repeat(5 - Math.round(myStars))}</span>
             </span>
           )}
           {reviewFor === a.id && (

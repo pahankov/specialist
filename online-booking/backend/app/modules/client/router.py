@@ -266,6 +266,7 @@ class ClientBookingCreate(BaseModel):
     bundle_id: Optional[int] = Field(default=None)
     appointment_date: datetime
     notes: Optional[str] = Field(default=None, max_length=140)
+    coupon_code: Optional[str] = Field(default=None, max_length=24)
 
 
 @router.get("/booking/schedule")
@@ -388,16 +389,29 @@ async def book_my_appointment(
     if await find_conflict(db, mp.id, appt_dt, item["duration_minutes"]):
         raise HTTPException(status_code=409, detail="Это время уже занято")
 
+    coupon = None
+    coupon_off = 0.0
+    if (data.coupon_code or "").strip():
+        from app.modules.admin.coupons import resolve_coupon, coupon_discount
+        coupon = await resolve_coupon(db, mp.id, data.coupon_code, user)
+        coupon_off = coupon_discount(item["price"], coupon)
+
     appointment = Appointment(
         master_id=mp.id, service_id=item["service_id"], client_id=profile.id,
         bundle_id=item["bundle_id"], bundle_name=item["bundle_name"],
-        duration_minutes=item["duration_minutes"], price=item["price"],
+        duration_minutes=item["duration_minutes"],
+        price=round(float(item["price"]) - coupon_off, 2),
         appointment_date=appt_dt,
         status="confirmed" if mp.auto_confirm else "pending",
         notes=(data.notes or "").strip() or None,
     )
     db.add(appointment)
     await db.flush()
+    if coupon is not None:
+        from app.models.coupon import CouponUse
+        db.add(CouponUse(coupon_id=coupon.id, appointment_id=appointment.id,
+                         user_id=user.id, amount=coupon_off))
+        coupon.used_count = (coupon.used_count or 0) + 1
     from app.services.client_visibility import unhide_client
     await unhide_client(db, mp.id, profile.id)
     client_note = (data.notes or "").strip()
@@ -409,7 +423,9 @@ async def book_my_appointment(
     )
     await log_action(
         db, user.id, "create", "appointment", None,
-        f"Клиент записался к мастеру {mp.id} на {appt_dt.isoformat()}", level="info",
+        f"Клиент записался к мастеру {mp.id} на {appt_dt.isoformat()}"
+        + (f" купон={coupon.code} −{coupon_off}" if coupon is not None else ""),
+        level="info",
     )
     await db.commit()
     await db.refresh(appointment)
@@ -425,6 +441,43 @@ async def book_my_appointment(
         .where(Appointment.id == appointment.id)
     )).scalar_one()
     return _to_details(full)
+
+
+class CouponPreview(BaseModel):
+    master_id: int
+    service_id: Optional[int] = Field(default=None)
+    bundle_id: Optional[int] = Field(default=None)
+    code: str = Field(min_length=1, max_length=24)
+
+
+@router.post("/coupons/preview")
+async def preview_coupon(
+    data: CouponPreview,
+    user: User = Depends(require_client),
+    db: AsyncSession = Depends(get_db),
+):
+    """Check a promo code before booking: new total or a friendly error."""
+    from app.services.booking import resolve_booking_item
+    from app.modules.admin.coupons import (
+        resolve_coupon, coupon_discount, describe_coupon,
+    )
+
+    mp = (await db.execute(
+        select(MasterProfile).where(MasterProfile.id == data.master_id)
+    )).scalar_one_or_none()
+    if mp is None:
+        raise HTTPException(status_code=404, detail="Мастер не найден")
+    item = await resolve_booking_item(db, mp.id, data.service_id, data.bundle_id)
+    coupon = await resolve_coupon(db, mp.id, data.code, user)
+    off = coupon_discount(item["price"], coupon)
+    return {
+        "ok": True,
+        "code": coupon.code,
+        "terms": describe_coupon(coupon),
+        "base_price": round(float(item["price"]), 2),
+        "discount": off,
+        "new_price": round(float(item["price"]) - off, 2),
+    }
 
 
 @router.get("/bundles")

@@ -359,6 +359,39 @@ export const adminApi = {
   clearSentNotifications() {
     return apiClient.delete<{ deleted: number }>('/api/v1/admin/notifications/sent');
   },
+  getCoupons() {
+    return apiClient.get<
+      {
+        id: number;
+        code: string;
+        kind: string;
+        value: number;
+        max_uses: number | null;
+        used_count: number;
+        uses_left: number | null;
+        audience: string;
+        user_ids: number[];
+        valid_until: string | null;
+        is_active: boolean;
+      }[]
+    >('/api/v1/admin/coupons');
+  },
+  createCoupon(data: {
+    code?: string;
+    kind: string;
+    value: number;
+    max_uses?: number;
+    user_ids?: number[];
+    valid_until?: string | null;
+  }) {
+    return apiClient.post<{ code: string; notified: number } & Record<string, unknown>>(
+      '/api/v1/admin/coupons',
+      data,
+    );
+  },
+  deleteCoupon(id: number) {
+    return apiClient.delete<{ ok: boolean }>(`/api/v1/admin/coupons/${id}`);
+  },
   getSentBroadcasts(params?: { page?: number; page_size?: number }) {
     return apiClient.get<{
       items: {

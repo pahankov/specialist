@@ -319,6 +319,9 @@ function CabinetBookPage() {
       setModalServiceId('');
     }
     setNotes('');
+    setPromo('');
+    setPromoResult(null);
+    setPromoError('');
     setSlotHour(hour);
   };
 
@@ -346,6 +349,42 @@ function CabinetBookPage() {
       setModalBundle(null);
       setModalServiceId('');
     }
+    // A different item may have a different price — re-check the promo.
+    setPromoResult(null);
+    setPromoError('');
+  };
+
+  // Promo code: preview against the current pick, applied on booking.
+  const [promo, setPromo] = useState('');
+  const [promoResult, setPromoResult] = useState<{
+    code: string;
+    terms: string;
+    base_price: number;
+    discount: number;
+    new_price: number;
+  } | null>(null);
+  const [promoError, setPromoError] = useState('');
+  const [promoChecking, setPromoChecking] = useState(false);
+
+  const applyPromo = async () => {
+    if (!selectedMaster || (!modalBundle && modalServiceId === '')) return;
+    const code = promo.trim();
+    if (!code) return;
+    setPromoChecking(true);
+    setPromoError('');
+    try {
+      const { data } = await cabinetApi.previewCoupon({
+        master_id: selectedMaster.id,
+        ...(modalBundle ? { bundle_id: modalBundle.id } : { service_id: Number(modalServiceId) }),
+        code,
+      });
+      setPromoResult(data);
+    } catch (err: unknown) {
+      setPromoResult(null);
+      setPromoError(getApiErrorMessage(err, 'Купон не подошёл'));
+    } finally {
+      setPromoChecking(false);
+    }
   };
 
   const handleBook = async () => {
@@ -361,6 +400,7 @@ function CabinetBookPage() {
         ...(modalBundle ? { bundle_id: modalBundle.id } : { service_id: Number(modalServiceId) }),
         appointment_date: `${y}-${m}-${d}T${String(slotHour).padStart(2, '0')}:00:00`,
         notes: notes.trim() || undefined,
+        ...(promoResult ? { coupon_code: promoResult.code } : {}),
       });
       // The server decides: auto-confirm masters return confirmed at once.
       if (data.status === 'confirmed') {
@@ -370,6 +410,9 @@ function CabinetBookPage() {
       }
       setSlotHour(null);
       setModalBundle(null);
+      setPromo('');
+      setPromoResult(null);
+      setPromoError('');
       navigate('/cabinet');
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'Не удалось записаться'));
@@ -703,6 +746,41 @@ function CabinetBookPage() {
               <span className="hint">
                 {notes.length}/140 — коротко, чтобы влезло в слот расписания
               </span>
+            </div>
+            <div className="form-group">
+              <label>Промокод (если мастер выдал купон)</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  value={promo}
+                  onChange={(e) => {
+                    setPromo(e.target.value);
+                    setPromoResult(null);
+                    setPromoError('');
+                  }}
+                  placeholder="XXXX-XXXX"
+                  style={{ textTransform: 'uppercase' }}
+                  maxLength={24}
+                />
+                <button
+                  type="button"
+                  className="btn btn-sm btn-ghost"
+                  disabled={promoChecking || !promo.trim()}
+                  onClick={applyPromo}
+                  style={{ flex: '0 0 auto' }}
+                >
+                  {promoChecking ? '…' : 'Применить'}
+                </button>
+              </div>
+              {promoError && (
+                <span className="hint" style={{ color: '#e5484d' }}>
+                  {promoError}
+                </span>
+              )}
+              {promoResult && (
+                <span className="hint" style={{ color: '#0f766e', fontWeight: 600 }}>
+                  🎟 {promoResult.terms}: {promoResult.base_price} → {promoResult.new_price} ₽
+                </span>
+              )}
             </div>
             <div className="modal-actions">
               <button type="button" className="btn btn-ghost" onClick={() => setSlotHour(null)}>

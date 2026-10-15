@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { adminApi } from '../../api/client';
 import { ConfirmDialog, DataTable, Skeleton, EmptyState, Pager } from '../../components/common';
+import { RecipientPicker } from '../../components/common';
+import type { RecipientOption } from '../../components/common';
 import type { FitColumnDef } from '../../components/common';
 import { usePersistentState } from '../../utils/persistentState';
 import type { Service } from '../../api/types';
@@ -10,6 +12,111 @@ import { formatPrice, formatDiscountTag } from '../../components/schedule/helper
 import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError';
 import '../../styles/tables.css';
 import './ServicesPage.css';
+
+/** 🏷 Inline discount editor: click the badge, set % + expiry right in the row. */
+function DiscountBadge({
+  pct,
+  until,
+  onSave,
+}: {
+  pct?: number | null;
+  until?: string | null;
+  onSave: (pct: number | null, until: string | null) => Promise<void> | void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [v, setV] = useState(pct ? String(pct) : '');
+  const [u, setU] = useState(until ? String(until).slice(0, 16) : '');
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    const num = v.trim() === '' ? null : Math.round(Number(v));
+    if (num !== null && !(num >= 0 && num <= 90)) {
+      toast.error('Скидка — от 0 до 90%');
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSave(num, u.trim() === '' ? null : new Date(u).toISOString());
+      setOpen(false);
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Не удалось сохранить скидку'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        className="btn btn-sm btn-ghost"
+        onClick={() => {
+          setV(pct ? String(pct) : '');
+          setU(until ? String(until).slice(0, 16) : '');
+          setOpen(true);
+        }}
+        title={pct ? `Скидка −${pct}% — нажать, чтобы изменить` : 'Назначить скидку'}
+        aria-label="Скидка"
+        style={pct ? { borderColor: '#e5484d', color: '#e5484d' } : undefined}
+      >
+        🏷️{pct ? ` −${pct}%` : ''}
+      </button>
+    );
+  }
+  return (
+    <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+      <input
+        type="number"
+        min={0}
+        max={90}
+        value={v}
+        onChange={(e) => setV(e.target.value)}
+        placeholder="%"
+        aria-label="Скидка, %"
+        style={{ width: 64 }}
+      />
+      <input
+        type="datetime-local"
+        value={u}
+        onChange={(e) => setU(e.target.value)}
+        aria-label="Скидка до"
+        title="Скидка до (пусто = бессрочно)"
+        style={{ width: 170 }}
+      />
+      <button
+        type="button"
+        className="btn btn-sm btn-primary"
+        disabled={saving}
+        onClick={save}
+        title="Сохранить скидку"
+      >
+        ✓
+      </button>
+      <button
+        type="button"
+        className="btn btn-sm btn-ghost"
+        onClick={() => setOpen(false)}
+        title="Закрыть"
+      >
+        ✕
+      </button>
+    </span>
+  );
+}
+
+interface CouponRow {
+  id: number;
+  code: string;
+  kind: string;
+  value: number;
+  max_uses: number | null;
+  used_count: number;
+  uses_left: number | null;
+  audience: string;
+  user_ids: number[];
+  valid_until: string | null;
+  is_active: boolean;
+}
 
 function ServicesPage() {
   const [services, setServices] = useState<Service[]>([]);
@@ -48,6 +155,16 @@ function ServicesPage() {
   // Empty = sum of per-service minutes above.
   const [bundleTime, setBundleTime] = useState('');
   const [picked, setPicked] = useState<Set<number>>(new Set());
+  // ─── Coupons (personal codes to own clients) ───
+  const [coupons, setCoupons] = useState<CouponRow[]>([]);
+  const [showCouponForm, setShowCouponForm] = useState(false);
+  const [couponKind, setCouponKind] = useState('percent');
+  const [couponValue, setCouponValue] = useState('');
+  const [couponUses, setCouponUses] = useState('');
+  const [couponUntil, setCouponUntil] = useState('');
+  const [couponClients, setCouponClients] = useState<RecipientOption[]>([]);
+  const [couponPicked, setCouponPicked] = useState<Set<number>>(new Set());
+  const [deletingCouponId, setDeletingCouponId] = useState<number | null>(null);
   // Per-service minutes inside the complex (default = service's own time).
   const [durMap, setDurMap] = useState<Record<number, number>>({});
 
@@ -353,6 +470,86 @@ function ServicesPage() {
     }
   };
 
+  // ─── Coupons ───
+  const fetchCoupons = async () => {
+    try {
+      const { data } = await adminApi.getCoupons();
+      setCoupons(data || []);
+    } catch (err) {
+      console.warn('[Services] coupons failed', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchCoupons();
+  }, []);
+
+  const openCouponForm = async () => {
+    setCouponKind('percent');
+    setCouponValue('');
+    setCouponUses('1');
+    setCouponUntil('');
+    setCouponPicked(new Set());
+    try {
+      const { data } = await adminApi.getClients({ page: 1, page_size: 200 });
+      setCouponClients(
+        (data.items || []).map((c: { id: number; name: string; phone?: string }) => ({
+          id: c.id,
+          name: c.name,
+          sub: c.phone || undefined,
+        })),
+      );
+    } catch {
+      setCouponClients([]);
+    }
+    setShowCouponForm(true);
+  };
+
+  const handleCouponSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const value = Number(couponValue);
+    if (!(value > 0)) {
+      setError('Укажите размер купона');
+      return;
+    }
+    if (couponKind === 'percent' && value > 90) {
+      setError('Процент — максимум 90');
+      return;
+    }
+    const uses = couponUses.trim() === '' ? undefined : Math.round(Number(couponUses));
+    if (uses !== undefined && !(uses >= 1)) {
+      setError('Число использований — от 1 (или пусто = без лимита)');
+      return;
+    }
+    setError('');
+    try {
+      const { data } = await adminApi.createCoupon({
+        kind: couponKind,
+        value,
+        ...(uses !== undefined ? { max_uses: uses } : {}),
+        ...(couponPicked.size > 0 ? { user_ids: [...couponPicked] } : {}),
+        ...(couponUntil.trim() !== '' ? { valid_until: new Date(couponUntil).toISOString() } : {}),
+      });
+      toast.success(`Купон ${data.code} выдан (колокол ушёл клиентам)`);
+      setShowCouponForm(false);
+      fetchCoupons();
+    } catch (err: unknown) {
+      showError(err);
+    }
+  };
+
+  const handleCouponDelete = async (id: number) => {
+    try {
+      await adminApi.deleteCoupon(id);
+      toast.success('Купон выключен');
+      fetchCoupons();
+    } catch (err: unknown) {
+      showError(err);
+    } finally {
+      setDeletingCouponId(null);
+    }
+  };
+
   const columns: FitColumnDef<Service>[] = useMemo(
     () => [
       {
@@ -409,7 +606,18 @@ function ServicesPage() {
         cell: ({ row }) => {
           const s = row.original;
           return (
-            <span style={{ display: 'inline-flex', gap: 4 }}>
+            <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+              <DiscountBadge
+                pct={s.discount_percent}
+                until={s.discount_until}
+                onSave={async (pct, until) => {
+                  await adminApi.updateService(s.id, {
+                    discount_percent: pct ?? 0,
+                    discount_until: until,
+                  });
+                  fetchData();
+                }}
+              />
               <button
                 className="btn btn-sm btn-edit"
                 onClick={() => handleEdit(s)}
@@ -795,6 +1003,17 @@ function ServicesPage() {
                   )}
                 </div>
                 <div className="bundle-actions">
+                  <DiscountBadge
+                    pct={b.discount_percent}
+                    until={b.discount_until}
+                    onSave={async (pct, until) => {
+                      await adminApi.updateBundle(b.id, {
+                        discount_percent: pct ?? null,
+                        discount_until: until,
+                      });
+                      fetchData();
+                    }}
+                  />
                   <button
                     className="btn btn-sm btn-ghost"
                     onClick={() => toggleBundleActive(b)}
@@ -808,9 +1027,139 @@ function ServicesPage() {
                   <button
                     className="btn btn-sm btn-delete"
                     onClick={() => setDeletingBundleId(b.id)}
+                    title="Удалить комплекс"
+                    aria-label="Удалить комплекс"
                   >
-                    🗑️
+                    ✖
                   </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ─── Coupons: personal codes to own clients ─── */}
+      <div className="card" id="coupons-card" style={{ marginTop: 16 }}>
+        <div className="card-header">
+          <h3>🎟 Купоны ({coupons.filter((c) => c.is_active).length})</h3>
+          <button className="btn btn-primary" onClick={openCouponForm}>
+            + Выдать купон
+          </button>
+        </div>
+        <p className="hint" style={{ margin: '0 0 12px' }}>
+          Персональный код на −% или −₽ своим клиентам: код улетает им в колокольчик, клиент вводит
+          его в поле «Промокод» при записи.
+        </p>
+        {showCouponForm && (
+          <div className="card form-card" style={{ marginBottom: 12 }}>
+            <h3>Новый купон</h3>
+            <form onSubmit={handleCouponSubmit}>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Вид</label>
+                  <select value={couponKind} onChange={(e) => setCouponKind(e.target.value)}>
+                    <option value="percent">−% от цены</option>
+                    <option value="fixed">−₽ от цены</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>{couponKind === 'percent' ? 'Процент (1–90)' : 'Рублей'}</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={couponKind === 'percent' ? 90 : undefined}
+                    value={couponValue}
+                    onChange={(e) => setCouponValue(e.target.value)}
+                    required
+                    placeholder={couponKind === 'percent' ? '20' : '500'}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Использований (пусто = без лимита)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={couponUses}
+                    onChange={(e) => setCouponUses(e.target.value)}
+                    placeholder="1"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Действует до (пусто = бессрочно)</label>
+                  <input
+                    type="datetime-local"
+                    value={couponUntil}
+                    onChange={(e) => setCouponUntil(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="form-group">
+                <label>Кому (пусто = всем своим клиентам)</label>
+                <RecipientPicker
+                  items={couponClients}
+                  selected={couponPicked}
+                  onChange={setCouponPicked}
+                  placeholder="Имя клиента…"
+                />
+              </div>
+              <div className="form-actions">
+                <button type="submit" className="btn btn-primary">
+                  Выдать + уведомить
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => setShowCouponForm(false)}
+                >
+                  Отмена
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+        {coupons.length === 0 ? (
+          <EmptyState
+            title="Купонов пока нет"
+            description="Выдайте первый — код придёт клиентам в колокольчик"
+          />
+        ) : (
+          <div className="bundle-list">
+            {coupons.map((c) => (
+              <div key={c.id} className={`bundle-card${c.is_active ? '' : ' bundle-off'}`}>
+                <div className="bundle-head">
+                  <strong>🎟 {c.code}</strong>
+                  <span className="bundle-chip">
+                    {c.kind === 'percent' ? `−${c.value}%` : `−${c.value} ₽`}
+                  </span>
+                  {!c.is_active && <span className="bundle-badge">выкл</span>}
+                </div>
+                <div className="bundle-comp">
+                  <span className="bundle-chip">
+                    {c.audience === 'selected'
+                      ? `👥 ${c.user_ids.length} получател.`
+                      : '👥 всем своим'}
+                  </span>
+                  <span className="bundle-chip">
+                    Использовано: {c.used_count}
+                    {c.max_uses ? ` из ${c.max_uses}` : ''}
+                  </span>
+                  {c.valid_until && (
+                    <span className="bundle-chip">
+                      до {new Date(c.valid_until).toLocaleString('ru-RU')}
+                    </span>
+                  )}
+                </div>
+                <div className="bundle-actions">
+                  {c.is_active && (
+                    <button
+                      className="btn btn-sm btn-delete"
+                      onClick={() => setDeletingCouponId(c.id)}
+                      title="Выключить купон"
+                    >
+                      ✖
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -836,6 +1185,16 @@ function ServicesPage() {
         confirmLabel="Удалить"
         danger
         onConfirm={() => deletingBundleId !== null && handleBundleDelete(deletingBundleId)}
+      />
+
+      <ConfirmDialog
+        open={deletingCouponId !== null}
+        onClose={() => setDeletingCouponId(null)}
+        title="Выключить купон?"
+        message="Код перестанет работать. История использований сохранится."
+        confirmLabel="Выключить"
+        danger
+        onConfirm={() => deletingCouponId !== null && handleCouponDelete(deletingCouponId)}
       />
     </div>
   );
