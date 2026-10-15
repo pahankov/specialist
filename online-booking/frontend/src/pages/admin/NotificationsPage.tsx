@@ -254,6 +254,7 @@ function NotificationsPage() {
   };
 
   const [confirmClear, setConfirmClear] = useState(false);
+  const [confirmClearSent, setConfirmClearSent] = useState(false);
 
   const handleClear = async () => {
     try {
@@ -265,6 +266,19 @@ function NotificationsPage() {
       toast.error(getApiErrorMessage(err, 'Не удалось очистить входящие'));
     } finally {
       setConfirmClear(false);
+    }
+  };
+
+  const handleClearSent = async () => {
+    try {
+      await adminApi.clearSentNotifications();
+      setSent([]);
+      setSentTotal(0);
+      toast.success('Отправленные очищены');
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Не удалось очистить отправленные'));
+    } finally {
+      setConfirmClearSent(false);
     }
   };
 
@@ -450,6 +464,11 @@ function NotificationsPage() {
             <h3>
               Отправленные {sentTotal > 0 && <span className="client-count">({sentTotal})</span>}
             </h3>
+            {sent.length > 0 && (
+              <button className="btn btn-ghost" onClick={() => setConfirmClearSent(true)}>
+                🗑 Очистить
+              </button>
+            )}
           </div>
           {sentLoading ? (
             <Skeleton rows={4} />
@@ -517,6 +536,16 @@ function NotificationsPage() {
         confirmLabel="Очистить"
         danger
         onConfirm={handleClear}
+      />
+
+      <ConfirmDialog
+        open={confirmClearSent}
+        onClose={() => setConfirmClearSent(false)}
+        title="🗑 Очистить отправленные?"
+        message="История ваших рассылок будет удалена. У получателей их колокольчики останутся."
+        confirmLabel="Очистить"
+        danger
+        onConfirm={handleClearSent}
       />
     </div>
   );

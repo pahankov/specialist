@@ -86,19 +86,37 @@ function CabinetNotificationsPage() {
     <div className="cabinet-page">
       <div className="page-header">
         <h1>🔔 Уведомления{unread > 0 ? ` (${unread} новых)` : ''}</h1>
-        <div style={{ display: 'flex', gap: 8 }}>
+      </div>
+      {(unread > 0 || notes.length > 0) && (
+        <div
+          style={{
+            display: 'flex',
+            gap: 8,
+            marginBottom: 16,
+            alignItems: 'center',
+            justifyContent: 'flex-start',
+          }}
+        >
           {unread > 0 && (
-            <button className="btn btn-sm btn-ghost" onClick={readAll}>
+            <button
+              className="btn btn-sm btn-ghost"
+              style={{ flex: '0 0 auto', width: 'auto' }}
+              onClick={readAll}
+            >
               ✓ Прочитать все
             </button>
           )}
           {notes.length > 0 && (
-            <button className="btn btn-sm btn-ghost" onClick={() => setConfirmClear(true)}>
+            <button
+              className="btn btn-sm btn-ghost"
+              style={{ flex: '0 0 auto', width: 'auto' }}
+              onClick={() => setConfirmClear(true)}
+            >
               🗑 Очистить
             </button>
           )}
         </div>
-      </div>
+      )}
       {notes.length === 0 ? (
         <EmptyState title="Пока тихо" description="Подтверждения и отмены записей появятся здесь" />
       ) : (
@@ -108,10 +126,17 @@ function CabinetNotificationsPage() {
               key={n.id}
               className="cabinet-card"
               onClick={() => {
-                if (n.link === 'appointments') navigate('/cabinet');
+                if (n.link === 'reviews') navigate('/cabinet', { state: { scrollTo: 'history' } });
+                else if (n.link === 'appointments') navigate('/cabinet');
               }}
               style={n.link ? { cursor: 'pointer' } : undefined}
-              title={n.link === 'appointments' ? 'Открыть мои записи →' : undefined}
+              title={
+                n.link === 'reviews'
+                  ? 'Открыть историю и оценить →'
+                  : n.link === 'appointments'
+                    ? 'Открыть мои записи →'
+                    : undefined
+              }
             >
               <div className="cabinet-card-main">
                 <span style={{ whiteSpace: 'pre-wrap' }}>{n.text}</span>

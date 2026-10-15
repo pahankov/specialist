@@ -367,7 +367,17 @@ function AppointmentsPage() {
         id: 'date',
         header: () => sortHead('appointment_date', 'Дата'),
         accessorFn: (a) => a.appointment_date,
-        cell: ({ row }) => new Date(row.original.appointment_date).toLocaleString('ru-RU'),
+        cell: ({ row }) => (
+          <span style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+            {new Date(row.original.appointment_date).toLocaleString('ru-RU', {
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+          </span>
+        ),
         meta: { minWidth: 130, label: 'Дата' },
       },
       {

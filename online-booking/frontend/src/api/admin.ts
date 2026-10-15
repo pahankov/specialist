@@ -337,6 +337,9 @@ export const adminApi = {
   clearNotifications() {
     return apiClient.delete<{ deleted: number }>('/api/v1/admin/notifications');
   },
+  clearSentNotifications() {
+    return apiClient.delete<{ deleted: number }>('/api/v1/admin/notifications/sent');
+  },
   getSentBroadcasts(params?: { page?: number; page_size?: number }) {
     return apiClient.get<{
       items: {

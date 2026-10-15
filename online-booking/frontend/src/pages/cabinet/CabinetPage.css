@@ -139,3 +139,38 @@
   border-color: #0d7a6f;
   color: white;
 }
+
+/* Status badges: one width everywhere, like the master panel. */
+.cabinet-page .status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  min-width: 140px;
+  text-align: center;
+  box-sizing: border-box;
+  white-space: nowrap;
+}
+
+.cabinet-page .status-pending {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.cabinet-page .status-confirmed {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.cabinet-page .status-cancelled {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.cabinet-page .status-completed {
+  background: #dbeafe;
+  color: #1e40af;
+}

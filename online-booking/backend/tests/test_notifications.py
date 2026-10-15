@@ -345,3 +345,36 @@ class TestClientInboxIsolation:
 
         rb = await client.get("/api/v1/client/notifications/inbox", headers=hb)
         assert [i["text"] for i in rb.json()["items"]] == ["theirs"]
+
+    async def test_clear_sent_keeps_recipient_bells(self, client, session,
+                                                   super_admin_headers):
+        from app.models.client_profile import ClientProfile
+        from app.models.notification import Notification
+        from sqlalchemy import select, func
+
+        c1 = await _mk_user(session, "SC1", "sc1@example.com", "CLIENT")
+        session.add(ClientProfile(user_id=c1.id))
+        await session.commit()
+
+        b = await client.post(
+            "/api/v1/admin/notifications/broadcast",
+            json={"audience": "clients", "text": "Sent clear check"},
+            headers=super_admin_headers,
+        )
+        assert b.status_code == 200, b.text
+
+        d = await client.delete("/api/v1/admin/notifications/sent",
+                                headers=super_admin_headers)
+        assert d.status_code == 200, d.text
+        assert d.json()["deleted"] >= 1
+
+        s = await client.get("/api/v1/admin/notifications/sent",
+                             headers=super_admin_headers)
+        assert s.json()["items"] == []
+
+        # Recipient bells survive the history cleanup.
+        n = (await session.execute(
+            select(func.count(Notification.id)).where(
+                Notification.recipient_id == c1.id)
+        )).scalar()
+        assert n >= 1

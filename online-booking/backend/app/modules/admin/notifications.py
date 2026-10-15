@@ -287,6 +287,22 @@ async def sent_history(
     }
 
 
+@router.delete("/notifications/sent")
+async def clear_sent_history(
+    sender: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete own broadcast history (recipients keep their bells)."""
+    from sqlalchemy import delete as sa_delete
+
+    res = await db.execute(
+        sa_delete(NotificationBroadcast).where(
+            NotificationBroadcast.sender_id == sender.id)
+    )
+    await db.commit()
+    return {"deleted": res.rowcount or 0}
+
+
 @router.get("/notifications/inbox")
 async def admin_inbox(
     unread_only: bool = Query(False),

@@ -64,7 +64,7 @@ async def run_auto_complete_once(session_factory=None) -> int:
                         text=(f"Услуга завершена: {label}, "
                               f"{format_slot(appt.appointment_date)} — "
                               f"оцените визит в Истории ⭐"),
-                        audience="booking", link="appointments",
+                        audience="booking", link="reviews",
                     )
             except Exception as e:
                 logger.warning("Auto-complete bell failed (non-fatal): %s", e)

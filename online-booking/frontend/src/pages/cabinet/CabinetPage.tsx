@@ -1,10 +1,9 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cabinetApi, type ClientMe, type ClientStats } from '../../api/client';
 import type { Appointment } from '../../api/types';
 import { ConfirmDialog, EmptyState, Skeleton, StatusBadge } from '../../components/common';
-import CitySelect, { type CityOption } from '../../components/common/CitySelect';
 import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError';
 import './CabinetPage.css';
 
@@ -24,21 +23,21 @@ function formatDate(iso: string): string {
 
 function CabinetPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const historyRef = useRef<HTMLHeadingElement>(null);
   const [me, setMe] = useState<ClientMe | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [stats, setStats] = useState<ClientStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [cancellingId, setCancellingId] = useState<number | null>(null);
-  // City was already given at registration — show it, edit only on demand.
-  const [changingCity, setChangingCity] = useState(false);
+  // History filter chips, like the master panel.
+  const [histFilter, setHistFilter] = useState('');
   // Own reviews: appointment_id → stars (to prompt only unrated visits).
   const [ratedByAppt, setRatedByAppt] = useState<Record<number, number>>({});
   const [reviewFor, setReviewFor] = useState<number | null>(null);
   const [stars, setStars] = useState(5);
   const [reviewText, setReviewText] = useState('');
   const [sendingReview, setSendingReview] = useState(false);
-  // History filter chips, like the master panel.
-  const [histFilter, setHistFilter] = useState('');
 
   const fetchData = async () => {
     try {
@@ -75,17 +74,23 @@ function CabinetPage() {
     fetchData();
   }, []);
 
-  const handleCityChange = async (city: CityOption | null) => {
-    if (!city?.id) return;
-    try {
-      const resp = await cabinetApi.updateMe({ city_id: city.id });
-      setMe(resp.data);
-      setChangingCity(false);
-      toast.success(`Ваш город — ${resp.data.city_name || city.name}`);
-    } catch (err: unknown) {
-      toast.error(getApiErrorMessage(err, 'Не удалось сохранить город'));
+  // Deep jump from a bell ("оцените визит") straight into History.
+  useEffect(() => {
+    const state = location.state as { scrollTo?: string } | null;
+    if (state?.scrollTo === 'history') {
+      navigate(location.pathname, { replace: true });
+      // List loads async — retry until the anchor exists.
+      let tries = 0;
+      const t = setInterval(() => {
+        tries += 1;
+        if (historyRef.current || tries > 20) {
+          clearInterval(t);
+          historyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 250);
+      return () => clearInterval(t);
     }
-  };
+  }, []);
 
   const handleCancel = async (id: number) => {
     try {
@@ -119,9 +124,23 @@ function CabinetPage() {
     );
   const history = appointments
     .filter((a) => !upcoming.includes(a))
-    .filter((a) => !histFilter || a.status === histFilter)
+    .filter((a) => !histFilter || histFilter === 'upcoming' || a.status === histFilter)
     .sort(
       (a, b) => new Date(b.appointment_date).getTime() - new Date(a.appointment_date).getTime(),
+    );
+
+  // A picked chip unites upcoming + history into one list.
+  const unified = [...appointments]
+    .filter((a) => {
+      if (histFilter === 'upcoming')
+        return (
+          (a.status === 'pending' || a.status === 'confirmed') &&
+          new Date(a.appointment_date).getTime() >= now
+        );
+      return a.status === histFilter;
+    })
+    .sort(
+      (a, b) => new Date(a.appointment_date).getTime() - new Date(b.appointment_date).getTime(),
     );
 
   const submitReview = async (appointmentId: number) => {
@@ -160,7 +179,7 @@ function CabinetPage() {
           )}
           {reviewFor === a.id && (
             <div style={{ marginTop: 8 }}>
-              <div style={{ display: 'flex', gap: 4, fontSize: 24 }}>
+              <div style={{ display: 'flex', gap: 6, fontSize: 34, lineHeight: 1 }}>
                 {[1, 2, 3, 4, 5].map((n) => (
                   <button
                     key={n}
@@ -170,6 +189,7 @@ function CabinetPage() {
                       background: 'none',
                       border: 'none',
                       cursor: 'pointer',
+                      padding: 2,
                       color: n <= stars ? '#f5a623' : '#ddd',
                     }}
                     aria-label={`Оценка ${n}`}
@@ -183,11 +203,18 @@ function CabinetPage() {
                 onChange={(e) => setReviewText(e.target.value)}
                 placeholder="Пара слов о визите (необязательно)"
                 maxLength={500}
-                style={{ marginTop: 6, width: '100%' }}
+                style={{
+                  marginTop: 8,
+                  width: '100%',
+                  minWidth: 260,
+                  fontSize: 15,
+                  padding: '10px 12px',
+                }}
               />
-              <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+              <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                 <button
                   className="btn btn-sm btn-primary"
+                  style={{ whiteSpace: 'nowrap' }}
                   disabled={sendingReview}
                   onClick={() => submitReview(a.id)}
                 >
@@ -195,6 +222,7 @@ function CabinetPage() {
                 </button>
                 <button
                   className="btn btn-sm btn-ghost"
+                  style={{ whiteSpace: 'nowrap' }}
                   onClick={() => {
                     setReviewFor(null);
                     setReviewText('');
@@ -255,20 +283,14 @@ function CabinetPage() {
 
       <div className="cabinet-city-row">
         <span className="cabinet-city-label">Ваш город:</span>
-        {me?.city_id && !changingCity ? (
-          <>
-            <strong>{me.city_name}</strong>
-            <button className="btn btn-sm btn-ghost" onClick={() => setChangingCity(true)}>
-              Изменить
-            </button>
-          </>
-        ) : (
-          <CitySelect
-            value={me?.city_id ?? null}
-            valueName={me?.city_name ?? ''}
-            onChange={handleCityChange}
-          />
-        )}
+        <strong>{me?.city_name || '—'}</strong>
+        <button
+          className="btn btn-sm btn-ghost"
+          onClick={() => navigate('/cabinet/profile')}
+          title="Сменить город в профиле"
+        >
+          Изменить
+        </button>
       </div>
 
       {stats && (
@@ -294,22 +316,30 @@ function CabinetPage() {
         </div>
       )}
 
-      <h2 className="cabinet-section">Предстоящие</h2>
-      {upcoming.length === 0 ? (
-        <EmptyState
-          title="Нет предстоящих записей"
-          description="Выберите мастера и время — это займёт минуту"
-          actionLabel="Записаться"
-          onAction={() => navigate('/cabinet/book')}
-        />
-      ) : (
-        <div className="cabinet-list">{upcoming.map(renderCard)}</div>
+      {!histFilter && (
+        <>
+          <h2 className="cabinet-section">Предстоящие</h2>
+          {upcoming.length === 0 ? (
+            <EmptyState
+              title="Нет предстоящих записей"
+              description="Выберите мастера и время — это займёт минуту"
+              actionLabel="Записаться"
+              onAction={() => navigate('/cabinet/book')}
+            />
+          ) : (
+            <div className="cabinet-list">{upcoming.map(renderCard)}</div>
+          )}
+        </>
       )}
 
-      <h2 className="cabinet-section">История</h2>
+      <h2 className="cabinet-section" ref={historyRef}>
+        {histFilter ? 'Записи по фильтру' : 'История'}
+      </h2>
       <div className="filters-bar" style={{ marginBottom: 12 }}>
         {[
           { value: '', label: 'Все' },
+          { value: 'upcoming', label: '📅 Предстоящие' },
+          { value: 'pending', label: '⏳ Ожидает' },
           { value: 'confirmed', label: '✅ Подтверждена' },
           { value: 'completed', label: '🏁 Завершена' },
           { value: 'cancelled', label: '❌ Отменена' },
@@ -324,7 +354,19 @@ function CabinetPage() {
           </button>
         ))}
       </div>
-      {history.length === 0 ? (
+      {histFilter ? (
+        unified.length === 0 ? (
+          <EmptyState title="Ничего не найдено" />
+        ) : (
+          <div className="cabinet-list">
+            {unified.map((a) =>
+              a.status === 'completed' || ratedByAppt[a.id] !== undefined
+                ? renderHistoryCard(a)
+                : renderCard(a),
+            )}
+          </div>
+        )
+      ) : history.length === 0 ? (
         <EmptyState title="История пуста" />
       ) : (
         <div className="cabinet-list">{history.map(renderHistoryCard)}</div>
