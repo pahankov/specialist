@@ -190,13 +190,31 @@ function DashboardPage() {
               <div className="funnel-container">
                 {stats.total_appointments > 0 ? (
                   <>
-                    <div className="funnel-step">
+                    <div
+                      className="funnel-step funnel-clickable"
+                      role="button"
+                      tabIndex={0}
+                      title="Открыть все записи →"
+                      onClick={() => handleCardClick('/appointments')}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleCardClick('/appointments');
+                      }}
+                    >
                       <div className="funnel-bar" style={{ width: '100%' }}>
                         <span className="funnel-label">Всего записей</span>
                         <span className="funnel-value">{stats.total_appointments}</span>
                       </div>
                     </div>
-                    <div className="funnel-step">
+                    <div
+                      className="funnel-step funnel-clickable"
+                      role="button"
+                      tabIndex={0}
+                      title="Открыть подтверждённые →"
+                      onClick={() => handleCardClick('/appointments?status=confirmed')}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleCardClick('/appointments?status=confirmed');
+                      }}
+                    >
                       <div
                         className="funnel-bar confirmed-bar"
                         style={{ width: `${(confirmedCount / stats.total_appointments) * 100}%` }}
@@ -208,7 +226,16 @@ function DashboardPage() {
                         </span>
                       </div>
                     </div>
-                    <div className="funnel-step">
+                    <div
+                      className="funnel-step funnel-clickable"
+                      role="button"
+                      tabIndex={0}
+                      title="Открыть завершённые →"
+                      onClick={() => handleCardClick('/appointments?status=completed')}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleCardClick('/appointments?status=completed');
+                      }}
+                    >
                       <div
                         className="funnel-bar completed-bar"
                         style={{ width: `${(completedCount / stats.total_appointments) * 100}%` }}
@@ -220,7 +247,16 @@ function DashboardPage() {
                         </span>
                       </div>
                     </div>
-                    <div className="funnel-step">
+                    <div
+                      className="funnel-step funnel-clickable"
+                      role="button"
+                      tabIndex={0}
+                      title="Открыть отменённые →"
+                      onClick={() => handleCardClick('/appointments?status=cancelled')}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleCardClick('/appointments?status=cancelled');
+                      }}
+                    >
                       <div
                         className="funnel-bar cancelled-bar"
                         style={{ width: `${(cancelledCount / stats.total_appointments) * 100}%` }}

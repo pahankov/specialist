@@ -237,7 +237,8 @@ async def ensure_master_cities(session: AsyncSession) -> int:
     return len(rows)
 
 
-AVATAR_PRESETS = ["🐱", "🐶", "🐥", "🦅", "🦊", "🐼", "🐸", "🦁"]
+AVATAR_PRESETS = ["🐱", "🐶", "🐥", "🦅", "🦊", "🐼", "🐸", "🦁",
+                  "🐯", "🐰", "🐷", "🐮", "🐵", "🐔", "🦄", "🐙"]
 
 
 async def ensure_avatar_presets(session: AsyncSession) -> int:

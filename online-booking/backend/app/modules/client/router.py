@@ -25,7 +25,7 @@ from app.modules.admin.notifications import (
 )
 from app.schemas.appointment import AppointmentWithDetails
 from app.services.audit import log_action
-from app.utils import utcnow_naive
+from app.utils import localnow_naive
 
 logger = get_logger(__name__)
 
@@ -180,7 +180,7 @@ async def get_my_stats(
             service_visits[key] = service_visits.get(key, [item_name, 0])
             service_visits[key][1] += 1
         elif a.status in ("pending", "confirmed"):
-            if a.appointment_date and a.appointment_date.replace(tzinfo=None) >= utcnow_naive():
+            if a.appointment_date and a.appointment_date.replace(tzinfo=None) >= localnow_naive():
                 upcoming += 1
         elif a.status == "cancelled":
             cancelled += 1
@@ -380,7 +380,7 @@ async def book_my_appointment(
             detail="Этот мастер вас заблокировал. Выберите другого мастера.")
 
     appt_dt = data.appointment_date.replace(tzinfo=None)
-    if appt_dt <= utcnow_naive():
+    if appt_dt <= localnow_naive():
         raise HTTPException(status_code=400, detail="Нельзя записаться в прошлое")
     from app.services.booking import find_conflict, format_slot, resolve_booking_item
     from app.services.notifications import notify_user
@@ -470,7 +470,7 @@ async def my_coupons(
     """
     from app.models.coupon import Coupon
     from app.modules.admin.coupons import coupon_to_dict, describe_coupon
-    from app.utils import utcnow_naive
+    from app.utils import localnow_naive
 
     profile = await _get_or_create_profile(db, user)
     my_master_ids = set((await db.execute(
@@ -480,7 +480,7 @@ async def my_coupons(
     if master_id is not None:
         q = q.where(Coupon.master_id == master_id)
     rows = (await db.execute(q.order_by(Coupon.id.desc()))).scalars().all()
-    now = utcnow_naive()
+    now = localnow_naive()
     out = []
     for c in rows:
         if c.valid_until is not None and now >= c.valid_until.replace(tzinfo=None):
@@ -654,7 +654,7 @@ async def create_own_review(
             end = appt.appointment_date.replace(tzinfo=None) + timedelta(minutes=int(dur))
         except Exception:
             end = None
-        if end is None or end > utcnow_naive():
+        if end is None or end > localnow_naive():
             raise HTTPException(status_code=400,
                                 detail="Оценить можно после визита")
     existing = (await db.execute(
@@ -671,6 +671,22 @@ async def create_own_review(
     db.add(review)
     await log_action(db, user.id, "create", "review", None,
                      f"Оценка {data.rating} мастеру {appt.master_id}", level="info")
+    # Master gets a bell (jumps to profile reviews) — feedback is two-way.
+    try:
+        from app.services.notifications import notify_user
+        mp_user_id = (await db.execute(
+            select(MasterProfile.user_id).where(MasterProfile.id == appt.master_id)
+        )).scalar_one_or_none()
+        if mp_user_id is not None:
+            await notify_user(
+                db, recipient_id=mp_user_id,
+                text=(f"⭐ Новая оценка {data.rating} от {user.name or 'клиента'}"
+                      + (f" — «{(data.comment or '').strip()[:120]}»"
+                         if (data.comment or "").strip() else "")),
+                sender_id=user.id, audience="review", link="reviews",
+            )
+    except Exception as e:
+        logger.warning("Review bell failed (non-fatal): %s", e)
     await db.commit()
     await db.refresh(review)
     from app.modules.review.router import _review_to_dict

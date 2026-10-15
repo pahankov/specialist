@@ -18,6 +18,16 @@ def utcnow_naive() -> datetime:
     return utcnow().replace(tzinfo=None)
 
 
+def localnow_naive() -> datetime:
+    """Server-local wall time (appointments are stored as local-naive).
+
+    Comparing local appointment times against UTC skews by the zone offset
+    (e.g. a 19:00 visit looks "future" until 22:00 MSK) — use this helper
+    for every appointment-time comparison.
+    """
+    return datetime.now().replace(tzinfo=None)
+
+
 def ensure_utc(dt: datetime) -> datetime:
     """Ensure datetime is UTC-aware.
 

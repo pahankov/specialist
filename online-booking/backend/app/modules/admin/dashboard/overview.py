@@ -12,7 +12,7 @@ from app.models.service import Service
 from app.models.user import User
 from app.models.master_profile import MasterProfile
 from app.dependencies.auth import require_master
-from app.utils import utcnow
+from app.utils import localnow_naive
 from app.services.cache import cache_service
 from app.modules.admin.helpers import get_master_profile_id
 from app.logging_config import get_logger
@@ -91,7 +91,7 @@ async def _get_master_stats(master: User, db: AsyncSession):
         )
         .where(
             Appointment.master_id == mp_id,
-            Appointment.appointment_date >= utcnow(),
+            Appointment.appointment_date >= localnow_naive(),
             Appointment.status.in_(["pending", "confirmed"]),
         )
         .order_by(Appointment.appointment_date.asc())
@@ -99,7 +99,7 @@ async def _get_master_stats(master: User, db: AsyncSession):
     )
     recent_appointments = recent_result.scalars().all()
 
-    week_from_now = utcnow() + timedelta(days=7)
+    week_from_now = localnow_naive() + timedelta(days=7)
     upcoming_result = await db.execute(
         select(Appointment)
         .options(
@@ -108,7 +108,7 @@ async def _get_master_stats(master: User, db: AsyncSession):
         )
         .where(
             Appointment.master_id == mp_id,
-            Appointment.appointment_date >= utcnow(),
+            Appointment.appointment_date >= localnow_naive(),
             Appointment.appointment_date <= week_from_now,
             Appointment.status != "cancelled"
         )
@@ -222,7 +222,7 @@ async def _get_global_stats(db: AsyncSession):
             selectinload(Appointment.master_profile).joinedload(MasterProfile.user)
         )
         .where(
-            Appointment.appointment_date >= utcnow(),
+            Appointment.appointment_date >= localnow_naive(),
             Appointment.status.in_(["pending", "confirmed"]),
         )
         .order_by(Appointment.appointment_date.asc())
@@ -231,14 +231,14 @@ async def _get_global_stats(db: AsyncSession):
     recent_appointments = recent_result.scalars().all()
 
     # Upcoming appointments
-    week_from_now = utcnow() + timedelta(days=7)
+    week_from_now = localnow_naive() + timedelta(days=7)
     upcoming_result = await db.execute(
         select(Appointment)
         .options(
             selectinload(Appointment.master_profile).joinedload(MasterProfile.user)
         )
         .where(
-            Appointment.appointment_date >= utcnow(),
+            Appointment.appointment_date >= localnow_naive(),
             Appointment.appointment_date <= week_from_now,
             Appointment.status != "cancelled"
         )

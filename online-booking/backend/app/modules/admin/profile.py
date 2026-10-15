@@ -30,7 +30,8 @@ ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 EXT_BY_TYPE = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
 # Built-in avatars (stored as-is in master_profiles.avatar_preset,
 # mutually exclusive with an uploaded photo).
-AVATAR_PRESETS = ["🐱", "🐶", "🐥", "🦅", "🦊", "🐼", "🐸", "🦁"]
+AVATAR_PRESETS = ["🐱", "🐶", "🐥", "🦅", "🦊", "🐼", "🐸", "🦁",
+                  "🐯", "🐰", "🐷", "🐮", "🐵", "🐔", "🦄", "🐙"]
 
 
 def _delete_avatar_file(url: Optional[str]) -> None:

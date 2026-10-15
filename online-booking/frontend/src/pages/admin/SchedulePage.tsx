@@ -191,6 +191,22 @@ function SchedulePage() {
     // ISO string, otherwise the fetch loops forever and trips rate limits.
   }, [currentMonthISO, selectedMasterId]);
 
+  // Draft follows the selected working day (its hours load into the
+  // editor); switching months resets to the saved global default, so edits
+  // never leak from one month into another.
+  useEffect(() => {
+    setWindowDraft({ start: String(windowStart), end: String(windowEnd) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentMonthISO]);
+
+  useEffect(() => {
+    if (!selectedDate) return;
+    const key = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
+    const day = schedule[key];
+    if (day) setWindowDraft({ start: String(day.start), end: String(day.end) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDate]);
+
   useEffect(() => {
     if (!bookingForm.open) return;
     let cancelled = false;
@@ -622,7 +638,14 @@ function SchedulePage() {
             >
               <span style={{ fontSize: 14, fontWeight: 600 }}>🕐 Рабочее время:</span>
               <span style={{ fontSize: 12, color: '#888' }}>
-                (сохранено {windowStart}:00–{windowEnd}:00)
+                {(() => {
+                  if (!selectedDate) return `(по умолчанию ${windowStart}:00–${windowEnd}:00)`;
+                  const key = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
+                  const day = schedule[key];
+                  return day
+                    ? `день ${selectedDate.toLocaleDateString('ru-RU')}: ${day.start}:00–${day.end}:00`
+                    : `(день нерабочий, по умолчанию ${windowStart}:00–${windowEnd}:00)`;
+                })()}
               </span>
               <span style={{ fontSize: 13, color: '#666' }}>с</span>
               <input

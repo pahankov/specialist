@@ -366,6 +366,17 @@
   font-weight: 500;
 }
 
+/* Funnel steps jump into the matching appointments list. */
+.funnel-clickable {
+  cursor: pointer;
+  border-radius: 8px;
+}
+
+.funnel-clickable:hover .funnel-bar {
+  filter: brightness(0.96);
+  box-shadow: 0 2px 8px rgba(26, 26, 46, 0.12);
+}
+
 .status-pending {
   background: #fef3c7;
   color: #92400e;

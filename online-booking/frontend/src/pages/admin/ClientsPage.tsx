@@ -16,6 +16,7 @@ import {
   Tooltip,
   ConfirmDialog,
   MasterSelect,
+  Modal,
   PhoneInput,
   DataTable,
   Pager,
@@ -41,6 +42,50 @@ function ClientsPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [blockingId, setBlockingId] = useState<number | null>(null);
+  // Coupon modal: issue a personal code right here (like 🏷 in services).
+  const [couponFor, setCouponFor] = useState<{ id: number; name: string } | null>(null);
+  const [couponKind, setCouponKind] = useState('percent');
+  const [couponValue, setCouponValue] = useState('');
+  const [couponUses, setCouponUses] = useState('1');
+  const [couponUntil, setCouponUntil] = useState('');
+  const [couponSaving, setCouponSaving] = useState(false);
+
+  const handleCouponIssue = async () => {
+    if (!couponFor) return;
+    const value = Number(couponValue);
+    if (!(value > 0)) {
+      toast.error('Укажите размер купона');
+      return;
+    }
+    if (couponKind === 'percent' && value > 90) {
+      toast.error('Процент — максимум 90');
+      return;
+    }
+    const uses = couponUses.trim() === '' ? undefined : Math.round(Number(couponUses));
+    if (uses !== undefined && !(uses >= 1)) {
+      toast.error('Число использований — от 1 (или пусто)');
+      return;
+    }
+    setCouponSaving(true);
+    try {
+      const { data } = await adminApi.createCoupon({
+        kind: couponKind,
+        value,
+        ...(uses !== undefined ? { max_uses: uses } : {}),
+        user_ids: [couponFor.id],
+        ...(couponUntil.trim() !== '' ? { valid_until: new Date(couponUntil).toISOString() } : {}),
+      });
+      toast.success(`Купон ${data.code} выдан клиенту ${couponFor.name} (колокол ушёл)`);
+      setCouponFor(null);
+      setCouponValue('');
+      setCouponUses('1');
+      setCouponUntil('');
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Не удалось выдать купон'));
+    } finally {
+      setCouponSaving(false);
+    }
+  };
   const [showArchive, setShowArchive] = useState(false);
   const [hideReason, setHideReason] = useState('inactive');
   const [blockCause, setBlockCause] = useState('no_show');
@@ -521,11 +566,13 @@ function ClientsPage() {
               <Tooltip content="Выдать персональный купон (−% / −₽)">
                 <button
                   className="btn btn-sm btn-ghost"
-                  onClick={() =>
-                    navigate(`${section}/services`, {
-                      state: { couponFor: { id: c.id, name: c.name } },
-                    })
-                  }
+                  onClick={() => {
+                    setCouponFor({ id: c.id, name: c.name });
+                    setCouponKind('percent');
+                    setCouponValue('');
+                    setCouponUses('1');
+                    setCouponUntil('');
+                  }}
                 >
                   🎟
                 </button>
@@ -841,6 +888,65 @@ function ClientsPage() {
 
       {/* Pagination */}
       <Pager page={currentPage} totalPages={totalPages} onChange={setCurrentPage} />
+
+      <Modal
+        open={couponFor !== null}
+        onClose={() => setCouponFor(null)}
+        title={`🎟 Купон для клиента ${couponFor?.name || ''}`}
+      >
+        <div className="form-row">
+          <div className="form-group">
+            <label>Вид</label>
+            <select value={couponKind} onChange={(e) => setCouponKind(e.target.value)}>
+              <option value="percent">−% от цены</option>
+              <option value="fixed">−₽ от цены</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label>{couponKind === 'percent' ? 'Процент (1–90)' : 'Рублей'}</label>
+            <input
+              type="number"
+              min={1}
+              max={couponKind === 'percent' ? 90 : undefined}
+              value={couponValue}
+              onChange={(e) => setCouponValue(e.target.value)}
+              placeholder={couponKind === 'percent' ? '20' : '500'}
+            />
+          </div>
+          <div className="form-group">
+            <label>Использований (пусто = ∞)</label>
+            <input
+              type="number"
+              min={1}
+              value={couponUses}
+              onChange={(e) => setCouponUses(e.target.value)}
+              placeholder="1"
+            />
+          </div>
+          <div className="form-group">
+            <label>Действует до (пусто = ∞)</label>
+            <input
+              type="datetime-local"
+              value={couponUntil}
+              onChange={(e) => setCouponUntil(e.target.value)}
+            />
+          </div>
+        </div>
+        <p className="hint">Код сгенерируется сам и улетит клиенту в колокольчик.</p>
+        <div className="modal-actions">
+          <button type="button" className="btn btn-ghost" onClick={() => setCouponFor(null)}>
+            Отмена
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={couponSaving}
+            onClick={handleCouponIssue}
+          >
+            {couponSaving ? 'Выдаём…' : 'Выдать купон'}
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }

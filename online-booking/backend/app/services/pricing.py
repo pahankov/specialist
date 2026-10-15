@@ -18,8 +18,8 @@ def discount_active(until, now=None) -> bool:
     from datetime import datetime
 
     if now is None:
-        from app.utils import utcnow_naive
-        now = utcnow_naive()
+        from app.utils import localnow_naive
+        now = localnow_naive()
     try:
         end = until.replace(tzinfo=None) if getattr(until, "tzinfo", None) else until
         now_naive = now.replace(tzinfo=None) if getattr(now, "tzinfo", None) else now

@@ -320,6 +320,21 @@ class TestClientReviews:
         mine = await client.get("/api/v1/client/reviews/mine", headers=ha)
         assert [x["appointment_id"] for x in mine.json()] == [appt]
 
+        # Master got the rating bell.
+        from sqlalchemy import select
+        from app.models.master_profile import MasterProfile
+        from app.models.notification import Notification
+        from app.models.user import User
+
+        mp_user_id = (await session.execute(
+            select(MasterProfile.user_id).where(MasterProfile.id == mp.id)
+        )).scalar_one()
+        bells = (await session.execute(
+            select(Notification).where(Notification.recipient_id == mp_user_id)
+        )).scalars().all()
+        assert any("Новая оценка 5" in (b.text or "") for b in bells)
+        assert any(b.link == "reviews" for b in bells)
+
     async def test_rate_pending_rejected(self, client, session):
         _, ha, __, ___, book = await self._setup(client, session)
         appt = await book(ha)

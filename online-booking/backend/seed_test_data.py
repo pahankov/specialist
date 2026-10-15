@@ -57,7 +57,8 @@ MASTER_TELEGRAM = [
 
 # Neutral built-in avatars (mirror of backend AVATAR_PRESETS) — no external
 # faces: pravatar gave random strangers (a bearded man for Ольга и т.п.).
-AVATAR_PRESETS = ["🐱", "🐶", "🐥", "🦅", "🦊", "🐼", "🐸", "🦁"]
+AVATAR_PRESETS = ["🐱", "🐶", "🐥", "🦅", "🦊", "🐼", "🐸", "🦁",
+                  "🐯", "🐰", "🐷", "🐮", "🐵", "🐔", "🦄", "🐙"]
 
 CLIENT_FIRST_NAMES = [
     "Анна", "Мария", "Елена", "Ольга", "Наталья", "Ирина", "Татьяна", "Екатерина",

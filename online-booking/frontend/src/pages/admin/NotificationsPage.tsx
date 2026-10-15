@@ -10,7 +10,7 @@ import {
   type RecipientOption,
 } from '../../components/common';
 import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError';
-import { useSectionPrefix, SUPER_PREFIX } from '../../utils/section';
+import { useSectionPrefix, SUPER_PREFIX, ADMIN_PREFIX } from '../../utils/section';
 import './NotificationsPage.css';
 
 const SUPER_AUDIENCES = [
@@ -240,11 +240,14 @@ function NotificationsPage() {
 
   // Deep link: booking notices jump straight to the appointments list,
   // flashing the exact row ("appointments:42" from new-booking bells).
+  // Review bells open the master's own reviews section.
   const openLinked = (n: InboxItem) => {
     if (!n.link) return;
     if (n.link.startsWith('appointments')) {
       const id = n.link.split(':')[1];
       navigate(`${section}/appointments${id ? `?highlight=${id}` : ''}`);
+    } else if (n.link === 'reviews' && section === ADMIN_PREFIX) {
+      navigate('/admin/profile#reviews');
     }
   };
 
@@ -441,7 +444,13 @@ function NotificationsPage() {
                       : undefined
                   }
                   title={
-                    n.link && n.link.startsWith('appointments') ? 'Перейти к записи →' : undefined
+                    n.link && n.link.startsWith('appointments')
+                      ? 'Перейти к записи →'
+                      : n.link === 'reviews'
+                        ? 'Открыть мои отзывы →'
+                        : n.link === 'book'
+                          ? 'Перейти к записи →'
+                          : undefined
                   }
                 >
                   <div className="inbox-text">{n.text}</div>

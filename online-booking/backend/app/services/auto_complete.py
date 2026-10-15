@@ -16,7 +16,7 @@ from app.models.client_profile import ClientProfile
 from app.models.master_profile import MasterProfile
 from app.services.booking import format_slot
 from app.services.notifications import notify_user
-from app.utils import utcnow_naive
+from app.utils import localnow_naive
 
 logger = get_logger(__name__)
 
@@ -25,7 +25,7 @@ INTERVAL_SECONDS = 10 * 60
 
 async def run_auto_complete_once(session_factory=None) -> int:
     """Complete eligible rows once. Returns the completed count."""
-    now = utcnow_naive()
+    now = localnow_naive()
     done = 0
     factory = session_factory or AsyncSessionLocal
     async with factory() as db:

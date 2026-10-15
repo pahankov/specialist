@@ -187,10 +187,10 @@ async def resolve_coupon(db: AsyncSession, master_profile_id: int,
     )).scalar_one_or_none()
     if c is None or c.is_active is not True:
         raise HTTPException(status_code=404, detail="Купон не найден")
-    from app.utils import utcnow_naive
     if c.valid_until is not None:
+        from app.utils import localnow_naive
         end = c.valid_until.replace(tzinfo=None)
-        if utcnow_naive() >= end:
+        if localnow_naive() >= end:
             raise HTTPException(status_code=400, detail="Срок купона истёк")
     if c.max_uses and (c.used_count or 0) >= c.max_uses:
         raise HTTPException(status_code=400, detail="Купон уже использован")

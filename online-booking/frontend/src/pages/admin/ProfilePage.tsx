@@ -23,7 +23,24 @@ interface Cert {
 }
 
 /** Built-in avatars (mirror of backend AVATAR_PRESETS): photo or preset. */
-const AVATAR_PRESETS = ['🐱', '🐶', '🐥', '🦅', '🦊', '🐼', '🐸', '🦁'];
+const AVATAR_PRESETS = [
+  '🐱',
+  '🐶',
+  '🐥',
+  '🦅',
+  '🦊',
+  '🐼',
+  '🐸',
+  '🦁',
+  '🐯',
+  '🐰',
+  '🐷',
+  '🐮',
+  '🐵',
+  '🐔',
+  '🦄',
+  '🐙',
+];
 
 /** Master personal data: photo, names, contacts, city, cabinet, certificates. */
 function ProfilePage() {
