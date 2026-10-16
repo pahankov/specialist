@@ -88,7 +88,7 @@ function RequireClient({ children }: { children: React.ReactNode }) {
 // own reviews at hand, daily flow (records/services/schedule) right below.
 // Order is draggable per user (persisted), this is only the fresh default.
 const masterNavItems = [
-  { path: `${ADMIN_PREFIX}/dashboard`, label: '📊 Дашборд' },
+  { path: `${ADMIN_PREFIX}/dashboard`, label: '📊 Обзор' },
   { path: `${ADMIN_PREFIX}/profile`, label: '👤 Профиль' },
   { path: `${ADMIN_PREFIX}/appointments`, label: '📅 Мои записи' },
   { path: `${ADMIN_PREFIX}/services`, label: '💇 Мои услуги' },

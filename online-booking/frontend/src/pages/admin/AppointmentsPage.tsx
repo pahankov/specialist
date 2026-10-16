@@ -696,14 +696,6 @@ function AppointmentsPage() {
         </div>
         <div className="page-header-actions">
           <button
-            type="button"
-            className="btn btn-primary"
-            onClick={openCreate}
-            title="Создать запись прямо здесь (без расписания)"
-          >
-            ＋ Новая запись
-          </button>
-          <button
             className="btn btn-ghost"
             onClick={async () => {
               const params = new URLSearchParams();
@@ -951,6 +943,16 @@ function AppointmentsPage() {
               columns={columns}
               data={filteredAppointments}
               rowId={(a) => a.id}
+              toolbarLeft={
+                <button
+                  type="button"
+                  className="btn btn-sm btn-primary"
+                  onClick={openCreate}
+                  title="Создать запись прямо здесь (без расписания)"
+                >
+                  ＋ Новая запись
+                </button>
+              }
             />
           </div>
         </div>

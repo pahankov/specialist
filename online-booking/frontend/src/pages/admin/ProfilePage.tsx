@@ -277,28 +277,29 @@ function ProfilePage() {
                   e.target.value = '';
                 }}
               />
-              <button
-                type="button"
-                className="btn btn-ghost"
-                disabled={uploading}
-                onClick={() => avatarInput.current?.click()}
-              >
-                {uploading ? 'Загрузка…' : avatar ? 'Сменить фото' : 'Добавить фото'}
-              </button>
-              {(avatar || preset) && (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
                 <button
                   type="button"
-                  className="btn btn-ghost btn-sm"
-                  style={{ marginLeft: 8 }}
-                  onClick={() => {
-                    setAvatar(null);
-                    setPreset(null);
-                  }}
-                  title="Убрать фото и пресет"
+                  className="btn btn-ghost"
+                  disabled={uploading}
+                  onClick={() => avatarInput.current?.click()}
                 >
-                  ✕
+                  {uploading ? 'Загрузка…' : avatar ? 'Сменить фото' : 'Добавить фото'}
                 </button>
-              )}
+                {(avatar || preset) && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => {
+                      setAvatar(null);
+                      setPreset(null);
+                    }}
+                    title="Убрать фото и пресет"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
               <div className="hint">JPEG, PNG или WebP до 5 МБ — или выберите зверя ниже</div>
               <div className="preset-grid" role="group" aria-label="Стандартные аватары">
                 {AVATAR_PRESETS.map((emoji) => (

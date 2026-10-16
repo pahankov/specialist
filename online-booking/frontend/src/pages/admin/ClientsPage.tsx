@@ -727,8 +727,6 @@ function ClientsPage() {
                   placeholder={EMAIL_PLACEHOLDER}
                 />
               </div>
-              {/* Address lives only on edit: a new client needs no address,
-                  the master's city is inherited for matching. */}
               {editingId ? (
                 <AddressSelect
                   value={address}
@@ -741,12 +739,9 @@ function ClientsPage() {
                   style={{ marginBottom: 0 }}
                 />
               ) : null}
-              {(addressCity || editingClient?.city_name || (!editingId && myDefaults?.city)) && (
+              {editingId && (addressCity || editingClient?.city_name) && (
                 <span style={{ fontSize: 12, color: '#666' }}>
-                  Город для подбора: {addressCity || editingClient?.city_name || myDefaults?.city}
-                  {!editingId && myDefaults?.address && address === myDefaults.address
-                    ? ' — ваш адрес, подставлен автоматически'
-                    : ''}
+                  Город для подбора: {addressCity || editingClient?.city_name}
                 </span>
               )}
             </div>
@@ -793,7 +788,7 @@ function ClientsPage() {
                 {totalClients > pageSize ? ` из ${totalClients}` : ''})
               </span>
             </h3>
-            {clients.length > 0 && (
+            {clients.length > 0 && !showForm && (
               <div style={{ display: 'flex', gap: 8 }}>
                 <Tooltip content="Добавить нового клиента">
                   <button className="btn btn-primary" onClick={openCreateForm}>
@@ -809,8 +804,8 @@ function ClientsPage() {
               icon="👥"
               title="Клиенты не найдены"
               description="Добавьте первого клиента или измените параметры поиска"
-              actionLabel="+ Добавить клиента"
-              onAction={openCreateForm}
+              actionLabel={showForm ? undefined : '+ Добавить клиента'}
+              onAction={showForm ? undefined : openCreateForm}
             />
           ) : (
             <DataTable tableId="clients" columns={columns} data={clients} />

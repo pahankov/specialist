@@ -127,13 +127,28 @@ async def list_coupons(
     master: User = Depends(require_master),
     db: AsyncSession = Depends(get_db),
 ):
-    """Own coupons, newest first."""
+    """Own coupons, newest first (with recipient names for personal ones)."""
     mp_id = await get_master_profile_id(db, master)
     rows = (await db.execute(
         select(Coupon).where(Coupon.master_id == mp_id)
         .order_by(Coupon.id.desc())
     )).scalars().all()
-    return [coupon_to_dict(c) for c in rows]
+    # Batch recipient names (no N+1): personal coupons carry user_ids.
+    wanted: set = set()
+    for c in rows:
+        wanted.update(c.user_ids or [])
+    names: dict = {}
+    if wanted:
+        name_rows = await db.execute(
+            select(User.id, User.name).where(User.id.in_(wanted))
+        )
+        names = dict(name_rows.all())
+    out = []
+    for c in rows:
+        d = coupon_to_dict(c)
+        d["recipient_names"] = [names.get(uid, "—") for uid in (c.user_ids or [])]
+        out.append(d)
+    return out
 
 
 @router.delete("/coupons/{coupon_id}")

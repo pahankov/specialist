@@ -34,6 +34,43 @@ class TestAdminGetServices:
         assert resp.status_code == 200
         assert len(resp.json()) >= 1
 
+    async def test_services_sort_by_price(self, client, auth_headers, test_master_data, test_service_data):
+        """sort_by=price&sort_dir=desc returns most expensive first."""
+        for name, price in (("Cheap", 500), ("Mid", 1500), ("Top", 3000)):
+            await client.post(
+                "/api/v1/services/",
+                json={**test_service_data, "master_id": 1, "name": name, "price": price},
+                headers=auth_headers,
+            )
+
+        resp = await client.get(
+            "/api/v1/admin/services",
+            params={"sort_by": "price", "sort_dir": "desc"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200, resp.text
+        prices = [float(i["price"]) for i in resp.json()["items"]]
+        assert prices == sorted(prices, reverse=True)
+
+    async def test_services_sort_by_duration(self, client, auth_headers, test_master_data, test_service_data):
+        """sort_by=duration orders by minutes ascending."""
+        for name, mins in (("Long", 120), ("Short", 30), ("Mid", 60)):
+            await client.post(
+                "/api/v1/services/",
+                json={**test_service_data, "master_id": 1, "name": name,
+                      "duration_minutes": mins},
+                headers=auth_headers,
+            )
+
+        resp = await client.get(
+            "/api/v1/admin/services",
+            params={"sort_by": "duration", "sort_dir": "asc"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200, resp.text
+        got = [i["duration_minutes"] for i in resp.json()["items"]]
+        assert got == sorted(got)
+
 
 class TestAdminCreateService:
     """Tests for POST /api/v1/admin/services"""

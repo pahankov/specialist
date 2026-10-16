@@ -9,7 +9,16 @@
 .datatable-toolbar {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 8px;
+}
+
+.datatable-toolbar-left {
+  margin-right: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .datatable-menu-anchor {

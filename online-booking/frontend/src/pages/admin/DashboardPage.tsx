@@ -73,7 +73,7 @@ function DashboardPage() {
   return (
     <div className="dashboard-page">
       <div className="page-header">
-        <h1>{isGlobal ? '🍬 Глобальный дашборд' : 'Дашборд'}</h1>
+        <h1>{isGlobal ? '🍬 Общий обзор' : 'Обзор'}</h1>
         <p>{isGlobal ? 'Общая статистика по всей системе' : 'Обзор вашей записи и статистики'}</p>
       </div>
 

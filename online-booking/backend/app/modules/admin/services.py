@@ -53,6 +53,8 @@ async def get_admin_services(
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=500, description="Items per page"),
     active_only_raw: Optional[bool] = Query(None, description="Return only active services (true/false)"),
+    sort_by: Optional[str] = Query(None, description="Sort column: name|category|duration|price"),
+    sort_dir: str = Query("asc", description="Sort direction: asc|desc"),
     db: AsyncSession = Depends(get_db)
 ):
     """Get active services (paginated with total count)."""
@@ -79,8 +81,18 @@ async def get_admin_services(
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
 
-    # Get data
-    data_query = base_query.order_by(Service.name).offset(offset).limit(page_size)
+    # Get data (whitelisted sort column — never raw user input in ORDER BY)
+    sort_map = {
+        "name": Service.name,
+        "category": Service.category,
+        "duration": Service.duration_minutes,
+        "price": Service.price,
+    }
+    sort_col = sort_map.get(sort_by or "name", Service.name)
+    order = sort_col.desc() if str(sort_dir).lower() == "desc" else sort_col.asc()
+    data_query = (
+        base_query.order_by(order, Service.id.asc()).offset(offset).limit(page_size)
+    )
     result = await db.execute(data_query)
     services = result.scalars().all()
 
@@ -99,6 +111,8 @@ async def get_all_admin_services(
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=200, description="Items per page"),
     master_id: Optional[int] = Query(None, description="MasterProfile.id (superadmin only)"),
+    sort_by: Optional[str] = Query(None, description="Sort column: name|category|duration|price"),
+    sort_dir: str = Query("asc", description="Sort direction: asc|desc"),
     db: AsyncSession = Depends(get_db)
 ):
     """Get all services including inactive (paginated with total count)."""
@@ -121,10 +135,18 @@ async def get_all_admin_services(
         )
         total = total_result.scalar() or 0
 
-        # Get data
+        # Get data (whitelisted sort column — never raw user input in ORDER BY)
+        sort_map = {
+            "name": Service.name,
+            "category": Service.category,
+            "duration": Service.duration_minutes,
+            "price": Service.price,
+        }
+        sort_col = sort_map.get(sort_by or "name", Service.name)
+        order = sort_col.desc() if str(sort_dir).lower() == "desc" else sort_col.asc()
         result = await db.execute(
             select(Service).where(Service.master_id == mp_id)
-            .order_by(Service.name).offset(offset).limit(page_size)
+            .order_by(order, Service.id.asc()).offset(offset).limit(page_size)
         )
         services = result.scalars().all()
 

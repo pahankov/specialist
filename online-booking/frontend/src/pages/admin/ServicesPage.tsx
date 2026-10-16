@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { adminApi } from '../../api/client';
@@ -11,6 +11,7 @@ import { usePersistentState } from '../../utils/persistentState';
 import type { Service } from '../../api/types';
 import type { Bundle } from '../../api/cabinet';
 import { formatPrice, formatDiscountTag } from '../../components/schedule/helpers';
+import CouponCards from '../../components/coupons/CouponCards';
 import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError';
 import { goLogin } from '../../utils/redirect';
 import '../../styles/tables.css';
@@ -26,6 +27,7 @@ interface CouponRow {
   uses_left: number | null;
   audience: string;
   user_ids: number[];
+  recipient_names?: string[];
   valid_until: string | null;
   is_active: boolean;
 }
@@ -40,6 +42,9 @@ function ServicesPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const pageSize = 20;
+  // Server-side sort (a 20-row page can't re-sort other pages).
+  const [sortKey, setSortKey] = usePersistentState<string | null>('services.sortKey', null);
+  const [sortDir, setSortDir] = usePersistentState<'asc' | 'desc'>('services.sortDir', 'asc');
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
@@ -47,12 +52,6 @@ function ServicesPage() {
   const [description, setDescription] = useState('');
   const [duration, setDuration] = useState(30);
   const [price, setPrice] = useState(1000);
-  // Discount % (empty = none, 0-90).
-  const [discount, setDiscount] = useState('');
-  // Fixed RUB off (empty = none).
-  const [discountFixed, setDiscountFixed] = useState('');
-  // Discount expiry, datetime-local value (empty = no expiry).
-  const [discountUntil, setDiscountUntil] = useState('');
   const [lastCategory, setLastCategory] = usePersistentState('services.lastCategory', '');
   const [category, setCategory] = useState('');
   const [categoryCustom, setCategoryCustom] = useState(false);
@@ -81,6 +80,7 @@ function ServicesPage() {
   const [couponUntil, setCouponUntil] = useState('');
   const [couponClients, setCouponClients] = useState<RecipientOption[]>([]);
   const [couponPicked, setCouponPicked] = useState<Set<number>>(new Set());
+  const [showCouponArchive, setShowCouponArchive] = useState(false);
   const [deletingCouponId, setDeletingCouponId] = useState<number | null>(null);
   // Per-service minutes inside the complex (default = service's own time).
   const [durMap, setDurMap] = useState<Record<number, number>>({});
@@ -89,18 +89,28 @@ function ServicesPage() {
     ...new Set(services.map((s) => s.category).filter(Boolean)),
   ] as string[];
 
+  // Guards the list against out-of-order responses (see AppointmentsPage).
+  const fetchSeq = useRef(0);
+
   const fetchData = async () => {
+    const seq = ++fetchSeq.current;
     try {
-      const s = await adminApi.getServices({ page, page_size: pageSize });
+      const s = await adminApi.getServices({
+        page,
+        page_size: pageSize,
+        ...(sortKey ? { sort_by: sortKey, sort_dir: sortDir } : {}),
+      });
+      if (fetchSeq.current !== seq) return;
       setServices(s.data.items);
       setTotal(s.data.total);
       setTotalPages(s.data.total_pages || 1);
     } catch (err: unknown) {
+      if (fetchSeq.current !== seq) return;
       if (getApiErrorStatus(err) === 401) {
         goLogin();
       } else setError('Ошибка загрузки');
     } finally {
-      setLoading(false);
+      if (fetchSeq.current === seq) setLoading(false);
     }
     try {
       const b = await adminApi.getBundles();
@@ -113,16 +123,17 @@ function ServicesPage() {
 
   useEffect(() => {
     fetchData();
-  }, [page]);
+  }, [page, sortKey, sortDir]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [sortKey, sortDir]);
 
   const resetForm = () => {
     setName('');
     setDescription('');
     setDuration(30);
     setPrice(1000);
-    setDiscount('');
-    setDiscountFixed('');
-    setDiscountUntil('');
     setCategory('');
     setCategoryCustom(false);
     setEditingId(null);
@@ -138,9 +149,6 @@ function ServicesPage() {
     setDescription('');
     setDuration(30);
     setPrice(1000);
-    setDiscount('');
-    setDiscountFixed('');
-    setDiscountUntil('');
     setCategory(lastCategory);
     // Stale memory (category was deleted meanwhile) → free input, not a lie.
     setCategoryCustom(
@@ -152,47 +160,11 @@ function ServicesPage() {
     setError('');
   };
 
-  const parseDiscount = (): number | undefined => {
-    if (discount.trim() === '') return undefined;
-    const v = Math.round(Number(discount));
-    if (!(v >= 0 && v <= 90)) {
-      setError('Скидка — от 0 до 90%');
-      return undefined;
-    }
-    return v;
-  };
-
-  const parseFixed = (): number | undefined => {
-    if (discountFixed.trim() === '') return undefined;
-    const v = Math.round(Number(discountFixed));
-    if (!(v >= 0)) {
-      setError('Скидка в рублях — от 0');
-      return undefined;
-    }
-    return v;
-  };
-
-  const parseUntil = (raw: string): string | null | undefined => {
-    // undefined = leave as is (create: none); null = clear on edit.
-    if (raw.trim() === '') return null;
-    const d = new Date(raw);
-    if (Number.isNaN(d.getTime())) {
-      setError('Некорректная дата окончания скидки');
-      return undefined;
-    }
-    return d.toISOString();
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    const disc = parseDiscount();
-    if (discount.trim() !== '' && disc === undefined) return;
-    const fixed = parseFixed();
-    if (discountFixed.trim() !== '' && fixed === undefined) return;
-    const until = parseUntil(discountUntil);
-    if (discountUntil.trim() !== '' && until === undefined) return;
-    const wantDiscount = disc !== undefined || fixed !== undefined || discountUntil.trim() !== '';
+    // Discounts live only in the 🏷 badge (table) — the form never touches
+    // them, so editing keeps the existing discount server-side.
     try {
       if (editingId) {
         await adminApi.updateService(editingId, {
@@ -201,9 +173,6 @@ function ServicesPage() {
           duration_minutes: duration,
           price,
           category: category || undefined,
-          ...(disc !== undefined ? { discount_percent: disc } : {}),
-          ...(fixed !== undefined ? { discount_fixed: fixed } : {}),
-          ...(discountUntil.trim() !== '' ? { discount_until: until as string } : {}),
         });
         toast.success('Услуга обновлена');
         if (category) setLastCategory(category);
@@ -214,9 +183,6 @@ function ServicesPage() {
           duration_minutes: duration,
           price,
           category: category || undefined,
-          ...(disc !== undefined ? { discount_percent: disc } : {}),
-          ...(fixed !== undefined ? { discount_fixed: fixed } : {}),
-          ...(wantDiscount && until ? { discount_until: until } : {}),
         });
         toast.success('Услуга создана');
         if (category) setLastCategory(category);
@@ -233,9 +199,6 @@ function ServicesPage() {
     setDescription(s.description || '');
     setDuration(s.duration_minutes);
     setPrice(Number(s.price));
-    setDiscount(s.discount_percent ? String(s.discount_percent) : '');
-    setDiscountFixed(Number(s.discount_fixed) > 0 ? String(s.discount_fixed) : '');
-    setDiscountUntil(s.discount_until ? String(s.discount_until).slice(0, 16) : '');
     setCategory(s.category || '');
     // Category from another page (pagination) isn't in the visible list.
     setCategoryCustom(
@@ -508,18 +471,38 @@ function ServicesPage() {
     }
   };
 
+  const toggleSort = (key: string) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  };
+  const sortMark = (key: string) => (sortKey === key ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ' ⇅');
+  const sortHead = (key: string, label: string) => (
+    <span
+      onClick={() => toggleSort(key)}
+      style={{ cursor: 'pointer', userSelect: 'none' }}
+      title={`Сортировать: ${label}`}
+    >
+      {label}
+      <span className="sort-arrow">{sortMark(key)}</span>
+    </span>
+  );
+
   const columns: FitColumnDef<Service>[] = useMemo(
     () => [
       {
         id: 'name',
-        header: 'Название',
+        header: () => sortHead('name', 'Название'),
         accessorFn: (s) => s.name,
         cell: ({ row }) => <strong>{row.original.name}</strong>,
         meta: { minWidth: 140, label: 'Название' },
       },
       {
         id: 'category',
-        header: 'Категория',
+        header: () => sortHead('category', 'Категория'),
         accessorFn: (s) => s.category || '—',
         cell: ({ row }) => row.original.category || '—',
         meta: { minWidth: 100, label: 'Категория' },
@@ -533,14 +516,14 @@ function ServicesPage() {
       },
       {
         id: 'duration',
-        header: 'Длительность',
+        header: () => sortHead('duration', 'Длительность'),
         accessorFn: (s) => s.duration_minutes,
         cell: ({ row }) => `${row.original.duration_minutes} мин`,
         meta: { minWidth: 90, maxWidth: 140, label: 'Длительность' },
       },
       {
         id: 'price',
-        header: 'Цена',
+        header: () => sortHead('price', 'Цена'),
         accessorFn: (s) => Number(s.effective_price ?? s.price) || 0,
         cell: ({ row }) => {
           const s = row.original;
@@ -606,7 +589,7 @@ function ServicesPage() {
         meta: { minWidth: 110, hideable: false, label: 'Действия' },
       },
     ],
-    [],
+    [sortKey, sortDir],
   );
 
   if (loading)
@@ -721,36 +704,10 @@ function ServicesPage() {
                   min="0"
                 />
               </div>
-              <div className="form-group">
-                <label>Скидка, % (пусто = нет)</label>
-                <input
-                  type="number"
-                  value={discount}
-                  onChange={(e) => setDiscount(e.target.value)}
-                  placeholder="0–90"
-                  min="0"
-                  max="90"
-                />
-              </div>
-              <div className="form-group">
-                <label>Скидка, ₽ (пусто = нет)</label>
-                <input
-                  type="number"
-                  value={discountFixed}
-                  onChange={(e) => setDiscountFixed(e.target.value)}
-                  placeholder="500"
-                  min="0"
-                />
-              </div>
-              <div className="form-group">
-                <label>Скидка до (пусто = бессрочно)</label>
-                <input
-                  type="datetime-local"
-                  value={discountUntil}
-                  onChange={(e) => setDiscountUntil(e.target.value)}
-                />
-              </div>
             </div>
+            <p className="hint" style={{ margin: '0 0 8px' }}>
+              Скидка — через значок 🏷 в таблице: нажмите на него в строке услуги.
+            </p>
             <div className="form-group">
               <label>Описание</label>
               <input
@@ -1112,46 +1069,12 @@ function ServicesPage() {
             description="Выдайте первый — код придёт клиентам в колокольчик"
           />
         ) : (
-          <div className="bundle-list">
-            {coupons.map((c) => (
-              <div key={c.id} className={`bundle-card${c.is_active ? '' : ' bundle-off'}`}>
-                <div className="bundle-head">
-                  <strong>🎟 {c.code}</strong>
-                  <span className="bundle-chip">
-                    {c.kind === 'percent' ? `−${c.value}%` : `−${c.value} ₽`}
-                  </span>
-                  {!c.is_active && <span className="bundle-badge">выкл</span>}
-                </div>
-                <div className="bundle-comp">
-                  <span className="bundle-chip">
-                    {c.audience === 'selected'
-                      ? `👥 ${c.user_ids.length} получател.`
-                      : '👥 всем своим'}
-                  </span>
-                  <span className="bundle-chip">
-                    Использовано: {c.used_count}
-                    {c.max_uses ? ` из ${c.max_uses}` : ''}
-                  </span>
-                  {c.valid_until && (
-                    <span className="bundle-chip">
-                      до {new Date(c.valid_until).toLocaleString('ru-RU')}
-                    </span>
-                  )}
-                </div>
-                <div className="bundle-actions">
-                  {c.is_active && (
-                    <button
-                      className="btn btn-sm btn-delete"
-                      onClick={() => setDeletingCouponId(c.id)}
-                      title="Выключить купон"
-                    >
-                      ✖
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
+          <CouponCards
+            coupons={coupons}
+            showArchive={showCouponArchive}
+            onToggleArchive={() => setShowCouponArchive((v) => !v)}
+            onDelete={(id) => setDeletingCouponId(id)}
+          />
         )}
       </div>
 

@@ -211,7 +211,13 @@ export const adminApi = {
   },
 
   // Services
-  getServices(params?: { page?: number; page_size?: number; active_only?: string | boolean }) {
+  getServices(params?: {
+    page?: number;
+    page_size?: number;
+    active_only?: string | boolean;
+    sort_by?: string;
+    sort_dir?: string;
+  }) {
     const processedParams = params ? { ...params } : undefined;
     if (processedParams?.active_only !== undefined) {
       processedParams.active_only = String(processedParams.active_only);

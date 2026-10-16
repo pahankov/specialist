@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import {
   flexRender,
   getCoreRowModel,
@@ -49,6 +49,8 @@ interface DataTableProps<T> {
   fitSample?: number;
   /** DOM id per row (data-row-id) — for deep-link highlight from bells. */
   rowId?: (row: T) => string | number;
+  /** Left side of the toolbar (next to "Столбцы") — page actions. */
+  toolbarLeft?: ReactNode;
 }
 
 const FALLBACK_MIN = 64;
@@ -96,6 +98,7 @@ export default function DataTable<T>({
   data,
   fitSample = 50,
   rowId,
+  toolbarLeft,
 }: DataTableProps<T>) {
   const widthsKey = `colwidths:${tableId}`;
   const visKey = `colvis:${tableId}`;
@@ -249,6 +252,7 @@ export default function DataTable<T>({
   return (
     <div className="datatable-wrap" ref={wrapRef}>
       <div className="datatable-toolbar">
+        {toolbarLeft && <div className="datatable-toolbar-left">{toolbarLeft}</div>}
         <div className="datatable-menu-anchor" ref={menuAnchorRef}>
           <button
             type="button"

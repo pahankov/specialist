@@ -3,7 +3,7 @@ import { SUPER_PREFIX } from '../../utils/section';
 import './SuperAdminLayout.css';
 
 const SUPER_NAV = [
-  { path: `${SUPER_PREFIX}/dashboard`, label: '📊 Дашборд' },
+  { path: `${SUPER_PREFIX}/dashboard`, label: '📊 Обзор' },
   { path: `${SUPER_PREFIX}/revenue`, label: '💰 Доход' },
   { path: `${SUPER_PREFIX}/masters`, label: '👨‍💼 Мастера' },
   { path: `${SUPER_PREFIX}/appointments`, label: '📅 Все записи' },
