@@ -150,7 +150,7 @@ function ClientsPage() {
     } catch (err: unknown) {
       if (getApiErrorStatus(err) === 401) {
         goLogin();
-      } else toast.error('Ошибка загрузки');
+      } else toast.error(getApiErrorMessage(err, 'Ошибка загрузки'));
     } finally {
       setLoading(false);
     }
@@ -210,8 +210,11 @@ function ClientsPage() {
       return;
     }
     // City for matching: parsed from the address pick, else the stored one,
-    // else the panel user's own city.
-    const cityName = addressCity.trim() || editingClient?.city_name || '' || myDefaults?.city || '';
+    // else the panel user's own city. New clients skip the address entirely
+    // (not needed at creation) and inherit the master's city.
+    const cityName = editingId
+      ? addressCity.trim() || editingClient?.city_name || '' || myDefaults?.city || ''
+      : myDefaults?.city || '';
     try {
       if (editingId) {
         await adminApi.updateClient(editingId, {
@@ -228,7 +231,6 @@ function ClientsPage() {
           phone,
           email: email || undefined,
           city_name: cityName || undefined,
-          address: address.trim() || null,
         });
         toast.success('Клиент создан');
       }
@@ -258,8 +260,8 @@ function ClientsPage() {
       // No undo: backend has no unhide/undelete, a fake "cancel" toast would lie.
       toast.success(isSuperSection ? 'Клиент заблокирован у всех' : 'Клиент убран в архив');
       fetchData();
-    } catch {
-      toast.error('Ошибка удаления');
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Ошибка удаления'));
     } finally {
       setDeletingId(null);
       setCauseNote('');
@@ -528,7 +530,7 @@ function ClientsPage() {
               {c.is_blocked ? (
                 <Tooltip content="Разблокировать — клиент снова сможет записываться" position="top">
                   <button className="btn btn-sm btn-ghost" onClick={() => handleUnblock(c.id)}>
-                    ✅
+                    ⛓️‍💥
                   </button>
                 </Tooltip>
               ) : (
@@ -725,16 +727,20 @@ function ClientsPage() {
                   placeholder={EMAIL_PLACEHOLDER}
                 />
               </div>
-              <AddressSelect
-                value={address}
-                onChange={(a, pickedCity) => {
-                  setAddress(a);
-                  if (pickedCity) setAddressCity(pickedCity);
-                }}
-                label="Адрес"
-                placeholder="Город, улица, дом... (подсказки DaData)"
-                style={{ marginBottom: 0 }}
-              />
+              {/* Address lives only on edit: a new client needs no address,
+                  the master's city is inherited for matching. */}
+              {editingId ? (
+                <AddressSelect
+                  value={address}
+                  onChange={(a, pickedCity) => {
+                    setAddress(a);
+                    if (pickedCity) setAddressCity(pickedCity);
+                  }}
+                  label="Адрес"
+                  placeholder="Город, улица, дом... (подсказки DaData)"
+                  style={{ marginBottom: 0 }}
+                />
+              ) : null}
               {(addressCity || editingClient?.city_name || (!editingId && myDefaults?.city)) && (
                 <span style={{ fontSize: 12, color: '#666' }}>
                   Город для подбора: {addressCity || editingClient?.city_name || myDefaults?.city}

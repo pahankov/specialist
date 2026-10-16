@@ -3,16 +3,23 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 
-const { me, getBookSchedule, bookAppointment, getAllMasters, getAllServices, getBundles, myCoupons } =
-  vi.hoisted(() => ({
-    me: vi.fn(),
-    getBookSchedule: vi.fn(),
-    bookAppointment: vi.fn(),
-    getAllMasters: vi.fn(),
-    getAllServices: vi.fn(),
-    getBundles: vi.fn(),
-    myCoupons: vi.fn(),
-  }));
+const {
+  me,
+  getBookSchedule,
+  bookAppointment,
+  getAllMasters,
+  getAllServices,
+  getBundles,
+  myCoupons,
+} = vi.hoisted(() => ({
+  me: vi.fn(),
+  getBookSchedule: vi.fn(),
+  bookAppointment: vi.fn(),
+  getAllMasters: vi.fn(),
+  getAllServices: vi.fn(),
+  getBundles: vi.fn(),
+  myCoupons: vi.fn(),
+}));
 
 vi.mock('../api/client', () => ({
   cabinetApi: { me, getBookSchedule, bookAppointment, bundles: getBundles, myCoupons },

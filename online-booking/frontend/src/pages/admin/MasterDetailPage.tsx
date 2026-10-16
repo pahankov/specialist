@@ -247,7 +247,9 @@ function MasterDetailPage() {
               superAdminApi
                 .toggleMasterActive(master.id)
                 .then(() => loadMaster())
-                .catch(() => toast.error('Ошибка'))
+                .catch((err: unknown) =>
+                  toast.error(getApiErrorMessage(err, 'Не удалось изменить статус')),
+                )
             }
           >
             {master.is_active ? '🔒 Заблокировать' : '🔓 Разблокировать'}
@@ -258,7 +260,9 @@ function MasterDetailPage() {
               superAdminApi
                 .suspendMaster(master.id)
                 .then(() => loadMaster())
-                .catch(() => toast.error('Ошибка'))
+                .catch((err: unknown) =>
+                  toast.error(getApiErrorMessage(err, 'Не удалось заблокировать')),
+                )
             }
           >
             ⏸ Заблокировать навсегда

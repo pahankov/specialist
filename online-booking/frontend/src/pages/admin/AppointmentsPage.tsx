@@ -9,6 +9,7 @@ import {
   Tooltip,
   ConfirmDialog,
   MasterSelect,
+  Modal,
   DataTable,
   AutoConfirmSwitch,
   AutoCompleteSwitch,
@@ -81,16 +82,24 @@ function AppointmentsPage() {
   );
   // Date order is server-side (a 20-row page can't re-sort other pages).
   // Default asc: today first — matches the ↑ header and worklist usage.
-  const [dateSort, setDateSort] = usePersistentState<'asc' | 'desc'>(
-    'appointments.dateDir',
-    'asc',
-  );
+  const [dateSort, setDateSort] = usePersistentState<'asc' | 'desc'>('appointments.dateDir', 'asc');
   const [totalPages, setTotalPages] = useState(1);
   // Row flashed when jumping from a bell (?highlight=id).
   const [highlightId, setHighlightId] = useState<number | null>(null);
   const [allClients, setAllClients] = useState<{ id: number; name: string }[]>([]);
-  const [allServices, setAllServices] = useState<{ id: number; name: string }[]>([]);
+  const [allServices, setAllServices] = useState<
+    { id: number; name: string; master_id?: number }[]
+  >([]);
   const pageSize = 20;
+  // Quick booking from the list (no schedule round-trip).
+  const [showCreate, setShowCreate] = useState(false);
+  const [createMasterId, setCreateMasterId] = useState<number | ''>('');
+  const [createClientId, setCreateClientId] = useState<number | ''>('');
+  const [createServiceId, setCreateServiceId] = useState<number | ''>('');
+  const [createDateTime, setCreateDateTime] = useState('');
+  const [createStatus, setCreateStatus] = useState('confirmed');
+  const [createNotes, setCreateNotes] = useState('');
+  const [creating, setCreating] = useState(false);
   // Guards the list against out-of-order responses: a drill-down fires two
   // fetches on mount (persisted filters, then deep-link filters) and the
   // first one must never overwrite the second.
@@ -348,6 +357,45 @@ function AppointmentsPage() {
 
   const isAppointmentTimePassed = (dateStr: string) => new Date(dateStr) <= new Date();
 
+  const openCreate = () => {
+    setCreateMasterId(isSuperSection && masterIdFilter !== '' ? masterIdFilter : '');
+    setCreateClientId('');
+    setCreateServiceId('');
+    setCreateDateTime('');
+    setCreateStatus('confirmed');
+    setCreateNotes('');
+    setShowCreate(true);
+  };
+
+  const handleCreate = async () => {
+    if (createClientId === '' || createServiceId === '' || !createDateTime) {
+      toast.error('Выберите клиента, услугу и время');
+      return;
+    }
+    if (isSuperSection && createMasterId === '') {
+      toast.error('Выберите мастера');
+      return;
+    }
+    setCreating(true);
+    try {
+      await adminApi.bookAppointment({
+        client_id: createClientId,
+        service_id: createServiceId,
+        appointment_date: new Date(createDateTime).toISOString(),
+        status: createStatus,
+        notes: createNotes.trim() || undefined,
+        ...(isSuperSection && createMasterId !== '' ? { master_id: createMasterId } : {}),
+      });
+      toast.success('Запись создана');
+      setShowCreate(false);
+      fetch();
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Не удалось создать запись'));
+    } finally {
+      setCreating(false);
+    }
+  };
+
   const filters = [
     { value: '', label: 'Все' },
     { value: 'pending', label: statusLabels['pending'] },
@@ -375,8 +423,8 @@ function AppointmentsPage() {
     // Server already ordered by date — re-sorting here would only
     // shuffle the visible page and lie about the rest.
     if (sortField === 'appointment_date') return 0;
-    let valA: string | number | Date = a[sortField] ?? '';
-    let valB: string | number | Date = b[sortField] ?? '';
+    const valA: string | number | Date = a[sortField] ?? '';
+    const valB: string | number | Date = b[sortField] ?? '';
 
     if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
     if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
@@ -647,6 +695,14 @@ function AppointmentsPage() {
           </p>
         </div>
         <div className="page-header-actions">
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={openCreate}
+            title="Создать запись прямо здесь (без расписания)"
+          >
+            ＋ Новая запись
+          </button>
           <button
             className="btn btn-ghost"
             onClick={async () => {
@@ -950,6 +1006,95 @@ function AppointmentsPage() {
         danger
         onConfirm={() => noShowingId !== null && handleNoShow(noShowingId)}
       />
+
+      {/* Quick booking modal */}
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="📅 Новая запись">
+        {isSuperSection && (
+          <div className="form-group">
+            <label>Мастер</label>
+            <MasterSelect value={createMasterId} onChange={setCreateMasterId} />
+          </div>
+        )}
+        <div className="form-group">
+          <label>Клиент</label>
+          <select
+            className="filter-control"
+            value={createClientId}
+            onChange={(e) => setCreateClientId(e.target.value === '' ? '' : Number(e.target.value))}
+          >
+            <option value="">Выберите клиента…</option>
+            {allClients.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="form-group">
+          <label>Услуга</label>
+          <select
+            className="filter-control"
+            value={createServiceId}
+            onChange={(e) =>
+              setCreateServiceId(e.target.value === '' ? '' : Number(e.target.value))
+            }
+          >
+            <option value="">Выберите услугу…</option>
+            {allServices
+              .filter(
+                (s) =>
+                  !isSuperSection ||
+                  createMasterId === '' ||
+                  s.master_id === undefined ||
+                  s.master_id === createMasterId,
+              )
+              .map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+          </select>
+        </div>
+        <div className="form-row">
+          <div className="form-group">
+            <label>Дата и время</label>
+            <input
+              type="datetime-local"
+              value={createDateTime}
+              onChange={(e) => setCreateDateTime(e.target.value)}
+            />
+          </div>
+          <div className="form-group">
+            <label>Статус</label>
+            <select value={createStatus} onChange={(e) => setCreateStatus(e.target.value)}>
+              <option value="confirmed">✅ Подтверждена</option>
+              <option value="pending">⏳ Ожидает</option>
+            </select>
+          </div>
+        </div>
+        <div className="form-group">
+          <label>Комментарий (необязательно)</label>
+          <input
+            value={createNotes}
+            onChange={(e) => setCreateNotes(e.target.value.slice(0, 140))}
+            placeholder="Пожелания..."
+            maxLength={140}
+          />
+        </div>
+        <div className="modal-actions">
+          <button type="button" className="btn btn-ghost" onClick={() => setShowCreate(false)}>
+            Отмена
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={creating}
+            onClick={handleCreate}
+          >
+            {creating ? 'Создаём…' : 'Создать запись'}
+          </button>
+        </div>
+      </Modal>
 
       {/* Pagination */}
       <Pager page={currentPage} totalPages={totalPages} onChange={setCurrentPage} />

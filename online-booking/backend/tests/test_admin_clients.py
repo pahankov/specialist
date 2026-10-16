@@ -61,6 +61,31 @@ class TestAdminCreateClient:
         assert resp.status_code == 201
 
 
+class TestClientBlockUnblock:
+    """Block severs created_by — unblock must still find the client."""
+
+    async def test_block_then_unblock_created_client(self, client, auth_headers, test_client_data):
+        """A freshly created (appointment-less) client unblocks cleanly."""
+        created = await client.post(
+            "/api/v1/admin/clients", json=test_client_data, headers=auth_headers
+        )
+        assert created.status_code == 201, created.text
+        user_id = created.json()["id"]
+
+        blocked = await client.post(
+            f"/api/v1/admin/clients/{user_id}/block",
+            params={"block_reason": "no_show"},
+            headers=auth_headers,
+        )
+        assert blocked.status_code == 200, blocked.text
+
+        unblocked = await client.delete(
+            f"/api/v1/admin/clients/{user_id}/block", headers=auth_headers
+        )
+        assert unblocked.status_code == 200, unblocked.text
+        assert unblocked.json()["blocked"] is False
+
+
 class TestAdminUpdateClient:
     """Tests for PATCH /api/v1/admin/clients/{id}"""
 

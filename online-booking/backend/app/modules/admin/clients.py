@@ -27,12 +27,24 @@ async def _require_own_client(db: AsyncSession, master: User, user: User) -> Non
     """403 unless the client is the master's own (booked or created).
 
     Uses 404 (not 403) so one master cannot probe another's book.
+    Hidden/blocked-by-me stays mine: block severs created_by, so the
+    hidden row itself counts as ownership (else unblock 404s).
     """
     if master.role == UserRole.ADMIN:
         return
     if user.created_by == master.id:
         return
     mp_id = await get_master_profile_id(db, master)
+    from app.models.master_hidden_client import MasterHiddenClient
+    hidden = await db.execute(
+        select(MasterHiddenClient.id)
+        .join(ClientProfile, ClientProfile.id == MasterHiddenClient.client_profile_id)
+        .where(MasterHiddenClient.master_profile_id == mp_id,
+               ClientProfile.user_id == user.id)
+        .limit(1)
+    )
+    if hidden.scalar_one_or_none() is not None:
+        return
     hit = await db.execute(
         select(Appointment.id)
         .join(ClientProfile, Appointment.client_id == ClientProfile.id)

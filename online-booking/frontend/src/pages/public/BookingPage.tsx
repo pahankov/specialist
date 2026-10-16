@@ -8,6 +8,7 @@ import PhoneInput, { isCompletePhone } from '../../components/common/PhoneInput'
 import CitySelect, { type CityOption } from '../../components/common/CitySelect';
 import { EmptyState, Skeleton } from '../../components/common';
 import { getCookie } from '../../utils/cookies';
+import { getApiErrorMessage } from '../../utils/apiError';
 import './BookingPage.css';
 
 function formatRating(rating?: number | null): string {
@@ -89,7 +90,7 @@ function BookingPage() {
         }
       } catch (err) {
         console.error(err);
-        toast.error('Не удалось загрузить мастеров');
+        toast.error(getApiErrorMessage(err, 'Не удалось загрузить мастеров'));
       } finally {
         setMastersLoading(false);
       }
@@ -112,7 +113,7 @@ function BookingPage() {
         if (list.length > 0) setSelectedService(list[0]);
       } catch (err) {
         console.error(err);
-        toast.error('Не удалось загрузить услуги');
+        toast.error(getApiErrorMessage(err, 'Не удалось загрузить услуги'));
       } finally {
         setServicesLoading(false);
       }
@@ -157,7 +158,7 @@ function BookingPage() {
       setSuccess(true);
       setSelectedDate('');
     } catch (err) {
-      toast.error('Не удалось записаться');
+      toast.error(getApiErrorMessage(err, 'Не удалось записаться'));
       console.error(err);
     } finally {
       setSubmitting(false);

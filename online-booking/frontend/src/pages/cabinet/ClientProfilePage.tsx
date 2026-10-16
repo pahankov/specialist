@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { authApi, cabinetApi, type ClientMe } from '../../api/client';
-import { AddressSelect, CitySelect, ConfirmDialog, Skeleton } from '../../components/common';
+import { AddressSelect, CitySelect, ConfirmDialog, Modal, Skeleton } from '../../components/common';
 import type { CityOption } from '../../components/common/CitySelect';
 import { getApiErrorMessage } from '../../utils/apiError';
 import { clearAuthCookies } from '../../utils/cookies';
@@ -16,6 +16,8 @@ function ClientProfilePage() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmDeleteStep2, setConfirmDeleteStep2] = useState(false);
+  const [deleteWord, setDeleteWord] = useState('');
   const [me, setMe] = useState<ClientMe | null>(null);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -198,10 +200,53 @@ function ClientProfilePage() {
         onClose={() => setConfirmDelete(false)}
         title="Удалить аккаунт?"
         message="Вход станет невозможен, будущие записи отменятся. Это действие нельзя отменить."
-        confirmLabel="Удалить аккаунт"
+        confirmLabel="Продолжить"
         danger
-        onConfirm={handleDelete}
+        onConfirm={() => {
+          setConfirmDelete(false);
+          setDeleteWord('');
+          setConfirmDeleteStep2(true);
+        }}
       />
+      <Modal
+        open={confirmDeleteStep2}
+        onClose={() => setConfirmDeleteStep2(false)}
+        title="🗑 Точно удалить?"
+      >
+        <p style={{ fontSize: 14, color: '#555' }}>
+          Последний шаг: введите слово <strong>УДАЛИТЬ</strong>, чтобы подтвердить удаление аккаунта
+          и отмену будущих записей.
+        </p>
+        <div className="form-group" style={{ marginTop: 12 }}>
+          <input
+            value={deleteWord}
+            onChange={(e) => setDeleteWord(e.target.value)}
+            placeholder="УДАЛИТЬ"
+            aria-label="Подтверждение удаления"
+            style={{ textTransform: 'uppercase' }}
+          />
+        </div>
+        <div className="modal-actions">
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => setConfirmDeleteStep2(false)}
+          >
+            Отмена
+          </button>
+          <button
+            type="button"
+            className="btn btn-delete"
+            disabled={deleting || deleteWord.trim().toUpperCase() !== 'УДАЛИТЬ'}
+            onClick={() => {
+              setConfirmDeleteStep2(false);
+              handleDelete();
+            }}
+          >
+            {deleting ? 'Удаление…' : 'Удалить навсегда'}
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }

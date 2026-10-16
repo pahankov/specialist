@@ -248,7 +248,7 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
       });
       // register-unified logs in immediately: land straight in the section.
       toast.success('Добро пожаловать! Вы вошли в аккаунт.');
-      landByRole();
+      landByRole(registerForm.isMaster ? 'master' : 'client');
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Ошибка регистрации');
     } finally {
@@ -295,6 +295,15 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
 
       <button type="submit" className="btn btn-primary btn-submit" disabled={loading}>
         {loading ? 'Отправляем...' : 'Получить код в MAX'}
+      </button>
+
+      <button
+        type="button"
+        className="btn btn-ghost btn-submit"
+        style={{ marginTop: 8 }}
+        onClick={() => switchMode('login')}
+      >
+        ← Назад ко входу
       </button>
 
       <p className="login-footer">
@@ -357,6 +366,15 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
           Запросить новый код
         </button>
       </div>
+
+      <button
+        type="button"
+        className="btn btn-ghost btn-submit"
+        style={{ marginTop: 8 }}
+        onClick={() => switchMode('login')}
+      >
+        ← Назад ко входу
+      </button>
 
       <p className="login-footer">
         <a

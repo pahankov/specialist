@@ -16,7 +16,7 @@ from app.models.master_profile import MasterProfile
 from app.schemas.appointment import AppointmentCreate, AppointmentResponse, PublicBookingCreate, AvailableDay, AvailableSlot
 from app.logging_config import get_logger
 from app.dependencies.auth import require_master
-from app.utils import utcnow
+from app.utils import localnow_naive
 
 logger = get_logger(__name__)
 
@@ -149,7 +149,7 @@ async def get_available_days(
     """Get available days for a master (next N days, excluding Sundays)."""
     logger.info("Запрос доступных дней: мастер=%s, дней=%s", master_id, days_ahead)
     available_days = []
-    today = utcnow().date()
+    today = localnow_naive().date()
 
     for i in range(days_ahead):
         check_date = today + timedelta(days=i)

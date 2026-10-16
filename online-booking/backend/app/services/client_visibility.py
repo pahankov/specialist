@@ -20,7 +20,7 @@ from app.models.user import User
 from app.services.audit import log_action
 from app.services.booking import format_slot
 from app.services.notifications import notify_user
-from app.utils import utcnow
+from app.utils import localnow_naive, utcnow
 
 logger = get_logger(__name__)
 
@@ -55,7 +55,7 @@ async def hide_client_from_master(
     an optional archive reason. Sends ONE summary bell when anything was
     cancelled. Returns the number of cancelled appointments.
     """
-    now = utcnow()
+    now = localnow_naive()
 
     cp = (await db.execute(
         select(ClientProfile).where(ClientProfile.user_id == client_user.id)
@@ -201,9 +201,9 @@ async def restore_client_appointments(db: AsyncSession, master_profile_id: int,
     """
     from datetime import timedelta
     from app.services.booking import find_conflict, format_slot
-    from app.utils import utcnow_naive
+    from app.utils import localnow_naive
 
-    now = utcnow_naive()
+    now = localnow_naive()
     doomed = (await db.execute(
         select(Appointment).where(
             Appointment.master_id == master_profile_id,

@@ -15,7 +15,7 @@ from app.models.master_profile import MasterProfile
 from app.models.refresh_token import RefreshToken
 from app.models.user import User, UserRole
 from app.services.audit import log_action
-from app.utils import utcnow
+from app.utils import localnow_naive
 
 logger = get_logger(__name__)
 
@@ -35,7 +35,7 @@ async def delete_own_account(db: AsyncSession, user: User) -> dict:
     if user.is_active is False:
         raise HTTPException(status_code=400, detail="Аккаунт уже удалён")
 
-    now = utcnow()
+    now = localnow_naive()
     cancelled = 0
 
     if user.role == UserRole.MASTER:

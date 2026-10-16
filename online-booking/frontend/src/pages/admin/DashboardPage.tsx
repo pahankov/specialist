@@ -118,8 +118,8 @@ function DashboardPage() {
       </div>
       {period !== 'all' && (
         <p className="period-note">
-          Записи, статусы, доход и топ клиентов — за выбранный период. Каталоги (клиенты,
-          услуги{isGlobal ? ', мастера' : ''}) и ближайшие записи — всегда общие.
+          Записи, статусы, доход и топ клиентов — за выбранный период. Каталоги (клиенты, услуги
+          {isGlobal ? ', мастера' : ''}) и ближайшие записи — всегда общие.
         </p>
       )}
 
@@ -151,7 +151,10 @@ function DashboardPage() {
                 <div className="card-hint">Нажмите для перехода →</div>
               </div>
             )}
-            <div className="stat-card clickable" onClick={() => handleCardClick('/appointments?status=all')}>
+            <div
+              className="stat-card clickable"
+              onClick={() => handleCardClick('/appointments?status=all')}
+            >
               <div className="stat-icon">📅</div>
               <div className="stat-value">{stats.total_appointments}</div>
               <div className="stat-label">Всего записей</div>

@@ -201,8 +201,35 @@ async def refresh_token(request: Request, db: AsyncSession = Depends(get_db)):
     stored_token = result.scalar_one_or_none()
 
     if not stored_token:
-        logger.warning("Token refresh: token not found for user_id=%s", user_id)
-        raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
+        # Rotation race (two tabs refreshing at once): the loser presents
+        # the just-revoked token. Grace window — if it was revoked moments
+        # ago by a legit rotation AND a live token exists, rotate from the
+        # live one instead of logging the user out.
+        revoked = (await db.execute(
+            select(RefreshToken).where(
+                RefreshToken.token == cookie_token,
+                RefreshToken.user_id == user_id,
+                RefreshToken.is_revoked == True,
+            )
+        )).scalar_one_or_none()
+        now_utc = datetime.now(dt_timezone.utc)
+        if revoked is not None:
+            revoked_at = revoked.revoked_at
+            if revoked_at is not None and revoked_at.tzinfo is None:
+                revoked_at = revoked_at.replace(tzinfo=dt_timezone.utc)
+            live = (await db.execute(
+                select(RefreshToken).where(
+                    RefreshToken.user_id == user_id,
+                    RefreshToken.is_revoked == False,
+                ).order_by(RefreshToken.id.desc())
+            )).scalars().first()
+            if (live is not None and revoked_at is not None
+                    and (now_utc - revoked_at).total_seconds() <= 60):
+                logger.info("Token refresh: rotation race absorbed for user_id=%s", user_id)
+                stored_token = live
+        if not stored_token:
+            logger.warning("Token refresh: token not found for user_id=%s", user_id)
+            raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 
     # Handle timezone-aware vs naive datetime comparison (SQLite stores naive datetimes)
     expires_at = stored_token.expires_at
@@ -229,6 +256,16 @@ async def refresh_token(request: Request, db: AsyncSession = Depends(get_db)):
     })
     new_refresh_value, new_expires = create_refresh_token_payload(user.id, user.email or "")
     db.add(RefreshToken(user_id=user.id, token=new_refresh_value, expires_at=new_expires))
+
+    # Housekeeping: drop long-dead rotations (one row per refresh otherwise).
+    from datetime import timedelta as _td
+    await db.execute(
+        RefreshToken.__table__.delete().where(
+            RefreshToken.user_id == user.id,
+            RefreshToken.is_revoked == True,
+            RefreshToken.revoked_at < datetime.now(dt_timezone.utc) - _td(days=30),
+        )
+    )
 
     await db.commit()
 
