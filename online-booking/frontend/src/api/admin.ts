@@ -64,8 +64,12 @@ export const adminApi = {
     );
   },
   // Dashboard
-  getDashboard() {
-    return apiClient.get<DashboardStats>('/api/v1/admin/dashboard');
+  getDashboard(params?: {
+    period?: 'all' | 'month' | 'today' | 'custom';
+    date_from?: string;
+    date_to?: string;
+  }) {
+    return apiClient.get<DashboardStats>('/api/v1/admin/dashboard', { params });
   },
   getMonthlyStats(year: number, month: number, master_id?: number) {
     return apiClient.get('/api/v1/admin/monthly-stats', { params: { year, month, master_id } });
@@ -83,6 +87,7 @@ export const adminApi = {
     page_size?: number;
     show_completed?: boolean;
     show_cancelled?: boolean;
+    sort_dir?: 'asc' | 'desc';
   }) {
     return apiClient.get('/api/v1/admin/appointments', { params });
   },

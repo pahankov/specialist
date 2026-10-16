@@ -40,6 +40,7 @@ async def get_admin_appointments(
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     show_completed: bool = Query(True, description="Include completed rows"),
     show_cancelled: bool = Query(True, description="Include cancelled rows"),
+    sort_dir: str = Query("desc", description="Date order: asc|desc"),
     db: AsyncSession = Depends(get_db)
 ):
     """Get appointments with client and service details (paginated with total count)."""
@@ -144,8 +145,14 @@ async def get_admin_appointments(
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
 
-    # Get data (id tiebreak keeps pages deterministic on equal timestamps)
-    query = query.order_by(Appointment.appointment_date.desc(), Appointment.id.desc()).offset(offset).limit(page_size)
+    # Get data (id tiebreak keeps pages deterministic on equal timestamps).
+    # Date direction is server-side: client-side re-sorting of a 20-row
+    # page would lie about rows on other pages.
+    if str(sort_dir).lower() == "asc":
+        date_order = (Appointment.appointment_date.asc(), Appointment.id.asc())
+    else:
+        date_order = (Appointment.appointment_date.desc(), Appointment.id.desc())
+    query = query.order_by(*date_order).offset(offset).limit(page_size)
     result = await db.execute(query)
     rows = result.all()
 

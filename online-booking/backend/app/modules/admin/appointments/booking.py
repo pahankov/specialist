@@ -37,8 +37,8 @@ async def _find_or_create_client(
                     created_by=created_by)
         db.add(user)
         await db.flush()
-        client_profile = ClientProfile(user_id=user.id)
-        db.add(client_profile)
+        from app.services.clients import get_or_create_profile
+        client_profile = await get_or_create_profile(db, user)
         await db.commit()
         await db.refresh(user)
         await db.refresh(client_profile)
@@ -48,10 +48,8 @@ async def _find_or_create_client(
     )
     profile = profile_result.scalar_one_or_none()
     if profile is None:
-        profile = ClientProfile(user_id=user.id)
-        db.add(profile)
-        await db.commit()
-        await db.refresh(profile)
+        from app.services.clients import get_or_create_profile
+        profile = await get_or_create_profile(db, user)
     return user, profile
 
 
@@ -119,8 +117,8 @@ async def book_appointment(
     if not user or user.role.value not in ("CLIENT", "MASTER"):
         raise HTTPException(status_code=404, detail="Клиент не найден")
     if user.client_profile is None:
-        user.client_profile = ClientProfile(user_id=user.id)
-        db.add(user.client_profile)
+        from app.services.clients import get_or_create_profile
+        user.client_profile = await get_or_create_profile(db, user)
         await db.flush()
 
     from app.services.booking import find_conflict, resolve_booking_item

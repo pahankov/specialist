@@ -229,10 +229,8 @@ async def create_client(
     await db.flush()
     await db.refresh(new_user)
 
-    new_cp = ClientProfile(user_id=new_user.id)
-    db.add(new_cp)
-    await db.flush()
-    await db.refresh(new_cp)
+    from app.services.clients import get_or_create_profile
+    new_cp = await get_or_create_profile(db, new_user)
     return _client_profile_to_dict(new_cp)
 
 

@@ -1,5 +1,5 @@
 """Booking module — appointment CRUD and public booking."""
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from typing import List, Optional
@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from pydantic import BaseModel
 
 from app.database import get_db
+from app.middleware.rate_limit import limiter
 from app.models.appointment import Appointment
 from app.models.service import Service
 from app.models.client_profile import ClientProfile
@@ -44,7 +45,9 @@ async def get_appointments(
 
 
 @router.post("/", response_model=AppointmentResponse, status_code=201)
+@limiter.limit("30/minute")
 async def create_appointment(
+    request: Request,
     appointment: AppointmentCreate,
     master: User = Depends(require_master),
     db: AsyncSession = Depends(get_db)
@@ -75,10 +78,8 @@ async def create_appointment(
             select(User).where(User.phone == lookup_phone)
         )).scalar_one_or_none()
         if owner is not None:
-            client = ClientProfile(user_id=owner.id)
-            db.add(client)
-            await db.flush()
-            await db.refresh(client)
+            from app.services.clients import get_or_create_profile
+            client = await get_or_create_profile(db, owner)
 
     if not client:
         logger.info("Создание нового клиента для записи: %s", appointment.client_phone)
@@ -90,11 +91,9 @@ async def create_appointment(
         db.add(new_user)
         await db.flush()
         await db.refresh(new_user)
-        
-        client = ClientProfile(user_id=new_user.id)
-        db.add(client)
-        await db.flush()
-        await db.refresh(client)
+
+        from app.services.clients import get_or_create_profile
+        client = await get_or_create_profile(db, new_user)
 
     # Create appointment
     new_appointment = Appointment(
@@ -200,7 +199,8 @@ async def get_available_slots(
 
 
 @router.post("/public", response_model=AppointmentResponse, status_code=201)
-async def public_booking(booking: PublicBookingCreate, db: AsyncSession = Depends(get_db)):
+@limiter.limit("10/minute")
+async def public_booking(request: Request, booking: PublicBookingCreate, db: AsyncSession = Depends(get_db)):
     """Public booking — no auth required. Creates appointment for any master."""
     logger.info("Публичная запись: мастер=%s, клиент=%s, время=%s",
                 booking.master_id, booking.client_phone, booking.appointment_date)
@@ -261,11 +261,9 @@ async def public_booking(booking: PublicBookingCreate, db: AsyncSession = Depend
         db.add(new_user)
         await db.flush()
         await db.refresh(new_user)
-        
-        client = ClientProfile(user_id=new_user.id)
-        db.add(client)
-        await db.flush()
-        await db.refresh(client)
+
+        from app.services.clients import get_or_create_profile
+        client = await get_or_create_profile(db, new_user)
     else:
         # Anonymous entry point: a blacklisted phone sees the same generic
         # "unavailable" as an inactive master (no block disclosure).

@@ -17,6 +17,8 @@ interface BookingModalProps {
   clients: Client[];
   services: Service[];
   bundles: Bundle[];
+  /** Full dropdown lists arrived (hint/empty states must not fire before). */
+  listsLoaded: boolean;
   bookingLoading: boolean;
   onClose: () => void;
   onUpdate: (field: string, value: any) => void;
@@ -37,6 +39,7 @@ export function BookingModal({
   clients,
   services,
   bundles,
+  listsLoaded,
   bookingLoading,
   onClose,
   onUpdate,
@@ -125,7 +128,9 @@ export function BookingModal({
           )}
           {showClientDropdown && (
             <div className="dropdown-list">
-              {filteredClients.length === 0 ? (
+              {!listsLoaded ? (
+                <div className="dropdown-empty">Загрузка…</div>
+              ) : filteredClients.length === 0 ? (
                 <div className="dropdown-empty">Ничего не найдено</div>
               ) : (
                 filteredClients.map((c) => (
@@ -182,7 +187,9 @@ export function BookingModal({
           )}
           {showServiceDropdown && (
             <div className="dropdown-list">
-              {filteredBundles.length === 0 && filteredServices.length === 0 ? (
+              {!listsLoaded ? (
+                <div className="dropdown-empty">Загрузка…</div>
+              ) : filteredBundles.length === 0 && filteredServices.length === 0 ? (
                 <div className="dropdown-empty">Ничего не найдено</div>
               ) : (
                 <>
@@ -246,7 +253,9 @@ export function BookingModal({
             Выберите услугу или комплекс из списка — кнопка записи активна только после выбора
           </div>
         )}
-        {scopedServices.length === 0 && (
+        {/* Shown only for a resolved master with a loaded, truly empty list —
+            never on an empty search field or a list still loading. */}
+        {listsLoaded && scopedServices.length === 0 && (
           <div className="field-hint">
             У мастера пока нет услуг — добавьте их в разделе «Услуги», иначе записать некого
           </div>

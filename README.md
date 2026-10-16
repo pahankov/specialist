@@ -131,7 +131,7 @@ beauty-specialist/              # корень репозитория
     │   │   └── modules/          # self-contained пакеты: auth, city, user, booking,
     │   │                         # service, schedule, review, admin/*, dadata
     │   ├── alembic/              # миграции PostgreSQL
-    │   ├── tests/                # pytest (~321)
+    │   ├── tests/                # pytest (~515)
     │   └── requirements.txt
     └── frontend/
         ├── src/
@@ -140,7 +140,7 @@ beauty-specialist/              # корень репозитория
         │   ├── pages/admin/      # AdminLayout (/admin) + SuperAdminLayout (/super) + страницы
         │   ├── pages/public/     # HomePage, BookingPage
         │   ├── styles/           # общие стили (filters.css — сетка фильтров)
-        │   ├── tests/            # Vitest (~75)
+        │   ├── tests/            # Vitest (~158)
         │   ├── utils/            # section (/admin|/super), persistentState, formatPhone, apiError, ...
         │   └── App.tsx           # роутинг: / → /booking → /admin/* → /super/*
         └── package.json
@@ -302,8 +302,8 @@ utils/
 - ESLint + Prettier для форматирования кода
 
 ### ✅ Тесты
-- **Backend:** ~270 pytest-тестов (auth, masters, services, appointments, clients, reviews, admin CRUD, rate limiting, refresh tokens, password security, no-show, dadata proxy, superuser, log level)
-- **Frontend:** 41 Vitest-тест (helpers, hooks, Modal/ConfirmDialog, auth refresh, dadata fallback)
+- **Backend:** ~515 pytest-тестов (auth, masters, services, appointments, clients, reviews, admin CRUD, rate limiting, refresh tokens, password security, no-show, dadata proxy, superuser, log level)
+- **Frontend:** 158 Vitest-тестов (helpers, hooks, Modal/ConfirmDialog, auth refresh, dadata fallback, CabinetBookPage)
 - 100% покрытие всех эндпоинтов
 - In-memory SQLite для изоляции тестов
 - pytest-asyncio для асинхронных тестов
@@ -426,13 +426,13 @@ OtpCode (id, phone, code_hash, expires_at, is_used, created_at)
 # Backend
 cd online-booking\backend
 $env:PYTHONPATH='.'
-pytest tests/ -v                          # Все тесты (~321)
+pytest tests/ -v                          # Все тесты (~515)
 pytest tests/test_reviews.py -v           # Только reviews
 pytest tests/ -v --cov=app                # С покрытием
 
 # Frontend
 cd online-booking\frontend
-npx vitest run                            # Все тесты (~75)
+npx vitest run                            # Все тесты (~158)
 npx vitest run src/tests/helpers.test.ts  # Только helpers
 npx vitest                              # Watch mode
 ```
@@ -446,6 +446,45 @@ npx vitest                              # Watch mode
 
 
 ## 📚 История версий
+
+### [1.69.0] — 2026-10-16
+- **Модалка записи:** dropdown-списки грузят все 500 клиентов / 200 услуг (раньше — первые 20, остальные «исчезали»); fetch-ы независимы (allSettled)
+- **Модалка записи:** хинт «нет услуг» только по загруженному списку + «Загрузка…» в dropdown-ах
+- **Сайдбар:** Профиль вторым в дефолте мастера (порядок всё ещё draggable)
+- **Отзывы:** «Показать ещё» по 20 в профиле мастера (все сохраняются, листаем); тизер на главной семплирует из 100
+- **Цифры тестов:** 515 pytest + 158 vitest
+
+### [1.68.0] — 2026-10-16
+- **Карусель:** починен регресс скролла (мой же эффект гасил one-shot на скелетоне) — state machine idle→loading→done + скролл к карточке мастера + регресс-тест
+- **Купон в записи:** «Применить» обязателен — без него запись по полной цене + подсказка; тихий авто-превью при записи убран
+- **Отзывы мастера:** фильтр-чипсы по звёздам (Все/5/4/3/2/1 с counts)
+- **Супер-записи:** серверная сортировка дат (`sort_dir`, дефолт asc — сегодня первые); стрелка больше не врёт; сброс страницы при highlight
+- **Супер-дашборд:** `top_clients` считался только мастеру — добавлен и в глобальную статистику
+- **Цифры тестов:** 515 pytest + 158 vitest
+
+### [1.67.0] — 2026-10-16
+- **Карусель → расписание:** deep-link докручивает к расписанию после загрузки (а не только в момент клика)
+- **Колокольчик — только непрочитанные:** прочитанные улетают из шторки сразу, история — на странице «Все уведомления»
+- **Записи:** убрана гонка двойного fetch при drill-down (таб больше не врёт); `?status=all` явно сбрасывает таб
+- **Дашборд:** переключатель «За всё время / Месяц / Сегодня / Даты» + фильтр дат (бэк: `period/date_from/date_to`, кэш с учётом периода)
+- **Дашборд:** даты в «Ближайших» строго по центру; «Все →» открывает записи с табом «Все»
+- **Купон:** селект «Вид» одного размера с остальными полями
+- **Цифры тестов:** 513 pytest + 157 vitest
+
+### [1.66.0] — 2026-10-16
+- **Services-слой достроен:** `inbox` / `coupons` / `reviews` / `clients` / `bundles` — вся shared-логика в `services/`
+- **client → admin/review:** кросс-модульных импортов больше нет (0) — кабинет и панели используют одни реализации
+- **Профили клиентов:** единый `get_or_create_profile` вместо 7 ручных копий (закрыт риск дубля по unique `user_id`)
+- `_bundle_to_dict`/`_review_to_dict` → `bundle_to_dict`/`review_to_dict` в services
+
+### [1.65.0] — 2026-10-16
+- **Модульность:** `services/booking` больше не зависит от `modules` — чистые хелперы переехали в `services/bundles`
+- **CORS:** явный allow-list заголовков вместо `*` при credentials (спека Fetch)
+- **Лимиты:** per-route throttling на создание записей (30/min) и публичный букинг/превью купона (10/min)
+- **Расписание:** legacy `schedule/router` сближен с каноном (409 на дубль дня, аудит, обновление статуса)
+- **Зависимости:** убран мёртвый `limits`, запинены `redis/rq/asyncpg/slowapi/Pillow`
+- **Фронт:** `DiscountBadge` вынесен в `components/common`; `scrollIntoView` защищён; мок `myCoupons` в тестах (0 unhandled errors)
+- Чистка: бэкапы 80+→5, снесены ротированные логи, `.bak`, `_ddl_check`, `htmlcov`, `__pycache__`
 
 ### [1.64.0] — 2026-10-15
 - **Купон → Мои купоны:** колокол ведёт в раздел с подсветкой карточки (а не в запись)

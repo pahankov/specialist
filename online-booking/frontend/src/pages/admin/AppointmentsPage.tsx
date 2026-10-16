@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { adminApi } from '../../api/client';
@@ -79,12 +79,22 @@ function AppointmentsPage() {
     'appointments.dir',
     'asc',
   );
+  // Date order is server-side (a 20-row page can't re-sort other pages).
+  // Default asc: today first — matches the ↑ header and worklist usage.
+  const [dateSort, setDateSort] = usePersistentState<'asc' | 'desc'>(
+    'appointments.dateDir',
+    'asc',
+  );
   const [totalPages, setTotalPages] = useState(1);
   // Row flashed when jumping from a bell (?highlight=id).
   const [highlightId, setHighlightId] = useState<number | null>(null);
   const [allClients, setAllClients] = useState<{ id: number; name: string }[]>([]);
   const [allServices, setAllServices] = useState<{ id: number; name: string }[]>([]);
   const pageSize = 20;
+  // Guards the list against out-of-order responses: a drill-down fires two
+  // fetches on mount (persisted filters, then deep-link filters) and the
+  // first one must never overwrite the second.
+  const fetchSeq = useRef(0);
 
   const fetchOptions = async () => {
     try {
@@ -127,6 +137,7 @@ function AppointmentsPage() {
   }, []);
 
   const fetch = async () => {
+    const seq = ++fetchSeq.current;
     setLoading(true);
     try {
       const params: Record<string, any> = {
@@ -134,6 +145,7 @@ function AppointmentsPage() {
         page_size: pageSize,
         show_completed: showCompleted,
         show_cancelled: showCancelled,
+        sort_dir: dateSort,
       };
       if (statusFilter) params.status = statusFilter;
       if (masterIdFilter !== '') params.master_id = masterIdFilter;
@@ -145,19 +157,22 @@ function AppointmentsPage() {
       }
 
       const resp = await adminApi.getAppointments(params);
+      if (fetchSeq.current !== seq) return; // stale response — a newer fetch won
       setAppointments(resp.data.items);
       setTotalPages(resp.data.total_pages);
     } catch (err: any) {
+      if (fetchSeq.current !== seq) return;
       if (err.response?.status === 401) {
         goLogin();
       } else setError('Ошибка загрузки');
     } finally {
-      setLoading(false);
+      if (fetchSeq.current === seq) setLoading(false);
     }
   };
 
   // Deep-link support: <section>/appointments?status=X&client_id=Y&master_id=Z
-  // (e.g. "appointments of this client" from Clients, stat cards from Revenue)
+  // (e.g. "appointments of this client" from Clients, stat cards from Revenue).
+  // status=all explicitly resets the tab (dashboard "Все →").
   useEffect(() => {
     const qp = searchParams.get('client_id');
     if (qp !== null && qp !== '') {
@@ -170,7 +185,9 @@ function AppointmentsPage() {
       if (Number.isFinite(id)) setMasterIdFilter(id);
     }
     const sp = searchParams.get('status');
-    if (
+    if (sp === 'all') {
+      setStatusFilter('');
+    } else if (
       sp !== null &&
       sp !== '' &&
       ['pending', 'confirmed', 'cancelled', 'completed'].includes(sp)
@@ -184,6 +201,8 @@ function AppointmentsPage() {
         // Cancelled/completed targets must be visible for the flash.
         setShowCompleted(true);
         setShowCancelled(true);
+        // The target may sit on any page — start from the first one.
+        setCurrentPage(0);
         setHighlightId(id);
       }
     }
@@ -216,6 +235,7 @@ function AppointmentsPage() {
     allTime,
     showCompleted,
     showCancelled,
+    dateSort,
   ]);
 
   useEffect(() => {
@@ -231,6 +251,7 @@ function AppointmentsPage() {
     allTime,
     showCompleted,
     showCancelled,
+    dateSort,
   ]);
 
   // Bell deep-link: scroll to the row and flash it, then let go.
@@ -336,6 +357,12 @@ function AppointmentsPage() {
   ];
 
   const handleSort = (field: SortField) => {
+    // Dates are ordered by the server (cross-page); the rest re-sorts
+    // the loaded page client-side.
+    if (field === 'appointment_date') {
+      setDateSort((d) => (d === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
     if (sortField === field) {
       setSortDirection((d) => (d === 'asc' ? 'desc' : 'asc'));
     } else {
@@ -345,13 +372,11 @@ function AppointmentsPage() {
   };
 
   const sortedAppointments = [...appointments].sort((a, b) => {
+    // Server already ordered by date — re-sorting here would only
+    // shuffle the visible page and lie about the rest.
+    if (sortField === 'appointment_date') return 0;
     let valA: string | number | Date = a[sortField] ?? '';
     let valB: string | number | Date = b[sortField] ?? '';
-
-    if (sortField === 'appointment_date') {
-      valA = new Date(valA as string).getTime();
-      valB = new Date(valB as string).getTime();
-    }
 
     if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
     if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
@@ -361,8 +386,10 @@ function AppointmentsPage() {
   const filteredAppointments = sortedAppointments;
 
   type Row = (typeof filteredAppointments)[number];
-  const sortMark = (field: SortField) =>
-    sortField === field ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ' ⇅';
+  const sortMark = (field: SortField) => {
+    if (field === 'appointment_date') return dateSort === 'asc' ? ' ↑' : ' ↓';
+    return sortField === field ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ' ⇅';
+  };
   const sortHead = (field: SortField, label: string) => (
     <span
       onClick={() => handleSort(field)}

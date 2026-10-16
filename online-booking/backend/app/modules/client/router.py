@@ -1,6 +1,6 @@
 """Client cabinet endpoints — own profile, own appointments, own cancel."""
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from app.database import get_db
 from app.dependencies.auth import require_client
+from app.middleware.rate_limit import limiter
 from app.logging_config import get_logger
 from app.models.appointment import Appointment
 from app.models.city import City
@@ -20,11 +21,19 @@ from app.models.working_hour import WorkingHour
 from app.modules.client.schemas import (
     ClientMeResponse, ClientMeUpdate, ClientStatsResponse,
 )
-from app.modules.admin.notifications import (
-    client_inbox, client_mark_read, client_read_all, client_unread_count,
+from app.services.inbox import (
+    client_inbox,
+    client_mark_read,
+    client_read_all,
+    client_unread_count,
+    delete_own_notifications,
 )
 from app.schemas.appointment import AppointmentWithDetails
 from app.services.audit import log_action
+from app.services.bundles import bundle_to_dict
+from app.services.clients import get_or_create_profile
+from app.services.coupons import coupon_discount, coupon_to_dict, describe_coupon, resolve_coupon
+from app.services.reviews import review_to_dict
 from app.utils import localnow_naive
 
 logger = get_logger(__name__)
@@ -32,20 +41,6 @@ logger = get_logger(__name__)
 router = APIRouter()
 
 CANCELLABLE = ("pending", "confirmed")
-
-
-async def _get_or_create_profile(db: AsyncSession, user: User) -> ClientProfile:
-    """ClientProfile for the JWT user (created on the fly if missing)."""
-    result = await db.execute(
-        select(ClientProfile).where(ClientProfile.user_id == user.id)
-    )
-    profile = result.scalar_one_or_none()
-    if profile is None:
-        logger.info("Creating missing ClientProfile for user_id=%s", user.id)
-        profile = ClientProfile(user_id=user.id)
-        db.add(profile)
-        await db.flush()
-    return profile
 
 
 def _to_details(a: Appointment) -> dict:
@@ -75,7 +70,7 @@ async def get_me(
     db: AsyncSession = Depends(get_db),
 ):
     """Own profile (name/phone/city/address for the cabinet header)."""
-    profile = await _get_or_create_profile(db, user)
+    profile = await get_or_create_profile(db, user)
     city_name = None
     if user.city_id:
         city_name = (await db.execute(
@@ -123,7 +118,7 @@ async def update_me(
             raise HTTPException(status_code=404, detail="Город не найден")
         user.city_id = data.city_id
     if data.address is not None:
-        profile = await _get_or_create_profile(db, user)
+        profile = await get_or_create_profile(db, user)
         profile.address = data.address.strip() or None
     await db.commit()
     await db.refresh(user)
@@ -150,7 +145,7 @@ async def get_my_stats(
     db: AsyncSession = Depends(get_db),
 ):
     """Cabinet dashboard: spending, visits, favorites (completed only for money)."""
-    profile = await _get_or_create_profile(db, user)
+    profile = await get_or_create_profile(db, user)
     rows = (await db.execute(
         select(Appointment,
                func.coalesce(Appointment.price, Service.price),
@@ -207,7 +202,7 @@ async def get_my_appointments(
     db: AsyncSession = Depends(get_db),
 ):
     """All own appointments, newest first (frontend splits upcoming/history)."""
-    profile = await _get_or_create_profile(db, user)
+    profile = await get_or_create_profile(db, user)
     result = await db.execute(
         select(Appointment)
         .options(
@@ -231,7 +226,7 @@ async def cancel_my_appointment(
     db: AsyncSession = Depends(get_db),
 ):
     """Cancel own pending/confirmed appointment (404 for чужой, 400 for final)."""
-    profile = await _get_or_create_profile(db, user)
+    profile = await get_or_create_profile(db, user)
     result = await db.execute(
         select(Appointment)
         .options(
@@ -299,7 +294,7 @@ async def get_booking_schedule(
         raise HTTPException(status_code=404, detail="Мастер недоступен")
 
     from app.services.client_visibility import is_client_blocked
-    _me_profile = await _get_or_create_profile(db, user)
+    _me_profile = await get_or_create_profile(db, user)
     if await is_client_blocked(db, mp.id, _me_profile.id):
         raise HTTPException(
             status_code=403,
@@ -349,7 +344,9 @@ async def get_booking_schedule(
 
 
 @router.post("/appointments", response_model=AppointmentWithDetails, status_code=201)
+@limiter.limit("30/minute")
 async def book_my_appointment(
+    request: Request,
     data: ClientBookingCreate,
     user: User = Depends(require_client),
     db: AsyncSession = Depends(get_db),
@@ -357,7 +354,7 @@ async def book_my_appointment(
     """Book an appointment for oneself (cabinet wizard)."""
     from datetime import timedelta
 
-    profile = await _get_or_create_profile(db, user)
+    profile = await get_or_create_profile(db, user)
 
     mp = (await db.execute(
         select(MasterProfile).where(MasterProfile.id == data.master_id)
@@ -392,7 +389,6 @@ async def book_my_appointment(
     coupon = None
     coupon_off = 0.0
     if (data.coupon_code or "").strip():
-        from app.modules.admin.coupons import resolve_coupon, coupon_discount
         coupon = await resolve_coupon(db, mp.id, data.coupon_code, user)
         coupon_off = coupon_discount(item["price"], coupon)
 
@@ -469,10 +465,8 @@ async def my_coupons(
     Spent/expired/inactive are excluded — the list is always usable.
     """
     from app.models.coupon import Coupon
-    from app.modules.admin.coupons import coupon_to_dict, describe_coupon
-    from app.utils import localnow_naive
 
-    profile = await _get_or_create_profile(db, user)
+    profile = await get_or_create_profile(db, user)
     my_master_ids = set((await db.execute(
         select(Appointment.master_id).where(Appointment.client_id == profile.id)
     )).scalars().all())
@@ -499,16 +493,15 @@ async def my_coupons(
 
 
 @router.post("/coupons/preview")
+@limiter.limit("10/minute")
 async def preview_coupon(
+    request: Request,
     data: CouponPreview,
     user: User = Depends(require_client),
     db: AsyncSession = Depends(get_db),
 ):
     """Check a promo code before booking: new total or a friendly error."""
     from app.services.booking import resolve_booking_item
-    from app.modules.admin.coupons import (
-        resolve_coupon, coupon_discount, describe_coupon,
-    )
 
     mp = (await db.execute(
         select(MasterProfile).where(MasterProfile.id == data.master_id)
@@ -536,7 +529,6 @@ async def get_bundles(
 ):
     """Active complexes of a master for the booking wizard (separate list)."""
     from app.models.service_bundle import ServiceBundle
-    from app.modules.admin.bundles import _bundle_to_dict
 
     mp = (await db.execute(
         select(MasterProfile).where(MasterProfile.id == master_id)
@@ -548,7 +540,7 @@ async def get_bundles(
                                     ServiceBundle.is_active == True)  # noqa: E712
         .order_by(ServiceBundle.name)
     )).scalars().all()
-    return [await _bundle_to_dict(db, b) for b in rows]
+    return [await bundle_to_dict(db, b) for b in rows]
 
 
 @router.get("/notifications/inbox")
@@ -594,7 +586,6 @@ async def clear_notifications(
     db: AsyncSession = Depends(get_db),
 ):
     """Delete all own bells (history cleanup)."""
-    from app.modules.admin.notifications import delete_own_notifications
     return await delete_own_notifications(db, user)
 
 
@@ -611,14 +602,13 @@ async def my_reviews(
 ):
     """Own reviews (to mark rated appointments in history)."""
     from app.models.review import Review
-    profile = await _get_or_create_profile(db, user)
+    profile = await get_or_create_profile(db, user)
     rows = (await db.execute(
         select(Review).join(Appointment, Review.appointment_id == Appointment.id)
         .where(Appointment.client_id == profile.id)
         .order_by(Review.created_at.desc())
     )).scalars().all()
-    from app.modules.review.router import _review_to_dict
-    return [_review_to_dict(r) for r in rows]
+    return [review_to_dict(r) for r in rows]
 
 
 @router.post("/reviews", status_code=201)
@@ -634,7 +624,7 @@ async def create_own_review(
     """
     from datetime import timedelta
     from app.models.review import Review
-    profile = await _get_or_create_profile(db, user)
+    profile = await get_or_create_profile(db, user)
     appt = (await db.execute(
         select(Appointment)
         .options(selectinload(Appointment.client_profile).joinedload(ClientProfile.user))
@@ -689,5 +679,4 @@ async def create_own_review(
         logger.warning("Review bell failed (non-fatal): %s", e)
     await db.commit()
     await db.refresh(review)
-    from app.modules.review.router import _review_to_dict
-    return _review_to_dict(review)
+    return review_to_dict(review)

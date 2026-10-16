@@ -43,9 +43,9 @@ export const appointmentsApi = {
 };
 
 export const reviewsApi = {
-  getAll: (masterId?: number, onlyPublished = true) =>
+  getAll: (masterId?: number, onlyPublished = true, limit?: number, offset?: number) =>
     apiClient.get<Review[]>('/api/v1/reviews/', {
-      params: { master_id: masterId, only_published: onlyPublished },
+      params: { master_id: masterId, only_published: onlyPublished, limit, offset },
     }),
   getAverage: (masterId: number) =>
     apiClient.get<AverageRating>('/api/v1/reviews/average', { params: { master_id: masterId } }),

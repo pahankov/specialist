@@ -172,8 +172,9 @@ function CabinetBookPage() {
   const pickMaster = (m: Master) => {
     setSelectedMaster(m);
     // The schedule renders below a long list — bring it into view at once.
+    // Optional call: jsdom and old browsers lack scrollIntoView.
     requestAnimationFrame(() => {
-      scheduleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      scheduleRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
     });
   };
 
@@ -238,9 +239,38 @@ function CabinetBookPage() {
     if (!deepMasterId || deepMasterDone.current || masters.length === 0) return;
     const found = masters.find((m) => m.id === deepMasterId) ?? null;
     deepMasterDone.current = true;
-    if (found && found.user_id !== myUserId) pickMaster(found);
-    else toast.error('Мастер не найден — выберите вручную');
+    if (found && found.user_id !== myUserId) {
+      pickMaster(found);
+      // Land on the master row itself first; the schedule scroll follows
+      // once its data arrives (effect above).
+      requestAnimationFrame(() => {
+        document
+          .getElementById(`master-pick-${found.id}`)
+          ?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+      });
+    } else toast.error('Мастер не найден — выберите вручную');
   }, [masters, myUserId]);
+
+  // Deep link from the carousel: the pickMaster scroll fires before the
+  // schedule card grows, so scroll again once the schedule has loaded.
+  // State machine: wait until the schedule fetch was actually seen
+  // running — otherwise the first run (loading=false, card a skeleton)
+  // would burn the one shot scrolling to a stub.
+  const deepScrollState = useRef<'idle' | 'loading' | 'done'>('idle');
+  const selectedMasterId = selectedMaster?.id;
+  useEffect(() => {
+    if (!deepMasterId || selectedMasterId !== deepMasterId) return;
+    if (deepScrollState.current === 'done') return;
+    if (scheduleLoading) {
+      deepScrollState.current = 'loading';
+      return;
+    }
+    if (deepScrollState.current !== 'loading') return;
+    deepScrollState.current = 'done';
+    requestAnimationFrame(() => {
+      scheduleRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    });
+  }, [deepMasterId, selectedMasterId, scheduleLoading]);
 
   const serviceNames = useMemo(() => {
     const set = new Set<string>();
@@ -419,22 +449,13 @@ function CabinetBookPage() {
     const y = selectedDate.getFullYear();
     const m = String(selectedDate.getMonth() + 1).padStart(2, '0');
     const d = String(selectedDate.getDate()).padStart(2, '0');
-    // Typed but never applied: validate silently so the code still counts.
-    let coupon = promoResult;
-    if (!coupon && promo.trim()) {
-      try {
-        const { data } = await cabinetApi.previewCoupon({
-          master_id: selectedMaster.id,
-          ...(modalBundle ? { bundle_id: modalBundle.id } : { service_id: Number(modalServiceId) }),
-          code: promo.trim(),
-        });
-        coupon = data;
-        setPromoResult(data);
-      } catch (err: unknown) {
-        toast.error(getApiErrorMessage(err, 'Купон не подошёл — запись без скидки?'));
-        return;
-      }
-    }
+    // Only an explicitly applied coupon counts: typed-but-unapplied codes
+    // book at full price (the input clears promoResult on every edit and
+    // the pick change clears it too, so a live result always matches).
+    // Normalization mirrors backend _norm_code so exotic dashes don't
+    // silently drop a just-applied coupon.
+    const normPromo = promo.trim().toUpperCase().replace(/ /g, '').replace(/‐/g, '-');
+    const coupon = promoResult && promoResult.code === normPromo ? promoResult : null;
     setBookingLoading(true);
     try {
       const { data } = await cabinetApi.bookAppointment({
@@ -529,6 +550,7 @@ function CabinetBookPage() {
           {visibleMasters.map((m) => (
             <label
               key={m.id}
+              id={`master-pick-${m.id}`}
               className={`master-pick${selectedMaster?.id === m.id ? ' selected' : ''}`}
             >
               <input
@@ -843,6 +865,9 @@ function CabinetBookPage() {
                 <span className="hint" style={{ color: '#0f766e', fontWeight: 600 }}>
                   🎟 {promoResult.terms}: {promoResult.base_price} → {promoResult.new_price} ₽
                 </span>
+              )}
+              {promo.trim() && !promoResult && !promoError && !promoChecking && (
+                <span className="hint">Нажмите «Применить», иначе запишетесь по полной цене</span>
               )}
             </div>
             <div className="modal-actions">

@@ -84,15 +84,17 @@ function RequireClient({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-// Master navigation (section /admin)
+// Master navigation (section /admin). Profile sits second: settings and
+// own reviews at hand, daily flow (records/services/schedule) right below.
+// Order is draggable per user (persisted), this is only the fresh default.
 const masterNavItems = [
   { path: `${ADMIN_PREFIX}/dashboard`, label: '📊 Дашборд' },
+  { path: `${ADMIN_PREFIX}/profile`, label: '👤 Профиль' },
   { path: `${ADMIN_PREFIX}/appointments`, label: '📅 Мои записи' },
   { path: `${ADMIN_PREFIX}/services`, label: '💇 Мои услуги' },
   { path: `${ADMIN_PREFIX}/clients`, label: '👥 Клиенты' },
   { path: `${ADMIN_PREFIX}/schedule`, label: '🕐 Расписание' },
   { path: `${ADMIN_PREFIX}/notifications`, label: '🔔 Уведомления' },
-  { path: `${ADMIN_PREFIX}/profile`, label: '👤 Профиль' },
 ];
 
 function App() {

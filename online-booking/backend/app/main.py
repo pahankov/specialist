@@ -63,7 +63,7 @@ app = FastAPI(
         "Все API-эндпоинты версионированы: `/api/v1/`. "
         "Список изменений: `GET /api/v1/admin/changelog`."
     ),
-    version="1.64.0",
+    version="1.69.0",
     contact={
         "name": "Support",
         "email": "support@beauty-specialist.ru",
@@ -148,7 +148,15 @@ app.add_middleware(
     allow_origins=settings.allowed_origins_list,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
+    # Explicit list: "*" is invalid with allow_credentials=True per
+    # the Fetch spec (browsers reject wildcard + credentials combo).
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "X-Requested-With",
+        "X-CSRF-Token",
+    ],
 )
 
 wire_rate_limit(app)

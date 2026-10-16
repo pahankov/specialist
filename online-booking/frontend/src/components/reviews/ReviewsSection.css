@@ -29,6 +29,39 @@
   color: #718096;
 }
 
+/* Star filter chips (master profile reviews). */
+.star-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.star-chip {
+  padding: 6px 12px;
+  border: 1px solid #e0e0e0;
+  border-radius: 16px;
+  background: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  color: #555;
+}
+
+.star-chip:hover:not(:disabled) {
+  border-color: #f6c23e;
+}
+
+.star-chip.active {
+  background: #1a1a2e;
+  border-color: #1a1a2e;
+  color: #ffd75e;
+}
+
+.star-chip:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 .reviews-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

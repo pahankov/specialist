@@ -71,15 +71,18 @@
 }
 
 .form-group input,
+.form-group select,
 .form-group textarea {
   padding: 8px 12px;
   border: 2px solid #e0e0e0;
   border-radius: 8px;
   font-size: 14px;
   transition: border-color 0.2s;
+  background: #fff;
 }
 
 .form-group input:focus,
+.form-group select:focus,
 .form-group textarea:focus {
   outline: none;
   border-color: #667eea;

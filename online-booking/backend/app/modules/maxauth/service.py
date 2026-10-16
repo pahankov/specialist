@@ -317,7 +317,8 @@ async def verify_max_code(
         )
         db.add(user)
         await db.flush()
-        db.add(ClientProfile(user_id=user.id))
+        from app.services.clients import get_or_create_profile
+        await get_or_create_profile(db, user)
         await db.commit()
         await db.refresh(user)
         logger.info("New client created via MAX: user_id=%s", user.id)

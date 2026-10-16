@@ -31,8 +31,10 @@ function ReviewsSection({ masterId }: ReviewsSectionProps) {
     const fetchReviews = async () => {
       try {
         setLoading(true);
+        // Wide pool (endpoint cap is 100): the teaser shuffles across ALL
+        // reviews, not just the first page.
         const [reviewsRes, avgRes] = await Promise.all([
-          reviewsApi.getAll(masterId),
+          reviewsApi.getAll(masterId, true, 100, 0),
           masterId ? reviewsApi.getAverage(masterId) : Promise.resolve({ data: null }),
         ]);
         setAllReviews(reviewsRes.data);

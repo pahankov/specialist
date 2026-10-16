@@ -8,6 +8,8 @@ import { goLogin } from '../../utils/redirect';
 import { useSectionPrefix, SUPER_PREFIX } from '../../utils/section';
 import './DashboardPage.css';
 
+type Period = 'all' | 'month' | 'today' | 'custom';
+
 function DashboardPage() {
   const navigate = useNavigate();
   const section = useSectionPrefix();
@@ -15,11 +17,20 @@ function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | AdminStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [period, setPeriod] = useState<Period>('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   useEffect(() => {
     setLoading(true);
+    setError('');
+    const params: { period: Period; date_from?: string; date_to?: string } = { period };
+    if (period === 'custom') {
+      if (dateFrom) params.date_from = dateFrom;
+      if (dateTo) params.date_to = dateTo;
+    }
     adminApi
-      .getDashboard()
+      .getDashboard(params)
       .then((r) => {
         setStats(r.data);
       })
@@ -33,7 +44,7 @@ function DashboardPage() {
         }
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [period, dateFrom, dateTo]);
 
   if (error)
     return (
@@ -66,6 +77,52 @@ function DashboardPage() {
         <p>{isGlobal ? 'Общая статистика по всей системе' : 'Обзор вашей записи и статистики'}</p>
       </div>
 
+      {/* ─── Period switcher: scopes appointment metrics (lists stay live) ─── */}
+      <div className="period-bar" role="group" aria-label="Период статистики">
+        {(
+          [
+            ['all', 'За всё время'],
+            ['month', 'Текущий месяц'],
+            ['today', 'Сегодня'],
+            ['custom', 'Даты'],
+          ] as [Period, string][]
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            className={`filter-btn${period === value ? ' active' : ''}`}
+            onClick={() => setPeriod(value)}
+          >
+            {label}
+          </button>
+        ))}
+        {period === 'custom' && (
+          <span className="period-dates">
+            <input
+              type="date"
+              value={dateFrom}
+              max={dateTo || undefined}
+              onChange={(e) => setDateFrom(e.target.value)}
+              aria-label="Дата от"
+            />
+            <span>—</span>
+            <input
+              type="date"
+              value={dateTo}
+              min={dateFrom || undefined}
+              onChange={(e) => setDateTo(e.target.value)}
+              aria-label="Дата до"
+            />
+          </span>
+        )}
+      </div>
+      {period !== 'all' && (
+        <p className="period-note">
+          Записи, статусы, доход и топ клиентов — за выбранный период. Каталоги (клиенты,
+          услуги{isGlobal ? ', мастера' : ''}) и ближайшие записи — всегда общие.
+        </p>
+      )}
+
       {loading ? (
         <div className="stats-grid">
           <Skeleton width="100%" height="120px" />
@@ -94,7 +151,7 @@ function DashboardPage() {
                 <div className="card-hint">Нажмите для перехода →</div>
               </div>
             )}
-            <div className="stat-card clickable" onClick={() => handleCardClick('/appointments')}>
+            <div className="stat-card clickable" onClick={() => handleCardClick('/appointments?status=all')}>
               <div className="stat-icon">📅</div>
               <div className="stat-value">{stats.total_appointments}</div>
               <div className="stat-label">Всего записей</div>
@@ -347,7 +404,7 @@ function DashboardPage() {
             <div className="card">
               <div className="card-header">
                 <h3>Ближайшие записи</h3>
-                <Link to={`${section}/appointments`} className="link">
+                <Link to={`${section}/appointments?status=all`} className="link">
                   Все →
                 </Link>
               </div>

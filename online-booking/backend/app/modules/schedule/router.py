@@ -1,15 +1,24 @@
-"""Schedule module — working hours CRUD endpoints."""
+"""Schedule module — working hours CRUD endpoints.
+
+Legacy read/write surface kept for the public schedule API
+(`GET/POST/DELETE /api/v1/working-hours/`). Behaviour converges with
+the canonical admin implementation (`modules/admin/working_hours.py`):
+duplicate-date 409, audit logging, master-status refresh.
+"""
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from typing import List
 
 from app.database import get_db
+from app.models.master_profile import MasterProfile
 from app.models.working_hour import WorkingHour
 from app.models.user import User
 from app.schemas.working_hour import WorkingHourCreate
 from app.dependencies.auth import require_master
 from app.dependencies.crud import get_owned_or_404
+from app.services.audit import log_action
+from app.services.master_status import update_master_status_from_working_hours
 from app.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -60,6 +69,17 @@ async def create_working_hour(
     if wh.master_id is not None and wh.master_id != master.master_profile.id:
         raise HTTPException(status_code=403, detail="Cannot create working hours for another master")
 
+    # Same duplicate-date guard as the admin implementation (409).
+    dup = (await db.execute(
+        select(WorkingHour.id).where(
+            WorkingHour.master_id == target_master_id,
+            WorkingHour.schedule_date == wh.schedule_date)
+    )).scalar_one_or_none()
+    if dup is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="На этот день часы уже заданы — отредактируйте их")
+
     new_wh = WorkingHour(
         master_id=target_master_id,
         schedule_date=wh.schedule_date,
@@ -68,8 +88,16 @@ async def create_working_hour(
     )
 
     db.add(new_wh)
-    await db.commit()
+    await db.flush()
     await db.refresh(new_wh)
+    await log_action(db, master.id, "create", "working_hour", new_wh.id,
+                     f"{wh.schedule_date}: {wh.start_time}-{wh.end_time}", level="info")
+    await db.commit()
+    mp = await db.execute(select(MasterProfile).where(MasterProfile.id == new_wh.master_id))
+    mp_profile = mp.scalar_one_or_none()
+    if mp_profile:
+        await update_master_status_from_working_hours(db, mp_profile)
+    await db.commit()
     return _working_hour_to_dict(new_wh)
 
 
@@ -81,6 +109,13 @@ async def delete_working_hour(
 ):
     """Delete working hour (only if owned by the authenticated master)."""
     hour = await get_owned_or_404(db, WorkingHour, wh_id, master.master_profile.id)
+    await log_action(db, master.id, "delete", "working_hour", wh_id,
+                     f"{hour.schedule_date}: {hour.start_time}-{hour.end_time}", level="warning")
     await db.delete(hour)
+    await db.commit()
+    mp = await db.execute(select(MasterProfile).where(MasterProfile.id == hour.master_id))
+    mp_profile = mp.scalar_one_or_none()
+    if mp_profile:
+        await update_master_status_from_working_hours(db, mp_profile)
     await db.commit()
     return None

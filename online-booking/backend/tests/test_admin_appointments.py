@@ -40,6 +40,33 @@ class TestAdminGetAppointments:
         assert "client_name" in appt
         assert "service_name" in appt
 
+    async def test_appointments_sort_dir(self, client, auth_headers, test_service_data):
+        """sort_dir=asc returns oldest first, desc (default) newest first."""
+        service_resp = await client.post(
+            "/api/v1/services/", json={**test_service_data, "master_id": 1}, headers=auth_headers
+        )
+        service_id = service_resp.json()["id"]
+        for days, phone in ((2, "+79994445571"), (9, "+79994445572")):
+            await client.post("/api/v1/admin/appointments", json={
+                "master_id": 1,
+                "service_id": service_id,
+                "client_name": "Sort Client",
+                "client_phone": phone,
+                "appointment_date": (datetime.now() + timedelta(days=days)).isoformat(),
+            }, headers=auth_headers)
+
+        asc = await client.get(
+            "/api/v1/admin/appointments", params={"sort_dir": "asc"}, headers=auth_headers
+        )
+        assert asc.status_code == 200, asc.text
+        asc_dates = [i["appointment_date"] for i in asc.json()["items"]]
+        assert asc_dates == sorted(asc_dates)
+
+        desc = await client.get("/api/v1/admin/appointments", headers=auth_headers)
+        assert desc.status_code == 200, desc.text
+        desc_dates = [i["appointment_date"] for i in desc.json()["items"]]
+        assert desc_dates == sorted(desc_dates, reverse=True)
+
 
 class TestAdminCreateAppointment:
     """Tests for POST /api/v1/admin/appointments"""

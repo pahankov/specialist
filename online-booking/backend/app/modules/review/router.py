@@ -11,6 +11,7 @@ from app.models.appointment import Appointment
 from app.models.client_profile import ClientProfile
 from app.models.user import User
 from app.schemas.review import ReviewCreate, ReviewUpdate
+from app.services.reviews import review_to_dict
 from app.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -19,17 +20,8 @@ router = APIRouter()
 
 
 def _review_to_dict(r):
-    return {
-        "id": r.id,
-        "appointment_id": r.appointment_id,
-        "master_id": r.master_id,
-        "client_name": r.client_name,
-        "client_phone": r.client_phone,
-        "rating": r.rating,
-        "comment": r.comment,
-        "is_published": r.is_published,
-        "created_at": r.created_at.isoformat() if r.created_at else None,
-    }
+    """Backward-compatible alias — canonical home is app.services.reviews."""
+    return review_to_dict(r)
 
 
 @router.get("/", response_model=List[dict])

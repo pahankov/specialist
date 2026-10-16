@@ -90,6 +90,10 @@ function SchedulePage() {
   const [bookingClients, setBookingClients] = useState<Client[]>([]);
   const [bookingServices, setBookingServices] = useState<Service[]>([]);
   const [bookingBundles, setBookingBundles] = useState<Bundle[]>([]);
+  // The modal dropdowns filter locally — they need the FULL lists, not the
+  // first API page (clients past #20 were unfindable). Loaded flag gates the
+  // "no services" hint so it never flashes on a not-yet-loaded list.
+  const [bookingListsLoaded, setBookingListsLoaded] = useState(false);
   const [bookingLoading, setBookingLoading] = useState(false);
   const [bookingForm, setBookingForm] = useState<BookingFormState>({
     open: false,
@@ -212,26 +216,28 @@ function SchedulePage() {
   useEffect(() => {
     if (!bookingForm.open) return;
     let cancelled = false;
-    Promise.all([
-      adminApi.getClients(),
-      adminApi.getAllServices(
-        selectedMasterId !== '' ? { master_id: selectedMasterId } : undefined,
-      ),
+    setBookingListsLoaded(false);
+    // Independent fetches: one failing must not blank the other two.
+    Promise.allSettled([
+      adminApi.getClients({ page: 1, page_size: 500 }),
+      adminApi.getAllServices({
+        page: 1,
+        page_size: 200,
+        ...(selectedMasterId !== '' ? { master_id: selectedMasterId } : {}),
+      }),
       adminApi.getBundles(selectedMasterId !== '' ? selectedMasterId : undefined),
-    ])
-      .then(([clientsResp, servicesResp, bundlesResp]) => {
-        if (cancelled) return;
-        setBookingClients(clientsResp.data?.items || []);
-        setBookingServices(servicesResp.data?.items || []);
-        setBookingBundles(bundlesResp.data || []);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setBookingClients([]);
-          setBookingServices([]);
-          setBookingBundles([]);
-        }
-      });
+    ]).then((results) => {
+      if (cancelled) return;
+      const [clientsRes, servicesRes, bundlesRes] = results;
+      setBookingClients(
+        clientsRes.status === 'fulfilled' ? clientsRes.value.data?.items || [] : [],
+      );
+      setBookingServices(
+        servicesRes.status === 'fulfilled' ? servicesRes.value.data?.items || [] : [],
+      );
+      setBookingBundles(bundlesRes.status === 'fulfilled' ? bundlesRes.value.data || [] : []);
+      setBookingListsLoaded(true);
+    });
     return () => {
       cancelled = true;
     };
@@ -934,6 +940,7 @@ function SchedulePage() {
         clients={bookingClients}
         services={bookingServices}
         bundles={bookingBundles}
+        listsLoaded={bookingListsLoaded}
         bookingLoading={bookingLoading}
         onClose={handleCloseBooking}
         onUpdate={handleBookingUpdate}

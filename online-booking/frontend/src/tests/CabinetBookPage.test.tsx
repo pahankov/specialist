@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 
-const { me, getBookSchedule, bookAppointment, getAllMasters, getAllServices, getBundles } =
+const { me, getBookSchedule, bookAppointment, getAllMasters, getAllServices, getBundles, myCoupons } =
   vi.hoisted(() => ({
     me: vi.fn(),
     getBookSchedule: vi.fn(),
@@ -11,10 +11,11 @@ const { me, getBookSchedule, bookAppointment, getAllMasters, getAllServices, get
     getAllMasters: vi.fn(),
     getAllServices: vi.fn(),
     getBundles: vi.fn(),
+    myCoupons: vi.fn(),
   }));
 
 vi.mock('../api/client', () => ({
-  cabinetApi: { me, getBookSchedule, bookAppointment, bundles: getBundles },
+  cabinetApi: { me, getBookSchedule, bookAppointment, bundles: getBundles, myCoupons },
   mastersApi: { getAll: getAllMasters },
   servicesApi: { getAll: getAllServices },
 }));
@@ -57,9 +58,9 @@ const BUNDLES: Record<number, object[]> = {
   2: [],
 };
 
-function renderPage() {
+function renderPage(entry = '/cabinet/book') {
   render(
-    <MemoryRouter initialEntries={['/cabinet/book']}>
+    <MemoryRouter initialEntries={[entry]}>
       <Routes>
         <Route path="/cabinet/book" element={<CabinetBookPage />} />
         <Route path="/cabinet" element={<div>cabinet home</div>} />
@@ -80,6 +81,7 @@ beforeEach(() => {
   getBundles.mockImplementation((masterId: number) =>
     Promise.resolve({ data: BUNDLES[masterId] || [] }),
   );
+  myCoupons.mockResolvedValue({ data: [] });
 });
 
 describe('CabinetBookPage', () => {
@@ -237,5 +239,42 @@ describe('CabinetBookPage', () => {
     });
     expect(toast.success).toHaveBeenCalledWith(expect.stringMatching(/подтверждена/));
     expect(toast.success).not.toHaveBeenCalledWith(expect.stringMatching(/подтвердит/));
+  });
+
+  it('deep link preselects the master and scrolls to the loaded schedule', async () => {
+    const scrollIntoView = vi.fn();
+    window.HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    const future = new Date();
+    future.setDate(future.getDate() + 5);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const dateStr = `${future.getFullYear()}-${pad(future.getMonth() + 1)}-${pad(future.getDate())}`;
+    let resolveSchedule!: (v: unknown) => void;
+    getBookSchedule.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSchedule = resolve;
+      }),
+    );
+    renderPage('/cabinet/book?master_id=1');
+    await waitFor(() => {
+      expect(getBookSchedule).toHaveBeenCalledWith(1, expect.any(String));
+    });
+    // Schedule still loading: no scroll to the (skeleton) card yet.
+    await new Promise((r) => setTimeout(r, 50));
+    const earlyCalls = scrollIntoView.mock.calls.length;
+    resolveSchedule({
+      data: {
+        master_id: 1,
+        window: { start_hour: 9, end_hour: 12 },
+        working_hours: [{ date: dateStr, start: '09:00', end: '12:00' }],
+        busy: [],
+      },
+    });
+    expect(await screen.findByText(/активное расписание/)).toBeInTheDocument();
+    await waitFor(
+      () => {
+        expect(scrollIntoView.mock.calls.length).toBeGreaterThan(earlyCalls);
+      },
+      { timeout: 3000 },
+    );
   });
 });

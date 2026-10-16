@@ -75,7 +75,7 @@ async def resolve_booking_item(
                 status_code=400,
                 detail="Комплекс изменился — попросите мастера обновить его",
             )
-        from app.modules.admin.bundles import bundle_total_minutes, effective_durations
+        from app.services.bundles import bundle_total_minutes, effective_durations
         from app.services.pricing import apply_discount, discount_tag
         overrides = effective_durations(b)
         duration = bundle_total_minutes(

@@ -191,8 +191,8 @@ async def verify_otp(phone: str, code: str, db: AsyncSession) -> tuple[str, User
         db.add(user)
         await db.flush()
 
-        client_profile = ClientProfile(user_id=user.id)
-        db.add(client_profile)
+        from app.services.clients import get_or_create_profile
+        await get_or_create_profile(db, user)
         await db.commit()
         await db.refresh(user)
         logger.info("New client created via OTP: user_id=%s, phone=%s", user.id, phone)

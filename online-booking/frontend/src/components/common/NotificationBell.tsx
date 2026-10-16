@@ -83,11 +83,12 @@ function NotificationBell({ unread, bellLink, scope, onRead }: NotificationBellP
           readAll: adminApi.readAllNotifications,
         };
 
+  // The bell is an unread-only tray: read items live on the full page.
   const fetchRecent = useCallback(async () => {
     setLoading(true);
     setFailed(false);
     try {
-      const { data } = await api.inbox({ page: 1, page_size: PAGE_SIZE });
+      const { data } = await api.inbox({ page: 1, page_size: PAGE_SIZE, unread_only: true });
       setItems(data.items || []);
       setTotal(data.total || 0);
     } catch {
@@ -135,8 +136,9 @@ function NotificationBell({ unread, bellLink, scope, onRead }: NotificationBellP
   };
 
   const handleItemClick = async (item: BellItem) => {
+    // Read items leave the tray at once (full history is one click below).
+    setItems((prev) => prev.filter((n) => n.id !== item.id));
     if (!item.is_read) {
-      setItems((prev) => prev.map((n) => (n.id === item.id ? { ...n, is_read: true } : n)));
       try {
         await api.read(item.id);
       } catch (err) {
@@ -156,13 +158,13 @@ function NotificationBell({ unread, bellLink, scope, onRead }: NotificationBellP
   };
 
   const handleReadAll = async () => {
+    setItems([]);
     try {
       await api.readAll();
     } catch (err) {
       // Refresh below still converges.
       console.warn('[Bell] read-all failed', err);
     }
-    setItems((prev) => prev.map((n) => ({ ...n, is_read: true })));
     onRead?.();
   };
 

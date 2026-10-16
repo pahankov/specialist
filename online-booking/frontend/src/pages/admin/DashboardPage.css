@@ -240,6 +240,56 @@
   color: #1a1a2e;
 }
 
+/* ─── Period switcher ─── */
+.period-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.period-bar .filter-btn {
+  padding: 6px 14px;
+  border: 1px solid #e0e0e0;
+  border-radius: 16px;
+  background: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  color: #555;
+}
+
+.period-bar .filter-btn:hover {
+  border-color: #667eea;
+  color: #667eea;
+}
+
+.period-bar .filter-btn.active {
+  background: #667eea;
+  border-color: #667eea;
+  color: #fff;
+}
+
+.period-dates {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  color: #888;
+}
+
+.period-dates input {
+  padding: 6px 10px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.period-note {
+  font-size: 12px;
+  color: #888;
+  margin: 4px 0 12px;
+}
+
 /* ─── Dashboard grid (status + recent) ─── */
 .dashboard-grid {
   display: grid;
@@ -302,7 +352,7 @@
 
 .upcoming-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
   padding: 10px 12px;

@@ -33,7 +33,7 @@ const ITEMS = [
     text: 'Напоминание',
     link: null,
     sender_name: null,
-    is_read: true,
+    is_read: false,
     created_at: null,
   },
 ];
@@ -54,28 +54,54 @@ describe('NotificationBell', () => {
     vi.clearAllMocks();
   });
 
-  it('opens a dropdown list on click and fetches recent', async () => {
+  it('opens a dropdown list on click and fetches unread only', async () => {
     vi.mocked(mocked.getNotificationsInbox).mockResolvedValue({
-      data: { items: ITEMS, total: 2, unread: 1 },
+      data: { items: ITEMS, total: 2, unread: 2 },
     } as never);
-    renderBell();
+    renderBell(2);
     fireEvent.click(screen.getByRole('button', { name: /Уведомления/ }));
     expect(await screen.findByText('Новая запись: Петр — Стрижка')).toBeInTheDocument();
     expect(screen.getByText('Напоминание')).toBeInTheDocument();
-    expect(mocked.getNotificationsInbox).toHaveBeenCalledWith({ page: 1, page_size: 10 });
+    expect(mocked.getNotificationsInbox).toHaveBeenCalledWith({
+      page: 1,
+      page_size: 10,
+      unread_only: true,
+    });
   });
 
   it('marks a linked row read on click (navigates to the sibling page)', async () => {
     vi.mocked(mocked.getNotificationsInbox).mockResolvedValue({
-      data: { items: ITEMS, total: 2, unread: 1 },
+      data: { items: ITEMS, total: 2, unread: 2 },
     } as never);
     vi.mocked(mocked.readNotification).mockResolvedValue({ data: {} } as never);
-    renderBell();
+    renderBell(2);
     fireEvent.click(screen.getByRole('button', { name: /Уведомления/ }));
     fireEvent.click(await screen.findByText('Новая запись: Петр — Стрижка'));
     await waitFor(() => {
       expect(mocked.readNotification).toHaveBeenCalledWith(7);
     });
+    // Linked rows navigate away, closing the whole tray (history page keeps it).
+    await waitFor(() => {
+      expect(screen.queryByText('Новая запись: Петр — Стрижка')).not.toBeInTheDocument();
+    });
+  });
+
+  it('drops a linkless row from the tray on click (stays open)', async () => {
+    vi.mocked(mocked.getNotificationsInbox).mockResolvedValue({
+      data: { items: ITEMS, total: 2, unread: 2 },
+    } as never);
+    vi.mocked(mocked.readNotification).mockResolvedValue({ data: {} } as never);
+    renderBell(2);
+    fireEvent.click(screen.getByRole('button', { name: /Уведомления/ }));
+    fireEvent.click(await screen.findByText('Напоминание'));
+    await waitFor(() => {
+      expect(mocked.readNotification).toHaveBeenCalledWith(8);
+    });
+    // Read rows leave the tray at once; the sibling stays visible.
+    await waitFor(() => {
+      expect(screen.queryByText('Напоминание')).not.toBeInTheDocument();
+    });
+    expect(screen.getByText('Новая запись: Петр — Стрижка')).toBeInTheDocument();
   });
 
   it('shows an empty state and a retry on failure', async () => {

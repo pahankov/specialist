@@ -158,7 +158,7 @@ async def get_current_client(
 
     Dual-role: MASTER users are welcome too (a master can book other
     masters as a client). Their ClientProfile is created on first visit
-    by the callers (_get_or_create_profile).
+    by the callers (services.clients.get_or_create_profile).
     """
     token = credentials.credentials
 
