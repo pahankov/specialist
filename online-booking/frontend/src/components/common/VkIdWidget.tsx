@@ -62,8 +62,16 @@ function VkIdWidget({ consent, onSuccess, onError }: VkIdWidgetProps) {
 
         // 2. Configure the SDK with our state + verifier so the backend
         //    exchange (which validates the state) still matches.
+        //    NOTE `app` is the VK ID client_id passed VERBATIM: VK ID uses a
+        //    hex id (e.g. "3772ca16...") which Number() would turn into NaN —
+        //    and the SDK sends `client_id: app` straight into the authorize
+        //    URL, validating it with !isNaN(parseInt(...)).
         Config.init({
-          app: Number(clientId),
+          // The SDK's TS type says `app: number` (legacy — numeric VK app
+          // ids), but the runtime validator accepts strings and the id is
+          // forwarded verbatim as `client_id`. VK ID's hex id MUST stay a
+          // string, so widen here.
+          app: clientId as unknown as number,
           redirectUrl: redirectUri,
           responseMode: ConfigResponseMode.Callback,
           state,

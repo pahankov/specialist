@@ -120,11 +120,14 @@ describe('VK ID widget (OAuthList: VK + OK + Mail)', () => {
 
   it('initializes the SDK and verifies the session on LOGIN_SUCCESS', async () => {
     openVkTab();
+    // VK ID uses a HEX client_id — the widget must pass it to the SDK verbatim
+    // (Number(hex) === NaN would fail the SDK's isNumber validator).
+    const HEX_CLIENT_ID = '3772ca16b2de4376bc632dd4fcd6341a';
     vi.mocked(mocked.vkStart).mockResolvedValue({
       data: {
-        authorize_url: 'https://id.vk.ru/authorize?client_id=54828785&state=s1',
+        authorize_url: `https://id.vk.ru/authorize?client_id=${HEX_CLIENT_ID}&state=s1`,
         state: 's1',
-        client_id: '54828785',
+        client_id: HEX_CLIENT_ID,
         redirect_uri: 'https://beauty-specialist.ru/auth/vk/callback',
       },
     } as never);
@@ -138,7 +141,7 @@ describe('VK ID widget (OAuthList: VK + OK + Mail)', () => {
     await waitFor(() => expect(mocked.vkStart).toHaveBeenCalledWith('test-code-challenge'));
     await waitFor(() => expect(sdk.rendered).toBe(true));
     expect(sdk.configInit).toMatchObject({
-      app: 54828785,
+      app: HEX_CLIENT_ID, // verbatim string, never Number()
       redirectUrl: 'https://beauty-specialist.ru/auth/vk/callback',
       state: 's1',
       codeVerifier: 'test-code-verifier-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',

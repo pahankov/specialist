@@ -86,8 +86,13 @@ class VkAuthApi:
             "device_id": device_id,
             "state": state,
         }
-        # Confidential apps must additionally send the service_token.
+        # Confidential apps must additionally prove app ownership. VK ID docs
+        # call this the OAuth `client_secret`; older VK API flows call it the
+        # «Сервисный ключ доступа» (`service_token`). Send BOTH names with the
+        # same configured secret so the exchange works whichever VK expects
+        # (VK ignores unknown params).
         if self._service_token:
+            data["client_secret"] = self._service_token
             data["service_token"] = self._service_token
         return await self._post_form("/oauth2/auth", data)
 
