@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { toast } from 'sonner';
 import { authApi } from '../api/client';
 import LoginModal from '../components/LoginModal';
+import { PASSWORD_PLACEHOLDER } from '../constants';
 
 vi.mock('../api/client', () => ({
   authApi: {
@@ -11,6 +12,16 @@ vi.mock('../api/client', () => ({
     registerUnified: vi.fn(),
     maxStart: vi.fn(),
     maxVerify: vi.fn(),
+  },
+}));
+
+// Address suggestions: register only accepts an address picked from the list.
+vi.mock('../api/dadata', () => ({
+  dadataApi: {
+    searchCities: vi.fn().mockResolvedValue([]),
+    searchAddresses: vi
+      .fn()
+      .mockResolvedValue([{ value: 'Россия, г Москва, ул Тестовая, д 1', city: 'Москва' }]),
   },
 }));
 
@@ -285,13 +296,48 @@ describe('Registration consent (152-FZ)', () => {
     );
   });
 
-  it('submits once consent is checked', async () => {
+  it('submits once consent is checked and every field is valid', async () => {
     openRegister();
     vi.mocked(mocked.registerUnified).mockResolvedValue({ data: {} } as never);
+
+    // Address: must come from a suggestion pick (city parsed from it).
+    fireEvent.change(screen.getByPlaceholderText('Город, улица, дом...'), {
+      target: { value: 'Москва, ул Тестовая 1' },
+    });
+    fireEvent.click(
+      await screen.findByText('Россия, г Москва, ул Тестовая, д 1', {}, { timeout: 2000 }),
+    );
+
+    fireEvent.change(screen.getByPlaceholderText('+7 (999) 123-45-67'), {
+      target: { value: '+79991234567' },
+    });
+    fireEvent.change(screen.getByPlaceholderText(PASSWORD_PLACEHOLDER), {
+      target: { value: 'Secret123!' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Иван'), { target: { value: 'Иван' } });
+    fireEvent.change(screen.getByPlaceholderText('Петров'), { target: { value: 'Иванов' } });
+    fireEvent.change(screen.getByPlaceholderText('email@example.com'), {
+      target: { value: 'ivan@example.com' },
+    });
     fireEvent.click(screen.getByText(/Соглашаюсь с/));
+
     const btn = screen.getByText('Зарегистрироваться', { selector: '.btn-submit' });
+    expect(btn).toBeEnabled();
+    // jsdom doesn't submit forms on button click — submit the form directly.
     fireEvent.submit(btn.closest('form') as HTMLFormElement);
     expect(await screen.findByText('Зарегистрироваться')).toBeInTheDocument();
     expect(vi.mocked(mocked.registerUnified)).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the submit button disabled until the form is valid', async () => {
+    openRegister();
+    fireEvent.click(screen.getByText(/Соглашаюсь с/));
+    const btn = screen.getByText('Зарегистрироваться', { selector: '.btn-submit' });
+    expect(btn).toBeDisabled();
+    fireEvent.submit(btn.closest('form') as HTMLFormElement);
+    expect(vi.mocked(mocked.registerUnified)).not.toHaveBeenCalled();
+    expect(vi.mocked(toast.error)).toHaveBeenCalledWith(
+      'Выберите адрес из списка подсказок — по нему определяется город',
+    );
   });
 });

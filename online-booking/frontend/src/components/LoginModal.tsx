@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { authApi } from '../api/client';
 import { PASSWORD_PLACEHOLDER } from '../constants';
 import { capitalizeWords } from '../utils/names';
+import { passwordError } from '../utils/password';
 import AddressSelect from './common/AddressSelect';
 import type { MaxStartResponse } from '../api/auth';
 import PhoneInput, { maskPhone, isCompletePhone, PHONE_MAX_DIGITS } from './common/PhoneInput';
@@ -38,6 +39,8 @@ interface RegisterFormState {
   password: string;
   address: string;
   addressCity: string;
+  /** The address came from a suggestion row (city parsed from it). */
+  addressPicked: boolean;
   telegramUsername: string;
   isMaster: boolean;
   consent: boolean;
@@ -61,6 +64,7 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
     password: '',
     address: '',
     addressCity: '',
+    addressPicked: false,
     telegramUsername: '',
     isMaster: false,
     consent: false,
@@ -231,6 +235,14 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
       toast.error('Подтвердите согласие на обработку персональных данных');
       return;
     }
+    if (!registerAddressOk) {
+      toast.error('Выберите адрес из списка подсказок — по нему определяется город');
+      return;
+    }
+    if (!registerValid) {
+      toast.error('Заполните все обязательные поля корректно');
+      return;
+    }
     setLoading(true);
     try {
       await authApi.registerUnified({
@@ -273,6 +285,7 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
       password: '',
       address: '',
       addressCity: '',
+      addressPicked: false,
       telegramUsername: '',
       isMaster: false,
       consent: false,
@@ -280,6 +293,21 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
     setShowLoginPassword(false);
     setShowRegisterPassword(false);
   };
+
+  /* ── Register validation: mirrors backend rules, submit stays disabled
+      until every required field is valid (item: disabled until valid). */
+  const registerPwdError = passwordError(registerForm.password);
+  const registerEmailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(registerForm.email.trim());
+  const registerPhoneOk = isCompletePhone(registerForm.phone);
+  const registerAddressOk = registerForm.addressPicked && registerForm.address.trim().length >= 3;
+  const registerValid =
+    registerForm.firstName.trim() !== '' &&
+    registerForm.lastName.trim() !== '' &&
+    registerEmailOk &&
+    registerPhoneOk &&
+    registerPwdError === null &&
+    registerAddressOk &&
+    registerForm.consent;
 
   const maxForm = !maxOffer ? (
     <form onSubmit={handleMaxStart}>
@@ -494,17 +522,21 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
           <div className="login-group">
             <AddressSelect
               value={registerForm.address}
-              onChange={(address, city) =>
+              onChange={(address, city, picked) =>
                 setRegisterForm((prev) => ({
                   ...prev,
                   address,
-                  addressCity: city || prev.addressCity,
+                  addressCity: picked ? city || '' : address.trim() === '' ? '' : prev.addressCity,
+                  addressPicked: picked ?? false,
                 }))
               }
               label={registerForm.isMaster ? 'Адрес кабинета *' : 'Ваш адрес *'}
               placeholder="Город, улица, дом..."
               required
             />
+            {registerForm.address.trim() !== '' && !registerAddressOk && (
+              <p className="error-message">Выберите адрес из списка подсказок</p>
+            )}
           </div>
 
           {/* Phone */}
@@ -516,6 +548,9 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
               placeholder="+7 (999) 123-45-67"
               required
             />
+            {registerForm.phone !== '' && !registerPhoneOk && (
+              <p className="error-message">Введите телефон полностью</p>
+            )}
           </div>
 
           {/* Password */}
@@ -551,6 +586,9 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
                 {showRegisterPassword ? '🙈' : '👁️'}
               </button>
             </div>
+            {registerForm.password !== '' && registerPwdError && (
+              <p className="error-message">{registerPwdError}</p>
+            )}
           </div>
 
           {/* Name + surname (auto-capitalized, editable later in profile) */}
@@ -597,6 +635,9 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
               placeholder="email@example.com"
               required
             />
+            {registerForm.email.trim() !== '' && !registerEmailOk && (
+              <p className="error-message">Некорректный email</p>
+            )}
           </div>
 
           {/* Telegram */}
@@ -645,7 +686,11 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
             </label>
           </div>
 
-          <button type="submit" className="btn btn-primary btn-submit" disabled={loading}>
+          <button
+            type="submit"
+            className="btn btn-primary btn-submit"
+            disabled={loading || !registerValid}
+          >
             {loading ? 'Регистрация...' : 'Зарегистрироваться'}
           </button>
 

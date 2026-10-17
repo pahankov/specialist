@@ -281,3 +281,41 @@ class TestDeleteMaster:
             headers=super_admin_headers
         )
         assert resp.status_code == 404
+
+
+class TestMastersNullableFields:
+    """users.email is nullable — a NULL row must not 500 the list."""
+
+    async def test_list_masters_null_email(self, client, session, super_admin_headers):
+        from app.models.user import User, UserRole
+        from app.models.master_profile import MasterProfile
+
+        user = User(name="Legacy Master", email=None, phone="+79990001122",
+                    role=UserRole.MASTER, is_verified=True)
+        session.add(user)
+        await session.flush()
+        session.add(MasterProfile(user_id=user.id))
+        await session.commit()
+
+        resp = await client.get("/api/v1/admin/masters", headers=super_admin_headers)
+        assert resp.status_code == 200, resp.text
+        row = next(m for m in resp.json() if m["user_id"] == user.id)
+        assert row["email"] == ""
+
+    async def test_toggle_active_null_email(self, client, session, super_admin_headers):
+        from app.models.user import User, UserRole
+        from app.models.master_profile import MasterProfile
+
+        user = User(name="Legacy Master 2", email=None, role=UserRole.MASTER)
+        session.add(user)
+        await session.flush()
+        mp = MasterProfile(user_id=user.id)
+        session.add(mp)
+        await session.commit()
+
+        resp = await client.post(
+            f"/api/v1/admin/masters/{mp.id}/toggle-active",
+            headers=super_admin_headers,
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["email"] == ""

@@ -22,19 +22,25 @@ router = APIRouter()
 
 async def _find_or_create_client(
     db: AsyncSession, phone: str, name: str, created_by: int | None = None,
+    city_id: int | None = None,
 ) -> tuple[User, ClientProfile]:
     """Helper: find existing client by phone or create new one.
 
     Returns (user, profile). Appointment.client_id is a ClientProfile.id
     (same as the /book endpoint stores) — never a users.id.
+    `city_id` (the booking master's city) is inherited by brand-new
+    clients so they are matchable by city from the very first visit.
     """
     from app.schemas.client import normalize_phone
     normalized = normalize_phone(phone)
     result = await db.execute(select(User).where(User.phone == normalized))
     user = result.scalar_one_or_none()
     if not user:
-        user = User(name=name, phone=normalized, role=UserRole.CLIENT,
-                    created_by=created_by)
+        from app.services.names import name_fields
+        full_name, last_name = name_fields(name)
+        user = User(name=full_name, last_name=last_name, phone=normalized,
+                    role=UserRole.CLIENT, created_by=created_by,
+                    city_id=city_id)
         db.add(user)
         await db.flush()
         from app.services.clients import get_or_create_profile
@@ -67,7 +73,8 @@ async def create_appointment(
     if not mp or data.master_id != mp.id:
         raise HTTPException(status_code=403, detail="Not your master")
     client, profile = await _find_or_create_client(
-        db, data.client_phone, data.client_name, created_by=master.id)
+        db, data.client_phone, data.client_name, created_by=master.id,
+        city_id=master.city_id)
     new_appointment = Appointment(
         master_id=data.master_id, service_id=data.service_id, client_id=profile.id,
         appointment_date=data.appointment_date, status="pending", notes=data.notes

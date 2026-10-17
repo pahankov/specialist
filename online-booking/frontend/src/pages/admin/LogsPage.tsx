@@ -31,11 +31,47 @@ function LogsPage() {
   const [currentPage, setCurrentPage] = usePersistentState('logs.page', 0);
   const pageSize = 20;
 
+  // Sorting: date is ordered server-side (cross-page), the rest re-sorts
+  // the loaded page client-side — same pattern as AppointmentsPage.
+  type LogSortField = 'level' | 'action' | 'object' | 'object_id' | 'master' | 'details';
+  const [dateSort, setDateSort] = usePersistentState<'asc' | 'desc'>('logs.dateDir', 'desc');
+  const [sortField, setSortField] = usePersistentState<LogSortField | null>('logs.sort', null);
+  const [sortDirection, setSortDirection] = usePersistentState<'asc' | 'desc'>('logs.dir', 'asc');
+
+  const handleSort = (field: 'date' | LogSortField) => {
+    if (field === 'date') {
+      setDateSort((d) => (d === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    if (sortField === field) {
+      setSortDirection((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const sortMark = (field: 'date' | LogSortField) => {
+    if (field === 'date') return dateSort === 'asc' ? ' ↑' : ' ↓';
+    return sortField === field ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ' ⇅';
+  };
+  const sortHead = (field: 'date' | LogSortField, label: string) => (
+    <span
+      onClick={() => handleSort(field)}
+      style={{ cursor: 'pointer', userSelect: 'none' }}
+      title={`Сортировать: ${label}`}
+    >
+      {label}
+      <span className="sort-arrow">{sortMark(field)}</span>
+    </span>
+  );
+
   const fetchLogs = async () => {
     try {
       const params: Record<string, string | number> = {
         limit: pageSize,
         offset: currentPage * pageSize,
+        sort_dir: dateSort,
       };
       if (entityFilter) params.entity_type = entityFilter;
       if (masterFilter) params.master_id = masterFilter;
@@ -61,7 +97,7 @@ function LogsPage() {
   useEffect(() => {
     setLoading(true);
     fetchLogs();
-  }, [entityFilter, masterFilter, currentPage]);
+  }, [entityFilter, masterFilter, currentPage, dateSort]);
 
   // Hooks must run before any early return (loading/error): otherwise the
   // hook count changes between renders and React unmounts the page.
@@ -69,7 +105,7 @@ function LogsPage() {
     () => [
       {
         id: 'date',
-        header: 'Дата и время',
+        header: () => sortHead('date', 'Дата и время'),
         accessorFn: (log) => log.created_at || '',
         cell: ({ row }) => {
           const log = row.original;
@@ -87,7 +123,7 @@ function LogsPage() {
       },
       {
         id: 'level',
-        header: 'Уровень',
+        header: () => sortHead('level', 'Уровень'),
         accessorFn: (log) => log.level,
         cell: ({ row }) => (
           <span className={`level-badge level-${row.original.level}`}>
@@ -98,7 +134,7 @@ function LogsPage() {
       },
       {
         id: 'action',
-        header: 'Действие',
+        header: () => sortHead('action', 'Действие'),
         accessorFn: (log) => log.action,
         cell: ({ row }) => {
           const log = row.original;
@@ -126,34 +162,34 @@ function LogsPage() {
       },
       {
         id: 'object',
-        header: 'Объект',
+        header: () => sortHead('object', 'Объект'),
         accessorFn: (log) => log.entity_type,
         cell: ({ row }) => entityLabels[row.original.entity_type] || row.original.entity_type,
         meta: { minWidth: 90, maxWidth: 150, label: 'Объект' },
       },
       {
         id: 'object_id',
-        header: 'ID объекта',
+        header: () => sortHead('object_id', 'ID объекта'),
         accessorFn: (log) => log.entity_id ?? 0,
         cell: ({ row }) => <code>{row.original.entity_id || '—'}</code>,
         meta: { minWidth: 70, maxWidth: 110, label: 'ID объекта' },
       },
       {
         id: 'master',
-        header: 'Мастер',
+        header: () => sortHead('master', 'Мастер'),
         accessorFn: (log) => log.master_name || '—',
         cell: ({ row }) => row.original.master_name || '—',
         meta: { minWidth: 110, label: 'Мастер' },
       },
       {
         id: 'details',
-        header: 'Детали',
+        header: () => sortHead('details', 'Детали'),
         accessorFn: (log) => log.details || '—',
         cell: ({ row }) => row.original.details || '—',
         meta: { minWidth: 160, maxWidth: 600, label: 'Детали' },
       },
     ],
-    [],
+    [sortField, sortDirection, dateSort],
   );
 
   const visibleLogs = logs.filter((log) => {
@@ -174,6 +210,35 @@ function LogsPage() {
     }
     return true;
   });
+
+  // Client-side re-sort of the loaded page (date stays server-ordered).
+  const sortValue = (log: AuditLogEntry): string | number => {
+    switch (sortField) {
+      case 'object_id':
+        return log.entity_id ?? 0;
+      case 'level':
+        return log.level;
+      case 'action':
+        return log.action;
+      case 'object':
+        return log.entity_type;
+      case 'master':
+        return log.master_name || '';
+      case 'details':
+        return log.details || '';
+      default:
+        return '';
+    }
+  };
+  const sortedLogs = sortField
+    ? [...visibleLogs].sort((a, b) => {
+        const valA = sortValue(a);
+        const valB = sortValue(b);
+        if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+        if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+        return 0;
+      })
+    : visibleLogs;
 
   const entityFilters = [
     { value: '', label: 'Все' },
@@ -282,7 +347,7 @@ function LogsPage() {
             description={logs.length === 0 ? undefined : 'Измените фильтры'}
           />
         ) : (
-          <DataTable tableId="logs" columns={columns} data={visibleLogs} />
+          <DataTable tableId="logs" columns={columns} data={sortedLogs} />
         )}
       </div>
 

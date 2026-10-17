@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { toast } from 'sonner';
 import { superAdminApi } from '../../api/client';
+import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError';
 import './SelectDropdown.css';
 
 export interface MasterOption {
@@ -60,8 +62,15 @@ export default function MasterSelect({
         cachedMasters = list;
         setMasters(list);
       })
-      .catch(() => {
-        /* ignore: empty list */
+      .catch((err: unknown) => {
+        // 401/403: the picker also renders in the master section, where
+        // /admin/masters is simply forbidden — stay silent there. Anything
+        // else (e.g. a 500) used to vanish into an empty dropdown and the
+        // master filter looked broken with no hint why.
+        const status = getApiErrorStatus(err);
+        if (status !== 401 && status !== 403) {
+          toast.error(getApiErrorMessage(err, 'Не удалось загрузить список мастеров'));
+        }
       });
     return () => {
       cancelled = true;

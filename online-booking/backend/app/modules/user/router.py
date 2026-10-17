@@ -14,6 +14,7 @@ from app.models.master_profile import MasterProfile, MasterStatus
 from app.models.client_profile import ClientProfile
 from app.schemas.master import MasterCreate, MasterUpdate
 from app.schemas.client import ClientCreate
+from app.services.names import name_fields, set_full_name
 from app.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -103,8 +104,10 @@ async def create_master(
     if result.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Master with this email already exists")
 
+    full_name, last_name = name_fields(master.name)
     new_user = User(
-        name=master.name,
+        name=full_name,
+        last_name=last_name,
         email=master.email,
         hashed_password=_hash_pw(master.password),
         phone=master.phone,
@@ -140,7 +143,7 @@ async def update_master(
         if field == "password" and value:
             mp.user.hashed_password = _hash_pw(value)
         elif field == "name":
-            mp.user.name = value
+            set_full_name(mp.user, value)
         elif field == "phone":
             mp.user.phone = value
         elif field == "telegram_username":
@@ -219,8 +222,10 @@ async def create_client(
         if email_result.scalar_one_or_none():
             raise HTTPException(status_code=409, detail="Client with this email already exists")
 
+    full_name, last_name = name_fields(client.name)
     new_user = User(
-        name=client.name,
+        name=full_name,
+        last_name=last_name,
         phone=client.phone,
         email=client.email,
         role=UserRole.CLIENT,

@@ -11,6 +11,7 @@ from app.models.master_profile import MasterProfile
 from app.models.city import City
 from app.schemas.master import MasterCreate, MasterResponse, MasterUpdate
 from app.dependencies.auth import require_super_admin
+from app.services.names import name_fields, set_full_name
 from app.utils.security import hash_password
 from app.services.audit import log_action
 from app.logging_config import get_logger
@@ -26,8 +27,11 @@ def _to_response(user: User, master_profile: MasterProfile) -> dict:
         "id": master_profile.id,
         "user_id": user.id,
         "name": user.name,
-        "email": user.email,
+        # users.email/phone are nullable (legacy/seed rows): one NULL would
+        # fail MasterResponse and 500 the whole list — coerce to "".
+        "email": user.email or "",
         "phone": user.phone,
+        "city_id": user.city_id,
         "telegram_username": master_profile.telegram_username,
         "description": master_profile.description,
         "status": master_profile.status if master_profile.status else "active",
@@ -147,8 +151,10 @@ async def create_master(
             logger.warning("Создание мастера отклонено %s: город id=%s не найден", super_admin.email, data.city_id)
             raise HTTPException(status_code=400, detail="Город не найден")
 
+    full_name, last_name = name_fields(data.name)
     new_user = User(
-        name=data.name,
+        name=full_name,
+        last_name=last_name,
         email=data.email,
         hashed_password=hash_password(data.password),
         phone=data.phone,
@@ -211,7 +217,7 @@ async def update_master(
         if field == "password" and value:
             master_profile.user.hashed_password = hash_password(value)
         elif field == "name":
-            master_profile.user.name = value
+            set_full_name(master_profile.user, value)
         elif field == "email":
             master_profile.user.email = value
         elif field == "phone":

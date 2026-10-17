@@ -32,6 +32,12 @@ function RevenuePage() {
   const [dateFrom, setDateFrom] = usePersistentState('revenue.from', '');
   const [dateTo, setDateTo] = usePersistentState('revenue.to', '');
   const [allTime, setAllTime] = usePersistentState('revenue.allTime', true);
+  // Breakdown table sorting (client-side, whole loaded table).
+  const [revSortKey, setRevSortKey] = usePersistentState<'name' | 'count' | 'revenue'>(
+    'revenue.sortKey',
+    'revenue',
+  );
+  const [revSortDir, setRevSortDir] = usePersistentState<'asc' | 'desc'>('revenue.sortDir', 'desc');
 
   useEffect(() => {
     setLoading(true);
@@ -115,6 +121,42 @@ function RevenuePage() {
   const avgRev = completedCount > 0 ? (g.total_revenue || 0) / completedCount : 0;
   const revPerClient = g.total_clients > 0 ? (g.total_revenue || 0) / g.total_clients : 0;
   const fmt = (v: number) => v.toLocaleString('ru-RU', { maximumFractionDigits: 0 });
+
+  // Breakdown sorting: 3-state header toggle, whole table re-sorts.
+  const toggleRevSort = (key: 'name' | 'count' | 'revenue') => {
+    if (revSortKey !== key) {
+      setRevSortKey(key);
+      setRevSortDir(key === 'name' ? 'asc' : 'desc');
+    } else {
+      setRevSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    }
+  };
+  const revHead = (key: 'name' | 'count' | 'revenue', label: string, align: 'left' | 'right') => (
+    <th
+      style={{
+        padding: '10px 12px',
+        textAlign: align,
+        fontSize: 13,
+        color: '#666',
+        cursor: 'pointer',
+        userSelect: 'none',
+        whiteSpace: 'nowrap',
+      }}
+      onClick={() => toggleRevSort(key)}
+      title={`Сортировать: ${label}`}
+    >
+      {label}
+      {revSortKey === key ? (revSortDir === 'asc' ? ' ▲' : ' ▼') : ' ⇅'}
+    </th>
+  );
+  const sortedBreakdown = revenueBreakdown
+    ? [...revenueBreakdown.breakdown].sort((a, b) => {
+        const dir = revSortDir === 'asc' ? 1 : -1;
+        if (revSortKey === 'name') return a.name.localeCompare(b.name, 'ru') * dir;
+        if (revSortKey === 'count') return (a.count - b.count) * dir;
+        return (a.revenue - b.revenue) * dir;
+      })
+    : [];
 
   // Stat banners drill down: appointments (optionally by status) or clients,
   // scoped to the selected master when one is picked.
@@ -269,50 +311,14 @@ function RevenuePage() {
               <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 12 }}>
                 <thead>
                   <tr style={{ borderBottom: '2px solid #e0e0e0' }}>
-                    <th
-                      style={{
-                        padding: '10px 12px',
-                        textAlign: 'left',
-                        fontSize: 13,
-                        color: '#666',
-                      }}
-                    >
-                      Название
-                    </th>
-                    <th
-                      style={{
-                        padding: '10px 12px',
-                        textAlign: 'right',
-                        fontSize: 13,
-                        color: '#666',
-                      }}
-                    >
-                      Записей
-                    </th>
-                    <th
-                      style={{
-                        padding: '10px 12px',
-                        textAlign: 'right',
-                        fontSize: 13,
-                        color: '#666',
-                      }}
-                    >
-                      Доход
-                    </th>
-                    <th
-                      style={{
-                        padding: '10px 12px',
-                        textAlign: 'right',
-                        fontSize: 13,
-                        color: '#666',
-                      }}
-                    >
-                      Доля
-                    </th>
+                    {revHead('name', 'Название', 'left')}
+                    {revHead('count', 'Записей', 'right')}
+                    {revHead('revenue', 'Доход', 'right')}
+                    {revHead('revenue', 'Доля', 'right')}
                   </tr>
                 </thead>
                 <tbody>
-                  {revenueBreakdown.breakdown.map((item, idx) => {
+                  {sortedBreakdown.map((item, idx) => {
                     const share =
                       revenueBreakdown.total_revenue > 0
                         ? (item.revenue / revenueBreakdown.total_revenue) * 100

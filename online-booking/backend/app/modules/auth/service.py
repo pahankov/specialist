@@ -14,6 +14,8 @@ from app.models.refresh_token import RefreshToken
 from app.models.otp_code import OtpCode
 from app.schemas.user import UserCreate, UserLoginByEmail, UserLoginByPhone
 from app.schemas.otp import SendOtpRequest
+from app.services.names import compose_full_name as _compose_name
+from app.services.names import name_fields as _name_fields
 from app.logging_config import get_logger
 from app.config import settings
 from app.utils.security import hash_password, verify_password, hash_otp_code
@@ -52,8 +54,10 @@ async def register_master(user_data: UserCreate, db: AsyncSession) -> User:
             )
 
     # Create user
+    full_name, last_name = _name_fields(user_data.name)
     new_user = User(
-        name=user_data.name,
+        name=full_name,
+        last_name=last_name,
         email=user_data.email,
         phone=user_data.phone,
         hashed_password=hash_password(user_data.password) if user_data.password else None,
@@ -354,7 +358,7 @@ async def register_unified(
     first = name.strip()
     last = (last_name or "").strip()
     new_user = User(
-        name=f"{first} {last}".strip() if last else first,
+        name=_compose_name(first, last),
         last_name=last or None,
         email=email,
         phone=phone,

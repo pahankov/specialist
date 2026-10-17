@@ -38,6 +38,7 @@ async def get_audit_logs(
     master_id: Optional[int] = Query(None, description="Filter by master ID (admin only)"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
+    sort_dir: str = Query("desc", pattern="^(asc|desc)$", description="created_at order"),
     db: AsyncSession = Depends(get_db)
 ):
     """Get audit logs.
@@ -61,7 +62,8 @@ async def get_audit_logs(
         count_query = count_query.where(AuditLog.entity_type == entity_type)
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
-    query = query.options(selectinload(AuditLog.user)).order_by(AuditLog.created_at.desc()).offset(offset).limit(limit)
+    order = AuditLog.created_at.asc() if sort_dir == "asc" else AuditLog.created_at.desc()
+    query = query.options(selectinload(AuditLog.user)).order_by(order).offset(offset).limit(limit)
     result = await db.execute(query)
     logs = result.scalars().all()
     return AuditLogListResponse(
@@ -77,6 +79,7 @@ async def get_all_audit_logs(
     master_id: Optional[int] = Query(None, description="Filter by master ID"),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    sort_dir: str = Query("desc", pattern="^(asc|desc)$", description="created_at order"),
     db: AsyncSession = Depends(get_db)
 ):
     """Get ALL audit logs (superadmin only)."""
@@ -92,7 +95,8 @@ async def get_all_audit_logs(
 
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
-    query = query.order_by(AuditLog.created_at.desc()).offset(offset).limit(limit)
+    order = AuditLog.created_at.asc() if sort_dir == "asc" else AuditLog.created_at.desc()
+    query = query.order_by(order).offset(offset).limit(limit)
     result = await db.execute(query)
     logs = result.scalars().all()
     return AuditLogListResponse(

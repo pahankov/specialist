@@ -65,3 +65,44 @@ class TestAdminAuditLogs:
         assert resp.status_code == 200
         data = resp.json()
         assert len(data["logs"]) <= 10
+
+    async def test_audit_logs_sort_dir(self, client, super_admin_headers, test_service_data):
+        """sort_dir flips created_at order; a bad value is rejected."""
+        for _ in range(3):
+            r = await client.post(
+                "/api/v1/admin/services",
+                json={**test_service_data, "master_id": 1},
+                headers=super_admin_headers
+            )
+            await client.delete(
+                f"/api/v1/admin/services/{r.json()['id']}",
+                headers=super_admin_headers
+            )
+
+        desc = await client.get(
+            "/api/v1/admin/audit-logs",
+            params={"limit": 10, "sort_dir": "desc"},
+            headers=super_admin_headers
+        )
+        asc = await client.get(
+            "/api/v1/admin/audit-logs",
+            params={"limit": 10, "sort_dir": "asc"},
+            headers=super_admin_headers
+        )
+        assert desc.status_code == 200
+        assert asc.status_code == 200
+
+        d_ts = [log["created_at"] for log in desc.json()["logs"]]
+        a_ts = [log["created_at"] for log in asc.json()["logs"]]
+        assert d_ts == sorted(d_ts, reverse=True)
+        assert a_ts == sorted(a_ts)
+        # When the page covers the whole table, asc must be desc reversed.
+        if desc.json()["total"] <= 10:
+            assert list(reversed(d_ts)) == a_ts
+
+        bad = await client.get(
+            "/api/v1/admin/audit-logs",
+            params={"sort_dir": "up"},
+            headers=super_admin_headers
+        )
+        assert bad.status_code == 422

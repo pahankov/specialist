@@ -33,6 +33,7 @@ from app.services.audit import log_action
 from app.services.bundles import bundle_to_dict
 from app.services.clients import get_or_create_profile
 from app.services.coupons import coupon_discount, coupon_to_dict, describe_coupon, resolve_coupon
+from app.services.names import set_names
 from app.services.reviews import review_to_dict
 from app.utils import localnow_naive
 
@@ -100,16 +101,12 @@ async def update_me(
     Names recompose the display `name` ("Имя Фамилия") like master profile.
     """
     if data.name is not None:
-        first = data.name.strip()
         last = (data.last_name.strip() if data.last_name is not None
                 else (user.last_name or ""))
-        user.name = f"{first} {last}".strip() if last else first
-        user.last_name = last or None
+        set_names(user, data.name, last)
     elif data.last_name is not None:
-        last = data.last_name.strip()
         first = user.name.split(" ")[0] if user.name else ""
-        user.name = f"{first} {last}".strip() if last else first
-        user.last_name = last or None
+        set_names(user, first, data.last_name)
     if data.city_id is not None:
         city_exists = (await db.execute(
             select(City.id).where(City.id == data.city_id)

@@ -16,6 +16,7 @@ from app.models.master_profile import MasterProfile
 from app.models.user import User, UserRole
 from app.modules.admin.helpers import get_master_profile_id
 from app.services.audit import log_action
+from app.services.names import set_names
 from app.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -135,13 +136,10 @@ async def update_my_profile(
         if not first:
             raise HTTPException(status_code=400, detail="Имя пустое")
         last = data.last_name.strip() if data.last_name is not None else (master.last_name or "")
-        master.name = f"{first} {last}".strip() if last else first
-        master.last_name = last or None
+        set_names(master, first, last)
     elif data.last_name is not None:
-        last = data.last_name.strip()
         first = master.name.split(" ")[0] if master.name else ""
-        master.name = f"{first} {last}".strip() if last else first
-        master.last_name = last or None
+        set_names(master, first, data.last_name)
     if data.city_id is not None:
         city_name = (await db.execute(
             select(City.name_ru).where(City.id == data.city_id)

@@ -68,7 +68,9 @@ export const dadataApi = {
   },
 
   /** Street addresses for the cabinet field (DaData suggest/address).
-   * Returns display strings; empty list when quota/network fails.
+   * Returns display strings; falls back to local city names so a quota
+   * outage can never make the address field unpickable (forms validate
+   * that the value came from a suggestion).
    */
   async searchAddresses(query: string, limit = 8): Promise<{ value: string; city?: string }[]> {
     try {
@@ -89,11 +91,12 @@ export const dadataApi = {
         seen.add(v);
         out.push({ value: v, city: s.data?.city?.trim() || undefined });
       }
-      return out;
+      if (out.length) return out;
     } catch (err) {
       console.warn('[DaData] address suggest failed', err);
-      return [];
     }
+    const cities = await searchLocalCities(query, limit);
+    return cities.map((c) => ({ value: c.unrestricted_value, city: c.city }));
   },
 };
 

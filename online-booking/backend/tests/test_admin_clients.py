@@ -244,6 +244,92 @@ class TestMasterOwnScope:
         )).status_code == 403
 
 
+class TestClientNullablePhone:
+    """users.phone is nullable — a NULL row must not 500 the list."""
+
+    async def test_list_clients_null_phone(self, client, session, super_admin_headers):
+        from app.models.user import User, UserRole
+        from app.models.client_profile import ClientProfile
+
+        user = User(name="Legacy Client", phone=None, role=UserRole.CLIENT)
+        session.add(user)
+        await session.flush()
+        session.add(ClientProfile(user_id=user.id))
+        await session.commit()
+
+        resp = await client.get("/api/v1/admin/clients", headers=super_admin_headers)
+        assert resp.status_code == 200, resp.text
+        row = next(c for c in resp.json()["items"] if c["id"] == user.id)
+        assert row["phone"] == ""
+
+
+class TestClientNameCityDefaults:
+    """FIO stays in sync (name <-> last_name) and new clients inherit
+    the acting master's city."""
+
+    async def test_create_derives_last_name(self, client, session, auth_headers):
+        resp = await client.post(
+            "/api/v1/admin/clients",
+            json={"name": "Иван Петров", "phone": "+79993330001"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 201, resp.text
+        from app.models.user import User
+        user = await session.get(User, resp.json()["id"])
+        assert user.name == "Иван Петров"
+        assert user.last_name == "Петров"
+
+    async def test_update_resyncs_last_name(self, client, session, auth_headers):
+        created = await client.post(
+            "/api/v1/admin/clients",
+            json={"name": "Иван Петров", "phone": "+79993330002"},
+            headers=auth_headers,
+        )
+        cid = created.json()["id"]
+        r = await client.patch(
+            f"/api/v1/admin/clients/{cid}",
+            json={"name": "Пётр Сидоров"},
+            headers=auth_headers,
+        )
+        assert r.status_code == 200, r.text
+        from app.models.user import User
+        user = await session.get(User, cid)
+        assert user.name == "Пётр Сидоров"
+        assert user.last_name == "Сидоров"
+
+    async def test_new_client_inherits_master_city(
+        self, client, session, auth_headers, test_master_data
+    ):
+        from sqlalchemy import select
+        from app.models.city import City
+        from app.models.country import Country
+        from app.models.user import User
+
+        country = Country(code="RU", name_ru="Россия", name_en="Russia",
+                          phone_prefix="+7")
+        session.add(country)
+        await session.flush()
+        city = City(country_id=country.id, name_ru="Казань", name_en="Kazan",
+                    slug="kazan")
+        session.add(city)
+        await session.flush()
+
+        master_user = (await session.execute(
+            select(User).where(User.email == test_master_data["email"])
+        )).scalar_one()
+        master_user.city_id = city.id
+        await session.commit()
+
+        resp = await client.post(
+            "/api/v1/admin/clients",
+            json={"name": "Новый Клиент", "phone": "+79993330003"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["city_id"] == city.id
+        assert resp.json()["city_name"] == "Казань"
+
+
 class TestClientAddress:
     """Address + city parsed from it (single-field location UX)."""
 

@@ -9,6 +9,7 @@ from app.database import get_db
 from app.models.user import User, UserRole
 from app.models.master_profile import MasterProfile
 from app.dependencies.auth import require_super_admin
+from app.services.names import name_fields as _name_fields
 from app.utils.security import hash_password
 
 router = APIRouter(prefix="/masters")
@@ -53,8 +54,10 @@ async def import_masters_from_csv(
                 errors.append({"row": i, "error": f"Email {email} already exists"})
                 continue
 
+            full_name, last_name = _name_fields(name)
             user = User(
-                name=name,
+                name=full_name,
+                last_name=last_name,
                 email=email,
                 hashed_password=hash_password(password),
                 phone=phone,

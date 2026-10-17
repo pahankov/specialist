@@ -33,6 +33,7 @@ from app.models.client_profile import ClientProfile
 from app.models.otp_code import OtpCode
 from app.models.refresh_token import RefreshToken
 from app.models.user import User, UserRole
+from app.services.names import name_fields
 from app.utils.phone import normalize_phone
 from app.utils.security import hash_otp_code
 from app.utils.tokens import create_access_token, create_refresh_token_payload
@@ -305,8 +306,10 @@ async def verify_max_code(
     if not user:
         is_new = True
         logger.info("Creating new client via MAX: phone=%s", phone)
+        max_name, max_last = name_fields(otp.max_user_name)
         user = User(
-            name=(otp.max_user_name or "").strip(),
+            name=max_name,
+            last_name=max_last,
             phone=phone,
             role=UserRole.CLIENT,
             hashed_password=None,  # MAX-only auth (same as OTP path)

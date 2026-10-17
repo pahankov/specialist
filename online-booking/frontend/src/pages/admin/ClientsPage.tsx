@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { adminApi } from '../../api/client';
-import type { Client } from '../../api/types';
+import { superAdminApi } from '../../api/superadmin';
+import type { Client, Master } from '../../api/types';
 import { PHONE_PLACEHOLDER, EMAIL_PLACEHOLDER } from '../../constants';
 import { isCompletePhone } from '../../components/common/PhoneInput';
 import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError';
@@ -102,6 +103,9 @@ function ClientsPage() {
   const [search, setSearch] = usePersistentState('clients.search', '');
   const [searchInput, setSearchInput] = usePersistentState('clients.searchInput', '');
   const [masterIdFilter, setMasterIdFilter] = usePersistentState<number | ''>('clients.master', '');
+  // Super + master filter: the filtered master's record — its city becomes
+  // the default for new clients created in this view.
+  const [filteredMaster, setFilteredMaster] = useState<Master | null>(null);
   const [totalClients, setTotalClients] = useState(0);
   const [currentPage, setCurrentPage] = usePersistentState('clients.page', 0);
   const [totalPages, setTotalPages] = useState(1);
@@ -164,6 +168,18 @@ function ClientsPage() {
     fetchData();
   }, [currentPage, search, masterIdFilter, sortKey, sortDir, showArchive]);
 
+  // Super + master filter → load that master (city default for new clients).
+  useEffect(() => {
+    if (isSuperSection && typeof masterIdFilter === 'number') {
+      superAdminApi
+        .getMasterById(masterIdFilter)
+        .then(({ data }) => setFilteredMaster(data))
+        .catch(() => setFilteredMaster(null));
+    } else {
+      setFilteredMaster(null);
+    }
+  }, [isSuperSection, masterIdFilter]);
+
   const resetForm = () => {
     setName('');
     setPhone('');
@@ -198,7 +214,8 @@ function ClientsPage() {
     setEmail('');
     const d = await ensureMyDefaults();
     setAddress(d?.address || '');
-    setAddressCity(d?.city || '');
+    // Prefer the filtered master's city over the panel user's own one.
+    setAddressCity(filteredMaster?.city_name || d?.city || '');
     setEditingId(null);
     setShowForm(true);
   };
@@ -210,11 +227,11 @@ function ClientsPage() {
       return;
     }
     // City for matching: parsed from the address pick, else the stored one,
-    // else the panel user's own city. New clients skip the address entirely
-    // (not needed at creation) and inherit the master's city.
+    // else the filtered master's city (super view), else the panel user's own
+    // city. New clients skip the address entirely (not needed at creation).
     const cityName = editingId
       ? addressCity.trim() || editingClient?.city_name || '' || myDefaults?.city || ''
-      : myDefaults?.city || '';
+      : filteredMaster?.city_name || myDefaults?.city || '';
     try {
       if (editingId) {
         await adminApi.updateClient(editingId, {
@@ -757,6 +774,11 @@ function ClientsPage() {
               <p className="hint" style={{ marginTop: 8 }}>
                 Отдельный кабинет не создаётся: клиент зайдёт в приложение по этому номеру через
                 SMS-код/MAX и увидит свои записи и историю.
+              </p>
+            )}
+            {!editingId && filteredMaster?.city_name && (
+              <p className="hint" style={{ marginTop: 4 }}>
+                Город для подбора: {filteredMaster.city_name} (по выбранному мастеру)
               </p>
             )}
           </form>

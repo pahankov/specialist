@@ -5,7 +5,12 @@ import './SelectDropdown.css';
 
 interface AddressSelectProps {
   value: string;
-  onChange: (address: string, city?: string) => void;
+  /**
+   * `picked` is true only when the current value came from a suggestion
+   * row (so `city` is the parsed one) — forms that validate the address
+   * use it to reject free-typed text with no city behind it.
+   */
+  onChange: (address: string, city?: string, picked?: boolean) => void;
   label?: string;
   placeholder?: string;
   required?: boolean;
@@ -62,7 +67,7 @@ export default function AddressSelect({
   };
 
   const search = (text: string) => {
-    onChange(text);
+    onChange(text, undefined, false);
     if (timer.current) clearTimeout(timer.current);
     if (text.trim().length < 3) {
       setRows([]);
@@ -83,7 +88,7 @@ export default function AddressSelect({
   };
 
   const pick = (row: { value: string; city?: string }) => {
-    onChange(row.value, row.city);
+    onChange(row.value, row.city, true);
     setRows([]);
     setOpen(false);
     if (timer.current) clearTimeout(timer.current);
@@ -115,7 +120,7 @@ export default function AddressSelect({
             className="master-select-clear"
             aria-label="Сбросить"
             onClick={() => {
-              onChange('');
+              onChange('', undefined, false);
               setRows([]);
               setOpen(false);
             }}

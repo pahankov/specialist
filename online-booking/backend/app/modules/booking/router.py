@@ -16,6 +16,7 @@ from app.models.master_profile import MasterProfile
 from app.schemas.appointment import AppointmentCreate, AppointmentResponse, PublicBookingCreate, AvailableDay, AvailableSlot
 from app.logging_config import get_logger
 from app.dependencies.auth import require_master
+from app.services.names import name_fields
 from app.utils import localnow_naive
 
 logger = get_logger(__name__)
@@ -83,8 +84,10 @@ async def create_appointment(
 
     if not client:
         logger.info("Создание нового клиента для записи: %s", appointment.client_phone)
+        full_name, last_name = name_fields(appointment.client_name)
         new_user = User(
-            name=appointment.client_name,
+            name=full_name,
+            last_name=last_name,
             phone=appointment.client_phone,
             role=UserRole.CLIENT
         )
@@ -253,8 +256,10 @@ async def public_booking(request: Request, booking: PublicBookingCreate, db: Asy
 
     if not client:
         logger.info("Создание нового клиента для записи: %s", booking.client_phone)
+        full_name, last_name = name_fields(booking.client_name)
         new_user = User(
-            name=booking.client_name,
+            name=full_name,
+            last_name=last_name,
             phone=booking.client_phone,
             role=UserRole.CLIENT
         )

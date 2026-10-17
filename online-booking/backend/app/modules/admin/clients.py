@@ -15,6 +15,7 @@ from app.dependencies.auth import require_admin, require_master
 from app.dependencies.crud import get_or_404
 from app.modules.admin.helpers import get_master_profile_id, own_client_user_ids
 from app.services.audit import log_action
+from app.services.names import name_fields, set_full_name
 from app.logging_config import get_logger
 from pydantic import BaseModel
 
@@ -231,7 +232,7 @@ async def get_admin_clients(
         {
             "id": cp.user.id,
             "name": cp.user.name,
-            "phone": cp.user.phone,
+            "phone": cp.user.phone or "",
             "email": cp.user.email,
             "no_show_count": cp.no_show_count or 0,
             "is_active": cp.user.is_active,
@@ -282,9 +283,17 @@ async def create_admin_client(
     elif data.city_name:
         city_id, city_name = await _resolve_city(db, data.city_name)
     else:
-        city_id, city_name = None, None
+        # No explicit city: a master's new client inherits the master's
+        # city (matching key). Superadmins without context stay NULL.
+        city_id, city_name = (master.city_id, None) if master.role != UserRole.ADMIN else (None, None)
+    if city_id is not None and city_name is None:
+        from app.models.city import City
+        city_name = (await db.execute(
+            select(City.name_ru).where(City.id == city_id)
+        )).scalar_one_or_none()
 
-    user = User(name=data.name, phone=data.phone, email=data.email, role=UserRole.CLIENT, city_id=city_id, created_by=master.id)
+    name, last_name = name_fields(data.name)
+    user = User(name=name, last_name=last_name, phone=data.phone, email=data.email, role=UserRole.CLIENT, city_id=city_id, created_by=master.id)
     db.add(user)
     await db.flush()
 
@@ -299,7 +308,7 @@ async def create_admin_client(
     return {
         "id": user.id,
         "name": user.name,
-        "phone": user.phone,
+        "phone": user.phone or "",
         "email": user.email,
         "no_show_count": 0,
         "is_active": user.is_active,
@@ -345,6 +354,10 @@ async def update_admin_client(
     for field, value in data.model_dump(exclude_unset=True).items():
         if field in ("city_name", "address"):
             continue  # not User columns — handled below
+        if field == "name" and isinstance(value, str):
+            # One-string edit: re-sync the stored surname too.
+            set_full_name(user, value)
+            continue
         setattr(user, field, value)
 
     profile_result = await db.execute(
@@ -369,7 +382,7 @@ async def update_admin_client(
     return {
         "id": user.id,
         "name": user.name,
-        "phone": user.phone,
+        "phone": user.phone or "",
         "email": user.email,
         "no_show_count": profile.no_show_count if profile else 0,
         "is_active": user.is_active,
@@ -418,7 +431,7 @@ async def toggle_client_active(
     return {
         "id": user.id,
         "name": user.name,
-        "phone": user.phone,
+        "phone": user.phone or "",
         "email": user.email,
         "no_show_count": profile.no_show_count if profile else 0,
         "is_active": user.is_active,

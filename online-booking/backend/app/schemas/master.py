@@ -56,6 +56,7 @@ class MasterResponse(BaseModel):
     status: str
     is_active: bool
     is_admin: bool
+    city_id: Optional[int] = None
     tariff: str = "trial"
     trial_ends_at: Optional[datetime] = None
     created_at: Optional[datetime]
