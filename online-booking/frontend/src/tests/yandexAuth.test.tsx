@@ -19,6 +19,13 @@ vi.mock('../api/client', () => ({
   },
 }));
 
+// VK widget mounts inline with the login form — stub it so the Yandex tests
+// don't fire a real /vk/start network call.
+vi.mock('../components/common/VkIdWidget', () => ({
+  __esModule: true,
+  default: () => <div data-testid="vkid-widget-container" />,
+}));
+
 vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
   Toaster: () => null,
@@ -49,67 +56,30 @@ function renderLogin() {
   );
 }
 
-function openYandexTab() {
-  renderLogin();
-  fireEvent.click(screen.getByRole('button', { name: /Войти через Яндекс/ }));
-}
-
-function acceptConsent() {
-  fireEvent.click(screen.getByRole('checkbox'));
-}
-
 describe('Yandex OAuth (redirect flow)', () => {
   it('offers Yandex from the login screen as a branded button', () => {
     renderLogin();
     expect(screen.getByRole('button', { name: /Войти через Яндекс/ })).toBeInTheDocument();
   });
 
-  it('offers Yandex registration from the register screen too', () => {
-    renderLogin();
-    fireEvent.click(screen.getByText('Зарегистрироваться'));
-    fireEvent.click(screen.getByRole('button', { name: /Регистрация через Яндекс/ }));
-    // The panel shows the mandatory 152-FZ consent before the redirect.
-    expect(screen.getByRole('checkbox')).toBeInTheDocument();
-    expect(screen.getByText('← Назад ко входу')).toBeInTheDocument();
-  });
-
-  it('keeps the continue button disabled until consent is checked', () => {
-    openYandexTab();
-    const submit = screen.getByRole('button', { name: /Продолжить через Яндекс/ });
-    expect(submit).toBeDisabled();
-
-    acceptConsent();
-    expect(submit).toBeEnabled();
-  });
-
   it('fetches a signed state, stashes it and hands the browser to Yandex', async () => {
-    openYandexTab();
+    renderLogin();
     vi.mocked(mocked.yandexStart).mockResolvedValue({ data: START_DATA } as never);
 
-    acceptConsent();
-    fireEvent.click(screen.getByRole('button', { name: /Продолжить через Яндекс/ }));
+    // Direct redirect button — no consent screen in between.
+    fireEvent.click(screen.getByRole('button', { name: /Войти через Яндекс/ }));
 
     await waitFor(() => expect(mocked.yandexStart).toHaveBeenCalledTimes(1));
-    // The signed state + consent flag are staged for /auth/yandex/callback.
+    // The signed state + implicit consent flag are staged for the callback.
     await waitFor(() => expect(sessionStorage.getItem('yandex_state')).toBe('s1'));
     expect(sessionStorage.getItem('yandex_consent')).toBe('1');
   });
 
-  it('does not call the start endpoint without consent', async () => {
-    openYandexTab();
-    fireEvent.click(screen.getByRole('button', { name: /Продолжить через Яндекс/ }));
-
-    // Button is disabled pre-consent, so nothing fires.
-    expect(mocked.yandexStart).not.toHaveBeenCalled();
-    expect(toast.error).not.toHaveBeenCalled();
-  });
-
   it('reports a 503 as "not configured"', async () => {
-    openYandexTab();
+    renderLogin();
     vi.mocked(mocked.yandexStart).mockRejectedValue({ response: { status: 503 } });
 
-    acceptConsent();
-    fireEvent.click(screen.getByRole('button', { name: /Продолжить через Яндекс/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Войти через Яндекс/ }));
 
     await waitFor(() =>
       expect(toast.error).toHaveBeenCalledWith('Вход через Яндекс не настроен'),

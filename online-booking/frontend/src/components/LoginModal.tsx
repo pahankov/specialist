@@ -9,9 +9,8 @@ import VkIdWidget from './common/VkIdWidget';
 import MaxIcon from './common/icons/MaxIcon';
 import type { MaxStartResponse } from '../api/auth';
 import PhoneInput, { maskPhone, isCompletePhone, PHONE_MAX_DIGITS } from './common/PhoneInput';
-import { getCookie, decodeJwtPayload, getUserRole } from '../utils/cookies';
-import { ADMIN_PREFIX, SUPER_PREFIX } from '../utils/section';
-import RoleSwitch, { type RoleChoice } from './common/RoleSwitch';
+import { getCookie, decodeJwtPayload } from '../utils/cookies';
+import { SUPER_PREFIX } from '../utils/section';
 import Modal from './common/Modal';
 import './LoginModal.css';
 
@@ -22,14 +21,12 @@ interface LoginModalProps {
   redirectTo?: string | null;
 }
 
-type ModalMode = 'login' | 'register' | 'max' | 'vk' | 'yandex';
+/** Only three modes: the VK widget is inline, Yandex redirects directly. */
+type ModalMode = 'login' | 'register' | 'max';
 
 interface LoginFormState {
   identifier: string; // email or phone
   password: string;
-  /** Segmented switch: which cabinet to enter (replaces the dead checkbox). */
-  loginAs: RoleChoice;
-  isRegister: boolean;
 }
 
 interface RegisterFormState {
@@ -45,8 +42,6 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
   const [loginForm, setLoginForm] = useState<LoginFormState>({
     identifier: '',
     password: '',
-    loginAs: 'client',
-    isRegister: false,
   });
   const [registerForm, setRegisterForm] = useState<RegisterFormState>({
     phone: '',
@@ -61,93 +56,20 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
   const [maxPhone, setMaxPhone] = useState('');
   const [maxOffer, setMaxOffer] = useState<MaxStartResponse | null>(null);
   const [maxCodeInput, setMaxCodeInput] = useState('');
-  // 152-FZ consent checkbox (same offer + privacy policy as registration);
-  // stamped server-side when the MAX code creates/backfills the account.
-  const [maxConsent, setMaxConsent] = useState(false);
 
-  // VK ID widget: 152-FZ consent gates the OAuthList (VK/OK/Mail) widget;
-  // PKCE + the signed state are handled inside VkIdWidget.
-  const [vkConsent, setVkConsent] = useState(false);
-
-  // Yandex OAuth (plain redirect, no PKCE): consent gates the redirect; the
-  // signed state + consent flag are stashed for the /auth/yandex/callback.
-  const [yandexConsent, setYandexConsent] = useState(false);
-
-  /* After the VK widget establishes the backend session (cookies set), land
-     by role — admins to their section, masters to the panel, else the client
-     cabinet. Mirrors the old /auth/vk/callback landing logic. */
-  const handleVkSuccess = () => {
-    toast.success('Вход через VK выполнен!');
+  /** Land by role: admins → their section, deep-link honored, everyone else
+      (clients AND masters) → the client cabinet. Masters switch to the panel
+      from inside the cabinet; there is no «войти как» switch anymore. */
+  const landByRole = () => {
     setTimeout(() => {
       onClose();
-      try {
-        const payload = decodeJwtPayload(getCookie('access_token') ?? '');
-        if (payload?.is_admin === true) {
-          navigate(`${SUPER_PREFIX}/dashboard`, { replace: true });
-          return;
-        }
-        if (redirectTo) {
-          try {
-            sessionStorage.removeItem('postLoginTo');
-          } catch {
-            /* ignore */
-          }
-          navigate(redirectTo, { replace: true });
-          return;
-        }
-        if (payload?.role === 'MASTER') {
-          navigate(`${ADMIN_PREFIX}/dashboard`, { replace: true });
-          return;
-        }
-        navigate('/cabinet', { replace: true });
-      } catch {
-        navigate('/cabinet', { replace: true });
-      }
-    }, 400);
-  };
-
-  /* Yandex OAuth start: consent must be given first (152-FZ), then we fetch
-     a signed state + authorize URL from the backend and hand the browser
-     over to Yandex. The callback page posts the code back for a server-side
-     exchange — the app secret never reaches the client. */
-  const handleYandexStart = async () => {
-    if (!yandexConsent) {
-      toast.error('Подтвердите согласие на обработку персональных данных');
-      return;
-    }
-    setLoading(true);
-    try {
-      const resp = await authApi.yandexStart();
-      try {
-        sessionStorage.setItem('yandex_state', resp.data.state);
-        sessionStorage.setItem('yandex_consent', yandexConsent ? '1' : '0');
-      } catch {
-        /* storage unavailable — the callback will rely on the echoed state */
-      }
-      window.location.href = resp.data.authorize_url;
-    } catch (err: any) {
-      setLoading(false);
-      toast.error(
-        err.response?.status === 503
-          ? 'Вход через Яндекс не настроен'
-          : 'Ошибка входа через Яндекс',
-      );
-    }
-  };
-
-  const landByRole = (loginAs: RoleChoice = 'client') => {
-    setTimeout(() => {
-      onClose();
-      const role = getUserRole();
-      // Admins always land in their section; everyone else follows
-      // the segmented switch (dual-role: masters open the client cabinet).
       try {
         if (decodeJwtPayload(getCookie('access_token') ?? '')?.is_admin === true) {
           navigate(`${SUPER_PREFIX}/dashboard`, { replace: true });
           return;
         }
       } catch {
-        /* fall through to role landing */
+        /* fall through to cabinet */
       }
       // Deep-link continue (e.g. carousel "Записаться" → cabinet booking).
       if (redirectTo) {
@@ -159,17 +81,7 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
         navigate(redirectTo, { replace: true });
         return;
       }
-      if (loginAs === 'client') {
-        navigate('/cabinet', { replace: true });
-        return;
-      }
-      if (role === 'MASTER') {
-        navigate(`${ADMIN_PREFIX}/dashboard`, { replace: true });
-        return;
-      }
-      // A client entering "as master" goes to the application form —
-      // no instant access, the profile opens after admin approval.
-      navigate('/cabinet/become-master', { replace: true });
+      navigate('/cabinet', { replace: true });
     }, 800);
   };
 
@@ -233,7 +145,7 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
     try {
       await authApi.loginUnified(identifier, loginForm.password);
       toast.success('Вход выполнен!');
-      landByRole(loginForm.loginAs);
+      landByRole();
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Ошибка входа');
     } finally {
@@ -241,14 +153,36 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
     }
   };
 
+  /* Yandex OAuth: a plain redirect (no separate consent screen — 152-FZ
+     consent is taken at registration, and a first social login IS a
+     registration that stamps it implicitly). Fetch a signed state +
+     authorize URL, stash the state, hand the browser to Yandex; the callback
+     posts the code back for a server-side exchange. */
+  const handleYandexStart = async () => {
+    setLoading(true);
+    try {
+      const resp = await authApi.yandexStart();
+      try {
+        sessionStorage.setItem('yandex_state', resp.data.state);
+        sessionStorage.setItem('yandex_consent', '1');
+      } catch {
+        /* storage unavailable — the callback will rely on the echoed state */
+      }
+      window.location.href = resp.data.authorize_url;
+    } catch (err: any) {
+      setLoading(false);
+      toast.error(
+        err.response?.status === 503
+          ? 'Вход через Яндекс не настроен'
+          : 'Ошибка входа через Яндекс',
+      );
+    }
+  };
+
   const handleMaxStart = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isCompletePhone(maxPhone)) {
       toast.error('Введите корректный номер телефона (11 цифр)');
-      return;
-    }
-    if (!maxConsent) {
-      toast.error('Подтвердите согласие на обработку персональных данных');
       return;
     }
     setLoading(true);
@@ -272,7 +206,9 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
     }
     setLoading(true);
     try {
-      const resp = await authApi.maxVerify(maxPhone, maxCodeInput.trim(), maxConsent);
+      // consent=true: a first MAX login is a registration (stamps 152-FZ);
+      // for returning users the backend only backfills legacy NULL consent.
+      const resp = await authApi.maxVerify(maxPhone, maxCodeInput.trim(), true);
       toast.success(
         resp.data.is_new_user ? 'Добро пожаловать! Аккаунт создан.' : 'Вход через MAX выполнен!',
       );
@@ -310,7 +246,7 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
       // register-unified logs in immediately: everyone lands in the client
       // cabinet — profile is filled in later, becoming a master is separate.
       toast.success('Добро пожаловать! Вы вошли в аккаунт.');
-      landByRole('client');
+      landByRole();
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Ошибка регистрации');
     } finally {
@@ -320,13 +256,10 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
 
   const switchMode = (newMode: ModalMode) => {
     resetMaxState();
-    setMaxConsent(false);
     setMode(newMode);
     setLoginForm({
       identifier: '',
       password: '',
-      loginAs: 'client',
-      isRegister: false,
     });
     setRegisterForm({
       phone: '',
@@ -358,32 +291,10 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
         />
       </div>
 
-      {/* 152-ФЗ + оферта: same consent as registration, stamped on the
-          account created (or backfilled) by the MAX code. */}
-      <div className="checkbox-group">
-        <label className="checkbox-label">
-          <input
-            type="checkbox"
-            checked={maxConsent}
-            onChange={(e) => setMaxConsent(e.target.checked)}
-          />
-          <span>
-            Соглашаюсь с{' '}
-            <Link to="/offer" target="_blank" rel="noreferrer">
-              Офертой
-            </Link>{' '}
-            и{' '}
-            <Link to="/privacy" target="_blank" rel="noreferrer">
-              Политикой обработки ПДн
-            </Link>
-          </span>
-        </label>
-      </div>
-
       <button
         type="submit"
         className="btn btn-primary btn-submit"
-        disabled={loading || !maxConsent}
+        disabled={loading}
       >
         {loading ? 'Отправляем...' : 'Получить код в MAX'}
       </button>
@@ -484,136 +395,6 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
     </form>
   );
 
-  /* VK ID widget: consent is captured here BEFORE the widget renders, then
-     the VK/OK/Mail OAuthList block is shown. The account is created on the
-     first successful exchange — registration and login are one flow. */
-  const vkForm = (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-      }}
-    >
-      <p style={{ fontSize: 14, color: '#555', marginBottom: 16 }}>
-        Войдите через ВКонтакте, Одноклассники или Mail — аккаунт создастся
-        автоматически при первом входе, email и пароль не нужны.
-      </p>
-
-      {/* 152-ФЗ + оферта: same consent as registration, required before the
-          widget renders (VK returns the profile data we then process). */}
-      <div className="checkbox-group">
-        <label className="checkbox-label">
-          <input
-            type="checkbox"
-            checked={vkConsent}
-            onChange={(e) => setVkConsent(e.target.checked)}
-          />
-          <span>
-            Соглашаюсь с{' '}
-            <Link to="/offer" target="_blank" rel="noreferrer">
-              Офертой
-            </Link>{' '}
-            и{' '}
-            <Link to="/privacy" target="_blank" rel="noreferrer">
-              Политикой обработки ПДн
-            </Link>
-          </span>
-        </label>
-      </div>
-
-      {/* VK + OK + Mail OAuthList widget (renders only once consent is given).
-          The backend exchange stays server-side — tokens never touch the browser. */}
-      <VkIdWidget consent={vkConsent} onSuccess={handleVkSuccess} />
-
-      <button
-        type="button"
-        className="btn btn-ghost btn-submit"
-        style={{ marginTop: 8 }}
-        onClick={() => switchMode('login')}
-      >
-        ← Назад ко входу
-      </button>
-
-      <p className="login-footer">
-        <a
-          href="#"
-          onClick={(e) => {
-            e.preventDefault();
-            switchMode('login');
-          }}
-        >
-          Войти по паролю
-        </a>
-      </p>
-    </form>
-  );
-
-  /* Yandex OAuth: consent is captured here, then the browser is handed to
-     Yandex and returns at /auth/yandex/callback (the registered redirect). */
-  const yandexForm = (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        handleYandexStart();
-      }}
-    >
-      <p style={{ fontSize: 14, color: '#555', marginBottom: 16 }}>
-        Войдите через Яндекс — аккаунт создастся автоматически при первом
-        входе, email и пароль не нужны.
-      </p>
-
-      {/* 152-ФЗ + оферта: same consent as registration, required before the
-          redirect (Yandex then returns the profile data we process). */}
-      <div className="checkbox-group">
-        <label className="checkbox-label">
-          <input
-            type="checkbox"
-            checked={yandexConsent}
-            onChange={(e) => setYandexConsent(e.target.checked)}
-          />
-          <span>
-            Соглашаюсь с{' '}
-            <Link to="/offer" target="_blank" rel="noreferrer">
-              Офертой
-            </Link>{' '}
-            и{' '}
-            <Link to="/privacy" target="_blank" rel="noreferrer">
-              Политикой обработки ПДн
-            </Link>
-          </span>
-        </label>
-      </div>
-
-      <button
-        type="submit"
-        className="btn btn-primary btn-submit"
-        disabled={loading || !yandexConsent}
-      >
-        {loading ? 'Перенаправляем...' : 'Продолжить через Яндекс'}
-      </button>
-
-      <button
-        type="button"
-        className="btn btn-ghost btn-submit"
-        style={{ marginTop: 8 }}
-        onClick={() => switchMode('login')}
-      >
-        ← Назад ко входу
-      </button>
-
-      <p className="login-footer">
-        <a
-          href="#"
-          onClick={(e) => {
-            e.preventDefault();
-            switchMode('login');
-          }}
-        >
-          Войти по паролю
-        </a>
-      </p>
-    </form>
-  );
-
   return (
     <Modal
       open={isOpen}
@@ -623,11 +404,7 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
           ? 'Вход в систему'
           : mode === 'register'
             ? 'Регистрация'
-            : mode === 'vk'
-              ? 'Вход через VK, OK или Mail'
-              : mode === 'yandex'
-                ? 'Вход через Яндекс'
-                : 'Вход и регистрация через MAX'
+            : 'Вход и регистрация через MAX'
       }
       className="login-modal"
     >
@@ -679,35 +456,26 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
             </div>
           </div>
 
-          <div className="login-group">
-            <label>Войти как</label>
-            <RoleSwitch
-              value={loginForm.loginAs}
-              onChange={(v) => setLoginForm((prev) => ({ ...prev, loginAs: v }))}
-              labels={{ client: '👤 Клиент', master: '💼 Мастер' }}
-            />
-          </div>
-
           <button type="submit" className="btn btn-primary btn-submit" disabled={loading}>
             {loading ? 'Входим...' : 'Войти'}
           </button>
 
           <div className="social-auth-divider">или</div>
-          {/* One-click MAX auth: logs in AND registers on first use. */}
-          <SocialAuthButton
-            provider="max"
-            action="login"
-            onClick={() => switchMode('max')}
-          />
-          <div style={{ marginTop: 8 }}>
-            <SocialAuthButton provider="vk" action="login" onClick={() => switchMode('vk')} />
-          </div>
+
+          {/* VK + OK + Mail: the official OAuthList widget rendered INLINE —
+              no separate screen, no consent checkbox (taken at registration). */}
+          <VkIdWidget onSuccess={landByRole} />
+
           <div style={{ marginTop: 8 }}>
             <SocialAuthButton
               provider="yandex"
               action="login"
-              onClick={() => switchMode('yandex')}
+              disabled={loading}
+              onClick={handleYandexStart}
             />
+          </div>
+          <div style={{ marginTop: 8 }}>
+            <SocialAuthButton provider="max" action="login" onClick={() => switchMode('max')} />
           </div>
 
           <p className="login-footer">
@@ -726,14 +494,8 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
       ) : mode === 'max' ? (
         /* MAX CHAT-BOT FORM (SMS-style: code arrives in MAX, typed here) */
         maxForm
-      ) : mode === 'vk' ? (
-        /* VK ID CONSENT PANEL (redirect flow; account created on first exchange) */
-        vkForm
-      ) : mode === 'yandex' ? (
-        /* YANDEX CONSENT PANEL (redirect flow; account created on first exchange) */
-        yandexForm
       ) : (
-        /* ─── REGISTER FORM ─── */
+        /* ─── REGISTER FORM (the only place 152-FZ consent is asked) ─── */
         <form onSubmit={handleRegister}>
           {/* Phone */}
           <div className="login-group">
@@ -787,7 +549,8 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
             )}
           </div>
 
-          {/* 152-ФЗ + оферта: explicit consent, blocks submit */}
+          {/* 152-ФЗ + оферта: explicit consent, blocks submit. The ONLY consent
+              checkbox in the modal — social logins stamp it implicitly. */}
           <div className="checkbox-group">
             <label className="checkbox-label">
               <input
@@ -817,25 +580,6 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
           >
             {loading ? 'Регистрация...' : 'Зарегистрироваться'}
           </button>
-
-          <div className="social-auth-divider">или</div>
-          {/* Same MAX flow for registration: the account is created on the
-              first verified code — no email/password needed. */}
-          <SocialAuthButton
-            provider="max"
-            action="register"
-            onClick={() => switchMode('max')}
-          />
-          <div style={{ marginTop: 8 }}>
-            <SocialAuthButton provider="vk" action="register" onClick={() => switchMode('vk')} />
-          </div>
-          <div style={{ marginTop: 8 }}>
-            <SocialAuthButton
-              provider="yandex"
-              action="register"
-              onClick={() => switchMode('yandex')}
-            />
-          </div>
 
           <p className="login-footer">
             Уже есть аккаунт?{' '}

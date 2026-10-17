@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { toast } from 'sonner';
 import {
   Config,
   ConfigResponseMode,
@@ -8,10 +7,14 @@ import {
   OAuthListInternalEvents,
 } from '@vkid/sdk';
 import { authApi } from '../../api/client';
+import { toast } from 'sonner';
 import { generateCodeVerifier, generateCodeChallenge } from '../../utils/pkce';
 
 /**
- * VK ID low-code widget (VK + Одноклассники + Mail in one OAuthList block).
+ * VK ID low-code widget (VK + Одноклассники + Mail in one OAuthList block),
+ * rendered INLINE in the login form — no separate consent screen. 152-FZ
+ * consent is taken once at registration; a first social login IS a
+ * registration and stamps it implicitly server-side.
  *
  * Flow — the backend exchange stays server-side, so tokens never touch the
  * browser:
@@ -22,28 +25,25 @@ import { generateCodeVerifier, generateCodeChallenge } from '../../utils/pkce';
  *      responseMode=Callback. The SDK renders the widget; on click the user
  *      approves inside VK's own popup, and LOGIN_SUCCESS fires with `code` +
  *      `device_id`.
- *   3. Post code + device_id + state + code_verifier + consent to the existing
+ *   3. Post code + device_id + state + code_verifier to the existing
  *      /vk/verify, which trades the code for tokens on the server (the backend
- *      holds the service token) and mints the session cookie.
+ *      holds the app secret) and mints the session cookie.
  *
  * Because we pass our own `state` into Config, the value VK echoes back is the
  * same HMAC state our backend validates — no CSRF gap, and the whole tested
  * /vk/verify path is reused unchanged.
  */
 interface VkIdWidgetProps {
-  /** 152-FZ consent must be checked before the widget is shown. */
-  consent: boolean;
   /** Called after the backend session is established (cookies set). */
   onSuccess: () => void;
   onError?: (message: string) => void;
 }
 
-function VkIdWidget({ consent, onSuccess, onError }: VkIdWidgetProps) {
+function VkIdWidget({ onSuccess, onError }: VkIdWidgetProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!consent) return;
     const container = containerRef.current;
     if (!container) return;
 
@@ -96,13 +96,20 @@ function VkIdWidget({ consent, onSuccess, onError }: VkIdWidgetProps) {
             return;
           }
           try {
-            // 4. Server-side exchange: tokens never reach the browser.
-            await authApi.vkVerify(
+            // 4. Server-side exchange: tokens never reach the browser. The
+            //    first successful exchange creates the account and stamps the
+            //    152-FZ consent implicitly (registration = first social login).
+            const resp = await authApi.vkVerify(
               payload.code,
               payload.device_id,
               state,
               verifier,
-              true, // consent already checked before the widget rendered
+              true,
+            );
+            toast.success(
+              resp.data.is_new_user
+                ? 'Добро пожаловать! Аккаунт создан.'
+                : 'Вход через VK выполнен!',
             );
             onSuccess();
           } catch (err: unknown) {
@@ -115,13 +122,15 @@ function VkIdWidget({ consent, onSuccess, onError }: VkIdWidgetProps) {
         });
       } catch (err: unknown) {
         if (disposed) return;
-        const e = err as { response?: { status?: number } };
+        const e = err as { response?: { status?: number } } | undefined;
+        // Inline widget mounts with the login form, so surface the error in
+        // place (no toast) — a 503 while VK is unconfigured shouldn't nag on
+        // every modal open.
         const msg =
           e?.response?.status === 503
             ? 'Вход через VK не настроен'
             : 'Не удалось загрузить виджет VK';
         setError(msg);
-        toast.error(msg);
         onError?.(msg);
       }
     })();
@@ -135,9 +144,7 @@ function VkIdWidget({ consent, onSuccess, onError }: VkIdWidgetProps) {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [consent]);
-
-  if (!consent) return null;
+  }, []);
 
   return (
     <div className="vkid-widget">

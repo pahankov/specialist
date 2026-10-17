@@ -82,44 +82,15 @@ function renderLogin() {
   );
 }
 
-function openVkTab() {
-  renderLogin();
-  fireEvent.click(screen.getByRole('button', { name: /Войти через VK/ }));
-}
-
-function acceptConsent() {
-  fireEvent.click(screen.getByRole('checkbox'));
-}
-
-describe('VK ID widget (OAuthList: VK + OK + Mail)', () => {
-  it('offers VK from the login screen as a branded button', () => {
+describe('VK ID widget (inline OAuthList: VK + OK + Mail)', () => {
+  it('renders the widget container immediately on the login screen', () => {
     renderLogin();
-    expect(screen.getByRole('button', { name: /Войти через VK/ })).toBeInTheDocument();
-    // Second social icon on the login form (after MAX).
-    expect(document.querySelectorAll('.social-auth-icon svg').length).toBeGreaterThanOrEqual(2);
-  });
-
-  it('offers VK registration from the register screen too', () => {
-    renderLogin();
-    fireEvent.click(screen.getByText('Зарегистрироваться'));
-    fireEvent.click(screen.getByRole('button', { name: /Регистрация через VK/ }));
-    // The widget panel shows the mandatory 152-FZ consent before rendering.
-    expect(screen.getByRole('checkbox')).toBeInTheDocument();
-    expect(screen.getByText('← Назад ко входу')).toBeInTheDocument();
-  });
-
-  it('does not render the widget until consent is checked', () => {
-    openVkTab();
-    // No container before consent (widget gated behind the checkbox).
-    expect(screen.queryByTestId('vkid-widget-container')).toBeNull();
-    expect(mocked.vkStart).not.toHaveBeenCalled();
-
-    acceptConsent();
+    // No separate screen and no consent gate — the container mounts inline.
     expect(screen.getByTestId('vkid-widget-container')).toBeInTheDocument();
   });
 
   it('initializes the SDK and verifies the session on LOGIN_SUCCESS', async () => {
-    openVkTab();
+    renderLogin();
     // VK ID uses a HEX client_id — the widget must pass it to the SDK verbatim
     // (Number(hex) === NaN would fail the SDK's isNumber validator).
     const HEX_CLIENT_ID = '3772ca16b2de4376bc632dd4fcd6341a';
@@ -134,8 +105,6 @@ describe('VK ID widget (OAuthList: VK + OK + Mail)', () => {
     vi.mocked(mocked.vkVerify).mockResolvedValue({
       data: { access_token: 't', token_type: 'bearer', is_new_user: true },
     } as never);
-
-    acceptConsent();
 
     // The widget fetches a signed state + inits the SDK + renders the block.
     await waitFor(() => expect(mocked.vkStart).toHaveBeenCalledWith('test-code-challenge'));
@@ -160,21 +129,23 @@ describe('VK ID widget (OAuthList: VK + OK + Mail)', () => {
         true,
       ),
     );
-    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Вход через VK выполнен!'));
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith('Добро пожаловать! Аккаунт создан.'),
+    );
   });
 
-  it('reports a 503 as "not configured" and does not verify', async () => {
-    openVkTab();
+  it('reports a 503 as "not configured" inline and does not verify', async () => {
+    renderLogin();
     vi.mocked(mocked.vkStart).mockRejectedValue({ response: { status: 503 } });
 
-    acceptConsent();
-
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Вход через VK не настроен'));
+    await waitFor(() =>
+      expect(screen.getByText('Вход через VK не настроен')).toBeInTheDocument(),
+    );
     expect(mocked.vkVerify).not.toHaveBeenCalled();
   });
 
   it('surfaces a backend verify error detail', async () => {
-    openVkTab();
+    renderLogin();
     vi.mocked(mocked.vkStart).mockResolvedValue({
       data: {
         authorize_url: 'https://id.vk.ru/authorize?client_id=54828785&state=s1',
@@ -187,7 +158,6 @@ describe('VK ID widget (OAuthList: VK + OK + Mail)', () => {
       response: { data: { detail: 'Неверная или просроченная сессия входа. Попробуйте снова.' } },
     });
 
-    acceptConsent();
     await waitFor(() => expect(sdk.rendered).toBe(true));
     sdk.loginSuccess?.({ code: 'c1', device_id: 'd1' });
 
@@ -233,7 +203,9 @@ describe('VK callback exchange', () => {
 
   it('shows an error when the user declines on VK', async () => {
     renderCallback('?error=access_denied');
-    expect(screen.getByText('Вы отклонили вход через VK')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByText('Вы отклонили вход через VK')).toBeInTheDocument(),
+    );
     expect(mocked.vkVerify).not.toHaveBeenCalled();
   });
 

@@ -25,6 +25,13 @@ vi.mock('../api/dadata', () => ({
   },
 }));
 
+// VK widget mounts inline with the login form — stub it so the MAX tests
+// don't fire a real /vk/start network call.
+vi.mock('../components/common/VkIdWidget', () => ({
+  __esModule: true,
+  default: () => <div data-testid="vkid-widget-container" />,
+}));
+
 vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
   Toaster: () => null,
@@ -39,7 +46,7 @@ function openMaxTab() {
       <LoginModal isOpen onClose={vi.fn()} />
     </MemoryRouter>,
   );
-  fireEvent.click(screen.getByText('Войти через MAX'));
+  fireEvent.click(screen.getByRole('button', { name: /Войти через MAX/ }));
   return view;
 }
 
@@ -47,11 +54,6 @@ function fillPhone() {
   fireEvent.change(screen.getByPlaceholderText('+7 (999) 123-45-67'), {
     target: { value: '+79991234567' },
   });
-}
-
-/** 152-FZ consent checkbox gates both the start button and the verify call. */
-function acceptConsent() {
-  fireEvent.click(screen.getByRole('checkbox'));
 }
 
 describe('MAX chat-bot login (SMS-style)', () => {
@@ -70,33 +72,15 @@ describe('MAX chat-bot login (SMS-style)', () => {
     expect(document.querySelector('.social-auth-icon svg')).toBeTruthy(); // MAX icon
   });
 
-  it('offers MAX registration from the register screen too', () => {
-    render(
-      <MemoryRouter>
-        <LoginModal isOpen onClose={vi.fn()} />
-      </MemoryRouter>,
-    );
-    fireEvent.click(screen.getByText('Зарегистрироваться'));
-    fireEvent.click(screen.getByRole('button', { name: /Регистрация через MAX/ }));
-    // Same MAX flow opens — it both logs in and registers.
-    expect(screen.getByText('Получить код в MAX')).toBeInTheDocument();
-    expect(screen.getByRole('checkbox')).toBeInTheDocument(); // 152-FZ consent
-  });
-
-  it('blocks the start button until consent is checked', () => {
+  it('starts the MAX flow from the login button', () => {
     openMaxTab();
-    fillPhone();
-    const start = screen.getByRole('button', { name: 'Получить код в MAX' });
-    expect(start).toBeDisabled();
-    acceptConsent();
-    expect(start).toBeEnabled();
-    expect(mocked.maxStart).not.toHaveBeenCalled();
+    // Same MAX flow — it both logs in and registers, no consent screen.
+    expect(screen.getByText('Получить код в MAX')).toBeInTheDocument();
   });
 
   it('requests a code and shows the bot step', async () => {
     openMaxTab();
     fillPhone();
-    acceptConsent();
     vi.mocked(mocked.maxStart).mockResolvedValue({
       data: {
         delivered: false,
@@ -118,7 +102,6 @@ describe('MAX chat-bot login (SMS-style)', () => {
   it('tells bound users the code is already in MAX', async () => {
     openMaxTab();
     fillPhone();
-    acceptConsent();
     vi.mocked(mocked.maxStart).mockResolvedValue({
       data: {
         delivered: true,
@@ -135,7 +118,6 @@ describe('MAX chat-bot login (SMS-style)', () => {
   it('verifies the dialog code and logs in', async () => {
     openMaxTab();
     fillPhone();
-    acceptConsent();
     vi.mocked(mocked.maxStart).mockResolvedValue({
       data: {
         delivered: false,
@@ -164,7 +146,6 @@ describe('MAX chat-bot login (SMS-style)', () => {
   it('shows the error on wrong code', async () => {
     openMaxTab();
     fillPhone();
-    acceptConsent();
     vi.mocked(mocked.maxStart).mockResolvedValue({
       data: {
         delivered: false,
