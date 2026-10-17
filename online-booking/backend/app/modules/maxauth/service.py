@@ -5,13 +5,21 @@ on site) -> user opens the bot and shares their number (typed text or the
 `request_contact` button) -> bot replies INTO the dialog with the code ->
 user types it on site -> /max/verify mints the JWT session.
 
+An HMAC-proven contact share may also OPEN the request itself (no site step
+beforehand): deliver_code_to_dialog() creates the pending row on the fly,
+so "open bot -> share number -> code -> type code on site" registers the
+account without typing the phone on site first.
+
 Trust model (see https://dev.max.ru, request_contact section):
 - Phone from a `request_contact` attachment whose HMAC-SHA256(access_token,
   vcf_info) matches `hash` is PROVEN to be the sender's MAX-bound number
-  -> created users get is_verified=True.
+  -> created users get is_verified=True; the same proof upgrades
+  is_verified for existing accounts at /max/verify.
 - Typed phone text is self-asserted (anyone can type anyone's number) ->
   is_verified=False, same as the SMS path; TTL 5 min + 10/min rate limit
-  bound the guessing window.
+  bound the guessing window. Never opens a request on its own.
+- 152-FZ consent is captured on site at /max/verify (checkbox on the login
+  form), stamped on user creation/backfill exactly like register-unified.
 - Registration may legitimately lack email/name: the MAX display name is a
   convenience default, the rest is progressive profiling.
 """
@@ -208,11 +216,15 @@ def parse_phone_text(text: str) -> Optional[str]:
         return None
 
 
-def parse_contact_phone(message: dict) -> tuple[Optional[str], bool, str]:
-    """Extract (phone, hmac_verified, display_name) from a contact attachment.
+def parse_contact_phone(
+    message: dict,
+) -> tuple[Optional[str], bool, str, Optional[str]]:
+    """Extract (phone, hmac_verified, display_name, email) from a contact.
 
-    Returns (None, False, name) when there is no contact attachment.
+    Returns (None, False, name, None) when there is no contact attachment.
     HMAC check per MAX docs: HMAC-SHA256(access_token, vcf_info) == hash.
+    The email is taken from the vCard when present (self-reported profile
+    data — useful, but NOT platform-verified like the phone).
     """
     body = (message or {}).get("body") or {}
     sender = (message or {}).get("sender") or {}
@@ -231,13 +243,32 @@ def parse_contact_phone(message: dict) -> tuple[Optional[str], bool, str]:
         phone = parse_phone_text(m.group(1))
         if phone is None:
             continue
+        email = parse_vcf_email(vcf)
         if not settings.MAX_BOT_TOKEN or not digest:
-            return phone, False, display
+            return phone, False, display, email
         expect = hmac.new(
             settings.MAX_BOT_TOKEN.encode(), vcf.encode(), hashlib.sha256
         ).hexdigest()
-        return phone, hmac.compare_digest(expect, digest), display
-    return None, False, display
+        return phone, hmac.compare_digest(expect, digest), display, email
+    return None, False, display, None
+
+
+def parse_vcf_email(vcf: str) -> Optional[str]:
+    """Email from a contact vCard, or None (absent/obviously malformed)."""
+    m = re.search(r"EMAIL[^:]*:([^\s\r\n]+)", vcf or "", re.IGNORECASE)
+    if not m:
+        return None
+    email = m.group(1).strip().strip('"').lower()
+    # Cheap sanity: local@domain.tld, no spaces (vCard lines are newline-split).
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[a-zа-я]{2,}", email):
+        return None
+    return email
+
+
+def sender_username(sender: dict) -> Optional[str]:
+    """MAX public nickname (@username), None when absent."""
+    return (sender or {}).get("username") or None
+
 
 
 async def deliver_code_to_dialog(
@@ -246,22 +277,54 @@ async def deliver_code_to_dialog(
     sender_id: int,
     sender_name: str,
     phone_verified: bool,
+    username: Optional[str] = None,
+    email: Optional[str] = None,
 ) -> Optional[str]:
     """Mint a fresh dialog code for the pending request. Returns plain code.
 
     The site-pending code value is never stored (only its hash), so delivery
     generates a NEW code, swaps the hash on the same row (TTL preserved) and
-    returns the plain text for the bot reply. None when no pending request
-    exists — the caller must ask the user to request a code on site first.
+    returns the plain text for the bot reply.
+
+    None only for a typed phone with no site request: self-asserted numbers
+    must not open requests (anyone could type anyone's number). An HMAC-
+    proven contact share MAY open the request itself — the platform vouches
+    the number belongs to this MAX account, so "share number" alone is a
+    valid registration start.
     """
     otp = await _latest_pending_code(phone, db)
-    if otp is None:
-        return None
     code = f"{secrets.randbelow(1_000_000):06d}"
+    if otp is None:
+        if not phone_verified:
+            return None
+        ttl = _code_ttl_seconds()
+        otp = OtpCode(
+            phone=phone,
+            code_hash=hash_otp_code(code),
+            expires_at=datetime.now(dt_timezone.utc) + timedelta(seconds=ttl),
+            is_used=False,
+            channel=MAX_CHANNEL,
+            max_user_id=sender_id,
+            max_user_name=(sender_name[:200] if sender_name else None),
+            max_verified_phone=True,
+            max_username=(username[:64] if username else None),
+            max_user_email=email,
+        )
+        db.add(otp)
+        await db.commit()
+        logger.info(
+            "MAX contact share opened the request: phone=%s (ttl=%ss)",
+            phone, ttl,
+        )
+        return code
     otp.code_hash = hash_otp_code(code)
     otp.max_user_id = sender_id
     otp.max_user_name = (sender_name[:200] if sender_name else None)
     otp.max_verified_phone = bool(phone_verified)
+    if username:
+        otp.max_username = username[:64]
+    if email:
+        otp.max_user_email = email
     await db.commit()
     logger.info(
         "MAX code delivered to dialog: otp_id=%s phone=%s verified=%s",
@@ -271,9 +334,14 @@ async def deliver_code_to_dialog(
 
 
 async def verify_max_code(
-    phone: str, code: str, db: AsyncSession
+    phone: str, code: str, db: AsyncSession, consent: bool = False
 ) -> tuple[str, User, bool]:
-    """Check a site-typed MAX code, mint the JWT session. Returns (token, user, is_new)."""
+    """Check a site-typed MAX code, mint the JWT session. Returns (token, user, is_new).
+
+    `consent` is the 152-FZ checkbox state from the site form: stamped on
+    new accounts and backfilled onto legacy MAX/OTP accounts (NULL consent)
+    that log in through the consented form.
+    """
     code_hash = hash_otp_code(code)
     result = await db.execute(
         select(OtpCode)
@@ -300,6 +368,8 @@ async def verify_max_code(
     otp.is_used = True
     await db.commit()
 
+    from app.modules.auth.service import OFFER_VERSION, POLICY_VERSION
+
     result = await db.execute(select(User).where(User.phone == phone))
     user = result.scalar_one_or_none()
     is_new = False
@@ -307,16 +377,34 @@ async def verify_max_code(
         is_new = True
         logger.info("Creating new client via MAX: phone=%s", phone)
         max_name, max_last = name_fields(otp.max_user_name)
+        # Email from the contact vCard is self-reported profile data: take it
+        # only when it does not collide with an existing account.
+        email = otp.max_user_email
+        if email:
+            taken = (await db.execute(
+                select(User.id).where(User.email == email)
+            )).scalar_one_or_none()
+            if taken is not None:
+                logger.info("MAX vCard email already taken, skipping: %s", email)
+                email = None
         user = User(
             name=max_name,
             last_name=max_last,
             phone=phone,
+            email=email,
             role=UserRole.CLIENT,
             hashed_password=None,  # MAX-only auth (same as OTP path)
             # Verified only when the number came from a contact share
             # whose HMAC matched (proven MAX-bound number).
             is_verified=bool(otp.max_verified_phone),
             max_user_id=otp.max_user_id,  # bind account for push-code login
+            max_username=otp.max_username,  # @nickname for support/UX
+            # 152-FZ: same consent stamp as register-unified, taken from
+            # the checkbox on the MAX login form.
+            consent_at=(
+                datetime.now(dt_timezone.utc) if consent else None),
+            consent_policy_version=POLICY_VERSION if consent else None,
+            consent_offer_version=OFFER_VERSION if consent else None,
         )
         db.add(user)
         await db.flush()
@@ -325,12 +413,41 @@ async def verify_max_code(
         await db.commit()
         await db.refresh(user)
         logger.info("New client created via MAX: user_id=%s", user.id)
-    elif user.max_user_id is None and otp.max_user_id is not None:
-        # Link a pre-existing account (e.g. password-registered master)
-        # to the MAX account that just proved the number.
-        user.max_user_id = otp.max_user_id
-        await db.commit()
-        logger.info("Linked MAX account to user_id=%s", user.id)
+    else:
+        changed = False
+        if user.max_user_id is None and otp.max_user_id is not None:
+            # Link a pre-existing account (e.g. password-registered master)
+            # to the MAX account that just proved the number.
+            user.max_user_id = otp.max_user_id
+            changed = True
+            logger.info("Linked MAX account to user_id=%s", user.id)
+        if otp.max_verified_phone and not user.is_verified:
+            # The HMAC-proven contact share is stronger than any OTP: the
+            # platform vouches the number is this MAX account's own.
+            user.is_verified = True
+            changed = True
+            logger.info("Verified existing user via MAX contact: user_id=%s",
+                        user.id)
+        if user.max_username is None and otp.max_username:
+            user.max_username = otp.max_username
+            changed = True
+        if user.email is None and otp.max_user_email:
+            # Backfill a missing email — skip when another account owns it.
+            taken = (await db.execute(
+                select(User.id).where(
+                    User.email == otp.max_user_email, User.id != user.id)
+            )).scalar_one_or_none()
+            if taken is None:
+                user.email = otp.max_user_email
+                changed = True
+        if consent and user.consent_at is None:
+            # Backfill consent for accounts created before consent tracking.
+            user.consent_at = datetime.now(dt_timezone.utc)
+            user.consent_policy_version = POLICY_VERSION
+            user.consent_offer_version = OFFER_VERSION
+            changed = True
+        if changed:
+            await db.commit()
 
     access_token = create_access_token({
         "sub": str(user.id),

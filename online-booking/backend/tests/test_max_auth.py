@@ -222,12 +222,15 @@ class TestMaxWebhook:
         assert resp.json() == {"ok": True, "outcome": "no_pending"}
         assert stub_sender and "на сайте" in stub_sender[0]["text"]
 
-    async def test_non_phone_text_gets_hint(
+    async def test_non_phone_text_gets_hint_with_keyboard(
         self, client, max_enabled, stub_sender
     ):
+        """Hint repeats the request_contact button (first one is easy to miss)."""
         resp = await _hook(client, _msg_update("hello"))
         assert resp.status_code == 200
         assert stub_sender and "номер" in stub_sender[0]["text"]
+        buttons = stub_sender[0]["attachments"][0]["payload"]["buttons"]
+        assert buttons[0][0]["type"] == "request_contact"
 
     async def test_contact_share_verified_flow(
         self, client, max_enabled, stub_sender, session
@@ -250,6 +253,36 @@ class TestMaxWebhook:
             select(OtpCode).where(OtpCode.phone == PHONE_NORM))).scalars().all()
         assert rows and rows[-1].max_verified_phone is True
 
+    async def test_contact_carries_username_and_email(
+        self, client, max_enabled, stub_sender, session
+    ):
+        """@nickname from sender + EMAIL from vCard land on the OTP row."""
+        import hashlib
+        import hmac as hmac_mod
+
+        vcf = ("BEGIN:VCARD\r\nVERSION:3.0\r\n"
+               "FN:Ivan\r\nTEL;TYPE=cell:79990001122\r\n"
+               "EMAIL;TYPE=INTERNET:ivan@Example.COM\r\nEND:VCARD\r\n")
+        digest = hmac_mod.new(b"test-token", vcf.encode(),
+                              hashlib.sha256).hexdigest()
+        update = _msg_update(None, contact={"vcf_info": vcf, "hash": digest})
+        update["message"]["sender"]["username"] = "ivan_max"
+        resp = await _hook(client, update)
+        assert resp.json()["outcome"] == "delivered"
+        code = re.search(r"\d{6}", stub_sender[0]["text"]).group(0)
+
+        done = await client.post(
+            "/api/v1/auth/max/verify",
+            json={"phone": PHONE, "code": code, "consent": True})
+        assert done.status_code == 200
+
+        from sqlalchemy import select
+        from app.models.user import User
+        user = (await session.execute(
+            select(User).where(User.phone == PHONE_NORM))).scalar_one()
+        assert user.max_username == "ivan_max"
+        assert user.email == "ivan@example.com"  # normalized to lowercase
+
     async def test_contact_bad_hmac_unverified(
         self, client, max_enabled, stub_sender, session
     ):
@@ -266,6 +299,45 @@ class TestMaxWebhook:
         rows = (await session.execute(
             select(OtpCode).where(OtpCode.phone == PHONE_NORM))).scalars().all()
         assert rows and rows[-1].max_verified_phone is False
+
+    async def test_contact_share_opens_request_without_site(
+        self, client, max_enabled, stub_sender, session
+    ):
+        """HMAC-proven share needs no site step: the platform vouches the number."""
+        import hashlib
+        import hmac as hmac_mod
+
+        vcf = ("BEGIN:VCARD\r\nVERSION:3.0\r\n"
+               "TEL;TYPE=cell:79990001122\r\nFN:Ivan\r\nEND:VCARD\r\n")
+        digest = hmac_mod.new(b"test-token", vcf.encode(),
+                              hashlib.sha256).hexdigest()
+        resp = await _hook(client, _msg_update(
+            None, contact={"vcf_info": vcf, "hash": digest}))
+        assert resp.json()["outcome"] == "delivered"
+        assert stub_sender
+        code = re.search(r"\d{6}", stub_sender[0]["text"]).group(0)
+
+        done = await client.post(
+            "/api/v1/auth/max/verify",
+            json={"phone": PHONE, "code": code, "consent": True})
+        assert done.status_code == 200
+        assert done.json()["is_new_user"] is True
+
+        from sqlalchemy import select
+        from app.models.user import User
+        user = (await session.execute(
+            select(User).where(User.phone == PHONE_NORM))).scalar_one()
+        assert user.is_verified is True  # HMAC-proven number
+        assert user.consent_at is not None  # 152-FZ checkbox
+
+    async def test_typed_phone_still_needs_site_request(
+        self, client, max_enabled, stub_sender
+    ):
+        """Self-asserted numbers must not open requests on their own."""
+        resp = await _hook(client, _msg_update("+79990009999"))
+        assert resp.json()["outcome"] == "no_pending"
+        buttons = stub_sender[0]["attachments"][0]["payload"]["buttons"]
+        assert buttons[0][0]["type"] == "request_contact"
 
 
 class TestMaxVerify:
@@ -422,6 +494,71 @@ class TestMaxVerify:
             select(User).where(User.phone == PHONE_NORM))).scalar_one()
         assert user.max_user_id == 777  # webhook sender from _msg_update
 
+    async def test_contact_share_verifies_existing_user(
+        self, client, max_enabled, stub_sender, session
+    ):
+        """HMAC-proven contact upgrades is_verified for an existing account."""
+        import hashlib
+        import hmac as hmac_mod
+        from sqlalchemy import select
+        from app.models.user import User, UserRole
+        from app.utils.security import hash_password
+
+        session.add(User(
+            name="Legacy", email="legacy@example.com", phone=PHONE_NORM,
+            hashed_password=hash_password("Password1!"),
+            role=UserRole.CLIENT, is_active=True, is_verified=False,
+        ))
+        await session.commit()
+
+        vcf = ("BEGIN:VCARD\r\nVERSION:3.0\r\n"
+               "TEL;TYPE=cell:79990001122\r\nFN:Ivan\r\nEND:VCARD\r\n")
+        digest = hmac_mod.new(b"test-token", vcf.encode(),
+                              hashlib.sha256).hexdigest()
+        resp = await _hook(client, _msg_update(
+            None, contact={"vcf_info": vcf, "hash": digest}))
+        assert resp.json()["outcome"] == "delivered"
+        code = re.search(r"\d{6}", stub_sender[-1]["text"]).group(0)
+
+        done = await client.post(
+            "/api/v1/auth/max/verify", json={"phone": PHONE, "code": code})
+        assert done.status_code == 200
+        assert done.json()["is_new_user"] is False
+        user = (await session.execute(
+            select(User).where(User.phone == PHONE_NORM))).scalar_one()
+        assert user.is_verified is True
+        assert user.max_user_id == 777
+
+    async def test_consent_backfilled_on_login(
+        self, client, max_enabled, stub_sender, session
+    ):
+        """Legacy NULL-consent account gains consent when the form is checked."""
+        from sqlalchemy import select
+        from app.models.user import User, UserRole
+        from app.utils.security import hash_password
+
+        session.add(User(
+            name="Old", email="old@example.com", phone=PHONE_NORM,
+            hashed_password=hash_password("Password1!"),
+            role=UserRole.CLIENT, is_active=True, is_verified=False,
+            max_user_id=555,
+        ))
+        await session.commit()
+
+        resp = await client.post("/api/v1/auth/max/start", json={"phone": PHONE})
+        assert resp.json()["delivered"] is True
+        code = re.search(r"\d{6}", stub_sender[-1]["text"]).group(0)
+
+        done = await client.post(
+            "/api/v1/auth/max/verify",
+            json={"phone": PHONE, "code": code, "consent": True})
+        assert done.status_code == 200
+        user = (await session.execute(
+            select(User).where(User.phone == PHONE_NORM))).scalar_one()
+        assert user.consent_at is not None
+        assert user.consent_policy_version is not None
+        assert user.consent_offer_version is not None
+
 
 class TestParseHelpers:
     def test_parse_phone_text(self):
@@ -433,8 +570,22 @@ class TestParseHelpers:
 
     def test_parse_contact_no_attachment(self):
         from app.modules.maxauth.service import parse_contact_phone
-        assert parse_contact_phone({}) == (None, False, "")
-        assert parse_contact_phone({"body": {}}) == (None, False, "")
+        assert parse_contact_phone({}) == (None, False, "", None)
+        assert parse_contact_phone({"body": {}}) == (None, False, "", None)
+
+    def test_parse_vcf_email(self):
+        from app.modules.maxauth.service import parse_vcf_email
+        vcf = "TEL:79990001122\r\nEMAIL;TYPE=INTERNET:Ivan@Example.COM\r\n"
+        assert parse_vcf_email(vcf) == "ivan@example.com"
+        assert parse_vcf_email("TEL:79990001122") is None
+        assert parse_vcf_email("EMAIL:not-an-email") is None
+        assert parse_vcf_email("") is None
+
+    def test_sender_username(self):
+        from app.modules.maxauth.service import sender_username
+        assert sender_username({"username": "ivan"}) == "ivan"
+        assert sender_username({"first_name": "Ivan"}) is None
+        assert sender_username({}) is None
 
     def test_sender_display_name(self):
         from app.modules.maxauth.service import sender_display_name

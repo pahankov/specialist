@@ -84,6 +84,8 @@ async def delete_own_account(db: AsyncSession, user: User) -> dict:
     user.name = "Удалённый аккаунт"
     user.last_name = None
     user.max_user_id = None
+    user.max_username = None  # MAX nickname is PII too
+    user.vk_user_id = None  # VK binding is a PII identifier too
     user.hashed_password = None
 
     await log_action(db, user.id, "delete", "account", user.id,

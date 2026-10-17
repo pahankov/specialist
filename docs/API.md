@@ -11,7 +11,7 @@
 | `POST` | `/api/v1/auth/register` | Регистрация мастера (с выбором города) |
 | `POST` | `/api/v1/auth/login` | Вход мастера (JWT + refresh token в cookies) |
 | `POST` | `/api/v1/auth/login-unified` | Вход по email ИЛИ телефону (мастера и клиенты; пишет login в аудит) |
-| `POST` | `/api/v1/auth/register-unified` | Регистрация с выбором роли (имя+фамилия, адрес; город выводится из адреса) — сразу входит: access_token + cookies |
+| `POST` | `/api/v1/auth/register-unified` | Быстрая регистрация: только `phone` + `password` + `consent` (152-ФЗ) — всегда CLIENT, сразу входит: access_token + cookies; email/имя/адрес заполняются позже в кабинете |
 | `POST` | `/api/v1/auth/become-master` | Заявка в мастера (адрес/описание/опыт) — профиль inactive, роль остаётся CLIENT до аппрува админа; повторная заявка 400 |
 | `POST` | `/api/v1/auth/send-otp` | Отправка SMS-кода клиенту |
 | `POST` | `/api/v1/auth/verify-otp` | Проверка кода, вход/регистрация клиента |
@@ -32,7 +32,25 @@
 привязан к MAX-аккаунту (`is_verified=True`); набранный текстом — нет
 (`is_verified=False`, как в SMS-флоу). Имя из MAX — дефолт нового клиента.
 Роль берётся из существующего юзера: мастер/админ входит по номеру своего
-аккаунта (новый юзер всегда CLIENT; регистрация мастера — только через форму).
+аккаунта (новый юзер всегда CLIENT; стать мастером — через заявку become-master).
+
+### VK ID auth (виджет VK + Одноклассники + Mail; OAuth 2.0 + PKCE)
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| `POST` | `/api/v1/auth/vk/start` | Подписанный `state` (HMAC, TTL 10 мин) + `redirect_uri` + `client_id` + полный `authorize_url` по `code_challenge` (браузерный PKCE); 10/min |
+| `POST` | `/api/v1/auth/vk/verify` | Обмен `code`+`device_id`+`state`+`code_verifier` на токены **на сервере** (сервисный ключ не уходит в браузер), create/bind аккаунта, JWT-сессия + cookies; 10/min |
+
+Флоу (официальный виджет `@vkid/sdk`, блок OAuthList с кнопками VK/OK/Mail):
+фронт генерирует PKCE `code_verifier` и шлёт только его SHA-256 (`code_challenge`)
+в `/vk/start` → получает подписанный `state` + `redirect_uri` + `client_id` →
+передаёт **свой** `state` и `code_verifier` в `Config.init` (`responseMode=Callback`)
+→ рисует виджет. После галочки согласия 152-ФЗ и одобрения внутри VK срабатывает
+`LOGIN_SUCCESS` (`code` + `device_id`) → фронт постит их + `state` + `code_verifier`
++ `consent` в `/vk/verify` → бэкенд меняет `code` на токены у
+`id.vk.ru/oauth2/auth`, читает профиль (`/oauth2/user_info`), создаёт/привязывает
+аккаунт (новый всегда CLIENT) и штампует `consent_*`. Токены VK в браузер не
+попадают; `state`, переданный в SDK, проходит HMAC-проверку на бэке — ручной
+редирект на `id.vk.ru` больше не используется.
 
 ### Geography
 | Метод | Endpoint | Описание |

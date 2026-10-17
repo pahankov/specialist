@@ -34,12 +34,13 @@ const mocked = vi.mocked(authApi);
 const MASKED = '+7 (999) 123-45-67';
 
 function openMaxTab() {
-  render(
+  const view = render(
     <MemoryRouter>
       <LoginModal isOpen onClose={vi.fn()} />
     </MemoryRouter>,
   );
   fireEvent.click(screen.getByText('Войти через MAX'));
+  return view;
 }
 
 function fillPhone() {
@@ -48,14 +49,54 @@ function fillPhone() {
   });
 }
 
+/** 152-FZ consent checkbox gates both the start button and the verify call. */
+function acceptConsent() {
+  fireEvent.click(screen.getByRole('checkbox'));
+}
+
 describe('MAX chat-bot login (SMS-style)', () => {
   afterEach(() => {
     vi.clearAllMocks();
   });
 
+  it('offers MAX from the login screen as a branded button', () => {
+    render(
+      <MemoryRouter>
+        <LoginModal isOpen onClose={vi.fn()} />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('button', { name: /Войти через MAX/ })).toBeInTheDocument();
+    // Modal portals into document.body — query globally.
+    expect(document.querySelector('.social-auth-icon svg')).toBeTruthy(); // MAX icon
+  });
+
+  it('offers MAX registration from the register screen too', () => {
+    render(
+      <MemoryRouter>
+        <LoginModal isOpen onClose={vi.fn()} />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByText('Зарегистрироваться'));
+    fireEvent.click(screen.getByRole('button', { name: /Регистрация через MAX/ }));
+    // Same MAX flow opens — it both logs in and registers.
+    expect(screen.getByText('Получить код в MAX')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox')).toBeInTheDocument(); // 152-FZ consent
+  });
+
+  it('blocks the start button until consent is checked', () => {
+    openMaxTab();
+    fillPhone();
+    const start = screen.getByRole('button', { name: 'Получить код в MAX' });
+    expect(start).toBeDisabled();
+    acceptConsent();
+    expect(start).toBeEnabled();
+    expect(mocked.maxStart).not.toHaveBeenCalled();
+  });
+
   it('requests a code and shows the bot step', async () => {
     openMaxTab();
     fillPhone();
+    acceptConsent();
     vi.mocked(mocked.maxStart).mockResolvedValue({
       data: {
         delivered: false,
@@ -77,6 +118,7 @@ describe('MAX chat-bot login (SMS-style)', () => {
   it('tells bound users the code is already in MAX', async () => {
     openMaxTab();
     fillPhone();
+    acceptConsent();
     vi.mocked(mocked.maxStart).mockResolvedValue({
       data: {
         delivered: true,
@@ -93,6 +135,7 @@ describe('MAX chat-bot login (SMS-style)', () => {
   it('verifies the dialog code and logs in', async () => {
     openMaxTab();
     fillPhone();
+    acceptConsent();
     vi.mocked(mocked.maxStart).mockResolvedValue({
       data: {
         delivered: false,
@@ -115,12 +158,13 @@ describe('MAX chat-bot login (SMS-style)', () => {
     await vi.waitFor(() => {
       expect(vi.mocked(toast.success)).toHaveBeenCalledWith('Добро пожаловать! Аккаунт создан.');
     });
-    expect(vi.mocked(mocked.maxVerify)).toHaveBeenCalledWith(MASKED, '482910');
+    expect(vi.mocked(mocked.maxVerify)).toHaveBeenCalledWith(MASKED, '482910', true);
   });
 
   it('shows the error on wrong code', async () => {
     openMaxTab();
     fillPhone();
+    acceptConsent();
     vi.mocked(mocked.maxStart).mockResolvedValue({
       data: {
         delivered: false,
@@ -300,24 +344,11 @@ describe('Registration consent (152-FZ)', () => {
     openRegister();
     vi.mocked(mocked.registerUnified).mockResolvedValue({ data: {} } as never);
 
-    // Address: must come from a suggestion pick (city parsed from it).
-    fireEvent.change(screen.getByPlaceholderText('Город, улица, дом...'), {
-      target: { value: 'Москва, ул Тестовая 1' },
-    });
-    fireEvent.click(
-      await screen.findByText('Россия, г Москва, ул Тестовая, д 1', {}, { timeout: 2000 }),
-    );
-
     fireEvent.change(screen.getByPlaceholderText('+7 (999) 123-45-67'), {
       target: { value: '+79991234567' },
     });
     fireEvent.change(screen.getByPlaceholderText(PASSWORD_PLACEHOLDER), {
       target: { value: 'Secret123!' },
-    });
-    fireEvent.change(screen.getByPlaceholderText('Иван'), { target: { value: 'Иван' } });
-    fireEvent.change(screen.getByPlaceholderText('Петров'), { target: { value: 'Иванов' } });
-    fireEvent.change(screen.getByPlaceholderText('email@example.com'), {
-      target: { value: 'ivan@example.com' },
     });
     fireEvent.click(screen.getByText(/Соглашаюсь с/));
 
@@ -337,7 +368,7 @@ describe('Registration consent (152-FZ)', () => {
     fireEvent.submit(btn.closest('form') as HTMLFormElement);
     expect(vi.mocked(mocked.registerUnified)).not.toHaveBeenCalled();
     expect(vi.mocked(toast.error)).toHaveBeenCalledWith(
-      'Выберите адрес из списка подсказок — по нему определяется город',
+      'Заполните все обязательные поля корректно',
     );
   });
 });

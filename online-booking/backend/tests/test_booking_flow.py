@@ -88,11 +88,9 @@ class TestBookingFlow:
 
         # ─── Step 3: Register client (via unified endpoint) ───
         client_resp = await client.post("/api/v1/auth/register-unified", json={
-            "name": "Flow Client",
-            "email": "flowclient@example.com",
-            "password": "SecurePass456!",
             "phone": "+79990000101",
-            "role": "CLIENT",
+            "password": "SecurePass456!",
+            "consent": True,
         })
         assert client_resp.status_code == 201
 
@@ -286,11 +284,9 @@ class TestBookingFlow:
 
         # Register client
         await client.post("/api/v1/auth/register-unified", json={
-            "name": "Review Client",
-            "email": "reviewclient@example.com",
-            "password": "SecurePassClient!",
             "phone": "+79990000108",
-            "role": "CLIENT",
+            "password": "SecurePassClient!",
+            "consent": True,
         })
 
         # Book and complete appointment

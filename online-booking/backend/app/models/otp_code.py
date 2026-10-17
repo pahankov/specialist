@@ -28,6 +28,11 @@ class OtpCode(Base):
     # True when the dialog number came from a request_contact share whose
     # HMAC matched (proven MAX-bound number -> user created verified).
     max_verified_phone = Column(Boolean, nullable=False, default=False)
+    # Extra profile data carried from the MAX dialog to /max/verify:
+    # public nickname and the email found in the contact vCard (both
+    # optional — MAX users may have neither).
+    max_username = Column(String(64), nullable=True)
+    max_user_email = Column(String(255), nullable=True)
 
     def __repr__(self):
         return f"<OtpCode(phone={self.phone}, used={self.is_used})>"

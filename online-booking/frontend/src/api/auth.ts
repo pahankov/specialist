@@ -4,18 +4,10 @@ import type { LoginResponse, UnifiedRegisterResponse } from './types';
 // ─── Auth API ──────────────────────────────────────────────────────
 
 export interface UnifiedRegisterData {
-  name: string;
-  last_name?: string | null;
-  email: string;
   phone: string;
   password: string;
-  /** DaData location: cabinet address (master) or home location (client). */
-  address?: string | null;
-  /** City parsed from the address (primary matching key). */
-  city_name?: string | null;
-  city_data?: Record<string, unknown> | null;
-  telegram_username?: string | null;
-  is_master: boolean;
+  /** 152-FZ consent checkbox (offer + privacy policy). */
+  consent: boolean;
 }
 
 export interface MaxStartResponse {
@@ -27,6 +19,21 @@ export interface MaxStartResponse {
 }
 
 export interface MaxVerifyResponse {
+  access_token: string;
+  token_type: string;
+  is_new_user?: boolean;
+}
+
+export interface VkStartResponse {
+  /** Full VK consent URL — the browser is redirected here. */
+  authorize_url: string;
+  state: string;
+  client_id: string;
+  /** Canonical backend redirect_uri (must match at authorize + exchange). */
+  redirect_uri: string;
+}
+
+export interface VkVerifyResponse {
   access_token: string;
   token_type: string;
   is_new_user?: boolean;
@@ -61,6 +68,24 @@ export const authApi = {
     apiClient.post<UnifiedRegisterResponse>('/api/v1/auth/register-unified', data),
   maxStart: (phone: string) =>
     apiClient.post<MaxStartResponse>('/api/v1/auth/max/start', { phone }),
-  maxVerify: (phone: string, code: string) =>
-    apiClient.post<MaxVerifyResponse>('/api/v1/auth/max/verify', { phone, code }),
+  maxVerify: (phone: string, code: string, consent = false) =>
+    apiClient.post<MaxVerifyResponse>('/api/v1/auth/max/verify', { phone, code, consent }),
+  vkStart: (codeChallenge: string) =>
+    apiClient.post<VkStartResponse>('/api/v1/auth/vk/start', {
+      code_challenge: codeChallenge,
+    }),
+  vkVerify: (
+    code: string,
+    deviceId: string,
+    state: string,
+    codeVerifier: string,
+    consent = false,
+  ) =>
+    apiClient.post<VkVerifyResponse>('/api/v1/auth/vk/verify', {
+      code,
+      device_id: deviceId,
+      state,
+      code_verifier: codeVerifier,
+      consent,
+    }),
 };

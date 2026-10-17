@@ -26,6 +26,7 @@ class User(Base):
         Index('ix_users_phone', 'phone', unique=True),
         Index('ix_users_role', 'role'),
         Index('ix_users_max_user_id', 'max_user_id', unique=True),
+        Index('ix_users_vk_user_id', 'vk_user_id', unique=True),
     )
 
     id = Column(Integer, primary_key=True)
@@ -48,6 +49,13 @@ class User(Base):
     # dialog (no contact share needed anymore). NULLs are distinct in PG/SQLite
     # unique indexes, so unbound users never collide.
     max_user_id = Column(BigInteger, nullable=True)
+    # MAX public nickname (@username) captured at binding time — support/UX
+    # hint, may be absent (MAX allows no nickname).
+    max_username = Column(String(64), nullable=True)
+    # Bound VK ID account: after the first VK login the VK user id is stored
+    # here, so subsequent logins match the account directly (no phone/email
+    # needed). Same NULL-distinct unique-index trick as max_user_id.
+    vk_user_id = Column(BigInteger, nullable=True)
     # Legal consent proof (152-ФЗ + offer): stamped at registration when the
     # user checks the consent box. NULL = registered before consent tracking
     # (e.g. OTP/MAX auto-created accounts) — consent unknown.

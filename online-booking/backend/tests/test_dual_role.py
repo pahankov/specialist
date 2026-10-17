@@ -69,9 +69,8 @@ class TestMasterAsClient:
 class TestBecomeMaster:
     async def _register_client(self, client):
         r = await client.post("/api/v1/auth/register-unified", json={
-            "name": "Soon Master", "email": "soon_master@example.com",
             "phone": "+79991115555", "password": "SecurePass123!",
-            "is_master": False,
+            "consent": True,
         })
         assert r.status_code == 201, r.text
         return r.json()["access_token"]
@@ -89,7 +88,7 @@ class TestBecomeMaster:
 
         # Still a client: no panel, invisible publicly.
         user = (await session.execute(
-            select(User).where(User.email == "soon_master@example.com")
+            select(User).where(User.phone == "+7 (999) 111-55-55")
         )).scalar_one()
         assert user.role == UserRole.CLIENT
         mp = (await session.execute(
@@ -125,7 +124,7 @@ class TestBecomeMaster:
         await client.post("/api/v1/auth/become-master",
                           headers=_auth(token), json={})
         user = (await session.execute(
-            select(User).where(User.email == "soon_master@example.com")
+            select(User).where(User.phone == "+7 (999) 111-55-55")
         )).scalar_one()
         mp = (await session.execute(
             select(MasterProfile).where(MasterProfile.user_id == user.id)

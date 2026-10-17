@@ -8,17 +8,34 @@ def _dt(days=1):
 
 
 async def _register(client, session, name, email, phone, is_master):
-    from sqlalchemy import select
-    from app.models.user import User
-    r = await client.post("/api/v1/auth/register-unified", json={
-        "name": name, "email": email, "phone": phone,
-        "password": "SecurePass123!", "is_master": is_master,
+    """Create a user directly in the DB (registration no longer makes masters
+    nor collects email). Returns a token + user id, mirroring the old helper."""
+    from app.models.user import User, UserRole
+    from app.models.master_profile import MasterProfile
+    from app.models.client_profile import ClientProfile
+    from app.utils.security import hash_password
+    from app.utils.phone import normalize_phone
+    from app.modules.auth.token import create_access_token
+
+    role = UserRole.MASTER if is_master else UserRole.CLIENT
+    user = User(name=name, email=email, phone=normalize_phone(phone),
+                hashed_password=hash_password("SecurePass123!"),
+                role=role, is_verified=True)
+    session.add(user)
+    await session.flush()
+    if is_master:
+        session.add(MasterProfile(user_id=user.id))
+    else:
+        session.add(ClientProfile(user_id=user.id))
+    await session.commit()
+
+    token = create_access_token({
+        "sub": str(user.id),
+        "role": user.role.value,
+        "name": user.name,
+        "is_admin": False,
     })
-    assert r.status_code == 201, r.text
-    user_id = (await session.execute(
-        select(User.id).where(User.email == email)
-    )).scalar_one()
-    return {"access_token": r.json()["access_token"], "id": user_id}
+    return {"access_token": token, "id": user.id}
 
 
 async def _mp_id(session, user_id):

@@ -1,5 +1,5 @@
 """Pydantic schemas for authentication."""
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, field_validator
 from typing import Optional
 from enum import Enum
 
@@ -26,17 +26,17 @@ class UnifiedLoginRequest(BaseModel):
 
 
 class UnifiedRegisterRequest(BaseModel):
-    """Full registration with role selection."""
-    name: str
-    last_name: Optional[str] = None
-    email: EmailStr
+    """Quick registration: phone + password only.
+
+    Everything else (name, email, address, city) is refined later in the
+    client cabinet profile — registration stays minimal by design. Every
+    account created here is a CLIENT; becoming a master is a separate,
+    admin-approved application (/become-master).
+    """
     phone: str
     password: str
-    city_name: Optional[str] = None
-    # DaData location string: cabinet address (master) or home location (client).
-    address: Optional[str] = None
-    telegram_username: Optional[str] = None
-    is_master: bool = False
+    # 152-FZ consent checkbox (offer + privacy policy); stamped on the account.
+    consent: bool = False
 
     @field_validator('phone')
     @classmethod
@@ -47,16 +47,6 @@ class UnifiedRegisterRequest(BaseModel):
     @classmethod
     def validate_password(cls, v: str) -> str:
         return validate_password_strength(v)
-
-    @field_validator('telegram_username')
-    @classmethod
-    def validate_telegram(cls, v: Optional[str]) -> Optional[str]:
-        if v is None:
-            return v
-        v = v.strip()
-        if v and not v.startswith('@'):
-            v = '@' + v
-        return v
 
 
 class TokenResponse(BaseModel):

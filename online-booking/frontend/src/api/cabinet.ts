@@ -8,6 +8,12 @@ export interface ClientMe {
   phone?: string | null;
   email?: string | null;
   is_verified: boolean;
+  /** Bound MAX account (chat-bot login available). */
+  max_bound?: boolean;
+  /** Public MAX nickname (@username) for support. */
+  max_username?: string | null;
+  /** Bound VK ID account (login via VK/OK/Mail widget). */
+  vk_bound?: boolean;
   city_id?: number | null;
   city_name?: string | null;
   address?: string | null;

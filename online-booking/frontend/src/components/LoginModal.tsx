@@ -3,9 +3,10 @@ import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { authApi } from '../api/client';
 import { PASSWORD_PLACEHOLDER } from '../constants';
-import { capitalizeWords } from '../utils/names';
 import { passwordError } from '../utils/password';
-import AddressSelect from './common/AddressSelect';
+import SocialAuthButton from './common/SocialAuthButton';
+import VkIdWidget from './common/VkIdWidget';
+import MaxIcon from './common/icons/MaxIcon';
 import type { MaxStartResponse } from '../api/auth';
 import PhoneInput, { maskPhone, isCompletePhone, PHONE_MAX_DIGITS } from './common/PhoneInput';
 import { getCookie, decodeJwtPayload, getUserRole } from '../utils/cookies';
@@ -21,7 +22,7 @@ interface LoginModalProps {
   redirectTo?: string | null;
 }
 
-type ModalMode = 'login' | 'register' | 'max';
+type ModalMode = 'login' | 'register' | 'max' | 'vk';
 
 interface LoginFormState {
   identifier: string; // email or phone
@@ -32,17 +33,8 @@ interface LoginFormState {
 }
 
 interface RegisterFormState {
-  firstName: string;
-  lastName: string;
-  email: string;
   phone: string;
   password: string;
-  address: string;
-  addressCity: string;
-  /** The address came from a suggestion row (city parsed from it). */
-  addressPicked: boolean;
-  telegramUsername: string;
-  isMaster: boolean;
   consent: boolean;
 }
 
@@ -57,16 +49,8 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
     isRegister: false,
   });
   const [registerForm, setRegisterForm] = useState<RegisterFormState>({
-    firstName: '',
-    lastName: '',
-    email: '',
     phone: '',
     password: '',
-    address: '',
-    addressCity: '',
-    addressPicked: false,
-    telegramUsername: '',
-    isMaster: false,
     consent: false,
   });
   const [loading, setLoading] = useState(false);
@@ -77,6 +61,46 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
   const [maxPhone, setMaxPhone] = useState('');
   const [maxOffer, setMaxOffer] = useState<MaxStartResponse | null>(null);
   const [maxCodeInput, setMaxCodeInput] = useState('');
+  // 152-FZ consent checkbox (same offer + privacy policy as registration);
+  // stamped server-side when the MAX code creates/backfills the account.
+  const [maxConsent, setMaxConsent] = useState(false);
+
+  // VK ID widget: 152-FZ consent gates the OAuthList (VK/OK/Mail) widget;
+  // PKCE + the signed state are handled inside VkIdWidget.
+  const [vkConsent, setVkConsent] = useState(false);
+
+  /* After the VK widget establishes the backend session (cookies set), land
+     by role — admins to their section, masters to the panel, else the client
+     cabinet. Mirrors the old /auth/vk/callback landing logic. */
+  const handleVkSuccess = () => {
+    toast.success('Вход через VK выполнен!');
+    setTimeout(() => {
+      onClose();
+      try {
+        const payload = decodeJwtPayload(getCookie('access_token') ?? '');
+        if (payload?.is_admin === true) {
+          navigate(`${SUPER_PREFIX}/dashboard`, { replace: true });
+          return;
+        }
+        if (redirectTo) {
+          try {
+            sessionStorage.removeItem('postLoginTo');
+          } catch {
+            /* ignore */
+          }
+          navigate(redirectTo, { replace: true });
+          return;
+        }
+        if (payload?.role === 'MASTER') {
+          navigate(`${ADMIN_PREFIX}/dashboard`, { replace: true });
+          return;
+        }
+        navigate('/cabinet', { replace: true });
+      } catch {
+        navigate('/cabinet', { replace: true });
+      }
+    }, 400);
+  };
 
   const landByRole = (loginAs: RoleChoice = 'client') => {
     setTimeout(() => {
@@ -190,6 +214,10 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
       toast.error('Введите корректный номер телефона (11 цифр)');
       return;
     }
+    if (!maxConsent) {
+      toast.error('Подтвердите согласие на обработку персональных данных');
+      return;
+    }
     setLoading(true);
     try {
       const resp = await authApi.maxStart(maxPhone);
@@ -211,7 +239,7 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
     }
     setLoading(true);
     try {
-      const resp = await authApi.maxVerify(maxPhone, maxCodeInput.trim());
+      const resp = await authApi.maxVerify(maxPhone, maxCodeInput.trim(), maxConsent);
       toast.success(
         resp.data.is_new_user ? 'Добро пожаловать! Аккаунт создан.' : 'Вход через MAX выполнен!',
       );
@@ -235,10 +263,6 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
       toast.error('Подтвердите согласие на обработку персональных данных');
       return;
     }
-    if (!registerAddressOk) {
-      toast.error('Выберите адрес из списка подсказок — по нему определяется город');
-      return;
-    }
     if (!registerValid) {
       toast.error('Заполните все обязательные поля корректно');
       return;
@@ -246,21 +270,14 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
     setLoading(true);
     try {
       await authApi.registerUnified({
-        name: registerForm.firstName.trim(),
-        last_name: registerForm.lastName.trim() || null,
-        email: registerForm.email,
         phone: registerForm.phone,
         password: registerForm.password,
-        // Location string (cabinet for masters, home for clients) + the
-        // city parsed from the DaData suggestion (primary matching key).
-        address: registerForm.address.trim() || null,
-        city_name: registerForm.addressCity.trim() || null,
-        telegram_username: registerForm.telegramUsername || null,
-        is_master: registerForm.isMaster,
+        consent: registerForm.consent,
       });
-      // register-unified logs in immediately: land straight in the section.
+      // register-unified logs in immediately: everyone lands in the client
+      // cabinet — profile is filled in later, becoming a master is separate.
       toast.success('Добро пожаловать! Вы вошли в аккаунт.');
-      landByRole(registerForm.isMaster ? 'master' : 'client');
+      landByRole('client');
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Ошибка регистрации');
     } finally {
@@ -270,6 +287,7 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
 
   const switchMode = (newMode: ModalMode) => {
     resetMaxState();
+    setMaxConsent(false);
     setMode(newMode);
     setLoginForm({
       identifier: '',
@@ -278,16 +296,8 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
       isRegister: false,
     });
     setRegisterForm({
-      firstName: '',
-      lastName: '',
-      email: '',
       phone: '',
       password: '',
-      address: '',
-      addressCity: '',
-      addressPicked: false,
-      telegramUsername: '',
-      isMaster: false,
       consent: false,
     });
     setShowLoginPassword(false);
@@ -297,16 +307,10 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
   /* ── Register validation: mirrors backend rules, submit stays disabled
       until every required field is valid (item: disabled until valid). */
   const registerPwdError = passwordError(registerForm.password);
-  const registerEmailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(registerForm.email.trim());
   const registerPhoneOk = isCompletePhone(registerForm.phone);
-  const registerAddressOk = registerForm.addressPicked && registerForm.address.trim().length >= 3;
   const registerValid =
-    registerForm.firstName.trim() !== '' &&
-    registerForm.lastName.trim() !== '' &&
-    registerEmailOk &&
     registerPhoneOk &&
     registerPwdError === null &&
-    registerAddressOk &&
     registerForm.consent;
 
   const maxForm = !maxOffer ? (
@@ -321,7 +325,33 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
         />
       </div>
 
-      <button type="submit" className="btn btn-primary btn-submit" disabled={loading}>
+      {/* 152-ФЗ + оферта: same consent as registration, stamped on the
+          account created (or backfilled) by the MAX code. */}
+      <div className="checkbox-group">
+        <label className="checkbox-label">
+          <input
+            type="checkbox"
+            checked={maxConsent}
+            onChange={(e) => setMaxConsent(e.target.checked)}
+          />
+          <span>
+            Соглашаюсь с{' '}
+            <Link to="/offer" target="_blank" rel="noreferrer">
+              Офертой
+            </Link>{' '}
+            и{' '}
+            <Link to="/privacy" target="_blank" rel="noreferrer">
+              Политикой обработки ПДн
+            </Link>
+          </span>
+        </label>
+      </div>
+
+      <button
+        type="submit"
+        className="btn btn-primary btn-submit"
+        disabled={loading || !maxConsent}
+      >
         {loading ? 'Отправляем...' : 'Получить код в MAX'}
       </button>
 
@@ -363,6 +393,9 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
             target="_blank"
             rel="noreferrer"
           >
+            <span className="social-auth-icon">
+              <MaxIcon size={18} />
+            </span>
             Открыть бота {maxOffer.bot_username}
           </a>
         )}
@@ -418,12 +451,81 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
     </form>
   );
 
+  /* VK ID widget: consent is captured here BEFORE the widget renders, then
+     the VK/OK/Mail OAuthList block is shown. The account is created on the
+     first successful exchange — registration and login are one flow. */
+  const vkForm = (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+      }}
+    >
+      <p style={{ fontSize: 14, color: '#555', marginBottom: 16 }}>
+        Войдите через ВКонтакте, Одноклассники или Mail — аккаунт создастся
+        автоматически при первом входе, email и пароль не нужны.
+      </p>
+
+      {/* 152-ФЗ + оферта: same consent as registration, required before the
+          widget renders (VK returns the profile data we then process). */}
+      <div className="checkbox-group">
+        <label className="checkbox-label">
+          <input
+            type="checkbox"
+            checked={vkConsent}
+            onChange={(e) => setVkConsent(e.target.checked)}
+          />
+          <span>
+            Соглашаюсь с{' '}
+            <Link to="/offer" target="_blank" rel="noreferrer">
+              Офертой
+            </Link>{' '}
+            и{' '}
+            <Link to="/privacy" target="_blank" rel="noreferrer">
+              Политикой обработки ПДн
+            </Link>
+          </span>
+        </label>
+      </div>
+
+      {/* VK + OK + Mail OAuthList widget (renders only once consent is given).
+          The backend exchange stays server-side — tokens never touch the browser. */}
+      <VkIdWidget consent={vkConsent} onSuccess={handleVkSuccess} />
+
+      <button
+        type="button"
+        className="btn btn-ghost btn-submit"
+        style={{ marginTop: 8 }}
+        onClick={() => switchMode('login')}
+      >
+        ← Назад ко входу
+      </button>
+
+      <p className="login-footer">
+        <a
+          href="#"
+          onClick={(e) => {
+            e.preventDefault();
+            switchMode('login');
+          }}
+        >
+          Войти по паролю
+        </a>
+      </p>
+    </form>
+  );
+
   return (
     <Modal
       open={isOpen}
       onClose={onClose}
       title={
-        mode === 'login' ? 'Вход в систему' : mode === 'register' ? 'Регистрация' : 'Вход через MAX'
+        mode === 'login'
+          ? 'Вход в систему'
+          : mode === 'register'
+            ? 'Регистрация'
+            : mode === 'vk'
+              ? 'Вход через VK, OK или Mail'
+              : 'Вход и регистрация через MAX'
       }
       className="login-modal"
     >
@@ -488,6 +590,17 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
             {loading ? 'Входим...' : 'Войти'}
           </button>
 
+          <div className="social-auth-divider">или</div>
+          {/* One-click MAX auth: logs in AND registers on first use. */}
+          <SocialAuthButton
+            provider="max"
+            action="login"
+            onClick={() => switchMode('max')}
+          />
+          <div style={{ marginTop: 8 }}>
+            <SocialAuthButton provider="vk" action="login" onClick={() => switchMode('vk')} />
+          </div>
+
           <p className="login-footer">
             Нет аккаунта?{' '}
             <a
@@ -499,46 +612,17 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
             >
               Зарегистрироваться
             </a>
-            {' · '}
-            <a
-              href="#"
-              onClick={(e) => {
-                e.preventDefault();
-                switchMode('max');
-              }}
-            >
-              Войти через MAX
-            </a>
           </p>
         </form>
       ) : mode === 'max' ? (
         /* MAX CHAT-BOT FORM (SMS-style: code arrives in MAX, typed here) */
         maxForm
+      ) : mode === 'vk' ? (
+        /* VK ID CONSENT PANEL (redirect flow; account created on first exchange) */
+        vkForm
       ) : (
         /* ─── REGISTER FORM ─── */
         <form onSubmit={handleRegister}>
-          {/* Location: cabinet address (master) or home location (client).
-              City for matching is parsed from the DaData pick. */}
-          <div className="login-group">
-            <AddressSelect
-              value={registerForm.address}
-              onChange={(address, city, picked) =>
-                setRegisterForm((prev) => ({
-                  ...prev,
-                  address,
-                  addressCity: picked ? city || '' : address.trim() === '' ? '' : prev.addressCity,
-                  addressPicked: picked ?? false,
-                }))
-              }
-              label={registerForm.isMaster ? 'Адрес кабинета *' : 'Ваш адрес *'}
-              placeholder="Город, улица, дом..."
-              required
-            />
-            {registerForm.address.trim() !== '' && !registerAddressOk && (
-              <p className="error-message">Выберите адрес из списка подсказок</p>
-            )}
-          </div>
-
           {/* Phone */}
           <div className="login-group">
             <label>Телефон *</label>
@@ -591,78 +675,6 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
             )}
           </div>
 
-          {/* Name + surname (auto-capitalized, editable later in profile) */}
-          <div className="login-row">
-            <div className="login-group">
-              <label>Имя *</label>
-              <input
-                type="text"
-                value={registerForm.firstName}
-                onChange={(e) =>
-                  setRegisterForm((prev) => ({
-                    ...prev,
-                    firstName: capitalizeWords(e.target.value),
-                  }))
-                }
-                placeholder="Иван"
-                required
-              />
-            </div>
-            <div className="login-group">
-              <label>Фамилия *</label>
-              <input
-                type="text"
-                value={registerForm.lastName}
-                onChange={(e) =>
-                  setRegisterForm((prev) => ({
-                    ...prev,
-                    lastName: capitalizeWords(e.target.value),
-                  }))
-                }
-                placeholder="Петров"
-                required
-              />
-            </div>
-          </div>
-
-          {/* Email */}
-          <div className="login-group">
-            <label>Email *</label>
-            <input
-              type="email"
-              value={registerForm.email}
-              onChange={(e) => setRegisterForm((prev) => ({ ...prev, email: e.target.value }))}
-              placeholder="email@example.com"
-              required
-            />
-            {registerForm.email.trim() !== '' && !registerEmailOk && (
-              <p className="error-message">Некорректный email</p>
-            )}
-          </div>
-
-          {/* Telegram */}
-          <div className="login-group">
-            <label>Telegram (необязательно)</label>
-            <input
-              type="text"
-              value={registerForm.telegramUsername}
-              onChange={(e) =>
-                setRegisterForm((prev) => ({ ...prev, telegramUsername: e.target.value }))
-              }
-              placeholder="@username"
-            />
-          </div>
-
-          {/* Register as client or master */}
-          <div className="login-group">
-            <label>Регистрируюсь как</label>
-            <RoleSwitch
-              value={registerForm.isMaster ? 'master' : 'client'}
-              onChange={(v) => setRegisterForm((prev) => ({ ...prev, isMaster: v === 'master' }))}
-              labels={{ client: '👤 Клиент', master: '💼 Мастер' }}
-            />
-          </div>
-
           {/* 152-ФЗ + оферта: explicit consent, blocks submit */}
           <div className="checkbox-group">
             <label className="checkbox-label">
@@ -693,6 +705,18 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
           >
             {loading ? 'Регистрация...' : 'Зарегистрироваться'}
           </button>
+
+          <div className="social-auth-divider">или</div>
+          {/* Same MAX flow for registration: the account is created on the
+              first verified code — no email/password needed. */}
+          <SocialAuthButton
+            provider="max"
+            action="register"
+            onClick={() => switchMode('max')}
+          />
+          <div style={{ marginTop: 8 }}>
+            <SocialAuthButton provider="vk" action="register" onClick={() => switchMode('vk')} />
+          </div>
 
           <p className="login-footer">
             Уже есть аккаунт?{' '}

@@ -76,19 +76,17 @@ class TestGetCurrentMaster:
 
     async def test_client_token_rejected_by_master_endpoint(self, client):
         """Client JWT token is rejected by master-only endpoints."""
-        # Register a client
+        # Register a client (quick phone+password)
         reg_resp = await client.post("/api/v1/auth/register-unified", json={
-            "name": "Client Test",
-            "email": "client_only@example.com",
             "phone": "+79991110000",
             "password": "SecurePass123!",
-            "is_master": False
+            "consent": True,
         })
         assert reg_resp.status_code == 201
 
-        # Login as client
+        # Login as client by phone
         login_resp = await client.post("/api/v1/auth/login-unified", json={
-            "identifier": "client_only@example.com",
+            "identifier": "+7 (999) 111-00-00",
             "password": "SecurePass123!"
         })
         assert login_resp.status_code == 200

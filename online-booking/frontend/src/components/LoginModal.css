@@ -258,7 +258,10 @@
 }
 
 .max-bot-btn {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   text-align: center;
   text-decoration: none;
   margin-bottom: 12px;

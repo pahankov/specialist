@@ -76,7 +76,7 @@ async def max_verify(
     if not settings.max_enabled:
         raise HTTPException(status_code=503, detail="Вход через MAX не настроен")
     access_token, user, is_new = await service.verify_max_code(
-        req.phone, req.code, db
+        req.phone, req.code, db, consent=req.consent
     )
     cookie_token = await service.get_latest_refresh_token_value(db, user.id)
     set_auth_cookies(response, access_token, cookie_token)
@@ -131,15 +131,16 @@ async def max_webhook(request: Request, db: AsyncSession = Depends(get_db)):
             if otp is not None:
                 name = service.sender_display_name(sender)
                 fresh = await service.deliver_code_to_dialog(
-                    db, otp.phone, int(sender_id), name, False)
+                    db, otp.phone, int(sender_id), name, False,
+                    username=service.sender_username(sender))
                 if fresh is not None:
                     await _reply_code(update, fresh)
                     return {"ok": True, "outcome": "auto_met"}
         await _reply_with_keyboard(
             update,
             "Здравствуйте! Это бот электронной записи.\n"
-            "Введите номер на сайте и нажмите «Получить код в MAX», "
-            "а затем поделитесь номером здесь — пришлём код для входа.",
+            "Поделитесь номером телефона кнопкой ниже или введите номер "
+            "на сайте — пришлём код для входа.",
         )
         return {"ok": True}
 
@@ -151,7 +152,8 @@ async def max_webhook(request: Request, db: AsyncSession = Depends(get_db)):
             return {"ok": True}
 
         # 1. Contact share (HMAC-verified number when it matches).
-        phone, verified, name = service.parse_contact_phone(message)
+        phone, verified, name, vcf_email = service.parse_contact_phone(message)
+        username = service.sender_username(sender)
         # 2. Fallback: typed phone text.
         if phone is None:
             body = message.get("body") or {}
@@ -159,20 +161,27 @@ async def max_webhook(request: Request, db: AsyncSession = Depends(get_db)):
             phone = service.parse_phone_text(text)
             name = service.sender_display_name(sender)
         if phone is None:
-            await _reply_to_sender(
+            # Not a phone — repeat the button: the first keyboard appeared
+            # only at bot_started and is easy to miss in the dialog.
+            await _reply_with_keyboard(
                 update,
-                "Пришлите номер телефона (или нажмите «Поделиться номером»), "
-                "а код для входа придёт сюда же.",
+                "Пришлите номер телефона кнопкой «Поделиться номером» "
+                "ниже — код для входа придёт сюда же. Можно также ввести "
+                "номер на сайте и нажмите «Получить код в MAX».",
             )
             return {"ok": True}
 
         code = await service.deliver_code_to_dialog(
-            db, phone, int(sender_id), name, verified)
+            db, phone, int(sender_id), name, verified,
+            username=username, email=vcf_email)
         if code is None:
-            await _reply_to_sender(
+            # Only reachable for a typed phone: an HMAC-verified contact
+            # share opens the request itself, a typed number must not.
+            await _reply_with_keyboard(
                 update,
-                "Заявки с таким номером нет. Сначала введите номер на сайте "
-                "и нажмите «Получить код в MAX».",
+                "Заявки с таким номером нет. Введите номер на сайте и "
+                "нажмите «Получить код в MAX», либо поделитесь номером "
+                "кнопкой ниже.",
             )
             return {"ok": True, "outcome": "no_pending"}
         await _reply_code(update, code)
@@ -212,17 +221,6 @@ async def _send_with_dialog_retry(target: int, text: str, attachments=None) -> N
         )
         await asyncio.sleep(DIALOG_RETRY_DELAY)
         await get_max_api().send_message(target, text, attachments)
-
-
-async def _reply_to_sender(update: dict, text: str) -> None:
-    """Best-effort bot reply; never fails the webhook (else MAX retries)."""
-    try:
-        target = _resolve_target(update)
-        if not target:
-            return
-        await _send_with_dialog_retry(int(target), text)
-    except (MaxApiError, ValueError, TypeError) as e:
-        logger.warning("MAX reply failed (best-effort): %s", e)
 
 
 async def _reply_with_keyboard(update: dict, text: str) -> None:

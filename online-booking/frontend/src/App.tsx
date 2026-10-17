@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { HomePage, BookingPage, PrivacyPolicyPage, OfferPage } from './pages/public';
+import VkCallbackPage from './pages/public/VkCallbackPage';
 import {
   AdminLayout,
   DashboardPage,
@@ -111,6 +112,9 @@ function App() {
           <Route path="/booking" element={<BookingPage />} />
           <Route path="/privacy" element={<PrivacyPolicyPage />} />
           <Route path="/offer" element={<OfferPage />} />
+          {/* VK ID OAuth landing: VK redirects here with ?code&device_id&state,
+              the code is exchanged server-side, then we land by role. */}
+          <Route path="/auth/vk/callback" element={<VkCallbackPage />} />
           <Route
             path="/cabinet"
             element={

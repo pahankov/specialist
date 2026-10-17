@@ -27,6 +27,9 @@ class MaxStartResponse(BaseModel):
 class MaxVerifyRequest(BaseModel):
     phone: str
     code: str
+    # 152-FZ consent checkbox on the MAX login form (offer + privacy policy).
+    # Stamped on account creation / backfilled onto legacy NULL-consent users.
+    consent: bool = False
 
     @field_validator('phone')
     @classmethod

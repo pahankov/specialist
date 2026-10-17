@@ -361,30 +361,21 @@ async def register_unified(
     req: UnifiedRegisterRequest,
     db: AsyncSession = Depends(get_db)
 ):
-    """Full registration with role selection (client or master).
+    """Quick registration: phone + password, everyone a CLIENT.
 
     Logs the user in immediately: returns access_token + sets auth cookies,
-    so the client lands straight in its section (no extra login step).
+    so the client lands straight in its cabinet (no extra login step).
     """
-    logger.info(
-        "Unified register: name=%s, email=%s, phone=%s, is_master=%s",
-        req.name, req.email, req.phone, req.is_master
-    )
+    logger.info("Quick register: phone=%s", req.phone)
     try:
         new_user = await service.register_unified(
-            name=req.name,
-            last_name=req.last_name,
-            email=req.email,
             phone=req.phone,
             password=req.password,
-            city_name=req.city_name,
-            address=req.address,
-            telegram_username=req.telegram_username,
-            is_master=req.is_master,
+            consent=req.consent,
             db=db,
         )
         logger.info(
-            "Unified register successful: user_id=%s, role=%s",
+            "Register successful: user_id=%s, role=%s",
             new_user.id, new_user.role.value
         )
 
@@ -401,16 +392,16 @@ async def register_unified(
         _set_auth_cookies(response, access_token, refresh_value)
         await log_action(
             db, new_user.id, "register", "auth", new_user.id,
-            f"Регистрация: {new_user.email or new_user.phone} ({new_user.role.value})",
+            f"Регистрация: {new_user.phone} ({new_user.role.value})",
             level="info",
         )
         await db.commit()
         return {"access_token": access_token, "token_type": "bearer"}
     except HTTPException:
-        logger.warning("Unified register failed: name=%s", req.name)
+        logger.warning("Quick register failed: phone=%s", req.phone)
         raise
     except Exception as e:
-        logger.error("Unified register failed (unexpected): name=%s, error=%s", req.name, e, exc_info=True)
+        logger.error("Quick register failed (unexpected): phone=%s, error=%s", req.phone, e, exc_info=True)
         raise HTTPException(status_code=500, detail="Ошибка регистрации")
 
 

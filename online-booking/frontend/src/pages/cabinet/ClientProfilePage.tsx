@@ -142,6 +142,19 @@ function ClientProfilePage() {
               <input value={me?.email || '—'} disabled className="input-disabled" />
             </div>
           </div>
+          {me?.max_bound && (
+            /* MAX chat-bot binding: quick login channel + @nickname for support. */
+            <p style={{ fontSize: 13, color: '#666', margin: '4px 0 0' }}>
+              ✅ Вход через MAX включён
+              {me.max_username ? ` (@${me.max_username})` : ''}
+            </p>
+          )}
+          {me?.vk_bound && (
+            /* VK ID binding: login via the VK/OK/Mail widget. */
+            <p style={{ fontSize: 13, color: '#666', margin: '4px 0 0' }}>
+              ✅ Вход через VK включён
+            </p>
+          )}
         </div>
 
         <div className="card" style={{ marginBottom: 16 }}>

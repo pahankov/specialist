@@ -9,12 +9,10 @@ from typing import Optional
 from app.models.user import User, UserRole
 from app.models.master_profile import MasterProfile
 from app.models.client_profile import ClientProfile
-from app.models.city import City
 from app.models.refresh_token import RefreshToken
 from app.models.otp_code import OtpCode
 from app.schemas.user import UserCreate, UserLoginByEmail, UserLoginByPhone
 from app.schemas.otp import SendOtpRequest
-from app.services.names import compose_full_name as _compose_name
 from app.services.names import name_fields as _name_fields
 from app.logging_config import get_logger
 from app.config import settings
@@ -304,37 +302,20 @@ POLICY_VERSION = "2026-10-12"
 OFFER_VERSION = "2026-10-12"
 
 async def register_unified(
-    name: str,
-    email: str,
     phone: str,
     password: str,
-    city_name: Optional[str],
-    telegram_username: Optional[str],
-    is_master: bool,
     db: AsyncSession,
-    last_name: Optional[str] = None,
-    address: Optional[str] = None,
+    consent: bool = False,
 ) -> User:
-    """Full registration with role selection (client or master).
+    """Quick registration: phone + password, everyone a CLIENT.
 
-    `name` is the first name; `last_name` optional. The display `name`
-    stores "Имя Фамилия" so every existing list/badge keeps working.
-    `address` is the DaData location string: master's cabinet for masters,
-    home location for clients. `city_name` (parsed from it by the client)
-    resolves users.city_id — the primary matching key.
-    Returns User instance with appropriate profile.
+    Minimal by design — name/email/address/city are refined later in the
+    client cabinet profile. Becoming a master is a separate, admin-approved
+    application (/become-master), never this path. `name` is nullable and
+    left empty here; the display name is filled in once the user edits
+    their profile.
     """
-    logger.info("Unified registration: %s (is_master=%s)", email, is_master)
-
-    role = UserRole.MASTER if is_master else UserRole.CLIENT
-
-    # Check email uniqueness
-    result = await db.execute(select(User).where(User.email == email))
-    if result.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Пользователь с таким email уже существует"
-        )
+    logger.info("Quick registration: %s", phone)
 
     # Check phone uniqueness
     result = await db.execute(select(User).where(User.phone == phone))
@@ -344,51 +325,28 @@ async def register_unified(
             detail="Пользователь с таким телефоном уже существует"
         )
 
-    # Look up city_id by name
-    city_id = None
-    if city_name:
-        result = await db.execute(
-            select(City.id).where(City.name_ru == city_name)
-        )
-        city_id = result.scalar_one_or_none()
-
-    # Create user (display name keeps "Имя Фамилия" for all existing views).
-    # The registration form carries a mandatory consent checkbox (offer +
-    # privacy policy), so consent is stamped here as legal proof.
-    first = name.strip()
-    last = (last_name or "").strip()
+    # Create user (CLIENT role; name/email filled later in the profile).
+    # Consent checkbox (offer + privacy policy) is stamped as legal proof.
+    # `name` starts empty (column is non-nullable) — filled in the cabinet.
     new_user = User(
-        name=_compose_name(first, last),
-        last_name=last or None,
-        email=email,
+        name="",
         phone=phone,
         hashed_password=hash_password(password),
-        role=role,
-        city_id=city_id,
+        role=UserRole.CLIENT,
         is_verified=True,
-        consent_at=datetime.now(dt_timezone.utc),
-        consent_policy_version=POLICY_VERSION,
-        consent_offer_version=OFFER_VERSION,
+        consent_at=(datetime.now(dt_timezone.utc) if consent else None),
+        consent_policy_version=(POLICY_VERSION if consent else None),
+        consent_offer_version=(OFFER_VERSION if consent else None),
     )
     db.add(new_user)
     await db.flush()
 
-    # Create profile based on role
-    if is_master:
-        master_profile = MasterProfile(
-            user_id=new_user.id,
-            telegram_username=telegram_username,
-            cabinet_address=(address or "").strip() or None,
-        )
-        db.add(master_profile)
-    else:
-        client_profile = ClientProfile(
-            user_id=new_user.id, address=(address or "").strip() or None)
-        db.add(client_profile)
+    # Every registrant gets a client cabinet profile.
+    db.add(ClientProfile(user_id=new_user.id))
 
     await db.commit()
     await db.refresh(new_user)
 
-    logger.info("User successfully registered: %s (role=%s)", email, role.value)
+    logger.info("User successfully registered: %s (role=CLIENT)", phone)
     return new_user
 

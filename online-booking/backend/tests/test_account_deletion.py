@@ -136,16 +136,17 @@ class TestClientSelfDelete:
         r = await client.get("/api/v1/client/me", headers=headers)
         assert r.status_code == 401
 
-    async def test_email_freed_for_reregistration(
+    async def test_phone_freed_for_reregistration(
         self, client, client_selfdel,
     ):
         user_id, headers = client_selfdel
         assert (await client.delete(
             "/api/v1/client/me", headers=headers)).status_code == 200
+        # The deleted account's phone was anonymized, so re-registering the
+        # same phone must now succeed.
         r = await client.post("/api/v1/auth/register-unified", json={
-            "name": "Return", "email": "selfdel@example.com",
-            "phone": "+79991112233", "password": "SecurePass123!",
-            "is_master": False,
+            "phone": "+79990009911", "password": "SecurePass123!",
+            "consent": True,
         })
         assert r.status_code == 201, r.text
 

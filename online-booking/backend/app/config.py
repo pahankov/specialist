@@ -60,6 +60,24 @@ class Settings(BaseSettings):
     # Empty = backend/certs/russian_trusted_ca.pem if present, else system store.
     MAX_CA_BUNDLE: str = ""
 
+    # VK ID (OAuth 2.0 Authorization Code + PKCE; server-side code exchange).
+    # client_id + service_token live in the VK ID app settings; redirect_uri
+    # must be registered as a trusted redirect URL.
+    #
+    # NOTE the VK credential naming (easy to mix up):
+    # - VK_CLIENT_ID        = «ID приложения»
+    # - VK_SERVICE_TOKEN    = «Сервисный ключ доступа» — this is the
+    #   `service_token` POST param VK requires from CONFIDENTIAL apps when
+    #   exchanging the code. NOT the «Защищённый ключ» (classic VK API secret).
+    VK_CLIENT_ID: str = ""
+    VK_SERVICE_TOKEN: str = ""
+    # Registered redirect URL — the frontend /auth/vk/callback page.
+    VK_REDIRECT_URI: str = ""
+    # Space-separated scopes; empty = VK default set (vkid.personal_info:
+    # name, surname, sex, photo, birthday). Add "email phone" only when those
+    # access rights are enabled for the app in the VK ID admin panel.
+    VK_SCOPE: str = ""
+
     # DaData (address suggestions; secret never leaves the backend proxy)
     DADATA_API_KEY: str = ""
     DADATA_SECRET: str = ""
@@ -85,6 +103,11 @@ class Settings(BaseSettings):
     def max_enabled(self) -> bool:
         """MAX chat-bot auth available iff bot token is configured."""
         return bool(self.MAX_BOT_TOKEN)
+
+    @property
+    def vk_enabled(self) -> bool:
+        """VK ID auth available iff client id + redirect uri are configured."""
+        return bool(self.VK_CLIENT_ID and self.VK_REDIRECT_URI)
 
     @property
     def max_verify(self):

@@ -24,6 +24,7 @@ from app.modules.city import router as city_router
 from app.modules.client import router as client_router
 from app.modules.dadata.router import router as dadata_router
 from app.modules.maxauth import router as max_router, webhook_router as max_webhook_router
+from app.modules.vkauth import router as vk_router
 
 # Инициализация логирования (LOG_LEVEL из env, иначе INFO в проде / DEBUG локально)
 setup_logging(settings.log_level)
@@ -63,7 +64,7 @@ app = FastAPI(
         "Все API-эндпоинты версионированы: `/api/v1/`. "
         "Список изменений: `GET /api/v1/admin/changelog`."
     ),
-    version="1.72.0",
+    version="1.73.0",
     contact={
         "name": "Support",
         "email": "support@beauty-specialist.ru",
@@ -188,6 +189,7 @@ async def health_check():
 
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(max_router, prefix="/api/v1/auth", tags=["max-auth"])
+app.include_router(vk_router, prefix="/api/v1/auth", tags=["vk-auth"])
 app.include_router(city_router, prefix="/api/v1", tags=["cities"])
 app.include_router(user_router, prefix="/api/v1", tags=["users"])
 app.include_router(booking_router, prefix="/api/v1/appointments", tags=["appointments"])

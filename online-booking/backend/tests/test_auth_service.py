@@ -1,7 +1,7 @@
 """Tests for auth service layer (register_unified, login_unified).
 
 Covers:
-- register_unified — creates User + ClientProfile or MasterProfile
+- register_unified — quick phone+password registration, always a CLIENT
 - login_unified — finds user by email OR phone
 - verify_password / hash_password helpers
 """
@@ -12,175 +12,128 @@ import pytest
 
 
 class TestRegisterUnified:
-    """Tests for unified registration endpoint."""
+    """Tests for quick phone+password registration (everyone a CLIENT)."""
 
-    async def test_register_client(self, client):
-        """Client registration creates CLIENT user with ClientProfile + logs in."""
+    async def test_register_client(self, client, session):
+        """Quick registration creates a CLIENT user with ClientProfile + logs in."""
         resp = await client.post("/api/v1/auth/register-unified", json={
-            "name": "Test",
-            "last_name": "Client",
-            "email": "client_test@example.com",
             "phone": "+79991112233",
             "password": "SecurePass123!",
-            "is_master": False
+            "consent": True,
         })
         assert resp.status_code == 201
         data = resp.json()
         assert "access_token" in data
         assert data["token_type"] == "bearer"
 
+        from sqlalchemy import select
+        from app.models.user import User, UserRole
+        from app.models.client_profile import ClientProfile
+
+        user = (await session.execute(
+            select(User).where(User.phone == "+7 (999) 111-22-33")
+        )).scalar_one()
+        assert user.role == UserRole.CLIENT
+        # Name is left empty — refined later in the cabinet profile.
+        assert user.name == ""
+        cp = (await session.execute(
+            select(ClientProfile).where(ClientProfile.user_id == user.id)
+        )).scalar_one()
+
     async def test_register_stamps_consent(self, client, session):
-        """Registration records legal consent proof (152-FZ + offer)."""
+        """consent=True stamps consent_at + policy/offer versions."""
         from sqlalchemy import select
         from app.models.user import User
         from app.modules.auth.service import POLICY_VERSION, OFFER_VERSION
 
         resp = await client.post("/api/v1/auth/register-unified", json={
-            "name": "Consent",
-            "email": "consent_test@example.com",
             "phone": "+79993334455",
             "password": "SecurePass123!",
-            "is_master": False
+            "consent": True,
         })
         assert resp.status_code == 201, resp.text
         user = (await session.execute(
-            select(User).where(User.email == "consent_test@example.com")
+            select(User).where(User.phone == "+7 (999) 333-44-55")
         )).scalar_one()
         assert user.consent_at is not None
         assert user.consent_policy_version == POLICY_VERSION
         assert user.consent_offer_version == OFFER_VERSION
 
-    async def test_register_master(self, client):
-        """Master registration creates MASTER user with MasterProfile + logs in."""
+    async def test_register_without_consent_leaves_blank(self, client, session):
+        """consent=False does NOT stamp consent_at (checkbox not ticked)."""
+        from sqlalchemy import select
+        from app.models.user import User
+
         resp = await client.post("/api/v1/auth/register-unified", json={
-            "name": "Test",
-            "last_name": "Master",
-            "email": "master_test@example.com",
-            "phone": "+79992223344",
+            "phone": "+79991112245",
             "password": "SecurePass123!",
-            "is_master": True,
-            "telegram_username": "test_master"
+            "consent": False,
         })
         assert resp.status_code == 201
-        data = resp.json()
-        assert "access_token" in data
-
-    async def test_register_composes_full_name(self, client, session):
-        """First + last name compose the display name; last_name stored."""
-        from sqlalchemy import select
-        from app.models.user import User
-
-        resp = await client.post("/api/v1/auth/register-unified", json={
-            "name": "Иван",
-            "last_name": "Петров",
-            "email": "fio_test@example.com",
-            "phone": "+79993334455",
-            "password": "SecurePass123!",
-            "is_master": True
-        })
-        assert resp.status_code == 201, resp.text
         user = (await session.execute(
-            select(User).where(User.email == "fio_test@example.com")
+            select(User).where(User.phone == "+7 (999) 111-22-45")
         )).scalar_one()
-        assert user.name == "Иван Петров"
-        assert user.last_name == "Петров"
+        assert user.consent_at is None
+        assert user.consent_policy_version is None
 
-    async def test_register_master_address_and_city(self, client, session):
-        """Master address stored on profile; city resolved for matching."""
+    async def test_register_always_creates_client(self, client, session):
+        """There is no master path anymore — every account is CLIENT."""
         from sqlalchemy import select
-        from app.models.city import City
-        from app.models.country import Country
+        from app.models.user import User, UserRole
         from app.models.master_profile import MasterProfile
-        from app.models.user import User
-
-        country = Country(code="RU", name_ru="Россия", name_en="Russia", phone_prefix="+7")
-        session.add(country)
-        await session.flush()
-        session.add(City(country_id=country.id, name_ru="Казань",
-                         name_en="Kazan", slug="kazan"))
-        await session.commit()
 
         resp = await client.post("/api/v1/auth/register-unified", json={
-            "name": "Мастер",
-            "email": "addr_master@example.com",
-            "phone": "+79994445566",
+            "phone": "+79992223344",
             "password": "SecurePass123!",
-            "address": "г. Казань, ул. Баумана, 10",
-            "city_name": "Казань",
-            "is_master": True
+            "consent": True,
         })
-        assert resp.status_code == 201, resp.text
+        assert resp.status_code == 201
         user = (await session.execute(
-            select(User).where(User.email == "addr_master@example.com")
+            select(User).where(User.phone == "+7 (999) 222-33-44")
         )).scalar_one()
-        assert user.city_id is not None
+        assert user.role == UserRole.CLIENT
+        # No MasterProfile is created on this path.
         mp = (await session.execute(
             select(MasterProfile).where(MasterProfile.user_id == user.id)
-        )).scalar_one()
-        assert mp.cabinet_address == "г. Казань, ул. Баумана, 10"
+        )).scalar_one_or_none()
+        assert mp is None
 
-    async def test_register_client_address(self, client, session):
-        """Client location stored on profile (unknown city: no match, kept)."""
-        from sqlalchemy import select
-        from app.models.client_profile import ClientProfile
-        from app.models.user import User
-
+    async def test_register_ignores_unknown_fields(self, client):
+        """Extra legacy fields (is_master, email, address) are ignored, not errors."""
         resp = await client.post("/api/v1/auth/register-unified", json={
-            "name": "Клиент",
-            "email": "addr_client@example.com",
-            "phone": "+79995556677",
+            "phone": "+79991112246",
             "password": "SecurePass123!",
-            "address": "г. Москва, ул. Тверская, 1",
-            "city_name": "Нетакойгород",
-            "is_master": False
+            "consent": True,
+            "is_master": True,
+            "email": "legacy@example.com",
+            "address": "Москва, Арбат, 1",
         })
-        assert resp.status_code == 201, resp.text
-        user = (await session.execute(
-            select(User).where(User.email == "addr_client@example.com")
-        )).scalar_one()
-        assert user.city_id is None
-        cp = (await session.execute(
-            select(ClientProfile).where(ClientProfile.user_id == user.id)
-        )).scalar_one()
-        assert cp.address == "г. Москва, ул. Тверская, 1"
-
-    async def test_register_duplicate_email(self, client):
-        """Registration fails when email already exists."""
-        await client.post("/api/v1/auth/register-unified", json={
-            "name": "First User",
-            "email": "dup_email@example.com",
-            "phone": "+79993334455",
-            "password": "SecurePass123!",
-            "is_master": False
-        })
-        resp = await client.post("/api/v1/auth/register-unified", json={
-            "name": "Second User",
-            "email": "dup_email@example.com",
-            "phone": "+79994445566",
-            "password": "SecurePass123!",
-            "is_master": False
-        })
-        assert resp.status_code == 400
-        assert "уже существует" in resp.json()["detail"]
+        # Pydantic ignores unknown fields; account is still CLIENT + 201.
+        assert resp.status_code == 201
 
     async def test_register_duplicate_phone(self, client):
         """Registration fails when phone already exists."""
         await client.post("/api/v1/auth/register-unified", json={
-            "name": "First User",
-            "email": "dup_phone1@example.com",
             "phone": "+79995556677",
             "password": "SecurePass123!",
-            "is_master": False
+            "consent": True,
         })
         resp = await client.post("/api/v1/auth/register-unified", json={
-            "name": "Second User",
-            "email": "dup_phone2@example.com",
             "phone": "+79995556677",
             "password": "SecurePass123!",
-            "is_master": False
+            "consent": True,
         })
         assert resp.status_code == 400
         assert "уже существует" in resp.json()["detail"]
+
+    async def test_register_rejects_weak_password(self, client):
+        """Weak password is rejected by the validator."""
+        resp = await client.post("/api/v1/auth/register-unified", json={
+            "phone": "+79991112247",
+            "password": "123",
+            "consent": True,
+        })
+        assert resp.status_code == 422
 
     async def test_register_missing_fields(self, client):
         """Registration fails when required fields are missing."""
@@ -194,17 +147,24 @@ class TestRegisterUnified:
 class TestLoginUnified:
     """Tests for unified login endpoint."""
 
-    async def test_login_by_email(self, client):
-        """Login by email works."""
-        # Register first
-        await client.post("/api/v1/auth/register-unified", json={
-            "name": "Login Test",
-            "email": "login_email@example.com",
-            "phone": "+79996667788",
-            "password": "SecurePass123!",
-            "is_master": False
-        })
-        # Login by email
+    async def test_login_by_email(self, client, session):
+        """Login by email works (legacy accounts keep their email)."""
+        # Email is no longer collected at registration; simulate an existing
+        # account that has an email set (e.g. social login or profile edit).
+        from sqlalchemy import select
+        from app.models.user import User, UserRole
+        from app.utils.security import hash_password
+
+        session.add(User(
+            name="Login Email",
+            email="login_email@example.com",
+            phone="+79996667788",
+            hashed_password=hash_password("SecurePass123!"),
+            role=UserRole.CLIENT,
+            is_verified=True,
+        ))
+        await session.commit()
+
         resp = await client.post("/api/v1/auth/login-unified", json={
             "identifier": "login_email@example.com",
             "password": "SecurePass123!"
@@ -216,13 +176,11 @@ class TestLoginUnified:
 
     async def test_login_by_phone(self, client):
         """Login by phone works."""
-        # Register first (phone gets normalized to +7 (999) 777-88-99)
+        # Register via phone+password (normalized to +7 (999) 777-88-99)
         await client.post("/api/v1/auth/register-unified", json={
-            "name": "Login Phone Test",
-            "email": "login_phone@example.com",
             "phone": "+79997778899",
             "password": "SecurePass123!",
-            "is_master": False
+            "consent": True,
         })
         # Login by formatted phone (stored format after normalization)
         resp = await client.post("/api/v1/auth/login-unified", json={
@@ -236,14 +194,12 @@ class TestLoginUnified:
     async def test_login_wrong_password(self, client):
         """Login fails with wrong password."""
         await client.post("/api/v1/auth/register-unified", json={
-            "name": "Wrong Password Test",
-            "email": "wrong_pass@example.com",
             "phone": "+79998889900",
             "password": "SecurePass123!",
-            "is_master": False
+            "consent": True,
         })
         resp = await client.post("/api/v1/auth/login-unified", json={
-            "identifier": "wrong_pass@example.com",
+            "identifier": "+7 (999) 888-99-00",
             "password": "WrongPassword123"
         })
         assert resp.status_code == 401
