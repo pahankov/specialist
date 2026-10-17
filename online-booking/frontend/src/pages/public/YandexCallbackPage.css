@@ -1,0 +1,45 @@
+/* ─── Yandex OAuth landing (code exchange happens on the backend) ─── */
+.yandex-callback-page {
+  min-height: 60vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 16px;
+}
+
+.yandex-callback-card {
+  background: #fff;
+  border: 1px solid #e8e8e8;
+  border-radius: 16px;
+  padding: 40px 32px;
+  max-width: 400px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+}
+
+.yandex-callback-icon {
+  display: inline-flex;
+  margin-bottom: 16px;
+}
+
+.yandex-callback-card h1 {
+  font-size: 20px;
+  margin: 0 0 8px;
+  color: #1a1a1a;
+}
+
+.yandex-callback-card p {
+  font-size: 14px;
+  color: #666;
+  margin: 0 0 20px;
+}
+
+.yandex-callback-error {
+  color: #dc2626;
+}
+
+.yandex-callback-card .btn {
+  width: 100%;
+  padding: 12px;
+}

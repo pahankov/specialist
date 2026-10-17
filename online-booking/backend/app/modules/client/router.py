@@ -87,6 +87,7 @@ async def get_me(
         "max_bound": user.max_user_id is not None,
         "max_username": user.max_username,
         "vk_bound": user.vk_user_id is not None,
+        "yandex_bound": user.yandex_user_id is not None,
         "city_id": user.city_id,
         "city_name": city_name,
         "address": profile.address,

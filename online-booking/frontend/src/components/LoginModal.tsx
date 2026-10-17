@@ -22,7 +22,7 @@ interface LoginModalProps {
   redirectTo?: string | null;
 }
 
-type ModalMode = 'login' | 'register' | 'max' | 'vk';
+type ModalMode = 'login' | 'register' | 'max' | 'vk' | 'yandex';
 
 interface LoginFormState {
   identifier: string; // email or phone
@@ -69,6 +69,10 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
   // PKCE + the signed state are handled inside VkIdWidget.
   const [vkConsent, setVkConsent] = useState(false);
 
+  // Yandex OAuth (plain redirect, no PKCE): consent gates the redirect; the
+  // signed state + consent flag are stashed for the /auth/yandex/callback.
+  const [yandexConsent, setYandexConsent] = useState(false);
+
   /* After the VK widget establishes the backend session (cookies set), land
      by role — admins to their section, masters to the panel, else the client
      cabinet. Mirrors the old /auth/vk/callback landing logic. */
@@ -100,6 +104,35 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
         navigate('/cabinet', { replace: true });
       }
     }, 400);
+  };
+
+  /* Yandex OAuth start: consent must be given first (152-FZ), then we fetch
+     a signed state + authorize URL from the backend and hand the browser
+     over to Yandex. The callback page posts the code back for a server-side
+     exchange — the app secret never reaches the client. */
+  const handleYandexStart = async () => {
+    if (!yandexConsent) {
+      toast.error('Подтвердите согласие на обработку персональных данных');
+      return;
+    }
+    setLoading(true);
+    try {
+      const resp = await authApi.yandexStart();
+      try {
+        sessionStorage.setItem('yandex_state', resp.data.state);
+        sessionStorage.setItem('yandex_consent', yandexConsent ? '1' : '0');
+      } catch {
+        /* storage unavailable — the callback will rely on the echoed state */
+      }
+      window.location.href = resp.data.authorize_url;
+    } catch (err: any) {
+      setLoading(false);
+      toast.error(
+        err.response?.status === 503
+          ? 'Вход через Яндекс не настроен'
+          : 'Ошибка входа через Яндекс',
+      );
+    }
   };
 
   const landByRole = (loginAs: RoleChoice = 'client') => {
@@ -514,6 +547,73 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
     </form>
   );
 
+  /* Yandex OAuth: consent is captured here, then the browser is handed to
+     Yandex and returns at /auth/yandex/callback (the registered redirect). */
+  const yandexForm = (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        handleYandexStart();
+      }}
+    >
+      <p style={{ fontSize: 14, color: '#555', marginBottom: 16 }}>
+        Войдите через Яндекс — аккаунт создастся автоматически при первом
+        входе, email и пароль не нужны.
+      </p>
+
+      {/* 152-ФЗ + оферта: same consent as registration, required before the
+          redirect (Yandex then returns the profile data we process). */}
+      <div className="checkbox-group">
+        <label className="checkbox-label">
+          <input
+            type="checkbox"
+            checked={yandexConsent}
+            onChange={(e) => setYandexConsent(e.target.checked)}
+          />
+          <span>
+            Соглашаюсь с{' '}
+            <Link to="/offer" target="_blank" rel="noreferrer">
+              Офертой
+            </Link>{' '}
+            и{' '}
+            <Link to="/privacy" target="_blank" rel="noreferrer">
+              Политикой обработки ПДн
+            </Link>
+          </span>
+        </label>
+      </div>
+
+      <button
+        type="submit"
+        className="btn btn-primary btn-submit"
+        disabled={loading || !yandexConsent}
+      >
+        {loading ? 'Перенаправляем...' : 'Продолжить через Яндекс'}
+      </button>
+
+      <button
+        type="button"
+        className="btn btn-ghost btn-submit"
+        style={{ marginTop: 8 }}
+        onClick={() => switchMode('login')}
+      >
+        ← Назад ко входу
+      </button>
+
+      <p className="login-footer">
+        <a
+          href="#"
+          onClick={(e) => {
+            e.preventDefault();
+            switchMode('login');
+          }}
+        >
+          Войти по паролю
+        </a>
+      </p>
+    </form>
+  );
+
   return (
     <Modal
       open={isOpen}
@@ -525,7 +625,9 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
             ? 'Регистрация'
             : mode === 'vk'
               ? 'Вход через VK, OK или Mail'
-              : 'Вход и регистрация через MAX'
+              : mode === 'yandex'
+                ? 'Вход через Яндекс'
+                : 'Вход и регистрация через MAX'
       }
       className="login-modal"
     >
@@ -600,6 +702,13 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
           <div style={{ marginTop: 8 }}>
             <SocialAuthButton provider="vk" action="login" onClick={() => switchMode('vk')} />
           </div>
+          <div style={{ marginTop: 8 }}>
+            <SocialAuthButton
+              provider="yandex"
+              action="login"
+              onClick={() => switchMode('yandex')}
+            />
+          </div>
 
           <p className="login-footer">
             Нет аккаунта?{' '}
@@ -620,6 +729,9 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
       ) : mode === 'vk' ? (
         /* VK ID CONSENT PANEL (redirect flow; account created on first exchange) */
         vkForm
+      ) : mode === 'yandex' ? (
+        /* YANDEX CONSENT PANEL (redirect flow; account created on first exchange) */
+        yandexForm
       ) : (
         /* ─── REGISTER FORM ─── */
         <form onSubmit={handleRegister}>
@@ -716,6 +828,13 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
           />
           <div style={{ marginTop: 8 }}>
             <SocialAuthButton provider="vk" action="register" onClick={() => switchMode('vk')} />
+          </div>
+          <div style={{ marginTop: 8 }}>
+            <SocialAuthButton
+              provider="yandex"
+              action="register"
+              onClick={() => switchMode('yandex')}
+            />
           </div>
 
           <p className="login-footer">

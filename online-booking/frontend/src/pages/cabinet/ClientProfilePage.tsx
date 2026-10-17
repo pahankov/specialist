@@ -155,6 +155,12 @@ function ClientProfilePage() {
               ✅ Вход через VK включён
             </p>
           )}
+          {me?.yandex_bound && (
+            /* Yandex ID binding: login via the Yandex redirect. */
+            <p style={{ fontSize: 13, color: '#666', margin: '4px 0 0' }}>
+              ✅ Вход через Яндекс включён
+            </p>
+          )}
         </div>
 
         <div className="card" style={{ marginBottom: 16 }}>

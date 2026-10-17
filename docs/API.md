@@ -52,6 +52,23 @@
 попадают; `state`, переданный в SDK, проходит HMAC-проверку на бэке — ручной
 редирект на `id.vk.ru` больше не используется.
 
+### Yandex ID auth (OAuth 2.0 Authorization Code, редирект)
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| `POST` | `/api/v1/auth/yandex/start` | Подписанный `state` (HMAC, TTL 10 мин) + `redirect_uri` + `client_id` + полный `authorize_url` на `oauth.yandex.ru/authorize`; 10/min |
+| `POST` | `/api/v1/auth/yandex/verify` | Обмен `code`+`state` на токены **на сервере** (OAuth-секрет не уходит в браузер), create/bind аккаунта, JWT-сессия + cookies; 10/min |
+
+Флоу (обычный редирект, без PKCE — подтверждает `client_secret`):
+фронт после галочки согласия 152-ФЗ шлёт `/yandex/start` → получает
+подписанный `state` + `authorize_url` → стешит `state`/`consent` в
+sessionStorage и редиректит браузер на Яндекс → пользователь соглашается →
+Яндекс возвращает на `/auth/yandex/callback?code&state` → фронт сверяет
+`state` со стешенным и постит `code`+`state`+`consent` в `/yandex/verify` →
+бэкенд меняет `code` на токен у `oauth.yandex.ru/token` (серверный
+`client_secret`), читает профиль (`login.yandex.ru/info`), создаёт/привязывает
+аккаунт (новый всегда CLIENT, ключ — `yandex_user_id`) и штампует `consent_*`.
+Токен Яндекса в браузер не попадает; `state` проходит HMAC-проверку на бэке.
+
 ### Geography
 | Метод | Endpoint | Описание |
 |-------|----------|----------|

@@ -27,6 +27,7 @@ class User(Base):
         Index('ix_users_role', 'role'),
         Index('ix_users_max_user_id', 'max_user_id', unique=True),
         Index('ix_users_vk_user_id', 'vk_user_id', unique=True),
+        Index('ix_users_yandex_user_id', 'yandex_user_id', unique=True),
     )
 
     id = Column(Integer, primary_key=True)
@@ -56,6 +57,10 @@ class User(Base):
     # here, so subsequent logins match the account directly (no phone/email
     # needed). Same NULL-distinct unique-index trick as max_user_id.
     vk_user_id = Column(BigInteger, nullable=True)
+    # Bound Yandex ID account: after the first Yandex login the Yandex user id
+    # is stored here, so subsequent logins match directly. Same NULL-distinct
+    # unique-index trick as max_user_id/vk_user_id.
+    yandex_user_id = Column(BigInteger, nullable=True)
     # Legal consent proof (152-ФЗ + offer): stamped at registration when the
     # user checks the consent box. NULL = registered before consent tracking
     # (e.g. OTP/MAX auto-created accounts) — consent unknown.

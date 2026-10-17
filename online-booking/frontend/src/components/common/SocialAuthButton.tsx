@@ -1,14 +1,15 @@
 import MaxIcon from './icons/MaxIcon';
 import VkIcon from './icons/VkIcon';
+import YandexIcon from './icons/YandexIcon';
 import './SocialAuthButton.css';
 
 /**
  * Social login/registration providers. MAX (chat-bot auth via
- * request_contact) and VK (OAuth + PKCE redirect) are wired; the list is
- * the single place to add a new provider later (WhatsApp, Telegram, Mail) —
- * drop in an icon and a handler in LoginModal.
+ * request_contact), VK (OAuth + PKCE redirect) and Yandex (OAuth redirect)
+ * are wired; the list is the single place to add a new provider later
+ * (WhatsApp, Telegram, Mail) — drop in an icon and a handler in LoginModal.
  */
-export type SocialProvider = 'max' | 'vk';
+export type SocialProvider = 'max' | 'vk' | 'yandex';
 
 interface SocialProviderMeta {
   /** Button label shown to the user. */
@@ -28,6 +29,11 @@ export const SOCIAL_PROVIDERS: Record<SocialProvider, SocialProviderMeta> = {
     label: 'VK',
     icon: <VkIcon size={20} />,
     color: '#0077FF',
+  },
+  yandex: {
+    label: 'Яндекс',
+    icon: <YandexIcon size={20} />,
+    color: '#FC3F1D',
   },
 };
 

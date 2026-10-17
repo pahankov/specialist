@@ -2,6 +2,7 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { HomePage, BookingPage, PrivacyPolicyPage, OfferPage } from './pages/public';
 import VkCallbackPage from './pages/public/VkCallbackPage';
+import YandexCallbackPage from './pages/public/YandexCallbackPage';
 import {
   AdminLayout,
   DashboardPage,
@@ -115,6 +116,9 @@ function App() {
           {/* VK ID OAuth landing: VK redirects here with ?code&device_id&state,
               the code is exchanged server-side, then we land by role. */}
           <Route path="/auth/vk/callback" element={<VkCallbackPage />} />
+          {/* Yandex OAuth landing: Yandex redirects here with ?code&state,
+              the code is exchanged server-side, then we land by role. */}
+          <Route path="/auth/yandex/callback" element={<YandexCallbackPage />} />
           <Route
             path="/cabinet"
             element={

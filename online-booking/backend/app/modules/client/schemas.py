@@ -15,6 +15,8 @@ class ClientMeResponse(BaseModel):
     max_username: Optional[str] = None
     # Bound VK ID account (login via VK/OK/Mail widget).
     vk_bound: bool = False
+    # Bound Yandex ID account (login via Yandex redirect).
+    yandex_bound: bool = False
     city_id: Optional[int] = None
     city_name: Optional[str] = None
     address: Optional[str] = None

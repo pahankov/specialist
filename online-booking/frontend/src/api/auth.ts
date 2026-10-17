@@ -39,6 +39,22 @@ export interface VkVerifyResponse {
   is_new_user?: boolean;
 }
 
+export interface YandexStartResponse {
+  /** Full Yandex consent URL — the browser is redirected here. */
+  authorize_url: string;
+  /** Signed state (stashed until Yandex echoes it back to the callback). */
+  state: string;
+  client_id: string;
+  /** Canonical backend redirect_uri (must match at authorize + exchange). */
+  redirect_uri: string;
+}
+
+export interface YandexVerifyResponse {
+  access_token: string;
+  token_type: string;
+  is_new_user?: boolean;
+}
+
 export const authApi = {
   login: (email: string, password: string) =>
     apiClient.post<LoginResponse>('/api/v1/auth/login', { email, password }),
@@ -86,6 +102,14 @@ export const authApi = {
       device_id: deviceId,
       state,
       code_verifier: codeVerifier,
+      consent,
+    }),
+  yandexStart: () =>
+    apiClient.post<YandexStartResponse>('/api/v1/auth/yandex/start', {}),
+  yandexVerify: (code: string, state: string, consent = false) =>
+    apiClient.post<YandexVerifyResponse>('/api/v1/auth/yandex/verify', {
+      code,
+      state,
       consent,
     }),
 };

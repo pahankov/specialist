@@ -78,6 +78,19 @@ class Settings(BaseSettings):
     # access rights are enabled for the app in the VK ID admin panel.
     VK_SCOPE: str = ""
 
+    # Yandex ID (OAuth 2.0 Authorization Code; server-side code exchange).
+    # Unlike VK there is no PKCE — the exchange uses the app's OAuth secret,
+    # which never leaves the backend. redirect_uri must be registered in the
+    # Yandex app settings («Платформы приложений → Веб-сервисы → Redirect URI»).
+    # - YANDEX_CLIENT_ID     = «ID приложения»
+    # - YANDEX_CLIENT_SECRET = «Пароль приложения» (the OAuth client secret)
+    YANDEX_CLIENT_ID: str = ""
+    YANDEX_CLIENT_SECRET: str = ""
+    # Registered redirect URL — the frontend /auth/yandex/callback page.
+    YANDEX_REDIRECT_URI: str = ""
+    # Space-separated scopes; empty = Yandex default (login:info + login:email).
+    YANDEX_SCOPE: str = ""
+
     # DaData (address suggestions; secret never leaves the backend proxy)
     DADATA_API_KEY: str = ""
     DADATA_SECRET: str = ""
@@ -108,6 +121,15 @@ class Settings(BaseSettings):
     def vk_enabled(self) -> bool:
         """VK ID auth available iff client id + redirect uri are configured."""
         return bool(self.VK_CLIENT_ID and self.VK_REDIRECT_URI)
+
+    @property
+    def yandex_enabled(self) -> bool:
+        """Yandex ID auth available iff client id + secret + redirect uri are set."""
+        return bool(
+            self.YANDEX_CLIENT_ID
+            and self.YANDEX_CLIENT_SECRET
+            and self.YANDEX_REDIRECT_URI
+        )
 
     @property
     def max_verify(self):

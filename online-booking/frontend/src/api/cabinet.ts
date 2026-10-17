@@ -14,6 +14,8 @@ export interface ClientMe {
   max_username?: string | null;
   /** Bound VK ID account (login via VK/OK/Mail widget). */
   vk_bound?: boolean;
+  /** Bound Yandex ID account (login via Yandex redirect). */
+  yandex_bound?: boolean;
   city_id?: number | null;
   city_name?: string | null;
   address?: string | null;
