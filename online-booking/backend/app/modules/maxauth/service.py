@@ -41,7 +41,8 @@ from app.models.client_profile import ClientProfile
 from app.models.otp_code import OtpCode
 from app.models.refresh_token import RefreshToken
 from app.models.user import User, UserRole
-from app.services.names import name_fields
+from app.services.names import name_fields, split_full_name
+from app.services.social_merge import merge_social_profile
 from app.utils.phone import normalize_phone
 from app.utils.security import hash_otp_code
 from app.utils.tokens import create_access_token, create_refresh_token_payload
@@ -399,6 +400,9 @@ async def verify_max_code(
             is_verified=bool(otp.max_verified_phone),
             max_user_id=otp.max_user_id,  # bind account for push-code login
             max_username=otp.max_username,  # @nickname for support/UX
+            # name came from MAX's display name: a later social login may
+            # refresh it; a human edit ("user") will not be overwritten.
+            name_source=("max" if max_name else None),
             # 152-FZ: same consent stamp as register-unified, taken from
             # the checkbox on the MAX login form.
             consent_at=(
@@ -421,25 +425,21 @@ async def verify_max_code(
             user.max_user_id = otp.max_user_id
             changed = True
             logger.info("Linked MAX account to user_id=%s", user.id)
-        if otp.max_verified_phone and not user.is_verified:
-            # The HMAC-proven contact share is stronger than any OTP: the
-            # platform vouches the number is this MAX account's own.
-            user.is_verified = True
-            changed = True
-            logger.info("Verified existing user via MAX contact: user_id=%s",
-                        user.id)
         if user.max_username is None and otp.max_username:
             user.max_username = otp.max_username
             changed = True
-        if user.email is None and otp.max_user_email:
-            # Backfill a missing email — skip when another account owns it.
-            taken = (await db.execute(
-                select(User.id).where(
-                    User.email == otp.max_user_email, User.id != user.id)
-            )).scalar_one_or_none()
-            if taken is None:
-                user.email = otp.max_user_email
-                changed = True
+        # Smart merge: name from MAX's display name, fill a missing email, only
+        # ever raise is_verified (the HMAC-proven number) — a human-set
+        # name/email is never overwritten.
+        max_first, max_last_name = split_full_name(otp.max_user_name or "")
+        merged = await merge_social_profile(
+            db, user, provider="max",
+            first_name=max_first, last_name=max_last_name,
+            email=otp.max_user_email,
+            avatar_url=None,  # MAX carries no avatar
+            verified=bool(otp.max_verified_phone),
+        )
+        changed = changed or merged
         if consent and user.consent_at is None:
             # Backfill consent for accounts created before consent tracking.
             user.consent_at = datetime.now(dt_timezone.utc)

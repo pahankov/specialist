@@ -17,6 +17,9 @@ class ClientMeResponse(BaseModel):
     vk_bound: bool = False
     # Bound Yandex ID account (login via Yandex redirect).
     yandex_bound: bool = False
+    # Social avatar (a provider CDN URL) shown in the cabinet; empty when the
+    # user has never logged in through a network that returns a photo.
+    avatar_url: Optional[str] = None
     city_id: Optional[int] = None
     city_name: Optional[str] = None
     address: Optional[str] = None

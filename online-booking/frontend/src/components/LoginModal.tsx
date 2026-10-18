@@ -490,6 +490,26 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
       ) : (
         /* ─── REGISTER FORM (the only place 152-FZ consent is asked) ─── */
         <form onSubmit={handleRegister}>
+          {/* Social registration FIRST — a one-tap account via VK/OK/Mail or
+              Yandex. Same flow as login (the account is created on the first
+              successful auth); the 152-FZ consent checkbox below only guards the
+              manual phone+password path (social logins stamp it server-side). */}
+          <VkIdWidget onSuccess={landByRole} />
+
+          <div style={{ marginTop: 8 }}>
+            <SocialAuthButton
+              provider="yandex"
+              action="register"
+              disabled={loading}
+              onClick={handleYandexStart}
+            />
+          </div>
+          <div style={{ marginTop: 8 }}>
+            <SocialAuthButton provider="max" action="register" onClick={() => switchMode('max')} />
+          </div>
+
+          <div className="social-auth-divider">или заполните форму</div>
+
           {/* Phone */}
           <div className="login-group">
             <label>Телефон *</label>

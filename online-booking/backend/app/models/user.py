@@ -61,6 +61,16 @@ class User(Base):
     # is stored here, so subsequent logins match directly. Same NULL-distinct
     # unique-index trick as max_user_id/vk_user_id.
     yandex_user_id = Column(BigInteger, nullable=True)
+    # Social avatar (a URL on the provider's CDN): filled/refreshed by social
+    # logins for the client cabinet. Masters keep using master_profiles.avatar_
+    # url (uploaded photo / preset) — this column is the CLIENT-facing photo.
+    avatar_url = Column(String(500), nullable=True)
+    # Where the display `name` came from: NULL (unset / set by a human before
+    # this column existed), "user" (manually edited in the cabinet), or a
+    # social provider id ("vk"/"yandex"/"max"). Social logins only fill/refresh
+    # the name when it is empty or was itself set by a social login — a name
+    # a human entered is never overwritten.
+    name_source = Column(String(16), nullable=True)
     # Legal consent proof (152-ФЗ + offer): stamped at registration when the
     # user checks the consent box. NULL = registered before consent tracking
     # (e.g. OTP/MAX auto-created accounts) — consent unknown.

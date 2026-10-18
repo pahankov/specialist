@@ -24,3 +24,29 @@
   color: #999;
   cursor: not-allowed;
 }
+
+.client-profile-page .client-avatar-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.client-profile-page .client-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #f0f0f5;
+  font-size: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #999;
+}
+
+.client-profile-page .client-avatar-hint {
+  font-size: 13px;
+  color: #888;
+}

@@ -36,6 +36,7 @@ from app.logging_config import get_logger
 from app.models.refresh_token import RefreshToken
 from app.models.user import User, UserRole
 from app.services.names import compose_full_name
+from app.services.social_merge import merge_social_profile
 from app.services.yandex_api import YandexApiError, get_yandex_api
 from app.utils.tokens import create_access_token, create_refresh_token_payload
 
@@ -140,6 +141,10 @@ async def verify_yandex_code(
     first = (profile.get("first_name") or "").strip()
     last = (profile.get("last_name") or "").strip()
     email = _clean_email(profile.get("default_email"))
+    # Yandex exposes the avatar as an id, not a URL — build the CDN link.
+    avatar_id = (profile.get("default_avatar_id") or "").strip()
+    avatar_url = (f"https://avatars.yandex.net/get-yapic/{avatar_id}/islands-200"
+                  if avatar_id else None)
 
     from app.modules.auth.service import OFFER_VERSION, POLICY_VERSION
 
@@ -172,6 +177,10 @@ async def verify_yandex_code(
             # profile is trusted.
             is_verified=bool(email),
             yandex_user_id=yandex_user_id,
+            avatar_url=avatar_url,
+            # name came from Yandex: a later social login may refresh it, a
+            # human edit ("user") will not be overwritten.
+            name_source="yandex",
             # 152-FZ: consent checkbox on the Yandex login form.
             consent_at=(datetime.now(dt_timezone.utc) if consent else None),
             consent_policy_version=POLICY_VERSION if consent else None,
@@ -183,16 +192,16 @@ async def verify_yandex_code(
         await get_or_create_profile(db, user)
         logger.info("New client created via Yandex: user_id=%s", user.id)
     else:
-        changed = False
         if user.is_active is False:
             raise HTTPException(status_code=403, detail="Аккаунт заблокирован.")
-        if email and user.email is None:
-            user.email = email
-            changed = True
-        if not user.name and (first or last):
-            user.name = compose_full_name(first, last)
-            user.last_name = last or None
-            changed = True
+        # Smart merge: refresh name/avatar from Yandex, fill a missing email,
+        # only ever raise is_verified — human-set fields are never lost.
+        changed = await merge_social_profile(
+            db, user, provider="yandex",
+            first_name=first, last_name=last,
+            email=email, avatar_url=avatar_url,
+            verified=bool(email),
+        )
         if consent and user.consent_at is None:
             user.consent_at = datetime.now(dt_timezone.utc)
             user.consent_policy_version = POLICY_VERSION

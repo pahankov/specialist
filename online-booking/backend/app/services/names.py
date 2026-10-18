@@ -33,13 +33,24 @@ def name_fields(full: Optional[str]) -> Tuple[str, Optional[str]]:
 
 
 def set_full_name(user, full: str) -> None:
-    """Assign a name edited as ONE string and re-sync last_name."""
+    """Assign a name edited as ONE string and re-sync last_name.
+
+    Also flags the name as human-set (name_source="user") so social logins
+    never overwrite it — see app.services.social_merge.
+    """
     name, last = name_fields(full)
     user.name = name
     user.last_name = last
+    user.name_source = "user"
 
 
 def set_names(user, first: Optional[str], last: Optional[str] = None) -> None:
-    """Assign name from separate first/last fields (profile forms)."""
+    """Assign name from separate first/last fields (profile forms).
+
+    Flags the name as human-set (name_source="user") — social logins leave it
+    alone. Registration/creation paths use name_fields + a direct constructor
+    instead, so a brand-new account is not marked as human-edited.
+    """
     user.name = compose_full_name(first, last)
     user.last_name = (last or "").strip() or None
+    user.name_source = "user"

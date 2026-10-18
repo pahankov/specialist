@@ -16,6 +16,8 @@ export interface ClientMe {
   vk_bound?: boolean;
   /** Bound Yandex ID account (login via Yandex redirect). */
   yandex_bound?: boolean;
+  /** Social avatar (VK/Yandex CDN URL) brought over by a social login. */
+  avatar_url?: string | null;
   city_id?: number | null;
   city_name?: string | null;
   address?: string | null;

@@ -2,7 +2,14 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { authApi, cabinetApi, type ClientMe } from '../../api/client';
-import { AddressSelect, CitySelect, ConfirmDialog, Modal, Skeleton } from '../../components/common';
+import {
+  AddressSelect,
+  BackendImg,
+  CitySelect,
+  ConfirmDialog,
+  Modal,
+  Skeleton,
+} from '../../components/common';
 import type { CityOption } from '../../components/common/CitySelect';
 import { getApiErrorMessage } from '../../utils/apiError';
 import { clearAuthCookies } from '../../utils/cookies';
@@ -113,6 +120,20 @@ function ClientProfilePage() {
 
       <form onSubmit={handleSave}>
         <div className="card" style={{ marginBottom: 16 }}>
+          {/* Social avatar: brought over by a VK/Yandex login. */}
+          <div className="client-avatar-row">
+            <BackendImg
+              src={me?.avatar_url}
+              alt={me?.name || 'Аватар'}
+              className="client-avatar"
+              fallbackEmoji="👤"
+            />
+            <span className="client-avatar-hint">
+              {me?.avatar_url
+                ? 'Фото из соцсети — обновится при следующем входе'
+                : 'Фото появится после входа через VK или Яндекс'}
+            </span>
+          </div>
           <div className="form-row">
             <div className="form-group">
               <label>Имя *</label>

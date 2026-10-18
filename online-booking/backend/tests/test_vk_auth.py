@@ -63,11 +63,13 @@ def _stub(monkeypatch, api):
 
 
 def _profile(user_id=111, first="Ivan", last="Petrov", email=None,
-             verified=True):
+             verified=True, avatar=None):
     user = {"user_id": user_id, "first_name": first, "last_name": last,
             "verified": verified}
     if email:
         user["email"] = email
+    if avatar:
+        user["avatar"] = avatar
     return {"user": user}
 
 
@@ -306,3 +308,134 @@ class TestVkHelpers:
         assert _clean_email(None) is None
         assert _clean_email("no-at-sign") is None
         assert _clean_email("has space@x.ru") is None
+
+
+class TestVkProfileSync:
+    """Smart merge of a VK profile into a created/existing account.
+
+    Policy under test: a new account stores the VK avatar + marks the name as
+    VK-set; a re-login refreshes VK-set name/avatar; a human-edited name is
+    never overwritten; is_verified only goes up; email fills only when empty
+    and free.
+    """
+
+    async def test_new_user_gets_avatar_and_name_source(
+        self, client, vk_enabled, monkeypatch, session
+    ):
+        api = _StubVkApi(
+            profile=_profile(email="ivan@vk.example",
+                             avatar="https://vk.example/photo.png"),
+            tokens=_tokens())
+        _stub(monkeypatch, api)
+        data = await _start(client)
+        done = await _verify(client, data, consent=True)
+        assert done.status_code == 200
+
+        from sqlalchemy import select
+        from app.models.user import User
+        user = (await session.execute(
+            select(User).where(User.vk_user_id == 111))).scalar_one()
+        assert user.avatar_url == "https://vk.example/photo.png"
+        assert user.name_source == "vk"
+
+    async def test_relogin_refreshes_vk_set_name_and_avatar(
+        self, client, vk_enabled, monkeypatch, session
+    ):
+        from app.models.user import User, UserRole
+        bound = User(name="Ivan Petrov", last_name="Petrov",
+                     role=UserRole.CLIENT, vk_user_id=111, name_source="vk")
+        session.add(bound)
+        await session.commit()
+
+        api = _StubVkApi(
+            profile=_profile(first="Petr", last="Ivanov",
+                             avatar="https://vk.example/new.png"),
+            tokens=_tokens())
+        _stub(monkeypatch, api)
+        data = await _start(client)
+        done = await _verify(client, data)
+        assert done.status_code == 200
+
+        await session.refresh(bound)
+        assert bound.name == "Petr Ivanov"  # latest VK login wins
+        assert bound.last_name == "Ivanov"
+        assert bound.avatar_url == "https://vk.example/new.png"
+        assert bound.name_source == "vk"
+
+    async def test_relogin_never_overwrites_human_edited_name(
+        self, client, vk_enabled, monkeypatch, session
+    ):
+        from app.models.user import User, UserRole
+        bound = User(name="Своё Имя", last_name="Фамилия",
+                     role=UserRole.CLIENT, vk_user_id=111, name_source="user")
+        session.add(bound)
+        await session.commit()
+
+        api = _StubVkApi(profile=_profile(first="Ivan", last="Petrov"),
+                         tokens=_tokens())
+        _stub(monkeypatch, api)
+        data = await _start(client)
+        done = await _verify(client, data)
+        assert done.status_code == 200
+
+        await session.refresh(bound)
+        assert bound.name == "Своё Имя"  # untouched
+        assert bound.name_source == "user"
+
+    async def test_verified_only_ever_upgrades(
+        self, client, vk_enabled, monkeypatch, session
+    ):
+        from app.models.user import User, UserRole
+        bound = User(name="Proved", role=UserRole.CLIENT, vk_user_id=111,
+                     is_verified=True, name_source="user")
+        session.add(bound)
+        await session.commit()
+
+        api = _StubVkApi(profile=_profile(verified=False), tokens=_tokens())
+        _stub(monkeypatch, api)
+        data = await _start(client)
+        done = await _verify(client, data)
+        assert done.status_code == 200
+
+        await session.refresh(bound)
+        assert bound.is_verified is True  # never downgraded
+
+    async def test_email_fills_when_empty_and_free(
+        self, client, vk_enabled, monkeypatch, session
+    ):
+        from app.models.user import User, UserRole
+        bound = User(name="No Email", role=UserRole.CLIENT, vk_user_id=111,
+                     name_source="user")
+        session.add(bound)
+        await session.commit()
+
+        api = _StubVkApi(profile=_profile(email="fresh@vk.example"),
+                         tokens=_tokens())
+        _stub(monkeypatch, api)
+        data = await _start(client)
+        done = await _verify(client, data)
+        assert done.status_code == 200
+
+        await session.refresh(bound)
+        assert bound.email == "fresh@vk.example"
+
+    async def test_email_never_steals_a_taken_address(
+        self, client, vk_enabled, monkeypatch, session
+    ):
+        from app.models.user import User, UserRole
+        owner = User(name="Owner", email="busy@vk.example",
+                     role=UserRole.CLIENT)
+        bound = User(name="No Email", role=UserRole.CLIENT, vk_user_id=111,
+                     name_source="user")
+        session.add_all([owner, bound])
+        await session.commit()
+
+        api = _StubVkApi(profile=_profile(email="busy@vk.example"),
+                         tokens=_tokens())
+        _stub(monkeypatch, api)
+        data = await _start(client)
+        done = await _verify(client, data)
+        assert done.status_code == 200
+
+        await session.refresh(bound)
+        assert bound.email is None  # taken by `owner`, skipped
