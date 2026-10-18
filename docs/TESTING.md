@@ -1,19 +1,19 @@
 # Тестирование
 
-> Backend: 55 файлов, 598 тестов (pytest, SQLite-файл на тест). Frontend: 36 файлов, 192 теста (Vitest).
+> Backend: 55 файлов, 600 тестов (pytest, SQLite-файл на тест). Frontend: 36 файлов, 193 теста (Vitest).
 > Чек-лист перед коммитом — только в [RULES.md](RULES.md), правила деплоя — в [DEPLOYMENT_RULES.md](DEPLOYMENT_RULES.md).
 
 ## Запуск
 
 ```powershell
-# Backend (598 passed, ~10 мин)
+# Backend (600 passed, ~10 мин)
 cd online-booking\backend
 $env:PYTHONPATH='.'
 pytest tests/ -v                          # всё
 pytest tests/test_reviews.py -v           # один файл
 pytest tests/ -q --cov=app --cov-report=term-missing --cov-fail-under=55  # с гейтом (как в CI)
 
-# Frontend (192 passed, ~20 сек)
+# Frontend (193 passed, ~20 сек)
 cd online-booking\frontend
 npx vitest run                            # всё
 npx tsc --noEmit                          # типы (обязательно: ловят то, что тесты не ловят)
@@ -78,7 +78,7 @@ npx prettier --check src/                 # стиль (конфиг .prettierrc
 | test_appointments_filters.py | 2 | test_masters_crud.py | 21 |
 | test_auth.py | 9 | test_masters_security.py | 11 |
 | test_auth_dependencies.py | 10 | test_masters_status.py | 14 |
-| test_auth_service.py | 16 | test_max_auth.py | 35 |
+| test_auth_service.py | 16 | test_max_auth.py | 37 |
 | test_auth_tokens.py | 12 | test_max_webhook_guard.py | 10 |
 | test_booking_flow.py | 7 | test_notifications.py | 14 |
 | test_bundles.py | 15 | test_password_security.py | 11 |
@@ -95,13 +95,13 @@ npx prettier --check src/                 # стиль (конфиг .prettierrc
 | test_export_tasks.py | 4 | test_yandex_auth.py | 26 |
 | test_fix_production_db.py | 2 |  |  |
 
-## Frontend: файлы (192 всего)
+## Frontend: файлы (193 всего)
 
 | Файл | N | Файл | N |
 |---|---|---|---|
 | apiError.test.ts | 5 | LogsPage.test.tsx | 1 |
 | assetUrl.test.ts | 5 | MasterSelect.test.tsx | 6 |
-| authRefresh.test.ts | 3 | maxAuth.test.tsx | 21 |
+| authRefresh.test.ts | 3 | maxAuth.test.tsx | 22 |
 | AutoConfirmSwitch.test.tsx | 1 | Modal.test.tsx | 10 |
 | BackendImg.test.tsx | 3 | names.test.ts | 6 |
 | BookingWizard.test.tsx | 3 | NotificationBell.test.ts | 8 |
@@ -132,9 +132,9 @@ npx prettier --check src/                 # стиль (конфиг .prettierrc
 
 | Gate | Где | Fail → |
 |---|---|---|
-| pytest 598 + `--cov-fail-under=55` | `ci.yml` backend-tests | PR/деплой blocked |
+| pytest 600 + `--cov-fail-under=55` | `ci.yml` backend-tests | PR/деплой blocked |
 | eslint (0 errors) + `tsc --noEmit` + `vitest run` + `prettier --check` | `ci.yml` frontend-lint | PR/деплой blocked |
-| pytest на сервере до restart | `deploy.yml` | deploy abort |
+| pytest (джоба `test` на раннере) | `deploy.yml` (`needs: test`) | деплой не стартует |
 | pg_dump перед миграциями | `deploy.yml` | warn, continue |
 
 ## Новый тест: шаблон

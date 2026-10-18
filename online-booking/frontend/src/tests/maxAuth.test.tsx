@@ -88,15 +88,32 @@ describe('MAX chat-bot login (SMS-style)', () => {
         expires_in: 300,
         bot_username: 'test_bot',
         bot_url: 'https://max.ru/test_bot',
+        bot_name: 'Электронная запись',
       },
     } as never);
     fireEvent.click(screen.getByText('Получить код в MAX'));
-    expect(await screen.findByText(/бот сам встретит вас/)).toBeInTheDocument();
-    expect(screen.getByText(/Открыть бота test_bot/)).toHaveAttribute(
+    expect(await screen.findByText(/бот попросит подтвердить номер/)).toBeInTheDocument();
+    expect(screen.getByText(/Открыть бота «Электронная запись»/)).toHaveAttribute(
       'href',
       'https://max.ru/test_bot?start=1_abcd',
     );
     expect(vi.mocked(mocked.maxStart)).toHaveBeenCalledWith(MASKED);
+  });
+
+  it('falls back to the bot username when bot_name is missing', async () => {
+    openMaxTab();
+    fillPhone();
+    vi.mocked(mocked.maxStart).mockResolvedValue({
+      data: {
+        delivered: false,
+        deeplink: 'https://max.ru/test_bot?start=3_ijkl',
+        expires_in: 300,
+        bot_username: 'test_bot',
+        bot_url: 'https://max.ru/test_bot',
+      },
+    } as never);
+    fireEvent.click(screen.getByText('Получить код в MAX'));
+    expect(await screen.findByText(/Открыть бота test_bot/)).toBeInTheDocument();
   });
 
   it('tells bound users the code is already in MAX', async () => {
@@ -109,6 +126,7 @@ describe('MAX chat-bot login (SMS-style)', () => {
         expires_in: 300,
         bot_username: 'test_bot',
         bot_url: 'https://max.ru/test_bot',
+        bot_name: 'Электронная запись',
       },
     } as never);
     fireEvent.click(screen.getByText('Получить код в MAX'));
@@ -128,7 +146,7 @@ describe('MAX chat-bot login (SMS-style)', () => {
       },
     } as never);
     fireEvent.click(screen.getByText('Получить код в MAX'));
-    await screen.findByText(/бот сам встретит вас/);
+    await screen.findByText(/бот попросит подтвердить номер/);
 
     vi.mocked(mocked.maxVerify).mockResolvedValue({
       data: { access_token: 'tok', token_type: 'bearer', is_new_user: true },
@@ -156,7 +174,7 @@ describe('MAX chat-bot login (SMS-style)', () => {
       },
     } as never);
     fireEvent.click(screen.getByText('Получить код в MAX'));
-    await screen.findByText(/бот сам встретит вас/);
+    await screen.findByText(/бот попросит подтвердить номер/);
 
     vi.mocked(mocked.maxVerify).mockRejectedValue({
       response: { data: { detail: 'Неверный код' } },

@@ -48,6 +48,8 @@
 # по SSH на сервере, из online-booking/backend (venv активен):
 nano .env   # добавь MAX_BOT_TOKEN, MAX_BOT_USERNAME, MAX_BOT_URL, MAX_WEBHOOK_SECRET,
             # MAX_WEBHOOK_URL=https://beauty-specialist.ru/api/max/webhook
+            # (MAX_BOT_NAME — имя бота для кнопки на сайте; дефолт «Электронная
+            #  запись» из config.py, переопределять не обязательно)
 sudo systemctl restart beauty-backend
 # проверка: в логах — "MAX webhook guard loop started" и "MAX webhook: update_type=..."
 ```

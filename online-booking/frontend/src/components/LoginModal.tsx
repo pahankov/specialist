@@ -203,7 +203,7 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
       const resp = await authApi.maxStart(maxPhone);
       setMaxOffer(resp.data);
       setMaxCodeInput('');
-      toast.success('Откройте бота в MAX — код придёт туда');
+      toast.success('Откройте бота в MAX и поделитесь номером');
     } catch (err: any) {
       toast.error(err.response?.status === 503 ? 'Вход через MAX не настроен' : 'Ошибка');
     } finally {
@@ -333,7 +333,7 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
           {maxOffer.delivered ? (
             <>Код уже отправлен в MAX — откройте бота</>
           ) : (
-            <>Нажмите кнопку — бот сам встретит вас и пришлёт код</>
+            <>Нажмите кнопку — бот попросит подтвердить номер и пришлёт код</>
           )}
         </p>
         {(maxOffer.deeplink || maxOffer.bot_url) && (
@@ -346,7 +346,7 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
             <span className="social-auth-icon">
               <MaxIcon size={18} />
             </span>
-            Открыть бота {maxOffer.bot_username}
+            Открыть бота {maxOffer.bot_name ? `«${maxOffer.bot_name}»` : maxOffer.bot_username}
           </a>
         )}
         <p className="max-hint">
@@ -354,7 +354,7 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
           нажмите «Открыть в браузере».
         </p>
         <p className="max-hint">
-          Не нашли бота? Поделитесь номером внутри диалога — код придёт туда. Введите код ниже:
+          В диалоге с ботом нажмите «Поделиться номером» — код придёт туда. Введите его ниже:
         </p>
         <input
           className="max-code-input"

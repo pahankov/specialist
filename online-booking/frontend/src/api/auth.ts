@@ -16,6 +16,8 @@ export interface MaxStartResponse {
   expires_in: number;
   bot_username: string;
   bot_url: string;
+  /** Human-readable bot name for the button («Электронная запись»). */
+  bot_name: string;
 }
 
 export interface MaxVerifyResponse {
