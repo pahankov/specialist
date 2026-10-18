@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Яндекс ID</title>
+    <!--
+      Helper page of the official Yandex ID instant-auth widget
+      («мгновенная авторизация», sdk-suggest.js). Yandex redirects here with
+      the OAuth token; the script below postMessages it back to the site page
+      that mounted the widget, where the SDK resolves with the token.
+
+      Its URL must be registered VERBATIM in the Yandex OAuth app
+      (Платформы приложений → Веб-сервисы → Redirect URI) and set as
+      YANDEX_SUGGEST_REDIRECT_URI in the backend env, e.g.
+      https://beauty-specialist.ru/suggest-token.html
+    -->
+    <script src="https://yastatic.net/s3/passport-sdk/autofill/v1/sdk-suggest-token-with-polyfills-latest.js"></script>
+  </head>
+  <body>
+    <script>
+      // Origin of the page that mounted the widget — our own SPA (this helper
+      // page is served from the same origin on purpose, both in dev and prod).
+      window.YaSendSuggestToken(window.location.origin, { flag: true });
+    </script>
+  </body>
+</html>

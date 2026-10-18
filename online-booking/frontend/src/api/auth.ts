@@ -47,6 +47,9 @@ export interface YandexStartResponse {
   client_id: string;
   /** Canonical backend redirect_uri (must match at authorize + exchange). */
   redirect_uri: string;
+  /** Helper page of the official instant-auth widget (sdk-suggest.js);
+      empty = widget off, the plain redirect button is used instead. */
+  suggest_redirect_uri: string;
 }
 
 export interface YandexVerifyResponse {
@@ -109,6 +112,13 @@ export const authApi = {
     apiClient.post<YandexVerifyResponse>('/api/v1/auth/yandex/verify', {
       code,
       state,
+      consent,
+    }),
+  /** Widget flow: the suggest SDK delivered an OAuth token — verified
+      server-side (user_info) before the session is minted. */
+  yandexVerifyToken: (accessToken: string, consent = false) =>
+    apiClient.post<YandexVerifyResponse>('/api/v1/auth/yandex/verify', {
+      access_token: accessToken,
       consent,
     }),
 };

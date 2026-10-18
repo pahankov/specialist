@@ -1,19 +1,19 @@
 # Тестирование
 
-> Backend: 54 файла, 588 тестов (pytest, SQLite-файл на тест). Frontend: 36 файлов, 186 тестов (Vitest).
+> Backend: 54 файла, 595 тестов (pytest, SQLite-файл на тест). Frontend: 36 файлов, 192 теста (Vitest).
 > Чек-лист перед коммитом — только в [RULES.md](RULES.md), правила деплоя — в [DEPLOYMENT_RULES.md](DEPLOYMENT_RULES.md).
 
 ## Запуск
 
 ```powershell
-# Backend (588 passed, ~10 мин)
+# Backend (595 passed, ~10 мин)
 cd online-booking\backend
 $env:PYTHONPATH='.'
 pytest tests/ -v                          # всё
 pytest tests/test_reviews.py -v           # один файл
 pytest tests/ -q --cov=app --cov-report=term-missing --cov-fail-under=55  # с гейтом (как в CI)
 
-# Frontend (186 passed, ~20 сек)
+# Frontend (192 passed, ~20 сек)
 cd online-booking\frontend
 npx vitest run                            # всё
 npx tsc --noEmit                          # типы (обязательно: ловят то, что тесты не ловят)
@@ -62,7 +62,7 @@ npx prettier --check src/                 # стиль (конфиг .prettierrc
     `test_toggle_admin_self` ×2, `test_email_conflict_skips_row` ×2; переименованы).
 12. `client_profiles.user_id NOT NULL` — сначала User+flush, потом профиль.
 
-## Backend: файлы (сгенерировано, 588 всего)
+## Backend: файлы (сгенерировано, 595 всего)
 
 | Файл | N | Файл | N |
 |---|---|---|---|
@@ -92,9 +92,9 @@ npx prettier --check src/                 # стиль (конфиг .prettierrc
 | test_create_superuser.py | 4 | test_validation_handler.py | 2 |
 | test_dadata_proxy.py | 5 | test_vk_auth.py | 26 |
 | test_dual_role.py | 13 | test_work_window.py | 3 |
-| test_export_tasks.py | 4 | test_yandex_auth.py | 19 |
+| test_export_tasks.py | 4 | test_yandex_auth.py | 26 |
 
-## Frontend: файлы (186 всего)
+## Frontend: файлы (192 всего)
 
 | Файл | N | Файл | N |
 |---|---|---|---|
@@ -115,13 +115,13 @@ npx prettier --check src/                 # стиль (конфиг .prettierrc
 | DataTable.test.tsx | 7 | Stars.test.tsx | 2 |
 | helpers.test.ts | 33 | SuperAdminLayout.test.tsx | 1 |
 | hooks.test.tsx | 2 | vkAuth.test.tsx | 7 |
-| impersonation.test.ts | 3 | yandexAuth.test.tsx | 8 |
+| impersonation.test.ts | 3 | yandexAuth.test.tsx | 14 |
 
 Покрыто: `apiError`, `assetUrl`, `authRefresh` (очередь 401), `CitySelect`, `ClientsFilter`,
 `CouponCards`, `dadata`, `helpers` (schedule), schedule `hooks`, `impersonation`, `MasterSelect`,
 `Modal`/`ConfirmDialog`, `names` (ФИО), `NotificationBell` (колокольчик), `Pager`, `password` (политика),
 `PhoneInput`, `RecipientPicker`, `RoleSwitch`, `Stars`, `AutoConfirmSwitch`, `BackendImg`, `sharedUi`, `DataTable`,
-`section`, `cookies` (getUserRole), `maxAuth`/`vkAuth`/`yandexAuth` (соц-входы и флоу кодов),
+`section`, `cookies` (getUserRole), `maxAuth`/`vkAuth`/`yandexAuth` (соц-входы, официальный виджет Яндекса suggest с откатом на редирект, флоу кодов),
 `CabinetPage` (список/отмена/empty/статы/город), `CabinetBookPage`, `ClientLayout` (свой nav под `/cabinet`),
 `BookingWizard` (мастер→категории→публичная запись), `LogsPage`, `SuperAdminLayout`.
 Не покрыто (сознательно): большие страницы и роутинг-гарды —
@@ -131,7 +131,7 @@ npx prettier --check src/                 # стиль (конфиг .prettierrc
 
 | Gate | Где | Fail → |
 |---|---|---|
-| pytest 588 + `--cov-fail-under=55` | `ci.yml` backend-tests | PR/деплой blocked |
+| pytest 595 + `--cov-fail-under=55` | `ci.yml` backend-tests | PR/деплой blocked |
 | eslint (0 errors) + `tsc --noEmit` + `vitest run` + `prettier --check` | `ci.yml` frontend-lint | PR/деплой blocked |
 | pytest на сервере до restart | `deploy.yml` | deploy abort |
 | pg_dump перед миграциями | `deploy.yml` | warn, continue |

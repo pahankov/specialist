@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { authApi } from '../api/client';
 import LoginModal from '../components/LoginModal';
 import YandexCallbackPage from '../pages/public/YandexCallbackPage';
+import { __resetYandexSuggestForTests } from '../components/common/yandexSuggestSdk';
 
 vi.mock('../api/client', () => ({
   authApi: {
@@ -16,6 +17,7 @@ vi.mock('../api/client', () => ({
     vkVerify: vi.fn(),
     yandexStart: vi.fn(),
     yandexVerify: vi.fn(),
+    yandexVerifyToken: vi.fn(),
   },
 }));
 
@@ -38,13 +40,53 @@ const START_DATA = {
   state: 's1',
   client_id: 'c1',
   redirect_uri: 'https://beauty-specialist.ru/auth/yandex/callback',
+  suggest_redirect_uri: '',
 };
+
+/** Same start payload, but the suggest widget is configured (prod-like). */
+const SUGGEST_START_DATA = {
+  ...START_DATA,
+  suggest_redirect_uri: 'https://beauty-specialist.ru/suggest-token.html',
+};
+
+interface SuggestInitArgs {
+  oauthParams: Record<string, unknown>;
+  origin: string;
+  suggestParams: Record<string, unknown>;
+}
+
+/**
+ * Minimal fake of the sdk-suggest global (window.YaAuthSuggest). When it is
+ * already present the component skips script injection, which jsdom cannot
+ * load. `handler` resolves with the widget's postMessage payload.
+ */
+function installSuggestSdk() {
+  const handler = vi.fn().mockResolvedValue({});
+  const calls: SuggestInitArgs[] = [];
+  const sdkInit = vi
+    .fn()
+    .mockImplementation(
+      async (
+        oauthParams: Record<string, unknown>,
+        origin: string,
+        suggestParams: Record<string, unknown>,
+      ) => {
+        calls.push({ oauthParams, origin, suggestParams });
+        return { handler };
+      },
+    );
+  (window as unknown as { YaAuthSuggest: unknown }).YaAuthSuggest = { init: sdkInit };
+  return { sdkInit, handler, calls };
+}
 
 beforeEach(() => {
   sessionStorage.clear();
 });
+
 afterEach(() => {
   vi.clearAllMocks();
+  delete (window as unknown as { YaAuthSuggest?: unknown }).YaAuthSuggest;
+  __resetYandexSuggestForTests();
 });
 
 function renderLogin() {
@@ -55,30 +97,147 @@ function renderLogin() {
   );
 }
 
-describe('Yandex OAuth (redirect flow)', () => {
-  it('offers Yandex from the login screen as a branded button', () => {
+describe('Yandex official widget («мгновенная авторизация», sdk-suggest)', () => {
+  it('mounts the official widget on the login form as the main button', async () => {
+    const { sdkInit } = installSuggestSdk();
+    vi.mocked(mocked.yandexStart).mockResolvedValue({ data: SUGGEST_START_DATA } as never);
     renderLogin();
-    expect(screen.getByRole('button', { name: /Войти через Яндекс/ })).toBeInTheDocument();
+
+    await waitFor(() => expect(sdkInit).toHaveBeenCalledTimes(1));
+    expect(sdkInit).toHaveBeenCalledWith(
+      {
+        client_id: 'c1',
+        response_type: 'token',
+        redirect_uri: 'https://beauty-specialist.ru/suggest-token.html',
+      },
+      window.location.origin,
+      expect.objectContaining({
+        view: 'button',
+        parentId: 'yandex-suggest-login',
+        buttonView: 'main',
+        buttonSize: 'm',
+        buttonBorderRadius: 10,
+      }),
+    );
+    // The slot the SDK renders into is present on the login tab.
+    expect(screen.getByTestId('yandex-suggest-container')).toBeInTheDocument();
+    // And the plain redirect button is NOT rendered next to it.
+    expect(screen.queryByRole('button', { name: /Войти через Яндекс/ })).not.toBeInTheDocument();
   });
 
-  it('fetches a signed state, stashes it and hands the browser to Yandex', async () => {
+  it('delivers the widget token to the backend and completes the login', async () => {
+    const { handler } = installSuggestSdk();
+    handler.mockResolvedValue({ access_token: 'ya-tok', expires_in: 3600, cid: 'c1' });
+    vi.mocked(mocked.yandexStart).mockResolvedValue({ data: SUGGEST_START_DATA } as never);
+    vi.mocked(mocked.yandexVerifyToken).mockResolvedValue({
+      data: { access_token: 't', token_type: 'bearer', is_new_user: true },
+    } as never);
+
     renderLogin();
+
+    await waitFor(() => expect(mocked.yandexVerifyToken).toHaveBeenCalledWith('ya-tok', true));
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith('Добро пожаловать! Аккаунт создан.'),
+    );
+  });
+
+  it('keeps the widget button when the user just closes the Yandex UI', async () => {
+    const { handler } = installSuggestSdk();
+    handler.mockResolvedValue({}); // empty payload = closed/declined
+    vi.mocked(mocked.yandexStart).mockResolvedValue({ data: SUGGEST_START_DATA } as never);
+    renderLogin();
+
+    await waitFor(() => expect(handler).toHaveBeenCalledTimes(1));
+    // No backend call, no fallback swap — the button stays for a retry.
+    expect(mocked.yandexVerifyToken).not.toHaveBeenCalled();
+    expect(screen.getByTestId('yandex-suggest-container')).toBeInTheDocument();
+  });
+
+  it('mounts the icon variant on the register form only after consent', async () => {
+    const { sdkInit } = installSuggestSdk();
+    vi.mocked(mocked.yandexStart).mockResolvedValue({ data: SUGGEST_START_DATA } as never);
+    renderLogin();
+    await waitFor(() => expect(sdkInit).toHaveBeenCalledTimes(1)); // login tab mounted
+
+    fireEvent.click(screen.getByRole('link', { name: 'Зарегистрироваться' }));
+    // 152-FZ gate: nothing social until the box is ticked.
+    expect(screen.queryByTestId('yandex-suggest-container')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText(/Соглашаюсь с/));
+    await waitFor(() =>
+      expect(sdkInit).toHaveBeenLastCalledWith(
+        expect.anything(),
+        window.location.origin,
+        expect.objectContaining({
+          buttonView: 'icon',
+          parentId: 'yandex-suggest-register',
+          buttonSize: 's',
+        }),
+      ),
+    );
+  });
+
+  it('falls back to the plain redirect button when the widget cannot init', async () => {
+    const sdkInit = vi.fn().mockRejectedValue({ code: 'no_cookie' });
+    (window as unknown as { YaAuthSuggest: unknown }).YaAuthSuggest = { init: sdkInit };
+    vi.mocked(mocked.yandexStart).mockResolvedValue({ data: SUGGEST_START_DATA } as never);
+    renderLogin();
+
+    const btn = await screen.findByRole('button', { name: /Войти через Яндекс/ });
+    expect(btn).toBeInTheDocument();
+
+    // The fallback is the same tested redirect flow: click → state + redirect.
+    fireEvent.click(btn);
+    await waitFor(() => expect(sessionStorage.getItem('yandex_state')).toBe('s1'));
+    expect(sessionStorage.getItem('yandex_consent')).toBe('1');
+  });
+
+  it('falls back when the widget is not configured server-side', async () => {
+    installSuggestSdk();
     vi.mocked(mocked.yandexStart).mockResolvedValue({ data: START_DATA } as never);
+    renderLogin();
 
-    // Direct redirect button — no consent screen in between.
-    fireEvent.click(screen.getByRole('button', { name: /Войти через Яндекс/ }));
+    expect(await screen.findByRole('button', { name: /Войти через Яндекс/ })).toBeInTheDocument();
+  });
 
-    await waitFor(() => expect(mocked.yandexStart).toHaveBeenCalledTimes(1));
-    // The signed state + implicit consent flag are staged for the callback.
+  it('falls back (with an error toast) when the backend refuses the token', async () => {
+    const { handler } = installSuggestSdk();
+    handler.mockResolvedValue({ access_token: 'stale-tok' });
+    vi.mocked(mocked.yandexStart).mockResolvedValue({ data: SUGGEST_START_DATA } as never);
+    vi.mocked(mocked.yandexVerifyToken).mockRejectedValue({
+      response: { data: { detail: 'Не удалось подтвердить вход через Яндекс. Попробуйте снова.' } },
+    });
+    renderLogin();
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        'Не удалось подтвердить вход через Яндекс. Попробуйте снова.',
+      ),
+    );
+    expect(await screen.findByRole('button', { name: /Войти через Яндекс/ })).toBeInTheDocument();
+  });
+});
+
+describe('Yandex OAuth redirect (fallback path)', () => {
+  it('fetches a signed state, stashes it and hands the browser to Yandex', async () => {
+    installSuggestSdk();
+    // Empty suggest_redirect_uri → the widget is off, the fallback shows.
+    vi.mocked(mocked.yandexStart).mockResolvedValue({ data: START_DATA } as never);
+    renderLogin();
+
+    const btn = await screen.findByRole('button', { name: /Войти через Яндекс/ });
+    fireEvent.click(btn);
+
     await waitFor(() => expect(sessionStorage.getItem('yandex_state')).toBe('s1'));
     expect(sessionStorage.getItem('yandex_consent')).toBe('1');
   });
 
   it('reports a 503 as "not configured"', async () => {
-    renderLogin();
     vi.mocked(mocked.yandexStart).mockRejectedValue({ response: { status: 503 } });
+    renderLogin();
 
-    fireEvent.click(screen.getByRole('button', { name: /Войти через Яндекс/ }));
+    const btn = await screen.findByRole('button', { name: /Войти через Яндекс/ });
+    fireEvent.click(btn);
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Вход через Яндекс не настроен'));
   });

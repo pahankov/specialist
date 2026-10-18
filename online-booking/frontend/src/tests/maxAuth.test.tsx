@@ -364,12 +364,16 @@ describe('Registration consent (152-FZ)', () => {
     expect(screen.queryByRole('button', { name: 'Регистрация через MAX' })).not.toBeInTheDocument();
   });
 
-  it('reveals the VK widget and the Yandex/MAX tiles once consent is ticked', () => {
+  it('reveals the VK widget and the Yandex/MAX tiles once consent is ticked', async () => {
     openRegister();
     fireEvent.click(screen.getByText(/Соглашаюсь с/));
 
     expect(screen.getByTestId('vkid-widget-container')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Регистрация через Яндекс' })).toBeInTheDocument();
+    // Yandex mounts the official suggest widget; with no SDK/start mock in
+    // this file it resolves to the redirect tile asynchronously.
+    expect(
+      await screen.findByRole('button', { name: 'Регистрация через Яндекс' }),
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Регистрация через MAX' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Отметьте согласие/ })).not.toBeInTheDocument();
   });

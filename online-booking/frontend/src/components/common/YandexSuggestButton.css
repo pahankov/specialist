@@ -1,0 +1,12 @@
+/* Official Yandex ID widget (sdk-suggest.js) mounts INTO these slots; the
+   slot itself only reserves the layout space so the row never jumps. */
+.yandex-suggest-slot {
+  width: 100%;
+}
+
+.yandex-suggest-login {
+  width: 100%;
+  min-height: 44px; /* SOCIAL_BTN_HEIGHT — matches the other social buttons */
+  display: flex;
+  align-items: center;
+}

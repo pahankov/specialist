@@ -33,6 +33,7 @@ async def yandex_start(request: Request, req: schemas.YandexStartRequest):
         "state": state,
         "client_id": settings.YANDEX_CLIENT_ID,
         "redirect_uri": settings.YANDEX_REDIRECT_URI,
+        "suggest_redirect_uri": settings.YANDEX_SUGGEST_REDIRECT_URI,
     }
 
 
@@ -44,17 +45,24 @@ async def yandex_verify(
     req: schemas.YandexVerifyRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    """Trade the callback code for a session (sets cookies).
+    """Trade the callback code OR the widget token for a session (sets cookies).
 
-    The backend holds the Yandex OAuth secret, so the code is exchanged here —
-    the access token never reaches the browser.
+    Redirect flow: the backend holds the Yandex OAuth secret, so the code is
+    exchanged here — the access token never reaches the browser. Widget flow
+    («мгновенная авторизация»): the SDK already delivered a token to the
+    browser; it is validated server-side via user_info before login.
     """
     if not settings.yandex_enabled:
         raise HTTPException(
             status_code=503, detail="Вход через Яндекс не настроен")
-    access_token, user, is_new = await service.verify_yandex_code(
-        req.code, req.state, db, consent=req.consent,
-    )
+    if req.access_token is not None:
+        access_token, user, is_new = await service.verify_yandex_token(
+            req.access_token, db, consent=req.consent,
+        )
+    else:
+        access_token, user, is_new = await service.verify_yandex_code(
+            req.code or "", req.state or "", db, consent=req.consent,
+        )
     cookie_token = await service.get_latest_refresh_token_value(db, user.id)
     set_auth_cookies(response, access_token, cookie_token)
     await log_action(

@@ -15,6 +15,8 @@ def yandex_enabled(monkeypatch):
     monkeypatch.setattr(settings, "YANDEX_CLIENT_SECRET", "test-client-secret")
     monkeypatch.setattr(settings, "YANDEX_REDIRECT_URI",
                         "https://site.example/auth/yandex/callback")
+    monkeypatch.setattr(settings, "YANDEX_SUGGEST_REDIRECT_URI",
+                        "https://site.example/suggest-token.html")
     monkeypatch.setattr(settings, "YANDEX_SCOPE", "")
 
 
@@ -23,6 +25,7 @@ def no_yandex(monkeypatch):
     monkeypatch.setattr(settings, "YANDEX_CLIENT_ID", "")
     monkeypatch.setattr(settings, "YANDEX_CLIENT_SECRET", "")
     monkeypatch.setattr(settings, "YANDEX_REDIRECT_URI", "")
+    monkeypatch.setattr(settings, "YANDEX_SUGGEST_REDIRECT_URI", "")
 
 
 class _StubYandexApi:
@@ -101,6 +104,8 @@ class TestYandexStart:
         assert data["client_id"] == "test-client-id"
         assert data["redirect_uri"] == (
             "https://site.example/auth/yandex/callback")
+        assert data["suggest_redirect_uri"] == (
+            "https://site.example/suggest-token.html")
         assert data["state"]
 
     async def test_start_state_is_fresh_and_signed(self, client,
@@ -253,6 +258,113 @@ class TestYandexVerify:
         data = await _start(client)
         resp = await _verify(client, data)
         assert resp.status_code == 400
+
+
+class TestYandexSuggestTokenVerify:
+    """Widget flow («мгновенная авторизация»): the SDK-delivered access_token
+    instead of code + state — same account create/bind tail."""
+
+    async def test_token_verify_creates_new_client(
+        self, client, yandex_enabled, monkeypatch, session
+    ):
+        api = _StubYandexApi(profile=_profile(email="ivan@ya.example"))
+        _stub(monkeypatch, api)
+        resp = await client.post(
+            "/api/v1/auth/yandex/verify",
+            json={"access_token": "ya-widget-token", "consent": True},
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["is_new_user"] is True
+        # The token goes straight to user_info — no code exchange.
+        assert api.info_calls == ["ya-widget-token"]
+        assert api.exchange_calls == []
+
+        from sqlalchemy import select
+        from app.models.user import User
+        user = (await session.execute(
+            select(User).where(User.yandex_user_id == 111))).scalar_one()
+        assert user.name == "Ivan Petrov"
+        assert user.email == "ivan@ya.example"
+        assert user.consent_at is not None
+
+    async def test_token_verify_existing_yandex_user_is_login(
+        self, client, yandex_enabled, monkeypatch, session
+    ):
+        from app.models.user import User, UserRole
+        bound = User(name="Bound User", role=UserRole.CLIENT,
+                     yandex_user_id=111)
+        session.add(bound)
+        await session.commit()
+
+        _stub(monkeypatch, _StubYandexApi(profile=_profile()))
+        resp = await client.post(
+            "/api/v1/auth/yandex/verify",
+            json={"access_token": "ya-widget-token"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["is_new_user"] is False
+        await session.refresh(bound)
+        assert bound.name == "Bound User"  # untouched
+
+    async def test_token_verify_rejects_invalid_token(
+        self, client, yandex_enabled, monkeypatch
+    ):
+        from app.services.yandex_api import YandexApiError
+        _stub(monkeypatch, _StubYandexApi(info_exc=YandexApiError("revoked")))
+        resp = await client.post(
+            "/api/v1/auth/yandex/verify",
+            json={"access_token": "bad-token"},
+        )
+        assert resp.status_code == 401
+
+    async def test_token_verify_blocked_account_rejected(
+        self, client, yandex_enabled, monkeypatch, session
+    ):
+        from app.models.user import User, UserRole
+        banned = User(name="Banned", role=UserRole.CLIENT,
+                      yandex_user_id=111, is_active=False)
+        session.add(banned)
+        await session.commit()
+
+        _stub(monkeypatch, _StubYandexApi(profile=_profile()))
+        resp = await client.post(
+            "/api/v1/auth/yandex/verify",
+            json={"access_token": "ya-widget-token"},
+        )
+        assert resp.status_code == 403
+
+    async def test_token_verify_disabled_without_config(
+        self, client, no_yandex
+    ):
+        resp = await client.post(
+            "/api/v1/auth/yandex/verify",
+            json={"access_token": "x"},
+        )
+        assert resp.status_code == 503
+
+    async def test_verify_requires_exactly_one_flow(
+        self, client, yandex_enabled
+    ):
+        # Neither flow.
+        resp = await client.post("/api/v1/auth/yandex/verify", json={})
+        assert resp.status_code == 422
+        # Both flows at once.
+        resp = await client.post(
+            "/api/v1/auth/yandex/verify",
+            json={"code": "c", "state": "s", "access_token": "t"},
+        )
+        assert resp.status_code == 422
+        # code without its state.
+        resp = await client.post(
+            "/api/v1/auth/yandex/verify", json={"code": "c"})
+        assert resp.status_code == 422
+
+    async def test_start_reports_widget_off_when_unset(
+        self, client, yandex_enabled, monkeypatch
+    ):
+        monkeypatch.setattr(settings, "YANDEX_SUGGEST_REDIRECT_URI", "")
+        data = await _start(client)
+        assert data["suggest_redirect_uri"] == ""
 
 
 class TestYandexHelpers:

@@ -94,6 +94,12 @@ class Settings(BaseSettings):
     YANDEX_REDIRECT_URI: str = ""
     # Space-separated scopes; empty = Yandex default (login:info + login:email).
     YANDEX_SCOPE: str = ""
+    # Suggest helper page for the official instant-auth widget
+    # («мгновенная авторизация», sdk-suggest.js): receives the OAuth token
+    # from Yandex and postMessages it back to the site. Its URL must be
+    # registered in the app's Redirect URI list verbatim. Empty = widget off,
+    # the frontend keeps the plain redirect button.
+    YANDEX_SUGGEST_REDIRECT_URI: str = ""
 
     # DaData (address suggestions; secret never leaves the backend proxy)
     DADATA_API_KEY: str = ""

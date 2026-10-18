@@ -15,6 +15,10 @@ Why this shape (Yandex docs, yandex.ru/dev/id):
   callback with a foreign/forged state is rejected before any token call.
 - Registration and login are one flow: the account is created on the first
   successful exchange (matched by yandex_user_id thereafter).
+- The official instant-auth widget («мгновенная авторизация», sdk-suggest.js)
+  skips the redirect: the widget hands an OAuth token to the browser and
+  /yandex/verify hands it to verify_yandex_token, which validates it via
+  user_info and reuses the exact same account tail as the code flow.
 - 152-FZ consent is captured on the site form (checkbox) and passed into
   /yandex/verify — stamped on new accounts, backfilled onto legacy ones.
 
@@ -131,7 +135,41 @@ async def verify_yandex_code(
             status_code=400,
             detail="Не удалось войти через Яндекс. Попробуйте позже.",
         )
+    return await _login_with_profile(db, profile, consent)
 
+
+async def verify_yandex_token(
+    access_token: str,
+    db: AsyncSession,
+    consent: bool = False,
+) -> tuple[str, User, bool]:
+    """Widget flow: the official sdk-suggest widget delivered a token.
+
+    Unlike the code flow there is no redirect and no signed state — owning a
+    valid OAuth token IS the proof of authentication. We validate it the only
+    way Yandex allows (a profile read; revoked/foreign tokens fail there) and
+    then reuse the same create/bind path as the code flow.
+    """
+    if not settings.yandex_enabled:
+        raise HTTPException(
+            status_code=503, detail="Вход через Яндекс не настроен")
+    api = get_yandex_api()
+    try:
+        profile = await api.user_info(access_token)
+    except YandexApiError as e:
+        logger.warning("Yandex ID token check failed: %s", e)
+        raise HTTPException(
+            status_code=401,
+            detail="Не удалось подтвердить вход через Яндекс. "
+                   "Попробуйте снова.",
+        )
+    return await _login_with_profile(db, profile, consent)
+
+
+async def _login_with_profile(
+    db: AsyncSession, profile: dict, consent: bool
+) -> tuple[str, User, bool]:
+    """Shared tail of both verify flows: profile -> account -> JWT session."""
     raw_id = profile.get("id")
     if raw_id is None:
         raise HTTPException(

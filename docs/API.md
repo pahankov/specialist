@@ -58,22 +58,31 @@
 попадают; `state`, переданный в SDK, проходит HMAC-проверку на бэке — ручной
 редирект на `id.vk.ru` больше не используется.
 
-### Yandex ID auth (OAuth 2.0 Authorization Code, редирект)
+### Yandex ID auth (официальный виджет suggest + Authorization Code, редирект-фолбэк)
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
-| `POST` | `/api/v1/auth/yandex/start` | Подписанный `state` (HMAC, TTL 10 мин) + `redirect_uri` + `client_id` + полный `authorize_url` на `oauth.yandex.ru/authorize`; 10/min |
-| `POST` | `/api/v1/auth/yandex/verify` | Обмен `code`+`state` на токены **на сервере** (OAuth-секрет не уходит в браузер), create/bind аккаунта, JWT-сессия + cookies; 10/min |
+| `POST` | `/api/v1/auth/yandex/start` | Подписанный `state` (HMAC, TTL 10 мин) + `redirect_uri` + `client_id` + `suggest_redirect_uri` (страница-приёмник виджета; пусто = виджет выключен) + полный `authorize_url` на `oauth.yandex.ru/authorize`; 10/min |
+| `POST` | `/api/v1/auth/yandex/verify` | Либо обмен `code`+`state` на токены **на сервере** (OAuth-секрет не уходит в браузер), либо проверка `access_token` виджета (`login.yandex.ru/info`); create/bind аккаунта, JWT-сессия + cookies; ровно один способ, иначе 422; 10/min |
 
-Флоу (обычный редирект, без PKCE — подтверждает `client_secret`):
-фронт после галочки согласия 152-ФЗ шлёт `/yandex/start` → получает
-подписанный `state` + `authorize_url` → стешит `state`/`consent` в
-sessionStorage и редиректит браузер на Яндекс → пользователь соглашается →
-Яндекс возвращает на `/auth/yandex/callback?code&state` → фронт сверяет
-`state` со стешенным и постит `code`+`state`+`consent` в `/yandex/verify` →
-бэкенд меняет `code` на токен у `oauth.yandex.ru/token` (серверный
-`client_secret`), читает профиль (`login.yandex.ru/info`), создаёт/привязывает
-аккаунт (новый всегда CLIENT, ключ — `yandex_user_id`) и штампует `consent_*`.
-Токен Яндекса в браузер не попадает; `state` проходит HMAC-проверку на бэке.
+Два флоу, у обоих один хвост (create/bind аккаунта, новый всегда CLIENT,
+ключ — `yandex_user_id`, штамп `consent_*`):
+
+- **Виджет «Мгновенная авторизация»** (основной, `sdk-suggest.js`): фронт
+  монтирует официальную кнопку/иконку (`YaAuthSuggest.init` с `client_id` и
+  `suggest_redirect_uri` из `/yandex/start`), после согласия пользователя SDK
+  получает OAuth-токен через страницу-приёмник `frontend/public/suggest-token.html`
+  и отдаёт его промису; фронт постит `access_token`+`consent` в `/yandex/verify`
+  → бэкенд валидирует токен чтением профиля (`login.yandex.ru/info`) и логинит.
+  Дальше токен в браузере не используется. Если SDK не может работать (нет
+  сторонних cookie, нет конфига, CDN недоступен) — фронт сам рендерит кнопку
+  редирект-флоу ниже.
+- **Редирект** (фолбэк, без PKCE — подтверждает `client_secret`): фронт после
+  галочки согласия 152-ФЗ шлёт `/yandex/start` → получает подписанный `state` +
+  `authorize_url` → стешит `state`/`consent` в sessionStorage и редиректит
+  браузер на Яндекс → Яндекс возвращает на `/auth/yandex/callback?code&state`
+  → фронт сверяет `state` со стешенным и постит `code`+`state`+`consent` в
+  `/yandex/verify` → бэкенд меняет `code` на токен у `oauth.yandex.ru/token`
+  (серверный `client_secret`). `state` проходит HMAC-проверку на бэке.
 
 ### Geography
 | Метод | Endpoint | Описание |

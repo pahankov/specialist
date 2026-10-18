@@ -6,6 +6,7 @@ import { PASSWORD_PLACEHOLDER } from '../constants';
 import { passwordError } from '../utils/password';
 import SocialAuthButton, { SocialAuthIconButton } from './common/SocialAuthButton';
 import VkIdWidget from './common/VkIdWidget';
+import YandexSuggestButton from './common/YandexSuggestButton';
 import MaxIcon from './common/icons/MaxIcon';
 import type { MaxStartResponse } from '../api/auth';
 import PhoneInput, { maskPhone, isCompletePhone, PHONE_MAX_DIGITS } from './common/PhoneInput';
@@ -21,7 +22,8 @@ interface LoginModalProps {
   redirectTo?: string | null;
 }
 
-/** Only three modes: the VK widget is inline, Yandex redirects directly. */
+/** Modes: VK widget inline, Yandex — the official suggest widget (with the
+    plain redirect button as fallback). */
 type ModalMode = 'login' | 'register' | 'max';
 
 interface LoginFormState {
@@ -55,6 +57,11 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
       above the manual fields, so the consent-gate hint can jump back to it. */
   const consentRef = useRef<HTMLInputElement>(null);
   const focusConsent = () => consentRef.current?.focus();
+
+  /** Yandex: the official suggest widget normally renders inline; when it
+      cannot run here (third-party cookies blocked, SDK/config unavailable)
+      the plain redirect button takes its place — both tabs switch together. */
+  const [yandexRedirect, setYandexRedirect] = useState(false);
 
   // MAX chat-bot auth: code arrives INTO the MAX dialog, user types it on site
   const [maxPhone, setMaxPhone] = useState('');
@@ -157,11 +164,13 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
     }
   };
 
-  /* Yandex OAuth: a plain redirect (no separate consent screen — 152-FZ
-     consent is taken at registration, and a first social login IS a
-     registration that stamps it implicitly). Fetch a signed state +
-     authorize URL, stash the state, hand the browser to Yandex; the callback
-     posts the code back for a server-side exchange. */
+  /* Yandex OAuth redirect — the fallback path (the official suggest widget
+     handles the normal case; this one works even without third-party
+     cookies). No separate consent screen: 152-FZ consent is taken at
+     registration, and a first social login IS a registration that stamps it
+     implicitly. Fetch a signed state + authorize URL, stash the state, hand
+     the browser to Yandex; the callback posts the code back for a
+     server-side exchange. */
   const handleYandexStart = async () => {
     setLoading(true);
     try {
@@ -463,13 +472,23 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
               no separate screen, no consent checkbox (taken at registration). */}
           <VkIdWidget onSuccess={landByRole} />
 
+          {/* Yandex: the official «мгновенная авторизация» widget; the plain
+              redirect button only appears if the widget cannot run here. */}
           <div style={{ marginTop: 8 }}>
-            <SocialAuthButton
-              provider="yandex"
-              action="login"
-              disabled={loading}
-              onClick={handleYandexStart}
-            />
+            {yandexRedirect ? (
+              <SocialAuthButton
+                provider="yandex"
+                action="login"
+                disabled={loading}
+                onClick={handleYandexStart}
+              />
+            ) : (
+              <YandexSuggestButton
+                variant="login"
+                onSuccess={landByRole}
+                onUnavailable={() => setYandexRedirect(true)}
+              />
+            )}
           </div>
           <div style={{ marginTop: 8 }}>
             <SocialAuthButton provider="max" action="login" onClick={() => switchMode('max')} />
@@ -529,12 +548,20 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
             <>
               <VkIdWidget onSuccess={landByRole} />
               <div className="social-icon-row">
-                <SocialAuthIconButton
-                  provider="yandex"
-                  action="register"
-                  disabled={loading}
-                  onClick={handleYandexStart}
-                />
+                {yandexRedirect ? (
+                  <SocialAuthIconButton
+                    provider="yandex"
+                    action="register"
+                    disabled={loading}
+                    onClick={handleYandexStart}
+                  />
+                ) : (
+                  <YandexSuggestButton
+                    variant="register"
+                    onSuccess={landByRole}
+                    onUnavailable={() => setYandexRedirect(true)}
+                  />
+                )}
                 <SocialAuthIconButton
                   provider="max"
                   action="register"

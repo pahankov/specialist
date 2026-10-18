@@ -67,3 +67,25 @@ python max_webhook.py unsubscribe # снять подписку (dev / long-poll
 
 Токен, показанный в чате/на скриншоте, считается скомпрометированным:
 перегенерируй его в настройках бота и обнови оба `.env` (локальный + серверный).
+
+## Yandex suggest («Мгновенная авторизация»): настройка (один раз)
+
+Виджет включён, пока задан `YANDEX_SUGGEST_REDIRECT_URI` (пусто = выключен,
+работает прежняя кнопка-редирект). Перед включением:
+
+1. В кабинете Яндекса (Платформы приложений → Веб-сервисы → Redirect URI)
+   добавить URL страницы-приёмника **точно как есть**:
+   - прод: `https://beauty-specialist.ru/suggest-token.html`
+   - локалка: `http://localhost:3000/suggest-token.html`
+2. Записать тот же URL в `backend/.env`:
+   - прод (по SSH, затем `sudo systemctl restart beauty-backend`):
+     `YANDEX_SUGGEST_REDIRECT_URI=https://beauty-specialist.ru/suggest-token.html`
+   - локально: `YANDEX_SUGGEST_REDIRECT_URI=http://localhost:3000/suggest-token.html`
+3. Проверка: в модалке входа вместо «Войти через Яндекс» рисуется официальная
+   кнопка «Войти с Яндекс ID» (на вкладке регистрации — такая же официальная
+   иконка-плитка).
+
+Страница-приёмник — `frontend/public/suggest-token.html` (копируется в сборку
+как есть, `sdk-suggest-token.js` отдаёт токен приложению через postMessage).
+Откат — очистить `YANDEX_SUGGEST_REDIRECT_URI`: фронт сам вернётся на
+кнопку-редирект.

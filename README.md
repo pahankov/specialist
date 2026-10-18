@@ -133,7 +133,7 @@ beauty-specialist/              # корень репозитория
     │   │   └── modules/          # self-contained пакеты: auth, city, user, booking, service, schedule,
     │   │                         # review, client, admin/*, dadata, maxauth, vkauth, yandexauth
     │   ├── alembic/              # миграции PostgreSQL
-    │   ├── tests/                # pytest (588)
+    │   ├── tests/                # pytest (595)
     │   └── requirements.txt
     └── frontend/
         ├── src/
@@ -142,7 +142,7 @@ beauty-specialist/              # корень репозитория
         │   ├── pages/admin/      # AdminLayout (/admin) + SuperAdminLayout (/super) + страницы
         │   ├── pages/public/     # HomePage, BookingPage
         │   ├── styles/           # общие стили (filters.css — сетка фильтров)
-        │   ├── tests/            # Vitest (186)
+        │   ├── tests/            # Vitest (192)
         │   ├── utils/            # section (/admin|/super), persistentState, formatPhone, apiError, ...
         │   └── App.tsx           # роутинг: / → /booking → /admin/* → /super/*
         └── package.json
@@ -306,8 +306,8 @@ utils/
 - ESLint + Prettier для форматирования кода
 
 ### ✅ Тесты
-- **Backend:** 588 pytest-тестов (auth, masters, services, appointments, clients, reviews, admin CRUD, bundles, coupons, notifications, visibility/модерация, dual-role, VK/Yandex/MAX auth, MAX webhook guard, rate limiting, refresh tokens, password security, no-show, dadata proxy, superuser, log level)
-- **Frontend:** 186 Vitest-тестов (helpers, hooks, Modal/ConfirmDialog, auth refresh, соц-входы VK/Yandex/MAX, dadata fallback, CabinetPage, CabinetBookPage, BookingWizard, DataTable, NotificationBell, ...)
+- **Backend:** 595 pytest-тестов (auth, masters, services, appointments, clients, reviews, admin CRUD, bundles, coupons, notifications, visibility/модерация, dual-role, VK/Yandex/MAX auth (в т.ч. виджет Яндекса suggest), MAX webhook guard, rate limiting, refresh tokens, password security, no-show, dadata proxy, superuser, log level)
+- **Frontend:** 192 Vitest-теста (helpers, hooks, Modal/ConfirmDialog, auth refresh, соц-входы VK/Yandex/MAX (виджет Яндекса), dadata fallback, CabinetPage, CabinetBookPage, BookingWizard, DataTable, NotificationBell, ...)
 - 100% покрытие всех эндпоинтов
 - Файловый SQLite (по файлу на тест) для изоляции тестов
 - pytest-asyncio для асинхронных тестов
@@ -430,13 +430,13 @@ OtpCode (id, phone, code_hash, expires_at, is_used, created_at)
 # Backend
 cd online-booking\backend
 $env:PYTHONPATH='.'
-pytest tests/ -v                          # Все тесты (588)
+pytest tests/ -v                          # Все тесты (595)
 pytest tests/test_reviews.py -v           # Только reviews
 pytest tests/ -v --cov=app                # С покрытием
 
 # Frontend
 cd online-booking\frontend
-npx vitest run                            # Все тесты (186)
+npx vitest run                            # Все тесты (192)
 npx vitest run src/tests/helpers.test.ts  # Только helpers
 npx vitest                              # Watch mode
 ```
@@ -450,6 +450,14 @@ npx vitest                              # Watch mode
 
 
 ## 📚 История версий
+
+### [1.78.0] — 2026-10-18
+- **Вход и регистрация через Яндекс переведены на официальный виджет «Мгновенная авторизация»** (sdk-suggest.js): SDK сам рисует официальную кнопку прямо в модалке — на вкладке входа «Войти с Яндекс ID» (main, 44px = `SOCIAL_BTN_HEIGHT`), на вкладке регистрации — иконку-плитку (icon, 40px) в ряду с MAX. Клик открывает родной интерфейс Яндекса; после согласия SDK отдаёт OAuth-токен, а страница-приёмник `frontend/public/suggest-token.html` пересылает его приложению через postMessage. Размеры/скругление выровнены с остальными соцкнопками (`buttonSize m/наша высота`, `buttonBorderRadius = SOCIAL_BTN_RADIUS`)
+- **Токен проверяется на сервере:** `/yandex/verify` принимает теперь либо `code`+`state` (прежний редирект), либо `access_token` (виджет) — ровно один способ (иначе 422). Токен валидируется чтением профиля (`login.yandex.ru/info`) до create/bind аккаунта (новый — всегда CLIENT, ключ `yandex_user_id`), сессия и штамп `consent_*` — как раньше. Невалидный/отозванный токен → 401, заблокированный аккаунт → 403, без конфига → 503
+- **Автоматический откат на прежнюю кнопку-редирект:** если сторонние cookie заблокированы (SDK отдаёт `no_cookie`), виджет не сконфигурирован или CDN недоступен — вместо виджета рендерится обычная «Войти через Яндекс» (весь redirect-flow сохранён: `/auth/yandex/callback` + серверный обмен кода). Повторные `init` сериализованы — React StrictMode и переоткрытие модалки не получают ошибку `in_progress`
+- **Новая настройка** `YANDEX_SUGGEST_REDIRECT_URI` (пусто = виджет выключен, работает кнопка-редирект). Перед включением URL страницы-приёмника нужно добавить в Redirect URI приложения Яндекса — точные строки для прода/локалки и порядок шагов в docs/SECRETS.md; `/yandex/start` отдаёт `suggest_redirect_uri` фронту
+- **Новые тесты:** +7 бэкенд (`test_yandex_auth.py`: create/bind по токену, 401/403/503, «ровно один способ» → 422, `suggest_redirect_uri` в старте) и +6 фронтенд (`yandexAuth.test.tsx`: параметры SDK для main/icon, доставка токена на бэк, закрытие окна без ошибок, откаты при `no_cookie`/пустом конфиге, тост при отказе бэкенда)
+- **Цифры тестов:** 595 pytest + 192 vitest
 
 ### [1.77.3] — 2026-10-18
 - **Причина «код в MAX не приходит» найдена на проде:** MAX автоматически отписывает бота от вебхука, если 8 часов не получил ни одного успешного ответа (см. POST /subscriptions в docs.max). Подписка отвалилась в какое-то окно сбоев — в итоге сайт по-прежнему принимал `/auth/max/start`, но ни один апдейт `bot_started`/`message_created` не доходил до бэкенда (0 обращений к `/api/max/webhook` за 4 дня, `max_webhook.py status` — пустой список), поэтому код в диалог не отправлялся. Подписка восстановлена вручную; диагностика — по журналу `beauty-backend` (запросы старта видны, вебхук-хитов нет)
