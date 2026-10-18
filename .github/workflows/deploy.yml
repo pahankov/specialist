@@ -121,32 +121,10 @@ jobs:
             source venv/bin/activate
             pip install -r requirements.txt
 
-            # Run tests BEFORE deployment — with CI-identical test env.
-            # The shell currently carries production values exported from the
-            # server .env above (notably ALLOWED_ORIGINS without localhost),
-            # which break dev-oriented CORS tests. conftest uses throwaway
-            # sqlite files per test, so overriding these for pytest is safe
-            # and does NOT touch the production database or .env file.
-            echo "=== RUNNING TESTS ==="
-            pip install pytest pytest-asyncio pytest-cov httpx aiosqlite
-            RATE_LIMIT_DISABLED=true \
-            APP_ENV=development \
-            ALLOWED_ORIGINS=http://localhost:3000 \
-            SECRET_KEY=ci-test-secret-key-not-for-production-01 \
-            REFRESH_SECRET_KEY=ci-test-refresh-key-not-for-production-01 \
-            PYTHONPATH=. pytest tests/ -v --tb=short --cov=app --cov-report=term-missing --tb=no 2>&1 | tee /tmp/test-results.txt
-            
-            # Check for actual test failures (not coverage report lines)
-            if grep -qE "^[=]+.*failed" /tmp/test-results.txt || grep -qE "^[=]+.*error" /tmp/test-results.txt; then
-                echo "ERROR: Tests failed on server! Aborting deployment."
-                grep -E "failed|error" /tmp/test-results.txt | tail -5
-                exit 1
-            fi
-            
-            # Show summary
-            TEST_SUMMARY=$(grep "passed.*in" /tmp/test-results.txt | tail -1)
-            echo "Test summary: $TEST_SUMMARY"
-            echo "=== ALL TESTS PASSED ==="
+            # Tests are not re-run here anymore (removed in 1.78.1): the
+            # GitHub Actions `test` job already gates this deploy via
+            # `needs: test`, and the server-side run cost ~10 of ~13 minutes
+            # on a 1 vCPU box.
 
             # Database stage: schema fix, ownership, alembic, seed scripts.
             # Lives in scripts/deploy_db.sh (absolute path, LF via .gitattributes).
