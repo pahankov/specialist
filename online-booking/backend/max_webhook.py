@@ -8,7 +8,8 @@ Usage (from online-booking/backend, venv active):
 Environment (server .env / local .env, never hardcoded):
     MAX_BOT_TOKEN      - bot access token
     MAX_WEBHOOK_SECRET - value sent as X-Max-Bot-Api-Secret
-    MAX_WEBHOOK_URL    - public webhook URL (default: https://beauty-specialist.ru/api/max/webhook)
+    MAX_WEBHOOK_URL    - public webhook URL (settings/.env first, then
+                         process env; default: https://beauty-specialist.ru/api/max/webhook)
 
 Requires: MAX_BOT_TOKEN set, otherwise exits non-zero (fail fast).
 """
@@ -67,7 +68,7 @@ async def main() -> int:
         print("ERROR: MAX_BOT_TOKEN is not set.", file=sys.stderr)
         return 1
     cmd = sys.argv[1] if len(sys.argv) > 1 else "status"
-    url = os.getenv("MAX_WEBHOOK_URL", DEFAULT_URL)
+    url = settings.MAX_WEBHOOK_URL or os.getenv("MAX_WEBHOOK_URL") or DEFAULT_URL
     api = MaxBotApi()
     try:
         await api.get_me()

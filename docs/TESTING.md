@@ -1,12 +1,12 @@
 # Тестирование
 
-> Backend: 53 файла, 578 тестов (pytest, SQLite-файл на тест). Frontend: 36 файлов, 186 тестов (Vitest).
+> Backend: 54 файла, 588 тестов (pytest, SQLite-файл на тест). Frontend: 36 файлов, 186 тестов (Vitest).
 > Чек-лист перед коммитом — только в [RULES.md](RULES.md), правила деплоя — в [DEPLOYMENT_RULES.md](DEPLOYMENT_RULES.md).
 
 ## Запуск
 
 ```powershell
-# Backend (578 passed, ~10 мин)
+# Backend (588 passed, ~10 мин)
 cd online-booking\backend
 $env:PYTHONPATH='.'
 pytest tests/ -v                          # всё
@@ -62,7 +62,7 @@ npx prettier --check src/                 # стиль (конфиг .prettierrc
     `test_toggle_admin_self` ×2, `test_email_conflict_skips_row` ×2; переименованы).
 12. `client_profiles.user_id NOT NULL` — сначала User+flush, потом профиль.
 
-## Backend: файлы (сгенерировано, 578 всего)
+## Backend: файлы (сгенерировано, 588 всего)
 
 | Файл | N | Файл | N |
 |---|---|---|---|
@@ -79,20 +79,20 @@ npx prettier --check src/                 # стиль (конфиг .prettierrc
 | test_auth.py | 9 | test_masters_status.py | 14 |
 | test_auth_dependencies.py | 10 | test_masters.py | 13 |
 | test_auth_service.py | 16 | test_max_auth.py | 35 |
-| test_auth_tokens.py | 12 | test_notifications.py | 14 |
-| test_booking_flow.py | 7 | test_password_security.py | 11 |
-| test_bundles.py | 15 | test_pull_production.py | 12 |
-| test_cache_service.py | 19 | test_rate_limiting.py | 3 |
-| test_cities_resolve.py | 6 | test_refresh_tokens.py | 7 |
-| test_client_booking.py | 8 | test_reviews.py | 19 |
-| test_client_cabinet.py | 16 | test_schedule.py | 7 |
-| test_client_visibility.py | 15 | test_seed_common.py | 9 |
-| test_clients.py | 9 | test_services.py | 10 |
-| test_coupons.py | 3 | test_validation_handler.py | 2 |
-| test_create_superuser.py | 4 | test_vk_auth.py | 26 |
-| test_dadata_proxy.py | 5 | test_work_window.py | 3 |
-| test_dual_role.py | 13 | test_yandex_auth.py | 19 |
-| test_export_tasks.py | 4 | | |
+| test_auth_tokens.py | 12 | test_max_webhook_guard.py | 10 |
+| test_booking_flow.py | 7 | test_notifications.py | 14 |
+| test_bundles.py | 15 | test_password_security.py | 11 |
+| test_cache_service.py | 19 | test_pull_production.py | 12 |
+| test_cities_resolve.py | 6 | test_rate_limiting.py | 3 |
+| test_client_booking.py | 8 | test_refresh_tokens.py | 7 |
+| test_client_cabinet.py | 16 | test_reviews.py | 19 |
+| test_client_visibility.py | 15 | test_schedule.py | 7 |
+| test_clients.py | 9 | test_seed_common.py | 9 |
+| test_coupons.py | 3 | test_services.py | 10 |
+| test_create_superuser.py | 4 | test_validation_handler.py | 2 |
+| test_dadata_proxy.py | 5 | test_vk_auth.py | 26 |
+| test_dual_role.py | 13 | test_work_window.py | 3 |
+| test_export_tasks.py | 4 | test_yandex_auth.py | 19 |
 
 ## Frontend: файлы (186 всего)
 
@@ -131,7 +131,7 @@ npx prettier --check src/                 # стиль (конфиг .prettierrc
 
 | Gate | Где | Fail → |
 |---|---|---|
-| pytest 578 + `--cov-fail-under=55` | `ci.yml` backend-tests | PR/деплой blocked |
+| pytest 588 + `--cov-fail-under=55` | `ci.yml` backend-tests | PR/деплой blocked |
 | eslint (0 errors) + `tsc --noEmit` + `vitest run` + `prettier --check` | `ci.yml` frontend-lint | PR/деплой blocked |
 | pytest на сервере до restart | `deploy.yml` | deploy abort |
 | pg_dump перед миграциями | `deploy.yml` | warn, continue |

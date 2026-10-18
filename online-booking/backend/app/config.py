@@ -56,6 +56,10 @@ class Settings(BaseSettings):
     MAX_BOT_USERNAME: str = ""
     MAX_BOT_URL: str = ""
     MAX_WEBHOOK_SECRET: str = ""
+    # Public webhook URL (prod only): enables the self-healing subscription
+    # guard (app/services/max_webhook_guard.py). Empty = guard off, so dev
+    # machines sharing the bot token never touch the prod subscription.
+    MAX_WEBHOOK_URL: str = ""
     # Custom CA bundle for platform-api2.max.ru (Russian trusted CA).
     # Empty = backend/certs/russian_trusted_ca.pem if present, else system store.
     MAX_CA_BUNDLE: str = ""

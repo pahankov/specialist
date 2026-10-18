@@ -1,5 +1,5 @@
 """MAX chat-bot auth endpoints + webhook receiver (SMS-style flow)."""
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -95,11 +95,19 @@ async def max_verify(
 # ─── MAX side (webhook) ────────────────────────────────────────────
 
 @webhook_router.post("/webhook")
-async def max_webhook(request: Request, db: AsyncSession = Depends(get_db)):
+async def max_webhook(
+    request: Request,
+    background: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
     """Receive MAX Bot API updates (message_created/bot_started).
 
     Secret check first (X-Max-Bot-Api-Secret); always 200 on processed
     updates so MAX stops retrying (retries x10 with backoff otherwise).
+    Dialog replies go out as BackgroundTasks so MAX gets its 2xx right
+    after the DB write: a slow send (dialog.not.found retry) or a failed
+    one can never look like a failed delivery — and enough failed
+    deliveries is exactly how the bot gets auto-unsubscribed after 8h.
     """
     if settings.MAX_WEBHOOK_SECRET:
         got = request.headers.get("X-Max-Bot-Api-Secret", "")
@@ -134,9 +142,10 @@ async def max_webhook(request: Request, db: AsyncSession = Depends(get_db)):
                     db, otp.phone, int(sender_id), name, False,
                     username=service.sender_username(sender))
                 if fresh is not None:
-                    await _reply_code(update, fresh)
+                    background.add_task(_reply_code, update, fresh)
                     return {"ok": True, "outcome": "auto_met"}
-        await _reply_with_keyboard(
+        background.add_task(
+            _reply_with_keyboard,
             update,
             "Здравствуйте! Это бот электронной записи.\n"
             "Поделитесь номером телефона кнопкой ниже или введите номер "
@@ -163,7 +172,8 @@ async def max_webhook(request: Request, db: AsyncSession = Depends(get_db)):
         if phone is None:
             # Not a phone — repeat the button: the first keyboard appeared
             # only at bot_started and is easy to miss in the dialog.
-            await _reply_with_keyboard(
+            background.add_task(
+                _reply_with_keyboard,
                 update,
                 "Пришлите номер телефона кнопкой «Поделиться номером» "
                 "ниже — код для входа придёт сюда же. Можно также ввести "
@@ -177,14 +187,15 @@ async def max_webhook(request: Request, db: AsyncSession = Depends(get_db)):
         if code is None:
             # Only reachable for a typed phone: an HMAC-verified contact
             # share opens the request itself, a typed number must not.
-            await _reply_with_keyboard(
+            background.add_task(
+                _reply_with_keyboard,
                 update,
                 "Заявки с таким номером нет. Введите номер на сайте и "
                 "нажмите «Получить код в MAX», либо поделитесь номером "
                 "кнопкой ниже.",
             )
             return {"ok": True, "outcome": "no_pending"}
-        await _reply_code(update, code)
+        background.add_task(_reply_code, update, code)
         return {"ok": True, "outcome": "delivered"}
 
     return {"ok": True}

@@ -45,8 +45,17 @@ async def lifespan(app: FastAPI):
     from app.services.auto_complete import auto_complete_loop
     auto_task = asyncio.create_task(auto_complete_loop())
     logger.info("Auto-complete loop started")
+    from app.services.max_webhook_guard import max_webhook_guard_loop
+    max_task = None
+    if settings.max_enabled and settings.MAX_WEBHOOK_URL:
+        max_task = asyncio.create_task(max_webhook_guard_loop())
+        logger.info("MAX webhook guard loop started")
+    elif settings.max_enabled:
+        logger.info("MAX webhook guard off (MAX_WEBHOOK_URL not set)")
     yield
     auto_task.cancel()
+    if max_task:
+        max_task.cancel()
 
 
 # ─── App creation ─────────────────────────────────────────────

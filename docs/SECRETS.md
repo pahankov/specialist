@@ -46,11 +46,23 @@
 
 ```bash
 # по SSH на сервере, из online-booking/backend (venv активен):
-nano .env   # добавь MAX_BOT_TOKEN, MAX_BOT_USERNAME, MAX_BOT_URL, MAX_WEBHOOK_SECRET
-python max_webhook.py status      # проверить текущую подписку
-python max_webhook.py subscribe   # подписать https://beauty-specialist.ru/api/max/webhook
+nano .env   # добавь MAX_BOT_TOKEN, MAX_BOT_USERNAME, MAX_BOT_URL, MAX_WEBHOOK_SECRET,
+            # MAX_WEBHOOK_URL=https://beauty-specialist.ru/api/max/webhook
 sudo systemctl restart beauty-backend
-# проверка: отправь боту любое сообщение, в логах — "MAX webhook: update_type=..."
+# проверка: в логах — "MAX webhook guard loop started" и "MAX webhook: update_type=..."
+```
+
+`MAX_WEBHOOK_URL` включает фоновый guard (`app/services/max_webhook_guard.py`):
+при старте и раз в 10 минут он сверяет подписку и молча восстанавливает её.
+Это защита от автоотписки MAX: если вебхук 8 часов не отвечал успешно, MAX сам
+отписывает бота — без единой ошибки на сайте код в диалог перестаёт приходить.
+
+Ручные команды (диагностика/dev, из `online-booking/backend`):
+
+```bash
+python max_webhook.py status      # текущие подписки
+python max_webhook.py subscribe   # подписать вручную (URL из MAX_WEBHOOK_URL)
+python max_webhook.py unsubscribe # снять подписку (dev / long-poll)
 ```
 
 Токен, показанный в чате/на скриншоте, считается скомпрометированным:

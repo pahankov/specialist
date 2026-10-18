@@ -127,13 +127,13 @@ beauty-specialist/              # корень репозитория
     │   │   ├── database.py       # Подключение к БД (aiosqlite / asyncpg)
     │   │   ├── dependencies/     # auth (JWT, require_master/admin), crud (get_or_404)
     │   │   ├── services/         # audit, sms, cache, background_tasks, export, auto_complete,
-    │   │   │                     # notifications/inbox, names, pricing, coupons, social_merge, ...
+    │   │   │                     # max_webhook_guard, notifications/inbox, names, pricing, coupons, social_merge, ...
     │   │   ├── models/           # SQLAlchemy ORM (User, MasterProfile, ClientProfile, City, ...)
     │   │   ├── schemas/          # Pydantic schemas (pagination, client, city, ...)
     │   │   └── modules/          # self-contained пакеты: auth, city, user, booking, service, schedule,
     │   │                         # review, client, admin/*, dadata, maxauth, vkauth, yandexauth
     │   ├── alembic/              # миграции PostgreSQL
-    │   ├── tests/                # pytest (578)
+    │   ├── tests/                # pytest (588)
     │   └── requirements.txt
     └── frontend/
         ├── src/
@@ -306,7 +306,7 @@ utils/
 - ESLint + Prettier для форматирования кода
 
 ### ✅ Тесты
-- **Backend:** 578 pytest-тестов (auth, masters, services, appointments, clients, reviews, admin CRUD, bundles, coupons, notifications, visibility/модерация, dual-role, VK/Yandex/MAX auth, rate limiting, refresh tokens, password security, no-show, dadata proxy, superuser, log level)
+- **Backend:** 588 pytest-тестов (auth, masters, services, appointments, clients, reviews, admin CRUD, bundles, coupons, notifications, visibility/модерация, dual-role, VK/Yandex/MAX auth, MAX webhook guard, rate limiting, refresh tokens, password security, no-show, dadata proxy, superuser, log level)
 - **Frontend:** 186 Vitest-тестов (helpers, hooks, Modal/ConfirmDialog, auth refresh, соц-входы VK/Yandex/MAX, dadata fallback, CabinetPage, CabinetBookPage, BookingWizard, DataTable, NotificationBell, ...)
 - 100% покрытие всех эндпоинтов
 - Файловый SQLite (по файлу на тест) для изоляции тестов
@@ -430,7 +430,7 @@ OtpCode (id, phone, code_hash, expires_at, is_used, created_at)
 # Backend
 cd online-booking\backend
 $env:PYTHONPATH='.'
-pytest tests/ -v                          # Все тесты (578)
+pytest tests/ -v                          # Все тесты (588)
 pytest tests/test_reviews.py -v           # Только reviews
 pytest tests/ -v --cov=app                # С покрытием
 
@@ -450,6 +450,15 @@ npx vitest                              # Watch mode
 
 
 ## 📚 История версий
+
+### [1.77.3] — 2026-10-18
+- **Причина «код в MAX не приходит» найдена на проде:** MAX автоматически отписывает бота от вебхука, если 8 часов не получил ни одного успешного ответа (см. POST /subscriptions в docs.max). Подписка отвалилась в какое-то окно сбоев — в итоге сайт по-прежнему принимал `/auth/max/start`, но ни один апдейт `bot_started`/`message_created` не доходил до бэкенда (0 обращений к `/api/max/webhook` за 4 дня, `max_webhook.py status` — пустой список), поэтому код в диалог не отправлялся. Подписка восстановлена вручную; диагностика — по журналу `beauty-backend` (запросы старта видны, вебхук-хитов нет)
+- **Автозащита подписки — новый фоновый guard** (`app/services/max_webhook_guard.py`): при старте приложения и далее раз в 10 минут сверяет `GET /subscriptions` и, если подписки нет или она не на тот URL / с неполным набором типов, заново подписывает бота (`POST /subscriptions` с секретом из `MAX_WEBHOOK_SECRET`). Включается только при заданном `MAX_WEBHOOK_URL` (прод; пусто = выключен, чтобы dev с тем же токеном не трогал прод-подписку). Ошибки MAX API не роняют цикл — следующая попытка через 10 минут
+- **Вебхук отвечает MAX мгновенно:** ответы боту (`_reply_code`/`_reply_with_keyboard`) переведены на `BackgroundTasks` — MAX получает 200 сразу после записи кода в БД, а отправка в диалог (включая ретрай `dialog.not.found`) идёт фоном. Медленная или упавшая отправка больше не выглядит как «неуспешная доставка» — именно набор таких неудач и приводит к автоотписке
+- **`max_webhook.py`:** URL подписки читается из настроек (`MAX_WEBHOOK_URL` из `.env`) — раньше переменная из `.env` игнорировалась (читалось только окружение процесса); `status`/`subscribe` используют тот же URL, что и guard
+- **Настройка прода (одноразово):** добавить `MAX_WEBHOOK_URL=https://beauty-specialist.ru/api/max/webhook` в серверный `.env`, перезапустить `beauty-backend` — дальше guard подписывает и чинит подписку сам
+- **Новые тесты:** 10 кейсов `test_max_webhook_guard.py` (переподписка при отсутствии / чужом URL / неполных типах, no-op при живой подписке и супермножестве типов, тихие ошибки API, выключение без URL/токена, устойчивость цикла к исключениям)
+- **Цифры тестов:** 588 pytest + 186 vitest
 
 ### [1.77.2] — 2026-10-18
 - **Документация синхронизирована с кодом** (docs-only, код не тронут):
