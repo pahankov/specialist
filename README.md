@@ -126,13 +126,14 @@ beauty-specialist/              # корень репозитория
     │   │   ├── config.py         # Настройки (SQLite/PostgreSQL, JWT, refresh tokens)
     │   │   ├── database.py       # Подключение к БД (aiosqlite / asyncpg)
     │   │   ├── dependencies/     # auth (JWT, require_master/admin), crud (get_or_404)
-    │   │   ├── services/         # audit, sms, cache, background_tasks, export
+    │   │   ├── services/         # audit, sms, cache, background_tasks, export, auto_complete,
+    │   │   │                     # notifications/inbox, names, pricing, coupons, social_merge, ...
     │   │   ├── models/           # SQLAlchemy ORM (User, MasterProfile, ClientProfile, City, ...)
     │   │   ├── schemas/          # Pydantic schemas (pagination, client, city, ...)
-    │   │   └── modules/          # self-contained пакеты: auth, city, user, booking,
-    │   │                         # service, schedule, review, admin/*, dadata
+    │   │   └── modules/          # self-contained пакеты: auth, city, user, booking, service, schedule,
+    │   │                         # review, client, admin/*, dadata, maxauth, vkauth, yandexauth
     │   ├── alembic/              # миграции PostgreSQL
-    │   ├── tests/                # pytest (~515)
+    │   ├── tests/                # pytest (578)
     │   └── requirements.txt
     └── frontend/
         ├── src/
@@ -141,7 +142,7 @@ beauty-specialist/              # корень репозитория
         │   ├── pages/admin/      # AdminLayout (/admin) + SuperAdminLayout (/super) + страницы
         │   ├── pages/public/     # HomePage, BookingPage
         │   ├── styles/           # общие стили (filters.css — сетка фильтров)
-        │   ├── tests/            # Vitest (~158)
+        │   ├── tests/            # Vitest (186)
         │   ├── utils/            # section (/admin|/super), persistentState, formatPhone, apiError, ...
         │   └── App.tsx           # роутинг: / → /booking → /admin/* → /super/*
         └── package.json
@@ -267,7 +268,7 @@ utils/
 - Отзывы и рейтинги: CRUD отзывов, средний рейтинг, публичная страница отзывов
 - **Admin reviews:** `/admin/reviews` — пагинированный список, approve/unpublish, average rating
 - **Master detail:** `/admin/masters/{id}/full` — полная статистика, рейтинг, отзывы, последние записи
-- **Bulk operations:** `/admin/masters/bulk/toggle-active`, `/bulk/suspend`, `/bulk/unsuspend`
+- **Bulk operations:** `/admin/bulk/toggle-active`, `/admin/bulk/suspend`, `/admin/bulk/unsuspend`
 - **Master import:** `/admin/masters/import` — загрузка из CSV
 - **Master audit:** `/admin/audit-logs?master_id=X` — логи по конкретному мастеру
 - **Фикс 422 /admin/services:** параметр `active_only` теперь принимает boolean
@@ -284,15 +285,17 @@ utils/
 - **Undo toast:** уведомления с кнопкой "Отменить" для delete-операций (5 сек)
 - **Empty states:** красивые заглушки с иконками и CTA при отсутствии данных
 - **MasterDetailPage:** детальная карточка мастера с вкладками (Обзор, Отзывы, Логи)
-- Админ-панель (13 страниц):
+- Админ-панель (мастер и суперпользователь — свои страницы):
   - Дашборд — статистика записей, клиентов, услуг, доход, рейтинг
   - Записи — фильтрация по статусу, пагинация, подтверждение, завершение, отмена, удаление, no-show
   - Услуги — создание, редактирование, soft-delete, пагинация
   - Клиенты — создание, редактирование, удаление, экспорт CSV, пагинация
   - Расписание — Calendar, TimeSlots, BookingModal, MonthlyStats (рефакторинг из монолита)
   - Логи — журнал всех действий с фильтрацией и пагинацией
+  - Профиль — данные мастера, фото/пресет, сертификаты, адрес кабинета
+  - Уведомления — колокольчик и рассылки своим клиентам
   - Мастера — управление мастерами (CRUD, bulk toggle/suspend, импорт CSV, детальная карточка) [суперпользователь]
-  - Глобальная статистика — общая статистика по всей системе [суперпользователь]
+  - Доход — финансовая аналитика, breakdown по мастерам/услугам [суперпользователь]
 - Cookie-based auth (без localStorage)
 - Axios interceptor с refresh-очередью
 - Обработка ошибок 422 (валидация)
@@ -303,10 +306,10 @@ utils/
 - ESLint + Prettier для форматирования кода
 
 ### ✅ Тесты
-- **Backend:** ~515 pytest-тестов (auth, masters, services, appointments, clients, reviews, admin CRUD, rate limiting, refresh tokens, password security, no-show, dadata proxy, superuser, log level)
-- **Frontend:** 158 Vitest-тестов (helpers, hooks, Modal/ConfirmDialog, auth refresh, dadata fallback, CabinetBookPage)
+- **Backend:** 578 pytest-тестов (auth, masters, services, appointments, clients, reviews, admin CRUD, bundles, coupons, notifications, visibility/модерация, dual-role, VK/Yandex/MAX auth, rate limiting, refresh tokens, password security, no-show, dadata proxy, superuser, log level)
+- **Frontend:** 186 Vitest-тестов (helpers, hooks, Modal/ConfirmDialog, auth refresh, соц-входы VK/Yandex/MAX, dadata fallback, CabinetPage, CabinetBookPage, BookingWizard, DataTable, NotificationBell, ...)
 - 100% покрытие всех эндпоинтов
-- In-memory SQLite для изоляции тестов
+- Файловый SQLite (по файлу на тест) для изоляции тестов
 - pytest-asyncio для асинхронных тестов
 - @testing-library/react для компонентных тестов
 
@@ -427,13 +430,13 @@ OtpCode (id, phone, code_hash, expires_at, is_used, created_at)
 # Backend
 cd online-booking\backend
 $env:PYTHONPATH='.'
-pytest tests/ -v                          # Все тесты (~515)
+pytest tests/ -v                          # Все тесты (578)
 pytest tests/test_reviews.py -v           # Только reviews
 pytest tests/ -v --cov=app                # С покрытием
 
 # Frontend
 cd online-booking\frontend
-npx vitest run                            # Все тесты (~158)
+npx vitest run                            # Все тесты (186)
 npx vitest run src/tests/helpers.test.ts  # Только helpers
 npx vitest                              # Watch mode
 ```
@@ -447,6 +450,14 @@ npx vitest                              # Watch mode
 
 
 ## 📚 История версий
+
+### [1.77.2] — 2026-10-18
+- **Документация синхронизирована с кодом** (docs-only, код не тронут):
+- **DB.md:** добавлены 5 отсутствовавших таблиц (`notifications`, `notification_broadcasts`, `master_hidden_clients`, `coupons`, `coupon_uses`); свежие колонки (`users.vk_user_id`/`yandex_user_id`/`avatar_url`/`name_source`/`max_username`, `otp_codes.max_username`/`max_user_email`, `master_profiles.auto_confirm`/`auto_complete`, скидки услуг и комплексов, `duration_override`, `appointments.discount_label`); цепочка миграций доведена до head `23a1b2c3d4e8`; новая ошибка №10 — легаси-колонка на проде ломает INSERT
+- **TESTING.md:** актуальные цифры — 578 pytest (53 файла, ~10 мин) и 186 vitest (36 файлов, ~20 сек) вместо 378/89; таблицы файлов перегенерированы
+- **API.md:** добавлены пропущенные эндпоинты (`GET /countries/{id}`, `GET /admin/revenue-breakdown`, `POST /admin/working-hours/{id}/toggle-active`, `GET /admin/audit-logs/all`, `GET /admin/export/clients/status/{job_id}`); убран несуществующий `GET /admin/global-stats`; bulk-пути приведены к фактическим (`/admin/bulk/*`); уточнены `auto_confirm`, `only_published`, 16 аватаров-пресетов; legacy-пометки у `/api/v1/{masters,services,clients,reviews}` (каноничные ветки — `/admin/*` и `/client/*`)
+- **README.md:** модули (client, maxauth, vkauth, yandexauth), состав `services/`, страницы панели (Профиль, Уведомления, Доход вместо несуществующей «Глобальной статистики»), цифры тестов
+- **Цифры тестов:** 578 pytest + 186 vitest (прогон: 578 passed за 10:21)
 
 ### [1.77.1] — 2026-10-18
 - **Починен 500 на `/auth/max/start` и `/auth/send-otp` в проде:** в таблице `otp_codes` на PostgreSQL осталась легаси-колонка `code VARCHAR(10) NOT NULL` без default — из времён, когда коды лежали открытым текстом. Модель её не мапит (остался только `code_hash`), ORM её не заполняет, и каждый INSERT падал с `NotNullViolationError`. Локально не воспроизводилось: SQLite создаёт таблицу заново по текущей модели через `create_all`, поэтому легаси-колонки там нет вовсе. Новая миграция `23a1b2c3d4e8` удаляет колонку (`DROP COLUMN IF EXISTS` — повторный прогон на уже починенной базе безопасен)

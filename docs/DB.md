@@ -51,6 +51,11 @@
 | is_active | BOOLEAN | DEFAULT TRUE | Мягкое удаление |
 | is_verified | BOOLEAN | DEFAULT FALSE | Верификация (email/phone) |
 | max_user_id | BIGINT | UNIQUE, NULLABLE | Привязанный MAX-аккаунт (push-вход без share; ставится при первом MAX-входе) |
+| max_username | VARCHAR(64) | NULLABLE | MAX-никнейм (@username) с привязки; может отсутствовать |
+| vk_user_id | BIGINT | UNIQUE, NULLABLE | Привязанный VK ID-аккаунт (первый VK-вход; дальше вход по нему без телефона/email) |
+| yandex_user_id | BIGINT | UNIQUE, NULLABLE | Привязанный Yandex ID-аккаунт (первый Яндекс-вход) |
+| avatar_url | VARCHAR(500) | NULLABLE | Фото из соцсети (CDN провайдера) — клиентское; у мастеров своё `master_profiles.avatar_url` |
+| name_source | VARCHAR(16) | NULLABLE | Откуда отображаемое имя: NULL (до трекинга) / `user` (правил человек) / `vk` / `yandex` / `max` |
 | created_by | INTEGER | FK -> users.id ON DELETE SET NULL, NULLABLE | Кто создал (мастер через «+ Добавить клиента»/запись); свои клиенты мастера = с записями у него ИЛИ created_by = он |
 | consent_at | TIMESTAMP WITH TIME ZONE | NULLABLE | Момент согласия (галочка при регистрации; NULL = до трекинга) |
 | consent_policy_version | VARCHAR(20) | NULLABLE | Версия политики ПДн на момент согласия |
@@ -59,7 +64,7 @@
 | created_at | TIMESTAMP WITH TIME ZONE | | Дата создания |
 | updated_at | TIMESTAMP WITH TIME ZONE | | Дата обновления |
 
-**Индексы:** `ix_users_email` (UNIQUE), `ix_users_phone` (UNIQUE), `ix_users_role`, `ix_users_max_user_id` (UNIQUE, NULL не конфликтуют), `ix_users_created_by`
+**Индексы:** `ix_users_email` (UNIQUE), `ix_users_phone` (UNIQUE), `ix_users_role`, `ix_users_max_user_id` (UNIQUE, NULL не конфликтуют), `ix_users_vk_user_id` (UNIQUE, NULL не конфликтуют), `ix_users_yandex_user_id` (UNIQUE, NULL не конфликтуют), `ix_users_created_by`
 
 **Enums (UserRole):**
 - `CLIENT` — обычный пользователь
@@ -90,11 +95,13 @@
 | user_id | INTEGER | UNIQUE, NOT NULL, FK -> users.id ON DELETE CASCADE | Ссылка на users.id |
 | description | TEXT | NULLABLE | Описание мастера |
 | avatar_url | VARCHAR(500) | NULLABLE | URL аватара (путь `/static/...` на бэкенде; взаимоисключающе с пресетом) |
-| avatar_preset | VARCHAR(12) | NULLABLE | Стандартный аватар-эмодзи (🐱🐶🐥🦅🦊🐼🐸🦁) |
+| avatar_preset | VARCHAR(12) | NULLABLE | Стандартный аватар-эмодзи, 16 штук (🐱🐶🐥🦅🦊🐼🐸🦁🐯🐰🐷🐮🐵🐔🦄🐙) |
 | telegram_username | VARCHAR(100) | NULLABLE | Telegram username |
 | experience_years | INTEGER | NULLABLE | Опыт работы (лет) |
 | status | VARCHAR(20) | NOT NULL, DEFAULT active | active, inactive, suspended |
 | is_active | BOOLEAN | DEFAULT TRUE | Мягкое удаление |
+| auto_confirm | BOOLEAN | NOT NULL, DEFAULT FALSE | Клиентские записи (кабинет, публичная форма) сразу `confirmed` вместо `pending` |
+| auto_complete | BOOLEAN | NULLABLE, DEFAULT FALSE | Прошедшие confirmed-записи сами переходят в `completed` (фоновый цикл) |
 | tariff | VARCHAR(20) | NOT NULL, DEFAULT trial | Тариф (фундамент биллинга, пока всем trial) |
 | trial_ends_at | TIMESTAMP WITH TIME ZONE | NULLABLE | Конец триала (новым: +180 дней) |
 | work_start_hour | INTEGER | NOT NULL, DEFAULT 8 | Начало дневного окна (границы гранул расписания) |
@@ -124,6 +131,7 @@
 | bundle_name | VARCHAR(200) | NULLABLE | Снапшот названия комплекса |
 | duration_minutes | INTEGER | NULLABLE | Снапшот длительности (комплексы; у услуг — живой join) |
 | price | NUMERIC(10,2) | NULLABLE | Снапшот цены (комплексы; у услуг — живой join) |
+| discount_label | VARCHAR(200) | NULLABLE | Слепок скидки на момент записи («−20%», «−500 ₽», «купон ABCD −200 ₽») |
 | appointment_date | TIMESTAMP WITH TIME ZONE | NOT NULL | Дата и время записи |
 | status | VARCHAR(20) | DEFAULT pending | pending, confirmed, completed, cancelled, no_show |
 | notes | TEXT | NULLABLE | Примечания |
@@ -144,10 +152,15 @@
 | description | TEXT | NULLABLE | Описание |
 | duration_minutes | INTEGER | NOT NULL | Длительность (минуты) |
 | price | NUMERIC(10, 2) | NOT NULL | Цена |
+| discount_percent | INTEGER | NULLABLE, DEFAULT 0 | Скидка 0–90% (0 = нет); клиенты платят effective_price |
+| discount_fixed | NUMERIC(10,2) | NULLABLE, DEFAULT 0 | Фикс. −₽ после процента (не ниже нуля) |
+| discount_until | TIMESTAMP WITH TIME ZONE | NULLABLE | Срок скидки: после него скидка молча перестаёт действовать |
 | category | VARCHAR(50) | NULLABLE | Категория для группировки (Ногти, Шугаринг, ...) |
 | is_active | BOOLEAN | DEFAULT TRUE | Активна ли |
 | created_at | TIMESTAMP WITH TIME ZONE | | Дата создания |
 | updated_at | TIMESTAMP WITH TIME ZONE | | Дата обновления |
+
+**Индексы:** `ix_services_master_active` (master_id, is_active), `ix_services_category`
 
 ### 6. working_hours
 
@@ -273,7 +286,11 @@
 | channel | VARCHAR(10) | NOT NULL, DEFAULT 'sms' | 'sms' — код вводится на сайте; 'max' — код шлётся боту |
 | max_user_id | BIGINT | NULLABLE | MAX sender, подтвердивший код (факт подтверждения) |
 | max_user_name | VARCHAR(200) | NULLABLE | Имя из MAX (дефолт имени нового клиента) |
+| max_username | VARCHAR(64) | NULLABLE | Никнейм (@username) из диалога MAX (переносится в `users.max_username`) |
+| max_user_email | VARCHAR(255) | NULLABLE | Email из vCard контакта MAX (заполняет пустой email клиента) |
 | max_verified_phone | BOOLEAN | NOT NULL, DEFAULT FALSE | TRUE, если номер пришёл через `request_contact` с верным HMAC (доказанно привязан к MAX-аккаунту → `is_verified=True`) |
+
+**Важно:** коды хранятся только в виде хэша (`code_hash`). Легаси-колонка `code` с открытым текстом, оставшаяся на проде со времён до squash, удаляется миграцией `23a1b2c3d4e8` (см. «Частые ошибки» №10).
 
 ### 14. service_bundles
 
@@ -287,9 +304,99 @@
 | service_ids | JSON | NOT NULL | Упорядоченные ID услуг (свои, ≥2) |
 | durations | JSON | NULLABLE | Переопределения минут {service_id: мин} (нет ключа = своё время услуги) |
 | price | NUMERIC(10,2) | NULLABLE | Своя цена; NULL = сумма услуг на момент записи |
+| discount_percent | INTEGER | NULLABLE, DEFAULT 0 | Скидка 0–90% на итог комплекса (свою цену или сумму состава) |
+| discount_fixed | NUMERIC(10,2) | NULLABLE, DEFAULT 0 | Фикс. −₽ после процента (не ниже нуля) |
+| discount_until | TIMESTAMP WITH TIME ZONE | NULLABLE | Срок скидки |
+| duration_override | INTEGER | NULLABLE | Ручное общее время комплекса; NULL = сумма минут состава |
 | is_active | BOOLEAN | DEFAULT TRUE | Видимость клиентам |
 | created_at | TIMESTAMP WITH TIME ZONE | | Дата создания |
 | updated_at | TIMESTAMP WITH TIME ZONE | | Дата обновления |
+
+### 15. notifications
+
+**Назначение:** внутренний «колокольчик» — по строке на получателя (событийные уведомления и рассылки; мессенджер не нужен)
+
+| Колонка | Тип | Ограничения | Описание |
+|---------|-----|-------------|----------|
+| id | INTEGER | PK | Автоинкремент |
+| sender_id | INTEGER | FK -> users.id ON DELETE SET NULL, NULLABLE | Отправитель (NULL — системное) |
+| recipient_id | INTEGER | NOT NULL, FK -> users.id ON DELETE CASCADE | Получатель |
+| text | TEXT | NOT NULL | Текст уведомления |
+| audience | VARCHAR(20) | NULLABLE | Аудитория рассылки: all / masters / clients / my_clients / selected; у событийных — NULL |
+| link | VARCHAR(50) | NULLABLE | Диплинк-ключ (например `appointments`) — раздел разворачивает сам |
+| is_read | BOOLEAN | NOT NULL, DEFAULT FALSE | Прочитано ли |
+| created_at | TIMESTAMP WITH TIME ZONE | | Дата создания |
+| read_at | TIMESTAMP WITH TIME ZONE | NULLABLE | Когда прочитано |
+
+**Индексы:** `ix_notifications_recipient_id`, `ix_notifications_recipient_created` (recipient_id, created_at), `ix_notifications_recipient_unread` (recipient_id, is_read)
+
+### 16. notification_broadcasts
+
+**Назначение:** история отправленных рассылок («что/когда/кому я отправлял»); получатели — снапшот `[{id, name}]`
+
+| Колонка | Тип | Ограничения | Описание |
+|---------|-----|-------------|----------|
+| id | INTEGER | PK | Автоинкремент |
+| sender_id | INTEGER | FK -> users.id ON DELETE SET NULL, NULLABLE | Отправитель |
+| audience | VARCHAR(20) | NOT NULL | Аудитория |
+| text | TEXT | NOT NULL | Текст |
+| recipients | JSON | NOT NULL, DEFAULT [] | Снапшот получателей `[{id, name}]` (имена читаемы после переименований) |
+| created_at | TIMESTAMP WITH TIME ZONE | | Дата отправки |
+
+**Индексы:** `ix_broadcasts_sender_created` (sender_id, created_at)
+
+### 17. master_hidden_clients
+
+**Назначение:** архив/чёрный список — мастер убрал клиента из своих списков; прошлая история у мастера рендерится обезличенно («Удалённый клиент»)
+
+| Колонка | Тип | Ограничения | Описание |
+|---------|-----|-------------|----------|
+| id | INTEGER | PK | Автоинкремент |
+| master_profile_id | INTEGER | NOT NULL, FK -> master_profiles.id ON DELETE CASCADE | Мастер |
+| client_profile_id | INTEGER | NOT NULL, FK -> client_profiles.id ON DELETE CASCADE | Клиент |
+| hidden_at | TIMESTAMP WITH TIME ZONE | | Когда скрыт |
+| hidden_reason | VARCHAR(30) | NULLABLE | Причина архива: moved / left / inactive / deceased / other (NULL — легаси) |
+| block_reason | VARCHAR(30) | NULLABLE | Причина блока: no_show / rude / spam / debt / other (NULL = только архив) |
+| block_note | VARCHAR(500) | NULLABLE | Заметка к блоку/архиву |
+| is_blocked | BOOLEAN | NOT NULL, DEFAULT FALSE | Чёрный список: скрыт + запрет новой записи |
+| blocked_at | TIMESTAMP WITH TIME ZONE | NULLABLE | Когда заблокирован |
+
+**Индексы:** UNIQUE `(master_profile_id, client_profile_id)`, `ix_hidden_by_master` (master_profile_id)
+
+### 18. coupons
+
+**Назначение:** персональные купоны мастера своим клиентам (−% или −₽); применяются в кабинете, скидка слепком падает на запись
+
+| Колонка | Тип | Ограничения | Описание |
+|---------|-----|-------------|----------|
+| id | INTEGER | PK | Автоинкремент |
+| master_id | INTEGER | NOT NULL, FK -> master_profiles.id ON DELETE CASCADE | Мастер |
+| code | VARCHAR(24) | NOT NULL | Код (латиница/цифры); уникален в рамках мастера — проверяется в коде (409) |
+| kind | VARCHAR(10) | NOT NULL, DEFAULT 'percent' | `percent` (1–90) или `fixed` (₽, не выше цены) |
+| value | NUMERIC(10,2) | NOT NULL, DEFAULT 0 | Номинал скидки |
+| max_uses | INTEGER | NULLABLE | Лимит использований (NULL = без лимита) |
+| used_count | INTEGER | NOT NULL, DEFAULT 0 | Использовано раз |
+| user_ids | JSON | NULLABLE | Аудитория: NULL = все свои клиенты, иначе список user id |
+| valid_until | TIMESTAMP WITH TIME ZONE | NULLABLE | Срок действия |
+| is_active | BOOLEAN | NOT NULL, DEFAULT TRUE | Включён ли |
+| created_at | TIMESTAMP WITH TIME ZONE | | Дата создания |
+
+**Индексы:** `ix_coupons_master_id`
+
+### 19. coupon_uses
+
+**Назначение:** факты применения купонов (история; выключение купона её не трогает)
+
+| Колонка | Тип | Ограничения | Описание |
+|---------|-----|-------------|----------|
+| id | INTEGER | PK | Автоинкремент |
+| coupon_id | INTEGER | NOT NULL, FK -> coupons.id ON DELETE CASCADE | Купон |
+| appointment_id | INTEGER | NULLABLE, FK -> appointments.id ON DELETE SET NULL | Запись (история переживает удаление записи) |
+| user_id | INTEGER | NULLABLE, FK -> users.id ON DELETE SET NULL | Кто применил |
+| amount | NUMERIC(10,2) | NOT NULL, DEFAULT 0 | Фактический размер скидки |
+| created_at | TIMESTAMP WITH TIME ZONE | | Дата применения |
+
+**Индексы:** `ix_coupon_uses_coupon_id`
 
 ---
 
@@ -311,6 +418,15 @@
 | cities | users | 1:N | SET NULL |
 | countries | cities | 1:N | CASCADE |
 | appointments | reviews | 1:1 (unique) | CASCADE |
+| users | notifications (sender) | 1:N | SET NULL |
+| users | notifications (recipient) | 1:N | CASCADE |
+| users | notification_broadcasts (sender) | 1:N | SET NULL |
+| master_profiles | master_hidden_clients | 1:N | CASCADE |
+| client_profiles | master_hidden_clients | 1:N | CASCADE |
+| master_profiles | coupons | 1:N | CASCADE |
+| coupons | coupon_uses | 1:N | CASCADE |
+| appointments | coupon_uses | 1:N | SET NULL |
+| users | coupon_uses | 1:N | SET NULL |
 
 ### N:1 (Many-to-One)
 
@@ -332,6 +448,14 @@
 | audit_logs | users | master_id |
 | cities | countries | country_id |
 | users | cities | city_id |
+| notifications | users | sender_id, recipient_id |
+| notification_broadcasts | users | sender_id |
+| master_hidden_clients | master_profiles | master_profile_id |
+| master_hidden_clients | client_profiles | client_profile_id |
+| coupons | master_profiles | master_id |
+| coupon_uses | coupons | coupon_id |
+| coupon_uses | appointments | appointment_id |
+| coupon_uses | users | user_id |
 
 ### Важные нюансы
 
@@ -339,6 +463,9 @@
 2. **client_id в appointments** — это `client_profiles.id`, а не `users.id`.
 3. **master_id в appointments** — это `master_profiles.id`, а не `users.id`.
 4. **master_id в audit_logs** — это `users.id` (НЕ master_profiles!).
+5. **Статус клиентской записи зависит от `master_profiles.auto_confirm`:** включён — сразу `confirmed`, выключен — `pending` (кабинет и публичная форма, см. `client/router.py`, `booking/router.py`).
+6. **Купоны:** `code` уникален в рамках мастера (проверка в коде → 409); применение фиксируется в `coupon_uses`, а слепок скидки — в `appointments.discount_label`.
+7. **`users.avatar_url` / `name_source` — только клиентские:** мастера используют `master_profiles.avatar_url` (загрузка) или `avatar_preset`; `name_source="user"` защищает имя от перезаписи соц-входом (`services/social_merge.py`).
 
 ---
 
@@ -376,8 +503,13 @@
 | 26 | 16a1b2c3d4e5 | 15a1b2c3d4e5 | `coupons`, `coupon_uses` (персональные коды −%/−₽ своим клиентам) | 2026-10-15 |
 | 27 | 17a1b2c3d4e5 | 16a1b2c3d4e5 | `services.discount_fixed`, `service_bundles.discount_fixed` (−₽ после %) | 2026-10-15 |
 | 28 | 18a1b2c3d4e5 | 17a1b2c3d4e5 | `appointments.discount_label` (слепок скидки на записи) | 2026-10-15 |
+| 29 | 19a1b2c3d4e5 | 18a1b2c3d4e5 | `users.max_username`, `otp_codes.max_username/max_user_email` (MAX-профиль из диалога) | 2026-10-17 |
+| 30 | 20a1b2c3d4e5 | 19a1b2c3d4e5 | `users.vk_user_id` (unique, привязка VK ID) | 2026-10-17 |
+| 31 | 21a1b2c3d4e6 | 20a1b2c3d4e5 | `users.yandex_user_id` (unique, привязка Yandex ID) | 2026-10-17 |
+| 32 | 22a1b2c3d4e7 | 21a1b2c3d4e6 | `users.avatar_url/name_source` (соц-профиль клиента) | 2026-10-18 |
+| 33 | 23a1b2c3d4e8 | 22a1b2c3d4e7 | DROP `otp_codes.code` — легаси-колонка с открытым текстом, ломавшая INSERT на проде | 2026-10-18 |
 
-**Head:** `18a1b2c3d4e5`
+**Head:** `23a1b2c3d4e8`
 
 > Старая цепочка из 12 миграций (`9a9c2edb` → `b2c3d4e5f6a7`) удалена после squash —
 > история сохранена в git (`git log -- alembic/versions/`). Прод-БД со старым head
@@ -588,6 +720,19 @@ select(ClientProfile).where(ClientProfile.id == appointment.client_id)
 select(ClientProfile).where(ClientProfile.user_id == appointment.client_id)
 ```
 
+### 10. Прод-таблица отстала от модели — легаси-колонка ломает INSERT
+
+**Симптом (только на проде, PG):**
+```
+sqlalchemy.exc.IntegrityError: NotNullViolationError: null value in column "code"
+of relation "otp_codes" violates not-null constraint
+```
+500 на `/auth/max/start` и `/auth/send-otp`; локальный SQLite при этом здоров — таблицу создаёт `create_all` по текущей модели, легаси-колонки там нет.
+
+**Причина:** на проде в `otp_codes` жила колонка `code VARCHAR(10) NOT NULL` (времена открытых кодов, до squash). Модель её не мапит и не заполняет — каждый INSERT падал.
+
+**Решение:** миграция `23a1b2c3d4e8` — `ALTER TABLE otp_codes DROP COLUMN IF EXISTS code` (идемпотентно, безопасна к повторному прогону). Диагностика: `journalctl -u beauty-backend` + `\d otp_codes` в psql. Урок шире: после squash сверяй фактическую схему прода с моделями, а не только `alembic_version`.
+
 ---
 
 ## Ручные запросы
@@ -664,3 +809,4 @@ WHERE blocked.blocking_pid IS NOT NULL;
 - [ ] Нет `flush()` перед созданием связанных объектов
 - [ ] Нет `master.master_profile.id` для супер-админа
 - [ ] Проверил `grep -r "old_relationship_name" app/` — все использованы
+- [ ] Сверил фактическую схему прода (`\d <таблица>`) с моделями — легаси-колонки ломают INSERT (см. ошибку №10)

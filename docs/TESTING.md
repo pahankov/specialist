@@ -1,19 +1,19 @@
 # Тестирование
 
-> Backend: 43 файла, 378 тестов (pytest, SQLite-файл на тест). Frontend: 20 файлов, 89 тестов (Vitest).
+> Backend: 53 файла, 578 тестов (pytest, SQLite-файл на тест). Frontend: 36 файлов, 186 тестов (Vitest).
 > Чек-лист перед коммитом — только в [RULES.md](RULES.md), правила деплоя — в [DEPLOYMENT_RULES.md](DEPLOYMENT_RULES.md).
 
 ## Запуск
 
 ```powershell
-# Backend (378 passed, ~9 мин)
+# Backend (578 passed, ~10 мин)
 cd online-booking\backend
 $env:PYTHONPATH='.'
 pytest tests/ -v                          # всё
 pytest tests/test_reviews.py -v           # один файл
 pytest tests/ -q --cov=app --cov-report=term-missing --cov-fail-under=55  # с гейтом (как в CI)
 
-# Frontend (78 passed, ~5 сек)
+# Frontend (186 passed, ~20 сек)
 cd online-booking\frontend
 npx vitest run                            # всё
 npx tsc --noEmit                          # типы (обязательно: ловят то, что тесты не ловят)
@@ -62,45 +62,76 @@ npx prettier --check src/                 # стиль (конфиг .prettierrc
     `test_toggle_admin_self` ×2, `test_email_conflict_skips_row` ×2; переименованы).
 12. `client_profiles.user_id NOT NULL` — сначала User+flush, потом профиль.
 
-## Backend: файлы (сгенерировано, 378 всего)
+## Backend: файлы (сгенерировано, 578 всего)
 
 | Файл | N | Файл | N |
 |---|---|---|---|
-| test_admin_appointments.py | 16 | test_import_csv.py | 6 |
-| test_admin_audit.py | 4 | test_log_level.py | 3 |
-| test_admin_clients.py | 11 | test_master_mutations.py | 7 |
-| test_admin_dashboard.py | 4 | test_master_stats.py | 6 |
-| test_admin_services.py | 9 | test_master_tariff_status.py | 14 |
-| test_admin_working_hours.py | 11 | test_masters.py | 11 |
-| test_appointments.py | 10 | test_masters_bulk.py | 6 |
-| test_appointments_filters.py | 2 | test_masters_crud.py | 19 |
-| test_auth.py | 9 | test_masters_security.py | 11 |
-| test_auth_dependencies.py | 10 | test_masters_status.py | 12 |
-| test_auth_service.py | 13 | test_max_auth.py | 28 |
-| test_auth_tokens.py | 12 | test_password_security.py | 11 |
-| test_booking_flow.py | 7 | test_pull_production.py | 12 |
+| test_account_deletion.py | 6 | test_fix_production_db.py | 2 |
+| test_admin_appointments.py | 23 | test_health.py | 6 |
+| test_admin_audit.py | 5 | test_import_csv.py | 6 |
+| test_admin_clients.py | 22 | test_log_level.py | 3 |
+| test_admin_dashboard.py | 12 | test_master_mutations.py | 7 |
+| test_admin_profile.py | 18 | test_master_stats.py | 6 |
+| test_admin_services.py | 11 | test_master_tariff_status.py | 14 |
+| test_admin_working_hours.py | 12 | test_masters_bulk.py | 6 |
+| test_appointments.py | 10 | test_masters_crud.py | 21 |
+| test_appointments_filters.py | 2 | test_masters_security.py | 11 |
+| test_auth.py | 9 | test_masters_status.py | 14 |
+| test_auth_dependencies.py | 10 | test_masters.py | 13 |
+| test_auth_service.py | 16 | test_max_auth.py | 35 |
+| test_auth_tokens.py | 12 | test_notifications.py | 14 |
+| test_booking_flow.py | 7 | test_password_security.py | 11 |
+| test_bundles.py | 15 | test_pull_production.py | 12 |
 | test_cache_service.py | 19 | test_rate_limiting.py | 3 |
-| test_cities_resolve.py | 4 | test_refresh_tokens.py | 5 |
-| test_clients.py | 9 | test_reviews.py | 12 |
-| test_create_superuser.py | 4 | test_schedule.py | 7 |
-| test_dadata_proxy.py | 5 | test_services.py | 10 |
-| test_export_tasks.py | 4 | test_validation_handler.py | 2 |
-| test_fix_production_db.py | 2 | test_work_window.py | 2 |
-| test_health.py | 3 | test_seed_common.py | 7 |
-## Frontend: файлы (89 всего)
+| test_cities_resolve.py | 6 | test_refresh_tokens.py | 7 |
+| test_client_booking.py | 8 | test_reviews.py | 19 |
+| test_client_cabinet.py | 16 | test_schedule.py | 7 |
+| test_client_visibility.py | 15 | test_seed_common.py | 9 |
+| test_clients.py | 9 | test_services.py | 10 |
+| test_coupons.py | 3 | test_validation_handler.py | 2 |
+| test_create_superuser.py | 4 | test_vk_auth.py | 26 |
+| test_dadata_proxy.py | 5 | test_work_window.py | 3 |
+| test_dual_role.py | 13 | test_yandex_auth.py | 19 |
+| test_export_tasks.py | 4 | | |
 
-Покрыто: `apiError`, `authRefresh` (очередь 401), `CitySelect`, `ClientsFilter`, `dadata`,
-`helpers` (schedule), schedule `hooks`, `impersonation`, `MasterSelect`,
-`maxAuth` (4: deeplink-кнопка, verify, ошибка), `Modal`/`ConfirmDialog`, `Pager`, `PhoneInput`, `section`, `SuperAdminLayout`,
-`StatusBadge`/`useAdminSort`, `cookies` (getUserRole),
-`CabinetPage` (список/отмена/empty/статы/город), `ClientLayout` (свой nav под `/cabinet`), `BookingWizard` (мастер→категории→публичная запись). Не покрыто (сознательно): большие страницы и роутинг-гарды —
+## Frontend: файлы (186 всего)
+
+| Файл | N | Файл | N |
+|---|---|---|---|
+| apiError.test.ts | 5 | LogsPage.test.tsx | 1 |
+| assetUrl.test.ts | 5 | MasterSelect.test.tsx | 6 |
+| authRefresh.test.ts | 3 | maxAuth.test.tsx | 21 |
+| AutoConfirmSwitch.test.tsx | 1 | Modal.test.tsx | 10 |
+| BackendImg.test.tsx | 3 | names.test.ts | 6 |
+| BookingWizard.test.tsx | 3 | NotificationBell.test.ts | 8 |
+| CabinetBookPage.test.tsx | 5 | NotificationBell.test.tsx | 4 |
+| CabinetPage.test.tsx | 4 | Pager.test.tsx | 2 |
+| CitySelect.test.tsx | 4 | password.test.ts | 4 |
+| ClientLayout.test.tsx | 1 | PhoneInput.test.tsx | 6 |
+| ClientsFilter.test.tsx | 2 | RecipientPicker.test.tsx | 3 |
+| cookies.test.ts | 3 | RoleSwitch.test.tsx | 2 |
+| CouponCards.test.ts | 3 | section.test.ts | 2 |
+| dadata.test.ts | 3 | sharedUi.test.tsx | 3 |
+| DataTable.test.tsx | 7 | Stars.test.tsx | 2 |
+| helpers.test.ts | 33 | SuperAdminLayout.test.tsx | 1 |
+| hooks.test.tsx | 2 | vkAuth.test.tsx | 7 |
+| impersonation.test.ts | 3 | yandexAuth.test.tsx | 8 |
+
+Покрыто: `apiError`, `assetUrl`, `authRefresh` (очередь 401), `CitySelect`, `ClientsFilter`,
+`CouponCards`, `dadata`, `helpers` (schedule), schedule `hooks`, `impersonation`, `MasterSelect`,
+`Modal`/`ConfirmDialog`, `names` (ФИО), `NotificationBell` (колокольчик), `Pager`, `password` (политика),
+`PhoneInput`, `RecipientPicker`, `RoleSwitch`, `Stars`, `AutoConfirmSwitch`, `BackendImg`, `sharedUi`, `DataTable`,
+`section`, `cookies` (getUserRole), `maxAuth`/`vkAuth`/`yandexAuth` (соц-входы и флоу кодов),
+`CabinetPage` (список/отмена/empty/статы/город), `CabinetBookPage`, `ClientLayout` (свой nav под `/cabinet`),
+`BookingWizard` (мастер→категории→публичная запись), `LogsPage`, `SuperAdminLayout`.
+Не покрыто (сознательно): большие страницы и роутинг-гарды —
 их держит `tsc --noEmit` + ручной смоук.
 
 ## CI/CD гейты
 
 | Gate | Где | Fail → |
 |---|---|---|
-| pytest 378 + `--cov-fail-under=55` | `ci.yml` backend-tests | PR/деплой blocked |
+| pytest 578 + `--cov-fail-under=55` | `ci.yml` backend-tests | PR/деплой blocked |
 | eslint (0 errors) + `tsc --noEmit` + `vitest run` + `prettier --check` | `ci.yml` frontend-lint | PR/деплой blocked |
 | pytest на сервере до restart | `deploy.yml` | deploy abort |
 | pg_dump перед миграциями | `deploy.yml` | warn, continue |

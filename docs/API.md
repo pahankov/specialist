@@ -73,10 +73,11 @@ sessionStorage и редиректит браузер на Яндекс → по
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
 | `GET` | `/api/v1/countries/` | Список стран |
+| `GET` | `/api/v1/countries/{country_id}` | Страна по ID |
 | `GET` | `/api/v1/cities/` | Список городов (пагинация, поиск, фильтр по стране) |
 | `GET` | `/api/v1/cities/search/?q=&limit=` | Поиск городов для автокомплита (фолбэк DaData) |
 | `GET` | `/api/v1/cities/{id}` | Город по ID |
-| `POST` | `/api/v1/cities/resolve` | Get-or-create города по имени (сначала ищет семью дублей DaData; master+) |
+| `POST` | `/api/v1/cities/resolve` | Get-or-create города по имени (сначала ищет семью дублей DaData; любой авторизованный пользователь) |
 | `POST` | `/api/v1/cities/merge-duplicates` | Супер: слить города-дубли (dry-run; `?apply=true` — оставить старший id, перепривязать юзеров) |
 
 ### DaData (backend proxy, секрет не покидает сервер)
@@ -89,17 +90,19 @@ sessionStorage и редиректит браузер на Яндекс → по
 |-------|----------|----------|
 | `GET` | `/api/v1/masters/?city_id=` | Активные мастера (+`city_id/city_name/avg_rating/avatar_preset` в ответе; фильтр по семье города-дублей) |
 | `GET` | `/api/v1/masters/{id}` | Мастер по ID |
-| `POST` | `/api/v1/masters/` | Создать мастера |
-| `PATCH` | `/api/v1/masters/{id}` | Обновить мастера |
-| `DELETE` | `/api/v1/masters/{id}` | Удалить мастера |
+| `POST` | `/api/v1/masters/` | Создать мастера — **legacy-ветка** (канонично: `/admin/masters`) |
+| `PATCH` | `/api/v1/masters/{id}` | Обновить мастера — **legacy-ветка** |
+| `DELETE` | `/api/v1/masters/{id}` | Удалить мастера — **legacy-ветка** |
+
+> Legacy-ручки оставлены для совместимости; актуальные операции — в Admin/Superadmin (`/admin/masters...`). В новом коде не использовать.
 
 ### Services
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
 | `GET` | `/api/v1/services/?master_id=` | Список услуг (+`category` для группировки) |
 | `GET` | `/api/v1/services/{id}` | Услуга по ID |
-| `POST` | `/api/v1/services/` | Создать услугу |
-| `DELETE` | `/api/v1/services/{id}` | Удалить услугу |
+| `POST` | `/api/v1/services/` | Создать услугу — **legacy-ветка** (канонично: `/admin/services`) |
+| `DELETE` | `/api/v1/services/{id}` | Удалить услугу — **legacy-ветка** |
 
 ### Appointments
 | Метод | Endpoint | Описание |
@@ -114,10 +117,12 @@ sessionStorage и редиректит браузер на Яндекс → по
 ### Clients
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
-| `GET` | `/api/v1/clients/` | Список клиентов |
-| `GET` | `/api/v1/clients/{id}` | Клиент по ID |
-| `POST` | `/api/v1/clients/` | Создать клиента |
-| `DELETE` | `/api/v1/clients/{id}` | Удалить клиента |
+| `GET` | `/api/v1/clients/` | Список клиентов — **legacy-ветка** |
+| `GET` | `/api/v1/clients/{id}` | Клиент по ID — **legacy-ветка** |
+| `POST` | `/api/v1/clients/` | Создать клиента — **legacy-ветка** |
+| `DELETE` | `/api/v1/clients/{id}` | Удалить клиента — **legacy-ветка** |
+
+> Клиентские данные канонично живут в кабинете (`/client/me`) и админ-панели (`/admin/clients`); legacy-ручки — только для совместимости.
 
 ### Cabinet (JWT CLIENT or MASTER — dual-role: masters book as clients)
 
@@ -131,11 +136,14 @@ sessionStorage и редиректит браузер на Яндекс → по
 | `PATCH` | `/api/v1/client/me` | Имя/фамилия/город/адрес (`city_id` проверяется, 404) |
 | `GET` | `/api/v1/client/stats` | Дашборд: траты, визиты, предстоящие, любимые мастер/услуга |
 | `GET` | `/api/v1/client/appointments` | Свои записи (все, новые сверху; фронт делит на будущие/историю) |
-| `POST` | `/api/v1/client/appointments` | Своя запись из визарда (`master_id` + ровно один из `service_id`/`bundle_id` + date, проверка конфликтов по длительностям, статус pending; мастеру падает в колокольчик вместе с комментарием клиента) |
+| `POST` | `/api/v1/client/appointments` | Своя запись из визарда (`master_id` + ровно один из `service_id`/`bundle_id` + date, проверка конфликтов по длительностям; статус `pending` или сразу `confirmed` при `auto_confirm` мастера; мастеру падает в колокольчик вместе с комментарием клиента) |
 | `GET` | `/api/v1/client/bundles?master_id=` | Активные комплексы мастера (состав, время, цена; время = ручное или сумма) |
 | `GET` | `/api/v1/client/booking/schedule` | Активное расписание мастера на месяц (окно + рабочие дни + занятые гранулы, без персональных данных) |
 | `POST` | `/api/v1/client/appointments/{id}/cancel` | Отмена своей pending/confirmed записи (чужая — 404, финальная — 400; пишется в аудит) |
 | `DELETE` | `/api/v1/client/me` | Удалить свой аккаунт (деактивация + обезличивание ПДн, отмена будущих записей; вход и токены умирают сразу, строки хранятся 3 года) |
+| `GET` | `/api/v1/client/notifications/inbox`, `/api/v1/client/notifications/unread-count` | Входящие кабинета и бейдж колокольчика |
+| `POST` | `/api/v1/client/notifications/{id}/read`, `/api/v1/client/notifications/read-all` | Отметить прочитанным |
+| `DELETE` | `/api/v1/client/notifications` | Очистить уведомления кабинета |
 
 ### Working Hours
 | Метод | Endpoint | Описание |
@@ -149,6 +157,7 @@ sessionStorage и редиректит браузер на Яндекс → по
 |-------|----------|----------|
 | `GET` | `/admin/dashboard` | Статистика (записи, клиенты, доход, `top_clients` топ-5 по тратам; `recent_appointments` — ближайшие живые) |
 | `GET` | `/admin/monthly-stats` | Статистика за месяц (есть `cancelled_appointments`) |
+| `GET` | `/admin/revenue-breakdown` | Детализация дохода (`by_master`/`by_service`, `date_from`/`date_to`; супер — `?master_id=`) |
 | `GET` | `/admin/appointments` | Список записей (пагинация, фильтрация; `show_completed`/`show_cancelled` — пейджер считает показанное) |
 | `POST` | `/admin/appointments` | Создать запись |
 | `POST` | `/admin/appointments/book` | Админская запись (выбор клиента из БД; услуга ИЛИ комплекс; суперадмин шлёт `master_id`) |
@@ -179,16 +188,19 @@ sessionStorage и редиректит браузер на Яндекс → по
 | `GET` | `/admin/working-hours` | Расписание |
 | `POST` | `/admin/working-hours` | Добавить рабочий день |
 | `PATCH` | `/admin/working-hours/{id}` | Обновить рабочий день |
+| `POST` | `/admin/working-hours/{id}/toggle-active` | Включить/выключить рабочий день (пересчитывает статус мастера) |
 | `DELETE` | `/admin/working-hours/{id}` | Удалить рабочий день |
 | `GET` | `/admin/work-window` | Окно рабочего времени мастера (`?master_id=` для суперадмина) |
 | `PATCH` | `/admin/work-window` | Задать окно (`start_hour`/`end_hour`, 0–24) |
 | `GET` | `/admin/profile` | Свой профиль (имя/фамилия/город/контакты/фото или пресет/адрес/сертификаты) |
-| `PATCH` | `/admin/profile` | Свои данные: имя, фамилия, город, telegram, описание, опыт, адрес кабинета, сертификаты, `avatar_preset` (эмодзи из 8 стандартных; null — снять; заменяет загруженное фото) |
+| `PATCH` | `/admin/profile` | Свои данные: имя, фамилия, город, telegram, описание, опыт, адрес кабинета, сертификаты, `avatar_preset` (эмодзи из 16 стандартных; null — снять; заменяет загруженное фото) |
 | `POST` | `/admin/profile/avatar` | Своё фото (JPEG/PNG/WebP, на входе ≤5МБ, иначе 400) → даунскейл до 1024px (JPEG/WebP q82, PNG optimize) → `avatar_url` на `/static` (снимает пресет). Файлы лежат на бэкенде — фронт резолвит через `assetUrl`. `?kind=cert` — отдельный файл (фото сертификата): не трогает аватар и ничего не удаляет |
 | `DELETE` | `/admin/profile` | Удалить свой аккаунт мастера (снятие с публикации, обезличивание ПДн, отмена будущих записей клиентов; админам — 400) |
 | `GET` | `/admin/audit-logs` | Журнал действий (пагинация, фильтрация; есть сущность `auth` — входы/выходы) |
+| `GET` | `/admin/audit-logs/all` | Все логи системы (только супер: `entity_type`/`master_id`/`limit`/`offset`/`sort_dir`) |
 | `GET` | `/admin/export/appointments` | Экспорт записей в CSV (`status`, `master_id`, `ids`, `include_master`) |
 | `GET` | `/admin/export/clients` | Экспорт клиентов в CSV (`ids`, `search`, `master_id`; есть колонка Город) |
+| `GET` | `/admin/export/clients/status/{job_id}` | Статус фонового экспорта клиентов |
 | `GET` | `/admin/export/masters` | Экспорт мастеров в CSV (суперадмин; `ids`) |
 | `GET` | `/admin/blocked-slots` | Заблокированные слоты |
 | `POST` | `/admin/blocked-slots` | Заблокировать слот |
@@ -197,14 +209,10 @@ sessionStorage и редиректит браузер на Яндекс → по
 | `POST` | `/admin/notifications/broadcast` | Внутренняя рассылка в колокольчик (`audience`, `user_ids?`, `text` 1–4000). Супер: `all/masters/clients/selected`; мастер: `my_clients/selected` (только свои). Пишет по строке на получателя + строку в историю |
 | `GET` | `/admin/notifications/sent` | Свои отправленные: что/когда/кому (текст, аудитория, получатели, дата) |
 | `DELETE` | `/admin/notifications/sent` | Очистить историю отправленных (у получателей колокольчики остаются) |
-| `GET` | `/admin/appointments` | Записи (`show_completed`/`show_cancelled` — пейджер считает показанное) |
 | `GET` | `/admin/notifications/inbox` | Свои входящие (панели): `unread_only`, пагинация, счётчик `unread` |
 | `GET` | `/admin/notifications/unread-count` | Бейдж колокольчика (панели) |
 | `POST` | `/admin/notifications/{id}/read`, `/admin/notifications/read-all` | Отметить прочитанным |
 | `DELETE` | `/admin/notifications` | Очистить свои входящие (панели) |
-| `GET` | `/client/notifications/inbox`, `/client/notifications/unread-count` | Входящие и бейдж кабинета |
-| `POST` | `/client/notifications/{id}/read`, `/client/notifications/read-all` | Прочитанное в кабинете |
-| `DELETE` | `/client/notifications` | Очистить уведомления кабинета |
 
 ### Superadmin (JWT required, is_admin=true)
 | Метод | Endpoint | Описание |
@@ -221,9 +229,9 @@ sessionStorage и редиректит браузер на Яндекс → по
 | `POST` | `/admin/masters/{id}/unsuspend` | Разблокировать |
 | `POST` | `/admin/masters/{id}/refresh-status` | Пересчитать статус по рабочим часам |
 | `GET` | `/admin/masters/{id}/stats` | Статистика по мастеру |
-| `POST` | `/admin/masters/bulk/toggle-active` | Массовая смена статуса |
-| `POST` | `/admin/masters/bulk/suspend` | Массовая блокировка |
-| `POST` | `/admin/masters/bulk/unsuspend` | Массовая разблокировка |
+| `POST` | `/admin/bulk/toggle-active` | Массовая смена статуса (тело `{"master_ids": [...]}`) |
+| `POST` | `/admin/bulk/suspend` | Массовая блокировка |
+| `POST` | `/admin/bulk/unsuspend` | Массовая разблокировка |
 | `POST` | `/admin/masters/import` | Импорт мастеров из CSV |
 | `POST` | `/admin/masters/{id}/impersonate` | Вход от имени мастера (support view-as, пишется в аудит) |
 | `PATCH` | `/admin/masters/{id}/password` | Сброс пароля мастера (+ отзыв сессий) |
@@ -235,7 +243,6 @@ sessionStorage и редиректит браузер на Яндекс → по
 | `PATCH` | `/admin/reviews/{id}/unpublish` | Скрыть отзыв |
 | `DELETE` | `/admin/reviews/{id}` | Удалить отзыв |
 | `GET` | `/admin/audit-logs?master_id=X` | Логи действий (фильтр по мастеру) |
-| `GET` | `/admin/global-stats` | Глобальная статистика по всей системе |
 | `POST` | `/admin/dashboard/cache/clear` | Сброс кэша дашборда |
 
 ### Health & Changelog
@@ -249,11 +256,11 @@ sessionStorage и редиректит браузер на Яндекс → по
 ### Reviews (публичные + авторизованные)
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
-| `GET` | `/api/v1/reviews/` | Список опубликованных отзывов (фильтр по master_id) |
-| `GET` | `/api/v1/reviews/average` | Средний рейтинг мастера |
-| `POST` | `/api/v1/reviews/` | Создать отзыв (только на completed appointment) |
-| `PATCH` | `/api/v1/reviews/{id}` | Обновить отзыв (comment, publish) |
-| `DELETE` | `/api/v1/reviews/{id}` | Удалить отзыв |
+| `GET` | `/api/v1/reviews/` | Публичный список отзывов (фильтр по `master_id`; `only_published` — по умолчанию только опубликованные, `false` — все) |
+| `GET` | `/api/v1/reviews/average` | Средний рейтинг мастера (только опубликованные) |
+| `POST` | `/api/v1/reviews/` | Legacy-создание отзыва (только на completed appointment); каноничные флоу — `/client/reviews` (клиент) и `/admin/reviews` (мастер/супер) |
+| `PATCH` | `/api/v1/reviews/{id}` | Legacy: comment / publish-unpublish |
+| `DELETE` | `/api/v1/reviews/{id}` | Legacy-удаление отзыва |
 | `GET` | `/client/reviews/mine` | Свои отзывы кабинета (для пометок в Истории) |
 | `POST` | `/client/reviews` | Оценить свой визит: completed или прошедший по времени (отменённые нельзя; 403 чужая, 409 повтор); мастеру летит ⭐-колокол |
 | `GET` | `/client/coupons/mine` | Свои годные купоны (`?master_id=` — одного мастера): код, условия, срок, остаток |
@@ -328,13 +335,13 @@ curl -X POST http://localhost:8000/api/v1/appointments/public \
 ### Управление мастерами (суперпользователь)
 ```bash
 # Список всех мастеров
-curl -X GET http://localhost:8000/api/v1/admin/masters/
+curl -X GET http://localhost:8000/api/v1/admin/masters
 
 # Поиск мастеров
-curl -X GET "http://localhost:8000/api/v1/admin/masters/?search=Елена&is_active=true&is_admin=false"
+curl -X GET "http://localhost:8000/api/v1/admin/masters?search=Елена&is_active=true&is_admin=false"
 
 # Создать мастера
-curl -X POST http://localhost:8000/api/v1/admin/masters/ \
+curl -X POST http://localhost:8000/api/v1/admin/masters \
   -H "Content-Type: application/json" \
   -d '{"name":"Мария","email":"maria@example.com","password":"SecurePass456!","phone":"+79991234568"}'
 
@@ -348,9 +355,10 @@ curl -X POST http://localhost:8000/api/v1/admin/masters/1/toggle-admin
 curl -X GET http://localhost:8000/api/v1/admin/masters/1/stats
 ```
 
-### Глобальная статистика (суперпользователь)
+### Детализация дохода (суперпользователь)
 ```bash
-curl -X GET http://localhost:8000/api/v1/admin/global-stats
+curl -X GET "http://localhost:8000/api/v1/admin/revenue-breakdown?by_master=true" \
+  -H "Authorization: Bearer <token>"
 ```
 
 ### Отзывы и рейтинги
@@ -437,16 +445,16 @@ curl -X GET http://localhost:8000/api/v1/admin/masters/1/full \
 ### Bulk operations
 ```bash
 # Массовая смена статуса
-curl -X POST http://localhost:8000/api/v1/admin/masters/bulk/toggle-active \
+curl -X POST http://localhost:8000/api/v1/admin/bulk/toggle-active \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
-  -d '[1, 2, 3]'
+  -d '{"master_ids": [1, 2, 3]}'
 
 # Массовая блокировка
-curl -X POST http://localhost:8000/api/v1/admin/masters/bulk/suspend \
+curl -X POST http://localhost:8000/api/v1/admin/bulk/suspend \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
-  -d '[1, 2, 3]'
+  -d '{"master_ids": [1, 2, 3]}'
 ```
 
 ### Master import from CSV
@@ -460,7 +468,7 @@ curl -X POST http://localhost:8000/api/v1/admin/masters/import \
 ### Background export
 ```bash
 # Запуск фонового экспорта
-curl -X POST "http://localhost:8000/api/v1/admin/export/appointments?background=true&status=pending" \
+curl -X GET "http://localhost:8000/api/v1/admin/export/appointments?background=true&status=pending" \
   -H "Authorization: Bearer <token>"
 
 # Статус задачи
