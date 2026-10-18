@@ -15,7 +15,8 @@
   - SQLAlchemy логи выведены на уровень WARNING (SQL-запросы только при ошибках)
   - Uvicorn логи выведены на уровень WARNING (HTTP-запросы в dev, ошибки в prod)
   - Цветной вывод для консоли (ANSI-коды)
-  - Rotating file handler (10 МБ, 5 файлов)
+  - Rotating file handler (10 МБ, 5 файлов) — best-effort: недоступный
+    файл логов отключает файловый вывод, но не роняет приложение
 """
 
 import logging
@@ -23,10 +24,11 @@ import sys
 from pathlib import Path
 from logging import LogRecord
 from contextvars import ContextVar
+from typing import Optional
 
 # Директория для файлов логов
+# (создаётся в setup_logging: недоступный каталог не должен ронять импорт)
 LOG_DIR = Path(__file__).parent.parent / "logs"
-LOG_DIR.mkdir(exist_ok=True)
 
 # Форматирование логов с поддержкой %(request_id)s
 LOG_FORMAT = "[%(asctime)s] %(levelname)s [%(request_id)s] %(name)s: %(message)s"
@@ -82,9 +84,14 @@ def setup_logging(level: str = "INFO") -> None:
     console_handler.addFilter(CorrelationFilter())
 
     # --- Rotating file handler (макс. 10 МБ, 5 файлов) ---
+    # Best-effort: если каталог/файл логов недоступен на запись (например,
+    # деплой сменил владельца logs/), приложение продолжает работать с
+    # консольным хендлером — падать из-за лог-файла сервис не должен.
+    file_handler: Optional[logging.Handler] = None
     try:
         from logging.handlers import RotatingFileHandler
 
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
         file_handler = RotatingFileHandler(
             LOG_DIR / "app.log",
             maxBytes=10 * 1024 * 1024,  # 10 MB
@@ -94,21 +101,33 @@ def setup_logging(level: str = "INFO") -> None:
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(logging.Formatter(LOG_FORMAT, datefmt=DATE_FORMAT))
         file_handler.addFilter(CorrelationFilter())
-    except ImportError:
-        # Fallback для старых версий Python
-        file_handler = logging.FileHandler(
-            LOG_DIR / "app.log", encoding="utf-8", mode="a"
-        )
-        file_handler.setLevel(logging.DEBUG)
-        file_handler.setFormatter(logging.Formatter(LOG_FORMAT, datefmt=DATE_FORMAT))
-        file_handler.addFilter(CorrelationFilter())
+    except (ImportError, OSError):
+        # ImportError — нет RotatingFileHandler (старые версии Python);
+        # OSError — каталог/файл недоступен на запись
+        try:
+            file_handler = logging.FileHandler(
+                LOG_DIR / "app.log", encoding="utf-8", mode="a"
+            )
+            file_handler.setLevel(logging.DEBUG)
+            file_handler.setFormatter(
+                logging.Formatter(LOG_FORMAT, datefmt=DATE_FORMAT)
+            )
+            file_handler.addFilter(CorrelationFilter())
+        except OSError:
+            file_handler = None
 
     # Корневой логгер
     root_logger = logging.getLogger()
     root_logger.setLevel(log_level)
     root_logger.handlers.clear()
     root_logger.addHandler(console_handler)
-    root_logger.addHandler(file_handler)
+    if file_handler is not None:
+        root_logger.addHandler(file_handler)
+    else:
+        root_logger.warning(
+            "Файловое логирование отключено: %s недоступен на запись",
+            LOG_DIR / "app.log",
+        )
 
     # --- Отключаем SQL-запросы на уровне INFO ---
     # SQL-запросы полезны только при отладке (DEBUG)
