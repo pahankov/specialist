@@ -1,8 +1,10 @@
 """Tests for MAX chat-bot auth (SMS-style flow).
 
 Covers: /max/start (no code in response), /max/verify, /api/max/webhook
-(phone/contact intake, HMAC, code delivery, keyboard), secret check,
-pure parse helpers. No real MAX network (send_message is stubbed).
+(contact intake, HMAC, keyboard hints), secret check, pure parse helpers,
+plus takeover regressions: deeplink opens and typed numbers never deliver
+a code, only an HMAC-verified contact share does. No real MAX network
+(send_message is stubbed).
 """
 import re
 
@@ -19,6 +21,7 @@ def max_enabled(monkeypatch):
     monkeypatch.setattr(settings, "MAX_BOT_TOKEN", "test-token")
     monkeypatch.setattr(settings, "MAX_BOT_USERNAME", "test_bot")
     monkeypatch.setattr(settings, "MAX_BOT_URL", "https://max.ru/test_bot")
+    monkeypatch.setattr(settings, "MAX_BOT_NAME", "Электронная запись")
     monkeypatch.setattr(settings, "MAX_WEBHOOK_SECRET", "test-secret")
 
 
@@ -73,10 +76,29 @@ def _hook(client, update):
 
 
 async def _request_code(client, phone=PHONE):
-    """Site step 1 -> bot step (typed phone) -> extract delivered code."""
+    """Site step 1: register a pending code request (no code in response)."""
     start = await client.post("/api/v1/auth/max/start", json={"phone": phone})
     assert start.status_code == 200
     return start
+
+
+def _vcf_and_digest(phone=PHONE):
+    """vCard + matching HMAC for a contact share (token = test-token)."""
+    import hashlib
+    import hmac as hmac_mod
+
+    vcf = ("BEGIN:VCARD\r\nVERSION:3.0\r\n"
+           f"TEL;TYPE=cell:{phone.lstrip('+')}\r\nFN:Ivan\r\nEND:VCARD\r\n")
+    digest = hmac_mod.new(b"test-token", vcf.encode(),
+                          hashlib.sha256).hexdigest()
+    return vcf, digest
+
+
+async def _share_contact(client, phone=PHONE, sender_id=777):
+    """HMAC-verified «Поделиться номером» tap in the dialog."""
+    vcf, digest = _vcf_and_digest(phone)
+    return await _hook(client, _msg_update(
+        None, sender_id=sender_id, contact={"vcf_info": vcf, "hash": digest}))
 
 
 class TestMaxStart:
@@ -94,6 +116,7 @@ class TestMaxStart:
         assert data["expires_in"] > 0
         assert data["bot_username"] == "test_bot"
         assert data["bot_url"]
+        assert data["bot_name"] == "Электронная запись"
 
     async def test_start_rejects_bad_phone(self, client, max_enabled):
         resp = await client.post("/api/v1/auth/max/start", json={"phone": "123"})
@@ -122,23 +145,27 @@ class TestMaxWebhook:
         buttons = stub_sender[0]["attachments"][0]["payload"]["buttons"]
         assert buttons[0][0]["type"] == "request_contact"
 
-    async def test_deeplink_open_auto_meets_user(
+    async def test_deeplink_open_asks_to_share_then_delivers(
         self, client, max_enabled, stub_sender
     ):
-        """One click on the deeplink: bot meets the user and sends the code."""
+        """Deeplink open proves nothing about the phone: the bot asks to
+        share the number; the code arrives only after the verified share."""
         start = await client.post("/api/v1/auth/max/start", json={"phone": PHONE})
         payload = start.json()["deeplink"].split("?start=")[1]
 
-        hook = await client.post(
-            "/api/max/webhook",
-            json={"update_type": "bot_started", "timestamp": 1, "chat_id": 1001,
-                  "user": {"user_id": 4242, "first_name": "Deep"},
-                  "payload": payload},
-            headers={"X-Max-Bot-Api-Secret": "test-secret"},
-        )
-        assert hook.json()["outcome"] == "auto_met"
-        assert stub_sender
-        code = re.search(r"\d{6}", stub_sender[0]["text"]).group(0)
+        hook = await _hook(client, {
+            "update_type": "bot_started", "timestamp": 1, "chat_id": 1001,
+            "user": {"user_id": 4242, "first_name": "Deep"},
+            "payload": payload,
+        })
+        assert hook.json()["outcome"] == "share_required"
+        assert not re.search(r"\d{6}", stub_sender[0]["text"])
+        buttons = stub_sender[0]["attachments"][0]["payload"]["buttons"]
+        assert buttons[0][0]["type"] == "request_contact"
+
+        share = await _share_contact(client, sender_id=4242)
+        assert share.json()["outcome"] == "delivered"
+        code = re.search(r"\d{6}", stub_sender[1]["text"]).group(0)
 
         done = await client.post(
             "/api/v1/auth/max/verify", json={"phone": PHONE, "code": code})
@@ -205,29 +232,33 @@ class TestMaxWebhook:
         assert hook.status_code == 200  # best-effort: webhook still 200
         assert calls == [4242, 4242]
 
-    async def test_typed_phone_gets_code(
+    async def test_typed_phone_never_gets_code(
         self, client, max_enabled, stub_sender
     ):
+        """A typed number is self-asserted: share button only, no code."""
         await _request_code(client)
-        resp = await _hook(client, _msg_update("+79990001122"))
-        assert resp.json()["outcome"] == "delivered"
+        resp = await _hook(client, _msg_update(PHONE))
+        assert resp.json()["outcome"] == "share_required"
         assert stub_sender
-        code = re.search(r"\d{6}", stub_sender[0]["text"])
-        assert code, stub_sender[0]["text"]
+        assert not re.search(r"\d{6}", stub_sender[0]["text"])
+        buttons = stub_sender[0]["attachments"][0]["payload"]["buttons"]
+        assert buttons[0][0]["type"] == "request_contact"
 
-    async def test_phone_without_pending_gets_hint(
+    async def test_typed_phone_without_pending_gets_hint(
         self, client, max_enabled, stub_sender
     ):
+        """Self-asserted number with no site request: share button only."""
         resp = await _hook(client, _msg_update("+79990009999"))
-        assert resp.json() == {"ok": True, "outcome": "no_pending"}
-        assert stub_sender and "на сайте" in stub_sender[0]["text"]
+        assert resp.json() == {"ok": True, "outcome": "share_required"}
+        assert stub_sender and "Поделиться номером" in stub_sender[0]["text"]
+        assert not re.search(r"\d{6}", stub_sender[0]["text"])
 
     async def test_non_phone_text_gets_hint_with_keyboard(
         self, client, max_enabled, stub_sender
     ):
         """Hint repeats the request_contact button (first one is easy to miss)."""
         resp = await _hook(client, _msg_update("hello"))
-        assert resp.status_code == 200
+        assert resp.json()["outcome"] == "share_required"
         assert stub_sender and "номер" in stub_sender[0]["text"]
         buttons = stub_sender[0]["attachments"][0]["payload"]["buttons"]
         assert buttons[0][0]["type"] == "request_contact"
@@ -286,19 +317,20 @@ class TestMaxWebhook:
     async def test_contact_bad_hmac_unverified(
         self, client, max_enabled, stub_sender, session
     ):
+        """HMAC mismatch is NOT platform-proven: no code, share hint only."""
         await _request_code(client)
-        vcf = ("BEGIN:VCARD\r\nVERSION:3.0\r\n"
-               "TEL;TYPE=cell:79990001122\r\nFN:Ivan\r\nEND:VCARD\r\n")
+        vcf, _ = _vcf_and_digest()
         resp = await _hook(client, _msg_update(
             None, contact={"vcf_info": vcf, "hash": "0" * 64}))
-        # HMAC mismatch -> treated as unverified typed-equivalent, code still delivered
-        assert resp.json()["outcome"] == "delivered"
+        assert resp.json()["outcome"] == "share_required"
+        assert not re.search(r"\d{6}", stub_sender[0]["text"])
+        assert "подтвердить номер" in stub_sender[0]["text"]
 
         from sqlalchemy import select
         from app.models.otp_code import OtpCode
-        rows = (await session.execute(
-            select(OtpCode).where(OtpCode.phone == PHONE_NORM))).scalars().all()
-        assert rows and rows[-1].max_verified_phone is False
+        otp = (await session.execute(
+            select(OtpCode).where(OtpCode.phone == PHONE_NORM))).scalar_one()
+        assert otp.max_user_id is None  # nothing bound, no code delivered
 
     async def test_contact_share_opens_request_without_site(
         self, client, max_enabled, stub_sender, session
@@ -331,19 +363,86 @@ class TestMaxWebhook:
         assert user.consent_at is not None  # 152-FZ checkbox
 
     async def test_typed_phone_still_needs_site_request(
-        self, client, max_enabled, stub_sender
+        self, client, max_enabled, stub_sender, session
     ):
         """Self-asserted numbers must not open requests on their own."""
+        from sqlalchemy import func, select
+        from app.models.otp_code import OtpCode
+
         resp = await _hook(client, _msg_update("+79990009999"))
-        assert resp.json()["outcome"] == "no_pending"
-        buttons = stub_sender[0]["attachments"][0]["payload"]["buttons"]
-        assert buttons[0][0]["type"] == "request_contact"
+        assert resp.json()["outcome"] == "share_required"
+        assert not re.search(r"\d{6}", stub_sender[0]["text"])
+        count = (await session.execute(
+            select(func.count()).select_from(OtpCode)
+            .where(OtpCode.channel == "max")
+        )).scalar_one()
+        assert count == 0
+
+
+class TestTakeoverRegression:
+    """Regressions for the pre-1.78.3 takeover hole: a code must never be
+    delivered to a dialog that only opened a deeplink or typed the number."""
+
+    async def _make_victim(self, session):
+        from app.models.user import User, UserRole
+        from app.utils.security import hash_password
+
+        victim = User(
+            name="Victim", phone=PHONE_NORM,
+            hashed_password=hash_password("victim-pass"),
+            role=UserRole.CLIENT, is_verified=True,
+        )
+        session.add(victim)
+        await session.commit()
+        await session.refresh(victim)
+        return victim
+
+    async def test_typed_spoof_cannot_takeover(
+        self, client, max_enabled, stub_sender, session
+    ):
+        """A foreign dialog typing the victim's number gets no code."""
+        victim = await self._make_victim(session)
+        await _request_code(client)
+
+        resp = await _hook(client, _msg_update(PHONE, sender_id=999999))
+        assert resp.json()["outcome"] == "share_required"
+        assert not re.search(r"\d{6}", stub_sender[0]["text"])
+
+        # Any code fails: nothing was delivered to a dialog.
+        done = await client.post(
+            "/api/v1/auth/max/verify", json={"phone": PHONE, "code": "000000"})
+        assert done.status_code == 400
+        await session.refresh(victim)
+        assert victim.max_user_id is None  # account untouched
+
+    async def test_deeplink_spoof_cannot_takeover(
+        self, client, max_enabled, stub_sender, session
+    ):
+        """A foreign MAX account opening the victim's deeplink gets no code."""
+        victim = await self._make_victim(session)
+        start = await client.post("/api/v1/auth/max/start", json={"phone": PHONE})
+        payload = start.json()["deeplink"].split("?start=")[1]
+
+        hook = await _hook(client, {
+            "update_type": "bot_started", "timestamp": 1, "chat_id": 666,
+            "user": {"user_id": 999999, "first_name": "Attacker"},
+            "payload": payload,
+        })
+        assert hook.json()["outcome"] == "share_required"
+        assert not re.search(r"\d{6}", stub_sender[0]["text"])
+
+        done = await client.post(
+            "/api/v1/auth/max/verify", json={"phone": PHONE, "code": "000000"})
+        assert done.status_code == 400
+        await session.refresh(victim)
+        assert victim.max_user_id is None  # account untouched
 
 
 class TestMaxVerify:
     async def _delivered_code(self, client, stub_sender, phone=PHONE):
+        """Site request + HMAC-verified share -> code from the dialog."""
         await _request_code(client, phone)
-        await _hook(client, _msg_update(phone))
+        await _share_contact(client, phone)
         assert stub_sender
         return re.search(r"\d{6}", stub_sender[-1]["text"]).group(0)
 
@@ -373,7 +472,7 @@ class TestMaxVerify:
         assert first.json()["is_new_user"] is True
 
         await _request_code(client)
-        await _hook(client, _msg_update(PHONE))
+        await _share_contact(client)
         code2 = re.search(r"\d{6}", stub_sender[-1]["text"]).group(0)
         second = await client.post(
             "/api/v1/auth/max/verify", json={"phone": PHONE, "code": code2})

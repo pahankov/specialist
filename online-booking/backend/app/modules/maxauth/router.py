@@ -28,6 +28,7 @@ def _bot_card() -> dict:
         "bot_url": settings.MAX_BOT_URL
         or (f"https://max.ru/{settings.MAX_BOT_USERNAME}"
             if settings.MAX_BOT_USERNAME else ""),
+        "bot_name": settings.MAX_BOT_NAME or settings.MAX_BOT_USERNAME,
     }
 
 
@@ -126,32 +127,30 @@ async def max_webhook(
     logger.info("MAX webhook: update_type=%s", update_type)
 
     if update_type == "bot_started":
-        # Deeplink open (?start=<otp_id>_<hmac>): the bot meets the user
-        # itself — bind the dialog and deliver the code, no typing needed.
+        # Deeplink open (?start=<otp_id>_<hmac>) or a plain "start" tap.
+        # SECURITY: opening a link proves nothing about the phone — the code
+        # is delivered only after an HMAC-verified contact share below.
+        # Here the bot always answers with the share-number keyboard.
         payload = (update or {}).get("payload") or ""
         sender = ((update or {}).get("message") or {}).get("sender") or {}
         if not sender:
             sender = (update or {}).get("user") or {}
         sender_id = sender.get("user_id")
         otp_id = service.parse_start_payload(payload) if payload else None
+        pending = False
         if otp_id is not None and sender_id is not None:
-            otp = await service.get_pending_otp(otp_id, db)
-            if otp is not None:
-                name = service.sender_display_name(sender)
-                fresh = await service.deliver_code_to_dialog(
-                    db, otp.phone, int(sender_id), name, False,
-                    username=service.sender_username(sender))
-                if fresh is not None:
-                    background.add_task(_reply_code, update, fresh)
-                    return {"ok": True, "outcome": "auto_met"}
-        background.add_task(
-            _reply_with_keyboard,
-            update,
+            pending = (await service.get_pending_otp(otp_id, db)) is not None
+        text = (
+            "Вы начали вход на сайте. Подтвердите номер кнопкой "
+            "«Поделиться номером» ниже — пришлём код для входа."
+            if pending else
             "Здравствуйте! Это бот электронной записи.\n"
-            "Поделитесь номером телефона кнопкой ниже или введите номер "
-            "на сайте — пришлём код для входа.",
+            "Поделитесь номером телефона кнопкой ниже — пришлём код "
+            "для входа."
         )
-        return {"ok": True}
+        background.add_task(_reply_with_keyboard, update, text)
+        return ({"ok": True, "outcome": "share_required"} if pending
+                else {"ok": True})
 
     if update_type == "message_created":
         message = (update or {}).get("message") or {}
@@ -160,41 +159,46 @@ async def max_webhook(
         if sender_id is None:
             return {"ok": True}
 
-        # 1. Contact share (HMAC-verified number when it matches).
+        # 1. Contact share: platform-proven only when the HMAC matches.
         phone, verified, name, vcf_email = service.parse_contact_phone(message)
         username = service.sender_username(sender)
-        # 2. Fallback: typed phone text.
-        if phone is None:
+        if not verified:
+            # 2. Anything typed is self-asserted — anyone can type anyone's
+            # number — so it NEVER unlocks a code. Point at the button.
             body = message.get("body") or {}
             text = body.get("text") or message.get("text") or ""
-            phone = service.parse_phone_text(text)
-            name = service.sender_display_name(sender)
-        if phone is None:
-            # Not a phone — repeat the button: the first keyboard appeared
-            # only at bot_started and is easy to miss in the dialog.
-            background.add_task(
-                _reply_with_keyboard,
-                update,
-                "Пришлите номер телефона кнопкой «Поделиться номером» "
-                "ниже — код для входа придёт сюда же. Можно также ввести "
-                "номер на сайте и нажмите «Получить код в MAX».",
-            )
-            return {"ok": True}
+            if phone is not None:
+                # Contact attachment present, HMAC mismatch: the number
+                # could not be platform-verified (forgery/config drift).
+                hint = ("Не получилось подтвердить номер. Нажмите "
+                        "«Поделиться номером» ещё раз.")
+            elif service.parse_phone_text(text) is not None:
+                hint = ("Код придёт только после подтверждения номера. "
+                        "Нажмите «Поделиться номером» ниже — пришлём код "
+                        "для входа.")
+            else:
+                # Not a phone — repeat the button: the first keyboard
+                # appeared only at bot_started and is easy to miss.
+                hint = ("Пришлите номер телефона кнопкой «Поделиться "
+                        "номером» ниже — код для входа придёт сюда же.")
+            background.add_task(_reply_with_keyboard, update, hint)
+            return {"ok": True, "outcome": "share_required"}
 
+        # Platform proved this number belongs to the sender: deliver the
+        # code (a pending site request gets a fresh code; a verified share
+        # without one opens the request itself).
         code = await service.deliver_code_to_dialog(
-            db, phone, int(sender_id), name, verified,
+            db, phone, int(sender_id), name, True,
             username=username, email=vcf_email)
         if code is None:
-            # Only reachable for a typed phone: an HMAC-verified contact
-            # share opens the request itself, a typed number must not.
+            # Nothing delivered (should not happen for a verified share) —
+            # fall back to the share flow instead of a broken reply.
             background.add_task(
-                _reply_with_keyboard,
-                update,
-                "Заявки с таким номером нет. Введите номер на сайте и "
-                "нажмите «Получить код в MAX», либо поделитесь номером "
-                "кнопкой ниже.",
+                _reply_with_keyboard, update,
+                "Не получилось выдать код. Нажмите «Поделиться номером» "
+                "ещё раз.",
             )
-            return {"ok": True, "outcome": "no_pending"}
+            return {"ok": True, "outcome": "share_required"}
         background.add_task(_reply_code, update, code)
         return {"ok": True, "outcome": "delivered"}
 

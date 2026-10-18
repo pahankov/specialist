@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     MAX_BOT_TOKEN: str = ""
     MAX_BOT_USERNAME: str = ""
     MAX_BOT_URL: str = ""
+    # Human-readable bot name for the site button («Открыть бота …»).
+    # Branding text, not a secret; empty falls back to MAX_BOT_USERNAME.
+    MAX_BOT_NAME: str = "Электронная запись"
     MAX_WEBHOOK_SECRET: str = ""
     # Public webhook URL (prod only): enables the self-healing subscription
     # guard (app/services/max_webhook_guard.py). Empty = guard off, so dev

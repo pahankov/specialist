@@ -15,13 +15,15 @@ class MaxStartRequest(BaseModel):
 
 
 class MaxStartResponse(BaseModel):
-    # NOTE: no code here — bound users get it pushed, deeplink openers get it
-    # on auto-meet, everyone else after sharing the number with the bot.
+    # NOTE: no code here — bound users get it pushed into their MAX dialog;
+    # everyone else receives it in the dialog after «Поделиться номером»
+    # (the platform proves the number belongs to that MAX account).
     delivered: bool  # True = code already pushed to the known MAX dialog
     deeplink: str  # one-click bot URL with request payload ("" if unconfigured)
     expires_in: int  # seconds
     bot_username: str
     bot_url: str
+    bot_name: str  # human-readable name for the site button (falls back to username)
 
 
 class MaxVerifyRequest(BaseModel):

@@ -1,8 +1,8 @@
 """MAX chat-bot auth business logic (SMS-style flow).
 
 Flow: site takes the phone -> backend stores a pending MAX code (NEVER shown
-on site) -> user opens the bot and shares their number (typed text or the
-`request_contact` button) -> bot replies INTO the dialog with the code ->
+on site) -> the user opens the bot and shares their number with the
+`request_contact` button -> bot replies INTO the dialog with the code ->
 user types it on site -> /max/verify mints the JWT session.
 
 An HMAC-proven contact share may also OPEN the request itself (no site step
@@ -11,13 +11,17 @@ so "open bot -> share number -> code -> type code on site" registers the
 account without typing the phone on site first.
 
 Trust model (see https://dev.max.ru, request_contact section):
-- Phone from a `request_contact` attachment whose HMAC-SHA256(access_token,
-  vcf_info) matches `hash` is PROVEN to be the sender's MAX-bound number
-  -> created users get is_verified=True; the same proof upgrades
-  is_verified for existing accounts at /max/verify.
-- Typed phone text is self-asserted (anyone can type anyone's number) ->
-  is_verified=False, same as the SMS path; TTL 5 min + 10/min rate limit
-  bound the guessing window. Never opens a request on its own.
+- The code reaches a dialog ONLY for a PROVEN number: `request_contact`
+  attachment whose HMAC-SHA256(access_token, vcf_info) matches `hash` is
+  platform-vouched to be the sender's number -> created users get
+  is_verified=True; the same proof upgrades is_verified for existing
+  accounts at /max/verify.
+- Opening a deeplink (?start=...) or typing a number/text in the dialog
+  proves NOTHING about number ownership (anyone can type anyone's number):
+  those paths only ever get the share-number keyboard, never a code. The
+  pre-1.78.3 "auto-meet" deeplink delivery was an account-takeover hole.
+- The one exception is push_code: the code goes into a dialog ALREADY bound
+  to the account by an earlier verified share (User.max_user_id).
 - 152-FZ consent is captured on site at /max/verify (checkbox on the login
   form), stamped on user creation/backfill exactly like register-unified.
 - Registration may legitimately lack email/name: the MAX display name is a
@@ -66,9 +70,9 @@ def _is_expired(otp: OtpCode) -> bool:
 async def start_max_auth(phone: str, db: AsyncSession) -> tuple[int, int]:
     """Store a pending MAX code for the phone. Returns (otp_id, ttl).
 
-    The code itself is NEVER returned to the site. Delivery paths:
-    bound dialog (push), deeplink open with payload (auto-meet), or
-    share-number flow — all converge on deliver_code_to_dialog().
+    The code itself is NEVER returned to the site. Delivery paths: push into
+    a bound dialog, or an HMAC-verified contact share in the dialog — both
+    converge on deliver_code_to_dialog().
     """
     if not settings.max_enabled:
         raise HTTPException(status_code=503, detail="Вход через MAX не настроен")
@@ -161,7 +165,10 @@ async def prepare_push_code(phone: str, db: AsyncSession) -> Optional[tuple[int,
     otp.code_hash = hash_otp_code(code)
     otp.max_user_id = user.max_user_id
     otp.max_user_name = user.name[:200] if user.name else None
-    otp.max_verified_phone = bool(user.is_verified)
+    # The bound dialog was proven with an HMAC-verified share earlier, so
+    # the number is platform-vouched for this delivery too. (user.is_verified
+    # is a broader flag — e.g. email checks — and must not stand in here.)
+    otp.max_verified_phone = True
     await db.commit()
     logger.info("MAX code prepared for push: otp_id=%s phone=%s", otp.id, phone)
     return user.max_user_id, code
@@ -229,8 +236,7 @@ def parse_contact_phone(
     """
     body = (message or {}).get("body") or {}
     sender = (message or {}).get("sender") or {}
-    name_parts = [sender.get("first_name") or "", sender.get("last_name") or ""]
-    display = " ".join(p for p in name_parts if p).strip()
+    display = sender_display_name(sender)
     attachments = body.get("attachments") or []
     for att in attachments:
         if not isinstance(att, dict) or att.get("type") != "contact":
@@ -281,23 +287,24 @@ async def deliver_code_to_dialog(
     username: Optional[str] = None,
     email: Optional[str] = None,
 ) -> Optional[str]:
-    """Mint a fresh dialog code for the pending request. Returns plain code.
+    """Mint a fresh dialog code for a VERIFIED contact share. Returns code.
 
     The site-pending code value is never stored (only its hash), so delivery
     generates a NEW code, swaps the hash on the same row (TTL preserved) and
     returns the plain text for the bot reply.
 
-    None only for a typed phone with no site request: self-asserted numbers
-    must not open requests (anyone could type anyone's number). An HMAC-
-    proven contact share MAY open the request itself — the platform vouches
-    the number belongs to this MAX account, so "share number" alone is a
-    valid registration start.
+    An HMAC-proven contact share MAY also open the request itself — the
+    platform vouches the number belongs to this MAX account, so "share
+    number" alone is a valid registration start.
+
+    Returns None only for an unverified number (guard): the router never
+    calls this for typed text, but nothing self-asserted may mint a code.
     """
+    if not phone_verified:
+        return None
     otp = await _latest_pending_code(phone, db)
     code = f"{secrets.randbelow(1_000_000):06d}"
     if otp is None:
-        if not phone_verified:
-            return None
         ttl = _code_ttl_seconds()
         otp = OtpCode(
             phone=phone,
