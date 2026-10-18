@@ -46,6 +46,78 @@
   color: #999;
 }
 
+/* ─── Icon tiles for Yandex/MAX ───
+   They continue the VK OAuthList row underneath it. Height, corner radius and
+   the 12px gap come from SOCIAL_BTN_HEIGHT / SOCIAL_BTN_RADIUS
+   (SocialAuthButton.tsx) — the same values VkIdWidget passes to the widget as
+   OAuthListStyles — and the border repeats VK's own `rgba(0, 0, 0, .12)`
+   (oauthlist--item_border_color), so the two rows match even though VK draws
+   its tiles inside an iframe. VK gives its tiles no hover animation either,
+   hence the flat hover here. */
+.social-icon-row {
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.social-icon-btn {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.social-icon-btn:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.social-icon-btn:focus-visible {
+  outline: 2px solid var(--brand-color, #ff6b9d);
+  outline-offset: 2px;
+}
+
+.social-icon-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ─── Consent gate placeholder (registration form) ───
+   Shown instead of the whole social block while the 152-FZ checkbox above is
+   unticked: the VK widget is not mounted and the icon tiles are not rendered,
+   so a social sign-up without consent is impossible. Clicking focuses the
+   checkbox — it never ticks it by itself. */
+.social-gate {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 18px 16px;
+  background: #fafafa;
+  border: 1px dashed #d9d9d9;
+  border-radius: 10px;
+  color: #8a8a8a;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.45;
+  text-align: center;
+  cursor: pointer;
+  transition:
+    border-color 0.2s,
+    color 0.2s,
+    background 0.2s;
+}
+
+.social-gate:hover {
+  border-color: #ff6b9d;
+  background: #fffafc;
+  color: #666;
+}
+
 .social-auth-divider::before,
 .social-auth-divider::after {
   content: '';

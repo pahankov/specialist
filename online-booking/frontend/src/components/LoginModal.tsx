@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { authApi } from '../api/client';
 import { PASSWORD_PLACEHOLDER } from '../constants';
 import { passwordError } from '../utils/password';
-import SocialAuthButton from './common/SocialAuthButton';
+import SocialAuthButton, { SocialAuthIconButton } from './common/SocialAuthButton';
 import VkIdWidget from './common/VkIdWidget';
 import MaxIcon from './common/icons/MaxIcon';
 import type { MaxStartResponse } from '../api/auth';
@@ -51,6 +51,10 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
   const [loading, setLoading] = useState(false);
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [showRegisterPassword, setShowRegisterPassword] = useState(false);
+  /** The 152-FZ checkbox on the register form — it gates the social block
+      above the manual fields, so the consent-gate hint can jump back to it. */
+  const consentRef = useRef<HTMLInputElement>(null);
+  const focusConsent = () => consentRef.current?.focus();
 
   // MAX chat-bot auth: code arrives INTO the MAX dialog, user types it on site
   const [maxPhone, setMaxPhone] = useState('');
@@ -490,23 +494,60 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
       ) : (
         /* ─── REGISTER FORM (the only place 152-FZ consent is asked) ─── */
         <form onSubmit={handleRegister}>
-          {/* Social registration FIRST — a one-tap account via VK/OK/Mail or
-              Yandex. Same flow as login (the account is created on the first
-              successful auth); the 152-FZ consent checkbox below only guards the
-              manual phone+password path (social logins stamp it server-side). */}
-          <VkIdWidget onSuccess={landByRole} />
+          {/* 152-ФЗ + оферта — the gate for everything below: the submit
+              button, the VK widget and the Yandex/MAX tiles. Registration
+              stays one tap, but only after this box is ticked. */}
+          <div className="checkbox-group checkbox-group--first">
+            <label className="checkbox-label">
+              <input
+                ref={consentRef}
+                type="checkbox"
+                checked={registerForm.consent}
+                onChange={(e) =>
+                  setRegisterForm((prev) => ({ ...prev, consent: e.target.checked }))
+                }
+              />
+              <span>
+                Соглашаюсь с{' '}
+                <Link to="/offer" target="_blank" rel="noreferrer">
+                  Офертой
+                </Link>{' '}
+                и{' '}
+                <Link to="/privacy" target="_blank" rel="noreferrer">
+                  Политикой обработки ПДн
+                </Link>
+              </span>
+            </label>
+          </div>
 
-          <div style={{ marginTop: 8 }}>
-            <SocialAuthButton
-              provider="yandex"
-              action="register"
-              disabled={loading}
-              onClick={handleYandexStart}
-            />
-          </div>
-          <div style={{ marginTop: 8 }}>
-            <SocialAuthButton provider="max" action="register" onClick={() => switchMode('max')} />
-          </div>
+          {/* Social registration FIRST — a one-tap account via VK/OK/Mail
+              (the official widget) plus the Yandex/MAX tiles that continue its
+              row. The whole block only exists once the consent box above is
+              ticked: the widget is not mounted, the tiles are not rendered —
+              no tick, no social sign-up. */}
+          {registerForm.consent ? (
+            <>
+              <VkIdWidget onSuccess={landByRole} />
+              <div className="social-icon-row">
+                <SocialAuthIconButton
+                  provider="yandex"
+                  action="register"
+                  disabled={loading}
+                  onClick={handleYandexStart}
+                />
+                <SocialAuthIconButton
+                  provider="max"
+                  action="register"
+                  disabled={loading}
+                  onClick={() => switchMode('max')}
+                />
+              </div>
+            </>
+          ) : (
+            <button type="button" className="social-gate" onClick={focusConsent}>
+              Отметьте согласие с Офертой и Политикой — появятся кнопки VK, Яндекс и MAX
+            </button>
+          )}
 
           <div className="social-auth-divider">или заполните форму</div>
 
@@ -560,30 +601,6 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
             {registerForm.password !== '' && registerPwdError && (
               <p className="error-message">{registerPwdError}</p>
             )}
-          </div>
-
-          {/* 152-ФЗ + оферта: explicit consent, blocks submit. The ONLY consent
-              checkbox in the modal — social logins stamp it implicitly. */}
-          <div className="checkbox-group">
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={registerForm.consent}
-                onChange={(e) =>
-                  setRegisterForm((prev) => ({ ...prev, consent: e.target.checked }))
-                }
-              />
-              <span>
-                Соглашаюсь с{' '}
-                <Link to="/offer" target="_blank" rel="noreferrer">
-                  Офертой
-                </Link>{' '}
-                и{' '}
-                <Link to="/privacy" target="_blank" rel="noreferrer">
-                  Политикой обработки ПДн
-                </Link>
-              </span>
-            </label>
           </div>
 
           <button

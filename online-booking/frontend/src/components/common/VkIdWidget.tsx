@@ -9,12 +9,17 @@ import {
 import { authApi } from '../../api/client';
 import { toast } from 'sonner';
 import { generateCodeVerifier, generateCodeChallenge } from '../../utils/pkce';
+import { SOCIAL_BTN_HEIGHT, SOCIAL_BTN_RADIUS } from './SocialAuthButton';
 
 /**
  * VK ID low-code widget (VK + Одноклассники + Mail in one OAuthList block),
- * rendered INLINE in the login form — no separate consent screen. 152-FZ
- * consent is taken once at registration; a first social login IS a
- * registration and stamps it implicitly server-side.
+ * rendered INLINE — no separate consent screen.
+ *
+ * Consent: on the LOGIN form this mounts right away (a returning user has
+ * already consented); on the REGISTER form LoginModal mounts it only after
+ * the 152-FZ checkbox is ticked, so a social sign-up can never happen
+ * without explicit consent. Either way the first successful auth IS the
+ * registration and stamps `consent_*` server-side.
  *
  * Flow — the backend exchange stays server-side, so tokens never touch the
  * browser:
@@ -78,11 +83,14 @@ function VkIdWidget({ onSuccess, onError }: VkIdWidgetProps) {
           codeVerifier: verifier,
         });
 
-        // 3. Render VK + OK + Mail as one OAuthList block.
+        // 3. Render VK + OK + Mail as one OAuthList block. Height and corner
+        //    radius are pinned so the Yandex/MAX icon tiles that continue this
+        //    row underneath (SocialAuthIconButton) match it exactly.
         widget = new OAuthList();
         widget.render({
           container,
           oauthList: [OAuthName.VK, OAuthName.OK, OAuthName.MAIL],
+          styles: { height: SOCIAL_BTN_HEIGHT, borderRadius: SOCIAL_BTN_RADIUS },
         });
 
         widget.on(

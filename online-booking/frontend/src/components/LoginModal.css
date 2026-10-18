@@ -74,6 +74,12 @@
   margin: 16px 0;
 }
 
+/* Consent gate sits at the very top of the registration form. */
+.checkbox-group--first {
+  margin-top: 0;
+  margin-bottom: 12px;
+}
+
 .checkbox-label {
   display: flex;
   align-items: center;

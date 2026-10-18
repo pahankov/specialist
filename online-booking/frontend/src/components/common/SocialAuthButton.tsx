@@ -11,6 +11,15 @@ import './SocialAuthButton.css';
  */
 export type SocialProvider = 'max' | 'vk' | 'yandex';
 
+/**
+ * Shared tile size for the social buttons. The VK OAuthList widget gets these
+ * via `OAuthListStyles` (see VkIdWidget) and the Yandex/MAX icon tiles repeat
+ * them — so both rows share one height and corner radius even though VK draws
+ * its part inside an iframe we cannot style from CSS.
+ */
+export const SOCIAL_BTN_HEIGHT = 44;
+export const SOCIAL_BTN_RADIUS = 10;
+
 interface SocialProviderMeta {
   /** Button label shown to the user. */
   label: string;
@@ -46,6 +55,12 @@ interface SocialAuthButtonProps {
   action?: 'login' | 'register';
 }
 
+/** One wording for text buttons, icon tiles, aria-labels and tests. */
+export function socialAuthLabel(provider: SocialProvider, action: 'login' | 'register' = 'login') {
+  const verb = action === 'register' ? 'Регистрация через' : 'Войти через';
+  return `${verb} ${SOCIAL_PROVIDERS[provider].label}`;
+}
+
 /**
  * One-click social auth button in the style every messenger login uses:
  * brand icon + «Войти через MAX». The backend flow is identical for login
@@ -58,7 +73,6 @@ function SocialAuthButton({
   action = 'login',
 }: SocialAuthButtonProps) {
   const meta = SOCIAL_PROVIDERS[provider];
-  const verb = action === 'register' ? 'Регистрация через' : 'Войти через';
   return (
     <button
       type="button"
@@ -68,9 +82,46 @@ function SocialAuthButton({
       disabled={disabled}
     >
       <span className="social-auth-icon">{meta.icon}</span>
-      <span>
-        {verb} {meta.label}
-      </span>
+      <span>{socialAuthLabel(provider, action)}</span>
+    </button>
+  );
+}
+
+/**
+ * Icon-only social tile (no caption) — used where the official VK OAuthList
+ * widget already owns the row: Yandex and MAX continue it right below, at the
+ * same height and corner radius, so the block reads as one set of providers.
+ * VK draws its own three tiles inside an iframe, so they can never be merged
+ * into a single row — this is the closest visual match available.
+ *
+ * The label moves into `aria-label`/`title`: the button is a bare icon on
+ * screen, but assistive tech and tests still see «Регистрация через Яндекс».
+ */
+export function SocialAuthIconButton({
+  provider,
+  onClick,
+  disabled = false,
+  action = 'login',
+}: SocialAuthButtonProps) {
+  const meta = SOCIAL_PROVIDERS[provider];
+  const label = socialAuthLabel(provider, action);
+  return (
+    <button
+      type="button"
+      className="social-icon-btn"
+      style={
+        {
+          '--brand-color': meta.color,
+          height: SOCIAL_BTN_HEIGHT,
+          borderRadius: SOCIAL_BTN_RADIUS,
+        } as React.CSSProperties
+      }
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
+    >
+      <span className="social-auth-icon">{meta.icon}</span>
     </button>
   );
 }

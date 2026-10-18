@@ -352,4 +352,35 @@ describe('Registration consent (152-FZ)', () => {
       'Заполните все обязательные поля корректно',
     );
   });
+
+  it('keeps the whole social block hidden until consent is ticked', () => {
+    openRegister();
+    // The gate stands in for VK/Yandex/MAX: no widget mount, no tiles.
+    expect(screen.getByRole('button', { name: /Отметьте согласие/ })).toBeInTheDocument();
+    expect(screen.queryByTestId('vkid-widget-container')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Регистрация через Яндекс' }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Регистрация через MAX' })).not.toBeInTheDocument();
+  });
+
+  it('reveals the VK widget and the Yandex/MAX tiles once consent is ticked', () => {
+    openRegister();
+    fireEvent.click(screen.getByText(/Соглашаюсь с/));
+
+    expect(screen.getByTestId('vkid-widget-container')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Регистрация через Яндекс' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Регистрация через MAX' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Отметьте согласие/ })).not.toBeInTheDocument();
+  });
+
+  it('the gate hint only focuses the consent checkbox — it never ticks it', () => {
+    openRegister();
+    fireEvent.click(screen.getByRole('button', { name: /Отметьте согласие/ }));
+
+    const box = screen.getByRole('checkbox') as HTMLInputElement;
+    expect(box).toHaveFocus();
+    expect(box).not.toBeChecked();
+    expect(screen.queryByTestId('vkid-widget-container')).not.toBeInTheDocument();
+  });
 });
