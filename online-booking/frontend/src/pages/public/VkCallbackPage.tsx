@@ -71,9 +71,7 @@ function VkCallbackPage() {
       try {
         const resp = await authApi.vkVerify(code, deviceId, state, verifier, consent);
         toast.success(
-          resp.data.is_new_user
-            ? 'Добро пожаловать! Аккаунт создан.'
-            : 'Вход через VK выполнен!',
+          resp.data.is_new_user ? 'Добро пожаловать! Аккаунт создан.' : 'Вход через VK выполнен!',
         );
         // Cookies are set by the backend; land by role (dual-role default
         // to the client cabinet, admins/master to their sections).

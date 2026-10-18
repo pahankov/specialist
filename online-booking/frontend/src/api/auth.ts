@@ -104,8 +104,7 @@ export const authApi = {
       code_verifier: codeVerifier,
       consent,
     }),
-  yandexStart: () =>
-    apiClient.post<YandexStartResponse>('/api/v1/auth/yandex/start', {}),
+  yandexStart: () => apiClient.post<YandexStartResponse>('/api/v1/auth/yandex/start', {}),
   yandexVerify: (code: string, state: string, consent = false) =>
     apiClient.post<YandexVerifyResponse>('/api/v1/auth/yandex/verify', {
       code,

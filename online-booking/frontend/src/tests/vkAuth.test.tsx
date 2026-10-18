@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { toast } from 'sonner';
 import { authApi } from '../api/client';
@@ -48,10 +48,16 @@ vi.mock('@vkid/sdk', () => {
       params.container.setAttribute('data-mock-rendered', '1');
       return this;
     }
-    close() {}
+    close() {
+      /* noop — mock for the SDK widget teardown */
+    }
   }
   return {
-    Config: { init: (cfg: Record<string, unknown>) => { sdk.configInit = cfg; } },
+    Config: {
+      init: (cfg: Record<string, unknown>) => {
+        sdk.configInit = cfg;
+      },
+    },
     ConfigResponseMode: { Callback: 'callback' },
     OAuthList: MockOAuthList,
     OAuthName: { VK: 'vkid', OK: 'ok_ru', MAIL: 'mail_ru' },
@@ -138,9 +144,7 @@ describe('VK ID widget (inline OAuthList: VK + OK + Mail)', () => {
     renderLogin();
     vi.mocked(mocked.vkStart).mockRejectedValue({ response: { status: 503 } });
 
-    await waitFor(() =>
-      expect(screen.getByText('Вход через VK не настроен')).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText('Вход через VK не настроен')).toBeInTheDocument());
     expect(mocked.vkVerify).not.toHaveBeenCalled();
   });
 
@@ -203,9 +207,7 @@ describe('VK callback exchange', () => {
 
   it('shows an error when the user declines on VK', async () => {
     renderCallback('?error=access_denied');
-    await waitFor(() =>
-      expect(screen.getByText('Вы отклонили вход через VK')).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText('Вы отклонили вход через VK')).toBeInTheDocument());
     expect(mocked.vkVerify).not.toHaveBeenCalled();
   });
 

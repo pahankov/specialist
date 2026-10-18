@@ -16,10 +16,7 @@ export function generateCodeVerifier(): string {
 
 /** BASE64URL(SHA256(verifier)) — the value sent to VK in the redirect. */
 export async function generateCodeChallenge(verifier: string): Promise<string> {
-  const digest = await crypto.subtle.digest(
-    'SHA-256',
-    new TextEncoder().encode(verifier),
-  );
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
   return base64UrlEncode(new Uint8Array(digest));
 }
 

@@ -85,41 +85,40 @@ function VkIdWidget({ onSuccess, onError }: VkIdWidgetProps) {
           oauthList: [OAuthName.VK, OAuthName.OK, OAuthName.MAIL],
         });
 
-        widget.on(OAuthListInternalEvents.LOGIN_SUCCESS, async (payload: {
-          code: string;
-          device_id: string;
-        }) => {
-          if (!payload?.code || !payload?.device_id) {
-            const msg = 'Не удалось войти через VK';
-            setError(msg);
-            onError?.(msg);
-            return;
-          }
-          try {
-            // 4. Server-side exchange: tokens never reach the browser. The
-            //    first successful exchange creates the account and stamps the
-            //    152-FZ consent implicitly (registration = first social login).
-            const resp = await authApi.vkVerify(
-              payload.code,
-              payload.device_id,
-              state,
-              verifier,
-              true,
-            );
-            toast.success(
-              resp.data.is_new_user
-                ? 'Добро пожаловать! Аккаунт создан.'
-                : 'Вход через VK выполнен!',
-            );
-            onSuccess();
-          } catch (err: unknown) {
-            const e = err as { response?: { data?: { detail?: string } } };
-            const msg =
-              e?.response?.data?.detail || 'Не удалось войти через VK';
-            setError(msg);
-            onError?.(msg);
-          }
-        });
+        widget.on(
+          OAuthListInternalEvents.LOGIN_SUCCESS,
+          async (payload: { code: string; device_id: string }) => {
+            if (!payload?.code || !payload?.device_id) {
+              const msg = 'Не удалось войти через VK';
+              setError(msg);
+              onError?.(msg);
+              return;
+            }
+            try {
+              // 4. Server-side exchange: tokens never reach the browser. The
+              //    first successful exchange creates the account and stamps the
+              //    152-FZ consent implicitly (registration = first social login).
+              const resp = await authApi.vkVerify(
+                payload.code,
+                payload.device_id,
+                state,
+                verifier,
+                true,
+              );
+              toast.success(
+                resp.data.is_new_user
+                  ? 'Добро пожаловать! Аккаунт создан.'
+                  : 'Вход через VK выполнен!',
+              );
+              onSuccess();
+            } catch (err: unknown) {
+              const e = err as { response?: { data?: { detail?: string } } };
+              const msg = e?.response?.data?.detail || 'Не удалось войти через VK';
+              setError(msg);
+              onError?.(msg);
+            }
+          },
+        );
       } catch (err: unknown) {
         if (disposed) return;
         const e = err as { response?: { status?: number } } | undefined;

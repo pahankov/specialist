@@ -34,8 +34,7 @@ vi.mock('sonner', () => ({
 const mocked = vi.mocked(authApi);
 
 const START_DATA = {
-  authorize_url:
-    'https://oauth.yandex.ru/authorize?response_type=code&client_id=c1&state=s1',
+  authorize_url: 'https://oauth.yandex.ru/authorize?response_type=code&client_id=c1&state=s1',
   state: 's1',
   client_id: 'c1',
   redirect_uri: 'https://beauty-specialist.ru/auth/yandex/callback',
@@ -81,9 +80,7 @@ describe('Yandex OAuth (redirect flow)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Войти через Яндекс/ }));
 
-    await waitFor(() =>
-      expect(toast.error).toHaveBeenCalledWith('Вход через Яндекс не настроен'),
-    );
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Вход через Яндекс не настроен'));
   });
 });
 

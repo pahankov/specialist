@@ -274,10 +274,7 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
       until every required field is valid (item: disabled until valid). */
   const registerPwdError = passwordError(registerForm.password);
   const registerPhoneOk = isCompletePhone(registerForm.phone);
-  const registerValid =
-    registerPhoneOk &&
-    registerPwdError === null &&
-    registerForm.consent;
+  const registerValid = registerPhoneOk && registerPwdError === null && registerForm.consent;
 
   const maxForm = !maxOffer ? (
     <form onSubmit={handleMaxStart}>
@@ -291,11 +288,7 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
         />
       </div>
 
-      <button
-        type="submit"
-        className="btn btn-primary btn-submit"
-        disabled={loading}
-      >
+      <button type="submit" className="btn btn-primary btn-submit" disabled={loading}>
         {loading ? 'Отправляем...' : 'Получить код в MAX'}
       </button>
 
