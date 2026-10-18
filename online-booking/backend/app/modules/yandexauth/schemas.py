@@ -1,6 +1,6 @@
-"""Pydantic schemas for Yandex ID auth (OAuth 2.0 Authorization Code)."""
-from pydantic import BaseModel, Field, model_validator
-from typing import Optional
+"""Pydantic schemas for Yandex ID auth (Authorization Code + widget)."""
+from pydantic import BaseModel, ConfigDict, Field
+from typing import Optional, Union
 
 
 class YandexStartRequest(BaseModel):
@@ -25,30 +25,31 @@ class YandexStartResponse(BaseModel):
     suggest_redirect_uri: str = ""
 
 
-class YandexVerifyRequest(BaseModel):
-    """Exactly one of the two flows per request:
+class YandexVerifyCodeRequest(BaseModel):
+    """Redirect/callback flow: the code + the signed state echoed by Yandex."""
 
-    - the redirect/callback flow sends `code` + `state`;
-    - the official widget flow sends the SDK-delivered `access_token`.
-    """
+    model_config = ConfigDict(extra="forbid")
 
-    code: Optional[str] = Field(default=None, min_length=1)
-    state: Optional[str] = Field(default=None, min_length=1)
-    access_token: Optional[str] = Field(default=None, min_length=1)
+    code: str = Field(min_length=1)
+    state: str = Field(min_length=1)
     # 152-FZ consent checkbox from the Yandex login form (offer + policy).
     consent: bool = False
 
-    @model_validator(mode="after")
-    def _exactly_one_flow(self):
-        code_flow = self.code is not None or self.state is not None
-        if code_flow and self.access_token is not None:
-            raise ValueError(
-                "code/state and access_token are mutually exclusive")
-        if not code_flow and self.access_token is None:
-            raise ValueError("code + state or access_token is required")
-        if code_flow and (self.code is None or self.state is None):
-            raise ValueError("code and state must be sent together")
-        return self
+
+class YandexVerifyTokenRequest(BaseModel):
+    """Official widget flow: the SDK-delivered token, checked via user_info."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    access_token: str = Field(min_length=1)
+    # 152-FZ consent checkbox from the Yandex login form (offer + policy).
+    consent: bool = False
+
+
+# Exactly one flow per request: `extra="forbid"` on both models makes the
+# shapes mutually exclusive, so the union itself rejects mixed/empty payloads
+# and each flow keeps its strictly typed schema (FastAPI/OpenAPI show both).
+YandexVerifyRequest = Union[YandexVerifyCodeRequest, YandexVerifyTokenRequest]
 
 
 class YandexVerifyResponse(BaseModel):

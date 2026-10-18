@@ -55,13 +55,13 @@ async def yandex_verify(
     if not settings.yandex_enabled:
         raise HTTPException(
             status_code=503, detail="Вход через Яндекс не настроен")
-    if req.access_token is not None:
+    if isinstance(req, schemas.YandexVerifyTokenRequest):
         access_token, user, is_new = await service.verify_yandex_token(
             req.access_token, db, consent=req.consent,
         )
     else:
         access_token, user, is_new = await service.verify_yandex_code(
-            req.code or "", req.state or "", db, consent=req.consent,
+            req.code, req.state, db, consent=req.consent,
         )
     cookie_token = await service.get_latest_refresh_token_value(db, user.id)
     set_auth_cookies(response, access_token, cookie_token)
