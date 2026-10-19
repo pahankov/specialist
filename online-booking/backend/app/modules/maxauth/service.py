@@ -428,7 +428,7 @@ async def verify_max_code(
         email_confirmed=False,
         avatar_url=None,  # MAX carries no avatar
         consent=consent,
-        defer_creation=(is_new and not consent),
+        defer_creation=(not consent),
     )
     # For deferred users (new account without consent), return a challenge
     # token instead of JWT — the frontend shows ConsentScreen, then calls

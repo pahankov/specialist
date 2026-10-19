@@ -200,7 +200,7 @@ async def verify_vk_code(
             avatar_url=avatar_url,
             fallback_name="VK Пользователь",
             consent=consent,
-            defer_creation=(is_new and not consent),
+            defer_creation=(link_user_id is None and not consent),
         )
     # For deferred users (new account without consent), return a challenge
     # token instead of JWT — the frontend shows ConsentScreen, then calls

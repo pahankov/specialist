@@ -203,6 +203,13 @@ async def resolve_social_user(
             # The frontend will call /auth/consent/complete which commits.
             await db.flush()
             logger.info("Deferred user creation via %s: user_id=%s (pending consent)", provider, user.id)
+            # Attach contacts before returning (they are outside the if/else block).
+            if phone:
+                await _attach_provider_contact(db, user, CONTACT_PHONE, phone,
+                                               confirmed=phone_confirmed)
+            if email:
+                await _attach_provider_contact(db, user, CONTACT_EMAIL, email,
+                                               confirmed=email_confirmed)
             return user, True
         await db.flush()
         from app.services.clients import get_or_create_profile
