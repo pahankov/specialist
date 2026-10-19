@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { toast } from 'sonner';
 import { authApi } from '../api/client';
@@ -187,6 +187,83 @@ describe('MAX chat-bot login (SMS-style)', () => {
       expect(vi.mocked(toast.error)).toHaveBeenCalledWith('Неверный код');
     });
   });
+
+  it('locks «Запросить новый код» for a minute after a request', async () => {
+    openMaxTab();
+    fillPhone();
+    vi.mocked(mocked.maxStart).mockResolvedValue({
+      data: {
+        delivered: false,
+        deeplink: 'https://max.ru/test_bot?start=1_abcd',
+        expires_in: 300,
+        bot_username: 'test_bot',
+        bot_url: 'https://max.ru/test_bot',
+        bot_name: 'Электронная запись',
+      },
+    } as never);
+    fireEvent.click(screen.getByText('Получить код в MAX'));
+    await screen.findByText(/бот попросит подтвердить номер/);
+
+    const resend = screen.getByRole('button', { name: /Запросить новый код/ });
+    expect(resend).toBeDisabled();
+    // Countdown is visible ("через 0:59" — 1:00 at the very first tick).
+    expect(resend).toHaveTextContent(/через (1:00|0:5\d)/);
+  });
+
+  it('unlocks and repeats the request after the cool-down', async () => {
+    vi.useFakeTimers();
+    try {
+      openMaxTab();
+      fillPhone();
+      vi.mocked(mocked.maxStart).mockResolvedValue({
+        data: {
+          delivered: false,
+          deeplink: 'https://max.ru/test_bot?start=1_abcd',
+          expires_in: 300,
+          bot_username: 'test_bot',
+          bot_url: 'https://max.ru/test_bot',
+        },
+      } as never);
+      fireEvent.click(screen.getByText('Получить код в MAX'));
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(screen.getByText(/бот попросит подтвердить номер/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Запросить новый код/ })).toBeDisabled();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60_000);
+      });
+      const resend = screen.getByRole('button', { name: 'Запросить новый код' });
+      expect(resend).toBeEnabled();
+
+      fireEvent.click(resend);
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(vi.mocked(mocked.maxStart)).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('closing the modal returns it to the login screen', async () => {
+    const onClose = vi.fn();
+    render(
+      <MemoryRouter>
+        <LoginModal isOpen onClose={onClose} />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Войти через MAX/ }));
+    expect(screen.getByText('Получить код в MAX')).toBeInTheDocument();
+
+    // Esc is one of the two allowed ways to close (no ✕, no «Закрыть»).
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    // Mode reset: the MAX screen is gone, the starting login form is back.
+    expect(screen.queryByText('Получить код в MAX')).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/email@example.com/)).toBeInTheDocument();
+  });
 });
 
 describe('Login identifier validation (regression)', () => {
@@ -293,6 +370,13 @@ describe('Login identifier validation (regression)', () => {
       target: { value: '+7923' },
     });
     expect(screen.getByPlaceholderText(/email@example.com/)).toHaveValue('+7 (923');
+  });
+
+  it('masks a bare mobile starting with 9 (no country code)', () => {
+    openLogin();
+    const box = screen.getByPlaceholderText(/email@example.com/);
+    fireEvent.change(box, { target: { value: '9615202311' } });
+    expect(box).toHaveValue('+7 (961) 520-23-11');
   });
 
   it('leaves digit-led input unmasked until a letter proves email', () => {

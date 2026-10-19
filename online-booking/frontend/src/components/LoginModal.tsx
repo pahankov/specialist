@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { authApi } from '../api/client';
@@ -29,6 +29,14 @@ interface LoginModalProps {
 /** Modes: VK widget inline, Yandex — the official suggest widget (with the
     plain redirect button as fallback). */
 type ModalMode = 'login' | 'register' | 'max' | 'forgot';
+
+/** «Запросить новый код» unlocks only after this many seconds. */
+const MAX_RESEND_SECONDS = 60;
+
+/** mm:ss for the resend countdown. */
+function formatCooldown(total: number): string {
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}
 
 interface LoginFormState {
   identifier: string; // email or phone
@@ -88,6 +96,17 @@ function LoginModal({
   const [maxPhone, setMaxPhone] = useState('');
   const [maxOffer, setMaxOffer] = useState<MaxStartResponse | null>(null);
   const [maxCodeInput, setMaxCodeInput] = useState('');
+  /** Resend cool-down: seconds left before «Запросить новый код» unlocks. */
+  const [maxCooldown, setMaxCooldown] = useState(0);
+  const maxCooling = maxCooldown > 0;
+
+  // One interval while the countdown is live (setTimeout chains need a
+  // commit per tick; the interval keeps ticking on its own).
+  useEffect(() => {
+    if (!maxCooling) return;
+    const t = setInterval(() => setMaxCooldown((s) => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(t);
+  }, [maxCooling]);
 
   /** Land by role: admins → their section, deep-link honored, everyone else
       (clients AND masters) → the client cabinet. Masters switch to the panel
@@ -131,9 +150,10 @@ function LoginModal({
   };
 
   // Live identifier mode: mask while the input is unambiguously a phone
-  // (starts with +/7/8, digits only); free text otherwise. Emails may start
-  // with digits too ("123user@mail.ru"), so digit-led input stays unmasked
-  // until '@'/letters prove it an email — and is normalized on submit.
+  // (starts with +/7/8/9 — a bare "9…" is a mobile without the country
+  // code — digits only); free text otherwise. Emails may start with digits
+  // too ("123user@mail.ru"), so digit-led input stays unmasked until
+  // '@'/letters prove it an email — and is normalized on submit.
   const handleIdentifierChange = (value: string) => {
     if (value === '') {
       setLoginForm((prev) => ({ ...prev, identifier: '' }));
@@ -150,7 +170,7 @@ function LoginModal({
       return;
     }
     setSocialNotice(false);
-    if (/^[+78]/.test(value)) {
+    if (/^[+789]/.test(value)) {
       setLoginForm((prev) => ({ ...prev, identifier: maskPhone(value) }));
       return;
     }
@@ -265,8 +285,8 @@ function LoginModal({
     }
   };
 
-  const handleMaxStart = async (e: React.FormEvent) => {
-    e.preventDefault();
+  /** Kick off (or repeat) a MAX request for the current number. */
+  const requestMaxCode = async () => {
     if (!isCompletePhone(maxPhone)) {
       toast.error('Введите корректный номер телефона (11 цифр)');
       return;
@@ -276,12 +296,18 @@ function LoginModal({
       const resp = await authApi.maxStart(maxPhone);
       setMaxOffer(resp.data);
       setMaxCodeInput('');
+      setMaxCooldown(MAX_RESEND_SECONDS);
       toast.success('Откройте бота в MAX и поделитесь номером');
     } catch (err: any) {
       toast.error(err.response?.status === 503 ? 'Вход через MAX не настроен' : 'Ошибка');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleMaxStart = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await requestMaxCode();
   };
 
   const handleMaxVerify = async (e: React.FormEvent) => {
@@ -310,6 +336,7 @@ function LoginModal({
   const resetMaxState = () => {
     setMaxOffer(null);
     setMaxCodeInput('');
+    setMaxCooldown(0);
   };
 
   /** Forgot password step 1: send a 6-digit code to the account email. */
@@ -406,6 +433,13 @@ function LoginModal({
     setForgotStep('email');
     setForgotCode('');
     setForgotPassword('');
+  };
+
+  /** Esc / outside click only (owner's rule): closing always resets the
+      modal to the starting login screen — the next open starts clean. */
+  const handleClose = () => {
+    if (mode !== 'login') switchMode('login');
+    onClose();
   };
 
   /* ── Register validation: mirrors backend rules, submit stays disabled
@@ -532,27 +566,6 @@ function LoginModal({
       <button type="submit" className="btn btn-primary btn-submit" disabled={loading}>
         {loading ? 'Отправляем...' : 'Получить код в MAX'}
       </button>
-
-      <button
-        type="button"
-        className="btn btn-ghost btn-submit"
-        style={{ marginTop: 8 }}
-        onClick={() => switchMode('login')}
-      >
-        ← Назад ко входу
-      </button>
-
-      <p className="login-footer">
-        <a
-          href="#"
-          onClick={(e) => {
-            e.preventDefault();
-            switchMode('login');
-          }}
-        >
-          Войти по паролю
-        </a>
-      </p>
     </form>
   ) : (
     <form onSubmit={handleMaxVerify}>
@@ -582,7 +595,8 @@ function LoginModal({
           нажмите «Открыть в браузере».
         </p>
         <p className="max-hint">
-          В диалоге с ботом нажмите «Поделиться номером» — код придёт туда. Введите его ниже:
+          В диалоге с ботом нажмите «Поделиться номером» — код придёт туда же. MAX поделится номером
+          вашего аккаунта: если в MAX вы вошли под другим номером, код будет для него.
         </p>
         <input
           className="max-code-input"
@@ -600,32 +614,14 @@ function LoginModal({
           type="button"
           className="btn btn-ghost"
           style={{ marginTop: 8 }}
-          onClick={resetMaxState}
+          disabled={loading || maxCooldown > 0}
+          onClick={requestMaxCode}
         >
-          Запросить новый код
+          {maxCooldown > 0
+            ? `Запросить новый код через ${formatCooldown(maxCooldown)}`
+            : 'Запросить новый код'}
         </button>
       </div>
-
-      <button
-        type="button"
-        className="btn btn-ghost btn-submit"
-        style={{ marginTop: 8 }}
-        onClick={() => switchMode('login')}
-      >
-        ← Назад ко входу
-      </button>
-
-      <p className="login-footer">
-        <a
-          href="#"
-          onClick={(e) => {
-            e.preventDefault();
-            switchMode('login');
-          }}
-        >
-          Войти по паролю
-        </a>
-      </p>
     </form>
   );
 
@@ -633,7 +629,7 @@ function LoginModal({
   return (
     <Modal
       open={isOpen}
-      onClose={onClose}
+      onClose={handleClose}
       title={
         mode === 'login'
           ? 'Вход в систему'
@@ -898,10 +894,6 @@ function LoginModal({
           </p>
         </form>
       )}
-
-      <button className="btn btn-ghost" onClick={onClose} style={{ marginTop: 12 }}>
-        Закрыть
-      </button>
     </Modal>
   );
 }

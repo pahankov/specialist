@@ -32,9 +32,13 @@ function getLayoutUser(fallbackName: string): LayoutUser | null {
   if (!token) return null;
   const payload = decodeJwtPayload(token);
   if (!payload?.sub) return null;
-  // Full display name: tokens minted since 1.79.3 carry last_name; older
-  // sessions fall back to the first name until the next login.
-  const fullName = [payload.name, payload.last_name].filter(Boolean).join(' ');
+  // Full display name: `name` may already carry the surname ("set_names"
+  // writes «Имя Фамилия»), tokens minted since 1.79.3 also ship last_name —
+  // append it only when it is not there yet. Older sessions (no claim) show
+  // the name as-is until the next login.
+  const name = payload.name || '';
+  const lastName = payload.last_name || '';
+  const fullName = lastName && !name.includes(lastName) ? `${name} ${lastName}`.trim() : name;
   return {
     id: parseInt(payload.sub, 10),
     name: fullName || fallbackName,
@@ -135,8 +139,14 @@ function BaseLayout({
   };
 
   useEffect(() => {
-    setUser(getLayoutUser(userFallbackName));
-    setImpersonatedName(getImpersonation()?.masterName ?? null);
+    const sync = () => {
+      setUser(getLayoutUser(userFallbackName));
+      setImpersonatedName(getImpersonation()?.masterName ?? null);
+    };
+    sync();
+    // A profile name change re-mints the token — re-read it in place.
+    window.addEventListener('auth:user-updated', sync);
+    return () => window.removeEventListener('auth:user-updated', sync);
   }, [userFallbackName]);
 
   // Close mobile menu on route change

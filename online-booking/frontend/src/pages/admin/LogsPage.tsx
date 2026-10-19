@@ -116,10 +116,11 @@ function LogsPage() {
                 year: 'numeric',
                 hour: '2-digit',
                 minute: '2-digit',
+                second: '2-digit',
               })
             : '—';
         },
-        meta: { minWidth: 130, label: 'Дата и время' },
+        meta: { minWidth: 150, label: 'Дата и время' },
       },
       {
         id: 'level',

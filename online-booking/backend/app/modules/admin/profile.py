@@ -18,7 +18,14 @@ from app.models.user import User, UserRole
 from app.models.user_contact import UserContact
 from app.modules.admin.helpers import get_master_profile_id
 from app.services.audit import log_action
-from app.services.contacts import get_contacts
+from app.services.contacts import (
+    ContactTaken,
+    InvalidContact,
+    attach_contact,
+    get_contacts,
+    remove_contact,
+    set_primary,
+)
 from app.services.email_verify import (
     finish_email_verification,
     require_email_contact,
@@ -333,5 +340,95 @@ async def verify_my_contact_code(
     contact = await finish_email_verification(db, contact, data.code)
     await log_action(db, master.id, "contact_verify", "user_contact", contact.id,
                      f"Почта подтверждена: {contact.value}", level="info")
+    await db.commit()
+    return _contact_out(contact)
+
+
+# ─── Own contacts: add / remove / promote (same model as the cabinet) ──
+
+
+class ProfileContactCreate(BaseModel):
+    contact_type: str = Field(pattern="^(phone|email)$")
+    value: str = Field(min_length=1, max_length=255)
+
+
+@router.post("/profile/contacts", status_code=201)
+@limiter.limit("10/minute")
+async def add_my_contact(
+    request: Request,
+    data: ProfileContactCreate,
+    master: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db),
+):
+    """Add a phone/email to own profile (lands unverified by design).
+
+    Self-typed values never verify themselves — confirmation comes from
+    social logins or emailed codes. A value held by another account is
+    rejected (409): transfers happen only on provider-confirmed logins.
+    """
+    from app.services.contacts import find_user_by_contact
+
+    holder = await find_user_by_contact(db, data.contact_type, data.value)
+    if holder is not None and holder.id != master.id:
+        raise HTTPException(
+            status_code=409,
+            detail="Этот контакт уже привязан к другому аккаунту",
+        )
+    try:
+        contact, _ = await attach_contact(db, master, data.contact_type, data.value)
+    except InvalidContact:
+        raise HTTPException(
+            status_code=422,
+            detail=("Некорректный телефон" if data.contact_type == "phone"
+                    else "Некорректный email"),
+        )
+    except ContactTaken:
+        raise HTTPException(
+            status_code=409,
+            detail="Этот контакт уже привязан к другому аккаунту",
+        )
+    await log_action(db, master.id, "contact_add", "user_contact", contact.id,
+                     f"Добавлен контакт {contact.contact_type}", level="info")
+    await db.commit()
+    return _contact_out(contact)
+
+
+@router.delete("/profile/contacts/{contact_id}", response_model=dict)
+async def remove_my_contact(
+    contact_id: int,
+    master: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db),
+):
+    """Detach an own contact (another of the type becomes primary).
+
+    A password account must keep at least one contact — otherwise no
+    identifier maps to it and password login becomes impossible.
+    """
+    contact = await _own_contact_or_404(db, master.id, contact_id)
+    if master.hashed_password is not None:
+        all_contacts = await get_contacts(db, master.id)
+        if len(all_contacts) <= 1:
+            raise HTTPException(
+                status_code=400,
+                detail="Это последний контакт аккаунта — иначе вход по "
+                       "паролю станет невозможен. Сначала добавьте другой.",
+            )
+    removed_type = contact.contact_type
+    await remove_contact(db, master, contact.contact_type, contact.value)
+    await log_action(db, master.id, "contact_remove", "user_contact", contact_id,
+                     f"Удалён контакт {removed_type}", level="info")
+    await db.commit()
+    return {"ok": True}
+
+
+@router.post("/profile/contacts/{contact_id}/primary")
+async def make_my_contact_primary(
+    contact_id: int,
+    master: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db),
+):
+    """Move a contact into the primary slot of its type."""
+    contact = await _own_contact_or_404(db, master.id, contact_id)
+    contact = await set_primary(db, master, contact.contact_type, contact.value)
     await db.commit()
     return _contact_out(contact)

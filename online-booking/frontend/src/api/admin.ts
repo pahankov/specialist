@@ -82,6 +82,21 @@ export const adminApi = {
       { code },
     );
   },
+  /** Ручное добавление контакта в свой профиль (статус «не подтверждён»). */
+  addProfileContact(data: { contact_type: 'phone' | 'email'; value: string }) {
+    return apiClient.post<import('./cabinet').ClientContact>(
+      '/api/v1/admin/profile/contacts',
+      data,
+    );
+  },
+  removeProfileContact(id: number) {
+    return apiClient.delete<{ ok: boolean }>(`/api/v1/admin/profile/contacts/${id}`);
+  },
+  makeProfileContactPrimary(id: number) {
+    return apiClient.post<import('./cabinet').ClientContact>(
+      `/api/v1/admin/profile/contacts/${id}/primary`,
+    );
+  },
   // Dashboard
   getDashboard(params?: {
     period?: 'all' | 'month' | 'today' | 'custom';

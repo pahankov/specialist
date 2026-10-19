@@ -10,7 +10,26 @@ interface ContactsCardProps {
   contacts: ClientContact[];
   /** Re-fetch the page data after any change. */
   onChanged: () => void;
+  /** Endpoint set: client cabinet by default; admin profile for the super. */
+  api?: ContactsApi;
 }
+
+/** API surface the card needs — injected so the super profile reuses it. */
+export interface ContactsApi {
+  addContact: (data: { contact_type: 'phone' | 'email'; value: string }) => Promise<unknown>;
+  removeContact: (id: number) => Promise<unknown>;
+  makeContactPrimary: (id: number) => Promise<unknown>;
+  sendContactCode: (id: number) => Promise<unknown>;
+  verifyContactCode: (id: number, code: string) => Promise<unknown>;
+}
+
+const CABINET_CONTACTS_API: ContactsApi = {
+  addContact: (data) => cabinetApi.addContact(data),
+  removeContact: (id) => cabinetApi.removeContact(id),
+  makeContactPrimary: (id) => cabinetApi.makeContactPrimary(id),
+  sendContactCode: (id) => cabinetApi.sendContactCode(id),
+  verifyContactCode: (id, code) => cabinetApi.verifyContactCode(id, code),
+};
 
 function verifyLabel(contact: ClientContact): string {
   if (contact.verified_via === 'social') return 'подтверждён соцсетью';
@@ -26,7 +45,7 @@ function verifyLabel(contact: ClientContact): string {
  * codes. Removing the last contact of a password account is blocked by the
  * backend (it would lock the person out).
  */
-function ContactsCard({ contacts, onChanged }: ContactsCardProps) {
+function ContactsCard({ contacts, onChanged, api = CABINET_CONTACTS_API }: ContactsCardProps) {
   const [newType, setNewType] = useState<'phone' | 'email'>('phone');
   const [newValue, setNewValue] = useState('');
   const [busy, setBusy] = useState<number | 'add' | null>(null);
@@ -48,7 +67,7 @@ function ContactsCard({ contacts, onChanged }: ContactsCardProps) {
     }
     setBusy('add');
     try {
-      await cabinetApi.addContact({ contact_type: newType, value });
+      await api.addContact({ contact_type: newType, value });
       toast.success('Контакт добавлен');
       setNewValue('');
       onChanged();
@@ -62,7 +81,7 @@ function ContactsCard({ contacts, onChanged }: ContactsCardProps) {
   const remove = async (contact: ClientContact) => {
     setBusy(contact.id);
     try {
-      await cabinetApi.removeContact(contact.id);
+      await api.removeContact(contact.id);
       toast.success('Контакт удалён');
       onChanged();
     } catch (err: unknown) {
@@ -75,7 +94,7 @@ function ContactsCard({ contacts, onChanged }: ContactsCardProps) {
   const makePrimary = async (contact: ClientContact) => {
     setBusy(contact.id);
     try {
-      await cabinetApi.makeContactPrimary(contact.id);
+      await api.makeContactPrimary(contact.id);
       toast.success('Основной контакт обновлён');
       onChanged();
     } catch (err: unknown) {
@@ -185,8 +204,8 @@ function ContactsCard({ contacts, onChanged }: ContactsCardProps) {
           open
           email={verifyContact.value}
           onClose={() => setVerifyContact(null)}
-          sendCode={() => cabinetApi.sendContactCode(verifyContact.id)}
-          verifyCode={(code) => cabinetApi.verifyContactCode(verifyContact.id, code)}
+          sendCode={() => api.sendContactCode(verifyContact.id)}
+          verifyCode={(code) => api.verifyContactCode(verifyContact.id, code)}
           onVerified={onChanged}
         />
       )}

@@ -17,8 +17,8 @@ import { getApiErrorMessage } from '../../utils/apiError';
 import { clearAuthCookies, decodeJwtPayload, getCookie } from '../../utils/cookies';
 import { capitalizeWords, splitFullName } from '../../utils/names';
 import { MasterReviews } from '../../components/reviews';
-import { BindingsCard, PasswordCard } from '../../components/profile';
-import EmailVerifyModal from '../../components/profile/EmailVerifyModal';
+import { BindingsCard, PasswordCard, ContactsCard } from '../../components/profile';
+import type { ContactsApi } from '../../components/profile/ContactsCard';
 import LoginModal from '../../components/LoginModal';
 import './ProfilePage.css';
 
@@ -50,11 +50,14 @@ const AVATAR_PRESETS = [
 /** Contact row of GET /admin/profile — the cabinet contact shape. */
 type ProfileContact = ClientContact;
 
-function verifyLabel(c: ClientContact): string {
-  if (c.verified_via === 'social') return 'подтверждён соцсетью';
-  if (c.verified_via === 'code') return 'подтверждён кодом';
-  return 'не подтверждён';
-}
+/** Admin-profile endpoints for ContactsCard (super reuses the cabinet card). */
+const ADMIN_CONTACTS_API: ContactsApi = {
+  addContact: (data) => adminApi.addProfileContact(data),
+  removeContact: (id) => adminApi.removeProfileContact(id),
+  makeContactPrimary: (id) => adminApi.makeProfileContactPrimary(id),
+  sendContactCode: (id) => adminApi.sendProfileContactCode(id),
+  verifyContactCode: (id, code) => adminApi.verifyProfileContactCode(id, code),
+};
 
 /** Master personal data: photo, names, contacts, city, cabinet, certificates. */
 function ProfilePage() {
@@ -92,8 +95,8 @@ function ProfilePage() {
   const avatarInput = useRef<HTMLInputElement>(null);
   const certInput = useRef<HTMLInputElement>(null);
   const [contacts, setContacts] = useState<ProfileContact[]>([]);
-  /** «Подтвердить» next to an unverified email (code roundtrip modal). */
-  const [verifyContact, setVerifyContact] = useState<ProfileContact | null>(null);
+  /** Super profile: «Имя и фамилия» save (sidebar refresh follows). */
+  const [savingNames, setSavingNames] = useState(false);
 
   /** Superadmin gets a slim profile: auth channels + password + contacts —
       the master-only blocks (photo/certs/reviews/delete) do not apply. */
@@ -150,7 +153,6 @@ function ProfilePage() {
         setLoading(false);
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /** Light reload for the bind cards (keeps the form drafts untouched). */
@@ -160,6 +162,33 @@ function ProfilePage() {
       applyAuthFlags(data);
     } catch {
       /* ignore — the next full reload recovers */
+    }
+  };
+
+  /** Super profile: save «Имя и фамилия»; the fresh token updates the
+      sidebar in place (BaseLayout listens for auth:user-updated). */
+  const saveNames = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const first = capitalizeWords(firstName).trim();
+    if (!first) {
+      toast.error('Введите имя');
+      return;
+    }
+    setSavingNames(true);
+    try {
+      await adminApi.updateProfile({ name: first, last_name: lastName.trim() });
+      try {
+        await authApi.refreshSession();
+      } catch {
+        /* старый токен остаётся валидным — имя появится после следующего входа */
+      }
+      window.dispatchEvent(new Event('auth:user-updated'));
+      setFirstName(first);
+      toast.success('Имя сохранено');
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Не удалось сохранить имя'));
+    } finally {
+      setSavingNames(false);
     }
   };
 
@@ -304,40 +333,6 @@ function ProfilePage() {
   }
 
   if (isSuper) {
-    const renderContacts = (list: ProfileContact[], title: string) =>
-      list.length > 0 ? (
-        <div className="contact-group" key={title}>
-          <div className="contact-group-title">{title}</div>
-          {list.map((c) => (
-            <div key={c.id} className="contact-row">
-              <div className="contact-main">
-                <span className="contact-value">{c.value}</span>
-                <span className="contact-badges">
-                  {c.is_primary && <span className="badge badge-primary">основной</span>}
-                  <span
-                    className={`badge ${c.is_verified ? 'badge-verified' : 'badge-unverified'}`}
-                  >
-                    {verifyLabel(c)}
-                  </span>
-                </span>
-              </div>
-              {c.contact_type === 'email' && !c.is_verified && (
-                <div className="contact-actions">
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => setVerifyContact(c)}
-                    title="Получить код подтверждения на эту почту"
-                  >
-                    Подтвердить
-                  </button>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      ) : null;
-
     return (
       <div className="profile-page">
         <div className="page-header">
@@ -345,6 +340,37 @@ function ProfilePage() {
             <h1>👤 Мой профиль</h1>
             <p>Способы входа, пароль и контакты суперпользователя</p>
           </div>
+        </div>
+
+        <div className="card" style={{ marginBottom: 16 }}>
+          <h3>👤 Имя и фамилия</h3>
+          <p className="profile-card-hint">
+            Показывается в сайдбаре и журнале действий. После сохранения сайдбар обновится сразу.
+          </p>
+          <form onSubmit={saveNames}>
+            <div className="form-row">
+              <div className="form-group">
+                <label>Имя *</label>
+                <input
+                  value={firstName}
+                  onChange={(e) => setFirstName(capitalizeWords(e.target.value))}
+                  placeholder="Иван"
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Фамилия</label>
+                <input
+                  value={lastName}
+                  onChange={(e) => setLastName(capitalizeWords(e.target.value))}
+                  placeholder="Петров"
+                />
+              </div>
+            </div>
+            <button type="submit" className="btn btn-primary" disabled={savingNames}>
+              {savingNames ? 'Сохраняем…' : 'Сохранить'}
+            </button>
+          </form>
         </div>
 
         <BindingsCard
@@ -358,22 +384,7 @@ function ProfilePage() {
 
         <PasswordCard hasPassword={hasPassword} hasEmail={hasEmail} />
 
-        <div className="card" style={{ marginBottom: 16 }}>
-          <h3>📱 Контакты</h3>
-          <p className="profile-card-hint">
-            Телефон и почта аккаунта. «Подтверждён» появляется после входа через соцсеть или ввода
-            кода из письма — для почты код запрашивается кнопкой «Подтвердить».
-          </p>
-          {renderContacts(
-            contacts.filter((c) => c.contact_type === 'phone'),
-            'Телефоны',
-          )}
-          {renderContacts(
-            contacts.filter((c) => c.contact_type === 'email'),
-            'Почты',
-          )}
-          {contacts.length === 0 && <p className="profile-card-hint">Пока пусто.</p>}
-        </div>
+        <ContactsCard contacts={contacts} onChanged={refreshAuthFlags} api={ADMIN_CONTACTS_API} />
 
         {/* MAX link roundtrip: login code flow, then refresh in place. */}
         {maxLinkOpen && (
@@ -382,18 +393,6 @@ function ProfilePage() {
             initialMode="max"
             onClose={() => setMaxLinkOpen(false)}
             onAuthSuccess={refreshAuthFlags}
-          />
-        )}
-
-        {/* «Подтвердить почту»: code roundtrip for an unverified email. */}
-        {verifyContact && (
-          <EmailVerifyModal
-            open
-            email={verifyContact.value}
-            onClose={() => setVerifyContact(null)}
-            sendCode={() => adminApi.sendProfileContactCode(verifyContact.id)}
-            verifyCode={(code) => adminApi.verifyProfileContactCode(verifyContact.id, code)}
-            onVerified={refreshAuthFlags}
           />
         )}
       </div>

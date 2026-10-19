@@ -1,4 +1,4 @@
-import apiClient from './http';
+import apiClient, { refreshClient } from './http';
 import type { LoginResponse, UnifiedRegisterResponse } from './types';
 
 // ─── Auth API ──────────────────────────────────────────────────────
@@ -85,6 +85,11 @@ export const authApi = {
   verifyOtp: (phone: string, code: string) =>
     apiClient.post<LoginResponse>('/api/v1/auth/verify-otp', { phone, code }),
   logout: () => apiClient.post('/api/v1/auth/logout'),
+  /** Re-mint the access token from the refresh cookie (fresh JWT claims:
+      used after a name change so the sidebar picks it up without re-login).
+      Bare client on purpose: a failed refresh must not hit the 401
+      interceptor (that one logs the user out). */
+  refreshSession: () => refreshClient.post<{ access_token: string }>('/api/v1/auth/refresh'),
   loginUnified: (identifier: string, password: string) =>
     apiClient.post<LoginResponse>('/api/v1/auth/login-unified', { identifier, password }),
   /** Unified entry step 1: does this phone belong to an account, and which

@@ -360,6 +360,31 @@ async def verify_max_code(
     )
     otp = result.scalar_one_or_none()
     if otp is None:
+        # The typed phone may not be the number whose contact was shared in
+        # the bot («Поделиться номером» sends the MAX account's own number).
+        # A code that matches ANOTHER delivered request gets a pointed hint
+        # instead of a flat «Неверный код» — still no session out of it.
+        other = (await db.execute(
+            select(OtpCode)
+            .where(
+                OtpCode.channel == MAX_CHANNEL,
+                OtpCode.code_hash == code_hash,
+                OtpCode.is_used == False,  # noqa: E712
+                OtpCode.max_user_id.is_not(None),
+            )
+            .order_by(OtpCode.created_at.desc())
+            .limit(1)
+        )).scalar_one_or_none()
+        if other is not None and not _is_expired(other):
+            logger.info(
+                "MAX verify: code delivered for another number (typed=%s, code_for=%s)",
+                phone, other.phone,
+            )
+            raise HTTPException(
+                status_code=400,
+                detail=(f"Код отправлен для номера {other.phone} — "
+                        "введите этот номер в поле выше и войдите снова."),
+            )
         raise HTTPException(status_code=400, detail="Неверный код")
     if _is_expired(otp):
         raise HTTPException(status_code=410, detail="Код истёк. Запросите новый.")

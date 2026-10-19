@@ -492,6 +492,25 @@ class TestMaxVerify:
             "/api/v1/auth/max/verify", json={"phone": PHONE, "code": "000000"})
         assert resp.status_code == 400
 
+    async def test_verify_hints_when_code_is_for_another_number(
+        self, client, max_enabled, stub_sender
+    ):
+        """Typed phone A, shared number B: the error names the real number
+        (share sends the MAX account's own phone) — no session is minted."""
+        other = "+79995554433"
+        code = await self._delivered_code(client, stub_sender)  # for PHONE
+
+        resp = await client.post(
+            "/api/v1/auth/max/verify", json={"phone": other, "code": code})
+        assert resp.status_code == 400
+        # The hint names the number the code was actually sent to.
+        assert PHONE_NORM in resp.json()["detail"]
+
+        # The hint consumes nothing: the right number still logs in.
+        ok = await client.post(
+            "/api/v1/auth/max/verify", json={"phone": PHONE, "code": code})
+        assert ok.status_code == 200
+
     async def test_expired_code_rejected(
         self, client, max_enabled, stub_sender, session
     ):

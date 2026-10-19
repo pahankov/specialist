@@ -317,3 +317,102 @@ class TestAvatarPreset:
             headers=auth_headers,
         )
         assert ok.status_code == 200, ok.text
+
+
+class TestAdminOwnContacts:
+    """1.79.4: manual add/remove/promote of own contacts in the panel profile.
+
+    Self-typed values land UNVERIFIED (status «не подтверждён») — same model
+    as the client cabinet, exposed so the super can keep extra phones/emails.
+    """
+
+    async def test_add_phone_lands_unverified(self, client, auth_headers):
+        r = await client.post(
+            "/api/v1/admin/profile/contacts",
+            json={"contact_type": "phone", "value": "+7 999 222-33-44"},
+            headers=auth_headers,
+        )
+        assert r.status_code == 201, r.text
+        body = r.json()
+        assert body["value"] == "+7 (999) 222-33-44"  # normalized
+        assert body["is_verified"] is False
+        assert body["verified_via"] is None
+        assert body["is_primary"] is False
+
+    async def test_added_contact_visible_in_profile(self, client, auth_headers):
+        await client.post(
+            "/api/v1/admin/profile/contacts",
+            json={"contact_type": "email", "value": "Extra@Example.com"},
+            headers=auth_headers,
+        )
+        r = await client.get("/api/v1/admin/profile", headers=auth_headers)
+        emails = [c for c in r.json()["contacts"] if c["contact_type"] == "email"]
+        assert any(
+            c["value"] == "extra@example.com" and not c["is_verified"]
+            for c in emails
+        )
+
+    async def test_add_rejects_foreign_contact(self, client, session, auth_headers):
+        from app.models.user import User, UserRole
+        from app.services.contacts import attach_contact
+
+        other = User(name="Other", role=UserRole.CLIENT, is_active=True)
+        session.add(other)
+        await session.flush()
+        await attach_contact(session, other, "phone", "+7 (999) 111-22-33")
+        await session.commit()
+
+        r = await client.post(
+            "/api/v1/admin/profile/contacts",
+            json={"contact_type": "phone", "value": "+7 999 111-22-33"},
+            headers=auth_headers,
+        )
+        assert r.status_code == 409
+
+    async def test_add_rejects_bad_email(self, client, auth_headers):
+        r = await client.post(
+            "/api/v1/admin/profile/contacts",
+            json={"contact_type": "email", "value": "not-an-email"},
+            headers=auth_headers,
+        )
+        assert r.status_code == 422
+
+    async def test_promote_and_remove(self, client, auth_headers):
+        added = await client.post(
+            "/api/v1/admin/profile/contacts",
+            json={"contact_type": "phone", "value": "+7 999 222-33-44"},
+            headers=auth_headers,
+        )
+        cid = added.json()["id"]
+
+        prim = await client.post(
+            f"/api/v1/admin/profile/contacts/{cid}/primary",
+            headers=auth_headers,
+        )
+        assert prim.status_code == 200, prim.text
+        assert prim.json()["is_primary"] is True
+
+        rm = await client.delete(
+            f"/api/v1/admin/profile/contacts/{cid}", headers=auth_headers
+        )
+        assert rm.status_code == 200, rm.text
+        assert rm.json() == {"ok": True}
+
+    async def test_cannot_remove_last_contact(self, client, auth_headers):
+        """A password account keeps at least one contact (login identifier)."""
+        r = await client.get("/api/v1/admin/profile", headers=auth_headers)
+        contacts = r.json()["contacts"]
+        assert len(contacts) >= 2  # phone + email from registration
+
+        for c in contacts[:-1]:
+            rm = await client.delete(
+                f"/api/v1/admin/profile/contacts/{c['id']}", headers=auth_headers
+            )
+            assert rm.status_code == 200, rm.text
+
+        last = contacts[-1]
+        blocked = await client.delete(
+            f"/api/v1/admin/profile/contacts/{last['id']}", headers=auth_headers
+        )
+        assert blocked.status_code == 400
+        assert "последний" in blocked.json()["detail"].lower()

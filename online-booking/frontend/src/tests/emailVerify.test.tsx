@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import EmailVerifyModal from '../components/profile/EmailVerifyModal';
 
 vi.mock('sonner', () => ({
@@ -41,22 +41,41 @@ describe('EmailVerifyModal («Подтвердить почту»)', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('resends the code on demand', async () => {
-    const sendCode = vi.fn().mockResolvedValue({});
+  it('locks the resend for a minute, then resends on demand', async () => {
+    vi.useFakeTimers();
+    try {
+      const sendCode = vi.fn().mockResolvedValue({});
 
-    render(
-      <EmailVerifyModal
-        open
-        email="user@example.com"
-        onClose={vi.fn()}
-        sendCode={sendCode}
-        verifyCode={vi.fn()}
-        onVerified={vi.fn()}
-      />,
-    );
+      render(
+        <EmailVerifyModal
+          open
+          email="user@example.com"
+          onClose={vi.fn()}
+          sendCode={sendCode}
+          verifyCode={vi.fn()}
+          onVerified={vi.fn()}
+        />,
+      );
 
-    await waitFor(() => expect(sendCode).toHaveBeenCalledTimes(1));
-    fireEvent.click(screen.getByRole('button', { name: 'Отправить код ещё раз' }));
-    await waitFor(() => expect(sendCode).toHaveBeenCalledTimes(2));
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(sendCode).toHaveBeenCalledTimes(1);
+      // Cool-down: right after the send the resend button is locked.
+      expect(screen.getByRole('button', { name: /Отправить код ещё раз/ })).toBeDisabled();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60_000);
+      });
+      const resend = screen.getByRole('button', { name: 'Отправить код ещё раз' });
+      expect(resend).toBeEnabled();
+      fireEvent.click(resend);
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(sendCode).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

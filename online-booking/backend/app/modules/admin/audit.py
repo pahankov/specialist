@@ -62,8 +62,11 @@ async def get_audit_logs(
         count_query = count_query.where(AuditLog.entity_type == entity_type)
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
-    order = AuditLog.created_at.asc() if sort_dir == "asc" else AuditLog.created_at.desc()
-    query = query.options(selectinload(AuditLog.user)).order_by(order).offset(offset).limit(limit)
+    # Stable tiebreak by id: same-timestamp bursts keep one order across
+    # pages and repeated clicks (date-only ORDER BY is non-deterministic).
+    order = ((AuditLog.created_at.asc(), AuditLog.id.asc()) if sort_dir == "asc"
+             else (AuditLog.created_at.desc(), AuditLog.id.desc()))
+    query = query.options(selectinload(AuditLog.user)).order_by(*order).offset(offset).limit(limit)
     result = await db.execute(query)
     logs = result.scalars().all()
     return AuditLogListResponse(
@@ -95,8 +98,10 @@ async def get_all_audit_logs(
 
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
-    order = AuditLog.created_at.asc() if sort_dir == "asc" else AuditLog.created_at.desc()
-    query = query.order_by(order).offset(offset).limit(limit)
+    # Stable tiebreak by id (see get_audit_logs).
+    order = ((AuditLog.created_at.asc(), AuditLog.id.asc()) if sort_dir == "asc"
+             else (AuditLog.created_at.desc(), AuditLog.id.desc()))
+    query = query.order_by(*order).offset(offset).limit(limit)
     result = await db.execute(query)
     logs = result.scalars().all()
     return AuditLogListResponse(
