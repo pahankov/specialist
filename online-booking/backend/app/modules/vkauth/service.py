@@ -128,6 +128,10 @@ async def verify_vk_code(
 
     Returns (token, user, is_new). Raises 4xx on a bad state, a rejected
     exchange, or a profile read failure — never logs anyone in blind.
+
+    For new accounts without consent (1.80.0), returns a challenge token
+    instead of JWT — the frontend shows ConsentScreen, then calls
+    /auth/consent/complete.
     """
     if not settings.vk_enabled:
         raise HTTPException(status_code=503, detail="Вход через VK не настроен")
@@ -196,7 +200,18 @@ async def verify_vk_code(
             avatar_url=avatar_url,
             fallback_name="VK Пользователь",
             consent=consent,
+            defer_creation=(is_new and not consent),
         )
+    # For deferred users (new account without consent), return a challenge
+    # token instead of JWT — the frontend shows ConsentScreen, then calls
+    # /auth/consent/complete.
+    if is_new and not consent and not link_user_id:
+        from app.modules.auth.service import _create_challenge_token
+        phone = (await db.execute(
+            select(User).where(User.id == user.id)
+        )).scalar_one_or_none().phone if not link_user_id else None
+        challenge = _create_challenge_token(user.id, phone or "")
+        return challenge, user, True
     access_token = await complete_social_login(db, user)
     logger.info("User logged in via VK: user_id=%s is_new=%s", user.id, is_new)
     return access_token, user, is_new

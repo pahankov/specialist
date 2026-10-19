@@ -12,6 +12,7 @@ from app.models.master_profile import MasterProfile
 from app.models.client_profile import ClientProfile
 from app.models.refresh_token import RefreshToken
 from app.models.otp_code import OtpCode
+from app.models.user_contact import UserContact
 from app.schemas.user import UserCreate, UserLoginByEmail, UserLoginByPhone
 from app.schemas.otp import SendOtpRequest
 from app.services.names import name_fields as _name_fields
@@ -32,11 +33,15 @@ from app.utils.security import hash_password, verify_password, hash_otp_code
 from app.utils.tokens import create_access_token, create_refresh_token_payload
 from datetime import datetime, timezone as dt_timezone, timedelta
 import secrets
+import jwt
 
 logger = get_logger(__name__)
 
 SECRET_KEY = settings.SECRET_KEY
 ALGORITHM = settings.ALGORITHM
+
+# Challenge token TTL: 5 minutes for the 2-step consent flow (152-FZ).
+CHALLENGE_TTL_SECONDS = 300
 
 
 # ─── Registration ─────────────────────────────────────────────────────
@@ -319,16 +324,27 @@ async def phone_status(phone: str, db: AsyncSession) -> dict:
     without a password — enter via VK/Яндекс/MAX). The phone arrives
     normalized from the schema; the lookup also covers legacy accounts
     whose number still sits in users.phone.
+
+    For "new" state, also returns a challenge token for the 2-step
+    consent flow (the frontend shows the register form, then calls
+    /auth/consent/complete with the challenge + consent).
     """
     user = await find_user_by_contact(db, CONTACT_PHONE, phone)
     if user is None:
         state = "new"
+        # Create a challenge token for the pending registration.
+        challenge = _create_challenge_token(0, phone)
     elif user.hashed_password:
         state = "password"
+        challenge = None
     else:
         state = "social"
+        challenge = None
     logger.info("Phone status: %s -> %s", phone, state)
-    return {"state": state, "phone": phone}
+    result = {"state": state, "phone": phone}
+    if challenge is not None:
+        result["challenge"] = challenge
+    return result
 
 
 # ─── Unified Registration ────────────────────────────────────────────
@@ -527,4 +543,102 @@ async def reset_password(
     await db.commit()
     logger.info("Password reset done: user_id=%s", user.id)
     return user
+
+
+# ─── Challenge Token (2-step consent flow, 152-FZ) ───────────────────
+
+def _create_challenge_token(user_id: int, phone: str) -> str:
+    """Create a signed JWT challenge for the 2-step consent flow.
+
+    Used by /phone/status (new accounts) and OAuth verify endpoints
+    (deferred creation) — the frontend shows ConsentScreen, then calls
+    /auth/consent/complete with this token.
+    """
+    payload = {
+        "sub": str(user_id),  # 0 for pending accounts (phone/status)
+        "phone": phone,
+        "iat": datetime.now(dt_timezone.utc),
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def _decode_challenge_token(token: str) -> dict:
+    """Decode and validate a challenge token. Returns payload or raises 400."""
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=400,
+            detail="Чек-бокс согласия истёк. Начните вход заново.",
+        )
+    except jwt.InvalidTokenError:
+        raise HTTPException(
+            status_code=400,
+            detail="Недействительный токен. Начните вход заново.",
+        )
+    # Validate age: max CHALLENGE_TTL_SECONDS from issued-at.
+    issued_at = payload.get("iat")
+    if isinstance(issued_at, datetime):
+        age = (datetime.now(dt_timezone.utc) - issued_at).total_seconds()
+        if age > CHALLENGE_TTL_SECONDS:
+            raise HTTPException(
+                status_code=400,
+                detail="Чек-бокс согласия истёк. Начните вход заново.",
+            )
+    return payload
+
+
+async def commit_pending_user(
+    user: User,
+    db: AsyncSession,
+    consent: bool = True,
+) -> None:
+    """Commit a deferred user (created by OAuth verify) with consent.
+
+    Called by /auth/consent/complete when the user accepts the consent.
+    Creates ClientProfile, stamps consent_at, and logs a welcome bell.
+    """
+    from app.services.clients import get_or_create_profile
+    from app.services.notifications import send_welcome_bell
+
+    now = datetime.now(dt_timezone.utc)
+    user.consent_at = now
+    user.consent_policy_version = POLICY_VERSION
+    user.consent_offer_version = OFFER_VERSION
+
+    # Create ClientProfile if missing (OAuth verify may skip it).
+    await get_or_create_profile(db, user)
+
+    # Send welcome notification.
+    await send_welcome_bell(db, user.id)
+
+    await log_action(
+        db, user.id, "consent_complete", "auth", user.id,
+        f"Подтверждение согласия: {consent}", level="info",
+    )
+    logger.info("Deferred user committed: user_id=%s consent=%s", user.id, consent)
+
+
+async def complete_consent_flow(
+    user: User,
+    db: AsyncSession,
+    consent: bool = True,
+) -> tuple[str, str]:
+    """Create JWT session for a user who just completed consent.
+
+    Returns (access_token, refresh_token_value) — caller sets cookies.
+    """
+    access_token = create_access_token({
+        "sub": str(user.id),
+        "role": user.role.value,
+        "name": user.name,
+        "last_name": user.last_name,
+        "is_admin": user.role == UserRole.ADMIN,
+    })
+    refresh_value, expires_at = create_refresh_token_payload(
+        user.id, user.email or "")
+    db.add(RefreshToken(user_id=user.id, token=refresh_value,
+                        expires_at=expires_at))
+    await db.commit()
+    return access_token, refresh_value
 

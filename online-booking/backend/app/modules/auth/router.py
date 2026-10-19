@@ -394,11 +394,27 @@ async def register_unified(
 
     Logs the user in immediately: returns access_token + sets auth cookies,
     so the client lands straight in its cabinet (no extra login step).
+
+    For the 2-step consent flow (1.80.0), the frontend sends a ``challenge``
+    token (from /phone/status) — the phone is extracted from the challenge
+    and ``phone`` in the body is ignored.
     """
-    logger.info("Quick register: phone=%s", req.phone)
+    # Resolve the phone: from challenge (2-step) or from body (legacy).
+    phone = req.phone
+    if req.challenge:
+        payload = service._decode_challenge_token(req.challenge)
+        phone = payload["phone"]
+        logger.info("Register via challenge: phone=%s", phone)
+    else:
+        logger.info("Quick register: phone=%s", phone)
+    if not phone:
+        raise HTTPException(
+            status_code=400,
+            detail="Укажите телефон или пройдите шаг проверки номера.",
+        )
     try:
         new_user = await service.register_unified(
-            phone=req.phone,
+            phone=phone,
             password=req.password,
             consent=req.consent,
             db=db,
@@ -428,10 +444,10 @@ async def register_unified(
         await db.commit()
         return {"access_token": access_token, "token_type": "bearer"}
     except HTTPException:
-        logger.warning("Quick register failed: phone=%s", req.phone)
+        logger.warning("Quick register failed: phone=%s", phone)
         raise
     except Exception as e:
-        logger.error("Quick register failed (unexpected): phone=%s, error=%s", req.phone, e, exc_info=True)
+        logger.error("Quick register failed (unexpected): phone=%s, error=%s", phone, e, exc_info=True)
         raise HTTPException(status_code=500, detail="Ошибка регистрации")
 
 
@@ -551,3 +567,68 @@ async def reset_password(
         logger.error("Reset password failed (unexpected): email=%s, error=%s",
                      req.email, e, exc_info=True)
         raise HTTPException(status_code=500, detail="Ошибка сброса пароля")
+
+
+# ─── 2-Step Consent Flow (152-FZ, 1.80.0) ──────────────────────────
+
+class ConsentCompleteRequest(BaseModel):
+    """Complete the 2-step consent flow."""
+    challenge: str = Field(min_length=1)
+    consent: bool = True
+
+
+@router.post("/consent/complete", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/minute")
+async def consent_complete(
+    request: Request,
+    response: Response,
+    req: ConsentCompleteRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Complete the 2-step consent flow.
+
+    The frontend calls this after the user checks the consent checkbox.
+    The challenge token (from /phone/status, /vk/verify, /yandex/verify,
+    or /max/verify) identifies the pending user. If consent is given,
+    the user is committed and a JWT session is returned.
+    """
+    payload = service._decode_challenge_token(req.challenge)
+    user_id = int(payload["sub"])
+    user = await db.get(User, user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Сессия не найдена. Начните вход заново.",
+        )
+    if user.consent_at is not None:
+        # Already consented and committed — just log in.
+        access_token = create_access_token({
+            "sub": str(user.id),
+            "role": user.role.value,
+            "name": user.name,
+            "last_name": user.last_name,
+            "is_admin": user.role == UserRole.ADMIN,
+        })
+        refresh_value, expires_at = create_refresh_token_payload(
+            user.id, user.email or "")
+        db.add(RefreshToken(user_id=user.id, token=refresh_value,
+                            expires_at=expires_at))
+        await db.commit()
+        _set_auth_cookies(response, access_token, refresh_value)
+        return {"access_token": access_token, "token_type": "bearer"}
+
+    # Stamp consent if given.
+    if req.consent:
+        now = datetime.now(dt_timezone.utc)
+        user.consent_at = now
+        user.consent_policy_version = service.POLICY_VERSION
+        user.consent_offer_version = service.OFFER_VERSION
+
+    # Commit the user (with profile, contacts, welcome bell).
+    await service.commit_pending_user(user, db, consent=req.consent)
+
+    # Mint JWT session.
+    access_token, refresh_value = await service.complete_consent_flow(
+        user, db, consent=req.consent)
+    _set_auth_cookies(response, access_token, refresh_value)
+    return {"access_token": access_token, "token_type": "bearer"}

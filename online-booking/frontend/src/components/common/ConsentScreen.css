@@ -1,0 +1,84 @@
+.consent-screen-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 1rem;
+}
+
+.consent-screen-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 2rem;
+  max-width: 480px;
+  width: 100%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.consent-screen-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0 0 1rem;
+  color: #1a1a1a;
+}
+
+.consent-screen-text {
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: #4a4a4a;
+  margin-bottom: 1.5rem;
+}
+
+.consent-screen-text a {
+  color: #6c5ce7;
+  text-decoration: underline;
+}
+
+.consent-screen-text a:hover {
+  color: #5a4bd1;
+}
+
+.consent-screen-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}
+
+.consent-screen-btn {
+  padding: 0.625rem 1.25rem;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s, opacity 0.2s;
+}
+
+.consent-screen-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.consent-screen-btn--accept {
+  background: #6c5ce7;
+  color: #fff;
+}
+
+.consent-screen-btn--accept:hover:not(:disabled) {
+  background: #5a4bd1;
+}
+
+.consent-screen-btn--reject {
+  background: #f1f1f1;
+  color: #4a4a4a;
+}
+
+.consent-screen-btn--reject:hover:not(:disabled) {
+  background: #e1e1e1;
+}

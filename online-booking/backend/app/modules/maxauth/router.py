@@ -84,6 +84,15 @@ async def max_verify(
     access_token, user, is_new = await service.verify_max_code(
         req.phone, req.code, db, consent=req.consent
     )
+    # If a challenge is returned (new account without consent), don't set
+    # cookies — the frontend shows ConsentScreen, then calls /auth/consent/complete.
+    if req.consent is False and is_new and "challenge" in access_token:
+        return {
+            "access_token": access_token,  # actually a challenge token
+            "token_type": "bearer",
+            "is_new_user": is_new,
+            "challenge": access_token,
+        }
     cookie_token = await service.get_latest_refresh_token_value(db, user.id)
     set_auth_cookies(response, access_token, cookie_token)
     await log_action(

@@ -136,9 +136,8 @@ async def resolve_social_user(
     db: AsyncSession,
     *,
     provider: str,
-    social_id: Optional[int] = None,
-    social_field: Optional[str] = None,
-    link_fields: Optional[dict] = None,
+    social_id: Optional[int],
+    social_field: Optional[str],
     first_name: str = "",
     last_name: str = "",
     phone: Optional[str] = None,
@@ -146,13 +145,19 @@ async def resolve_social_user(
     email: Optional[str] = None,
     email_confirmed: bool = False,
     avatar_url: Optional[str] = None,
-    fallback_name: str = "",
+    fallback_name: str = "Соц. Пользователь",
     consent: bool = False,
+    link_fields: Optional[dict] = None,
+    defer_creation: bool = False,
 ) -> tuple[User, bool]:
     """Find the account behind a social login or create one → (user, is_new).
 
     See the module docstring for the lookup order and the contact policy.
     Raises 403 for a blocked account; never logs anyone in blind.
+
+    When ``defer_creation=True`` (1.80.0, 152-FZ consent flow), a new user
+    is built but NOT committed — the frontend shows ConsentScreen, then
+    calls /auth/consent/complete which commits with consent stamped.
     """
     from app.modules.auth.service import OFFER_VERSION, POLICY_VERSION
 
@@ -193,6 +198,10 @@ async def resolve_social_user(
             setattr(user, social_field, social_id)
         await _apply_link_fields(user, link_fields, only_empty=False)
         db.add(user)
+        if defer_creation:
+            # Don't commit — the frontend will call /auth/consent/complete.
+            logger.info("Deferred user creation via %s: user_id=%s (pending consent)", provider, user.id)
+            return user, True
         await db.flush()
         from app.services.clients import get_or_create_profile
         await get_or_create_profile(db, user)

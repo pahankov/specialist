@@ -58,3 +58,7 @@ class YandexVerifyResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     is_new_user: Optional[bool] = None
+    # Challenge token for the 2-step consent flow (1.80.0). Present only
+    # for new accounts without consent — the frontend shows ConsentScreen,
+    # then calls /auth/consent/complete with this challenge.
+    challenge: Optional[str] = None

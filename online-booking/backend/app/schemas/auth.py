@@ -32,11 +32,18 @@ class UnifiedRegisterRequest(BaseModel):
     client cabinet profile — registration stays minimal by design. Every
     account created here is a CLIENT; becoming a master is a separate,
     admin-approved application (/become-master).
+
+    For the 2-step consent flow (1.80.0), the frontend sends a ``challenge``
+    token (from /phone/status) instead of ``phone`` — the phone is embedded
+    in the challenge and validated server-side.
     """
-    phone: str
+    phone: Optional[str] = None
     password: str
     # 152-FZ consent checkbox (offer + privacy policy); stamped on the account.
     consent: bool = False
+    # Challenge token from the 2-step flow (phone/status). When present,
+    # ``phone`` is ignored and the phone is extracted from the challenge.
+    challenge: Optional[str] = None
 
     @field_validator('phone')
     @classmethod
@@ -138,3 +145,7 @@ class PhoneStatusResponse(BaseModel):
     """
     state: str
     phone: str  # normalized, echoed back for the next step
+    # Challenge token for the 2-step consent flow (1.80.0). Present only
+    # when state="new" — the frontend shows the register form, then calls
+    # /auth/consent/complete with this challenge + the user's consent.
+    challenge: Optional[str] = None

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { authApi } from '../../api/client';
 import { SOCIAL_BTN_HEIGHT, SOCIAL_BTN_RADIUS } from './SocialAuthButton';
@@ -9,6 +9,7 @@ import {
   type YandexSuggestTokenPayload,
 } from './yandexSuggestSdk';
 import './YandexSuggestButton.css';
+import ConsentScreen from './ConsentScreen';
 
 /**
  * Official Yandex ID instant-auth block («мгновенная авторизация»).
@@ -42,6 +43,18 @@ interface YandexSuggestButtonProps {
 
 function YandexSuggestButton({ variant, onSuccess, onUnavailable }: YandexSuggestButtonProps) {
   const parentId = variant === 'login' ? 'yandex-suggest-login' : 'yandex-suggest-register';
+  const [showConsent, setShowConsent] = useState<string | null>(null);
+
+  const handleConsentSuccess = () => {
+    setShowConsent(null);
+    onSuccess();
+  };
+
+  const handleConsentError = (_msg: string) => {
+    setShowConsent(null);
+    // Fall back to redirect button on consent error.
+    onUnavailable();
+  };
 
   useEffect(() => {
     let disposed = false;
@@ -83,6 +96,12 @@ function YandexSuggestButton({ variant, onSuccess, onUnavailable }: YandexSugges
 
         // Server-side validation + account create/bind; sets the cookies.
         const resp = await authApi.yandexVerifyToken(accessToken, true);
+        // If a challenge is returned (new account without consent), show
+        // the ConsentScreen overlay.
+        if (resp.data.challenge) {
+          setShowConsent(resp.data.challenge);
+          return;
+        }
         if (disposed) return;
         toast.success(
           resp.data.is_new_user
@@ -116,25 +135,32 @@ function YandexSuggestButton({ variant, onSuccess, onUnavailable }: YandexSugges
     };
   }, []);
 
-  if (variant === 'register') {
-    return (
-      <div
-        className="social-icon-btn"
-        style={{
-          height: SOCIAL_BTN_HEIGHT,
-          borderRadius: SOCIAL_BTN_RADIUS,
-        }}
-        data-testid="yandex-suggest-container"
-      >
-        <div id={parentId} className="yandex-suggest-slot" />
-      </div>
-    );
-  }
-
   return (
-    <div className="yandex-suggest-login" data-testid="yandex-suggest-container">
-      <div id={parentId} className="yandex-suggest-slot" />
-    </div>
+    <>
+      {variant === 'register' ? (
+        <div
+          className="social-icon-btn"
+          style={{
+            height: SOCIAL_BTN_HEIGHT,
+            borderRadius: SOCIAL_BTN_RADIUS,
+          }}
+          data-testid="yandex-suggest-container"
+        >
+          <div id={parentId} className="yandex-suggest-slot" />
+        </div>
+      ) : (
+        <div className="yandex-suggest-login" data-testid="yandex-suggest-container">
+          <div id={parentId} className="yandex-suggest-slot" />
+        </div>
+      )}
+      {showConsent && (
+        <ConsentScreen
+          challenge={showConsent}
+          onSuccess={handleConsentSuccess}
+          onError={handleConsentError}
+        />
+      )}
+    </>
   );
 }
 

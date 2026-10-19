@@ -8,6 +8,9 @@ export interface UnifiedRegisterData {
   password: string;
   /** 152-FZ consent checkbox (offer + privacy policy). */
   consent: boolean;
+  /** Challenge token from the 2-step flow (phone/status). When present,
+      ``phone`` is ignored and the phone is extracted from the challenge. */
+  challenge?: string;
 }
 
 export interface MaxStartResponse {
@@ -24,6 +27,7 @@ export interface MaxVerifyResponse {
   access_token: string;
   token_type: string;
   is_new_user?: boolean;
+  challenge?: string;
 }
 
 export interface VkStartResponse {
@@ -39,6 +43,14 @@ export interface VkVerifyResponse {
   access_token: string;
   token_type: string;
   is_new_user?: boolean;
+  challenge?: string;
+}
+
+export interface YandexVerifyResponse {
+  access_token: string;
+  token_type: string;
+  is_new_user?: boolean;
+  challenge?: string;
 }
 
 export interface YandexStartResponse {
@@ -157,6 +169,12 @@ export const authApi = {
   yandexVerifyToken: (accessToken: string, consent = false) =>
     apiClient.post<YandexVerifyResponse>('/api/v1/auth/yandex/verify', {
       access_token: accessToken,
+      consent,
+    }),
+  /** Complete the 2-step consent flow (1.80.0). */
+  consentComplete: (challenge: string, consent: boolean) =>
+    apiClient.post<LoginResponse>('/api/v1/auth/consent/complete', {
+      challenge,
       consent,
     }),
 };

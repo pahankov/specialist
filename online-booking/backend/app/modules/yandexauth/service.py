@@ -264,7 +264,18 @@ async def _login_with_profile(
             avatar_url=avatar_url,
             fallback_name="Яндекс Пользователь",
             consent=consent,
+            defer_creation=(is_new and not consent),
         )
+    # For deferred users (new account without consent), return a challenge
+    # token instead of JWT — the frontend shows ConsentScreen, then calls
+    # /auth/consent/complete.
+    if is_new and not consent and not link_user_id:
+        from app.modules.auth.service import _create_challenge_token
+        phone = (await db.execute(
+            select(User).where(User.id == user.id)
+        )).scalar_one_or_none().phone
+        challenge = _create_challenge_token(user.id, phone or "")
+        return challenge, user, True
     access_token = await complete_social_login(db, user)
     logger.info("User logged in via Yandex: user_id=%s is_new=%s",
                 user.id, is_new)

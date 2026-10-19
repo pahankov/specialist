@@ -10,6 +10,7 @@ import { authApi } from '../../api/client';
 import { toast } from 'sonner';
 import { generateCodeVerifier, generateCodeChallenge } from '../../utils/pkce';
 import { SOCIAL_BTN_HEIGHT, SOCIAL_BTN_RADIUS } from './SocialAuthButton';
+import ConsentScreen from './ConsentScreen';
 
 /**
  * VK ID low-code widget (VK + Одноклассники + Mail in one OAuthList block),
@@ -50,6 +51,17 @@ interface VkIdWidgetProps {
 function VkIdWidget({ onSuccess, onError, link = false }: VkIdWidgetProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showConsent, setShowConsent] = useState<string | null>(null);
+
+  const handleConsentSuccess = () => {
+    setShowConsent(null);
+    onSuccess();
+  };
+
+  const handleConsentError = (msg: string) => {
+    setShowConsent(null);
+    onError?.(msg);
+  };
 
   useEffect(() => {
     const container = containerRef.current;
@@ -116,6 +128,12 @@ function VkIdWidget({ onSuccess, onError, link = false }: VkIdWidgetProps) {
                 verifier,
                 true,
               );
+              // If a challenge is returned (new account without consent), show
+              // the ConsentScreen overlay.
+              if (resp.data.challenge) {
+                setShowConsent(resp.data.challenge);
+                return;
+              }
               toast.success(
                 link
                   ? 'VK привязан к аккаунту'
@@ -162,6 +180,13 @@ function VkIdWidget({ onSuccess, onError, link = false }: VkIdWidgetProps) {
     <div className="vkid-widget">
       {error && <p className="error-message">{error}</p>}
       <div ref={containerRef} data-testid="vkid-widget-container" />
+      {showConsent && (
+        <ConsentScreen
+          challenge={showConsent}
+          onSuccess={handleConsentSuccess}
+          onError={handleConsentError}
+        />
+      )}
     </div>
   );
 }
