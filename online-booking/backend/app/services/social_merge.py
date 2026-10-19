@@ -199,7 +199,9 @@ async def resolve_social_user(
         await _apply_link_fields(user, link_fields, only_empty=False)
         db.add(user)
         if defer_creation:
-            # Don't commit — the frontend will call /auth/consent/complete.
+            # Flush to get the auto-generated ID, but don't commit.
+            # The frontend will call /auth/consent/complete which commits.
+            await db.flush()
             logger.info("Deferred user creation via %s: user_id=%s (pending consent)", provider, user.id)
             return user, True
         await db.flush()
