@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { adminApi, assetUrl, authApi } from '../../api/client';
+import type { ClientContact } from '../../api/cabinet';
 import {
   AddressSelect,
   BackendImg,
@@ -13,7 +14,7 @@ import {
 } from '../../components/common';
 import type { CityOption } from '../../components/common/CitySelect';
 import { getApiErrorMessage } from '../../utils/apiError';
-import { clearAuthCookies } from '../../utils/cookies';
+import { clearAuthCookies, decodeJwtPayload, getCookie } from '../../utils/cookies';
 import { capitalizeWords, splitFullName } from '../../utils/names';
 import { MasterReviews } from '../../components/reviews';
 import { BindingsCard, PasswordCard } from '../../components/profile';
@@ -44,6 +45,15 @@ const AVATAR_PRESETS = [
   '🦄',
   '🐙',
 ];
+
+/** Contact row of GET /admin/profile — the cabinet contact shape. */
+type ProfileContact = ClientContact;
+
+function verifyLabel(c: ClientContact): string {
+  if (c.verified_via === 'social') return 'подтверждён соцсетью';
+  if (c.verified_via === 'code') return 'подтверждён кодом';
+  return 'не подтверждён';
+}
 
 /** Master personal data: photo, names, contacts, city, cabinet, certificates. */
 function ProfilePage() {
@@ -80,6 +90,17 @@ function ProfilePage() {
   const [uploadingCert, setUploadingCert] = useState(false);
   const avatarInput = useRef<HTMLInputElement>(null);
   const certInput = useRef<HTMLInputElement>(null);
+  const [contacts, setContacts] = useState<ProfileContact[]>([]);
+
+  /** Superadmin gets a slim profile: auth channels + password + contacts —
+      the master-only blocks (photo/certs/reviews/delete) do not apply. */
+  const isSuper = (() => {
+    try {
+      return decodeJwtPayload(getCookie('access_token') ?? '')?.is_admin === true;
+    } catch {
+      return false;
+    }
+  })();
 
   const applyAuthFlags = (data: {
     has_password?: boolean;
@@ -87,14 +108,16 @@ function ProfilePage() {
     yandex_bound?: boolean;
     max_bound?: boolean;
     max_username?: string | null;
-    contacts?: { contact_type: string }[];
+    contacts?: ProfileContact[];
   }) => {
     setHasPassword(Boolean(data.has_password));
     setVkBound(Boolean(data.vk_bound));
     setYandexBound(Boolean(data.yandex_bound));
     setMaxBound(Boolean(data.max_bound));
     setMaxUsername(data.max_username ?? null);
-    setHasEmail((data.contacts ?? []).some((c) => c.contact_type === 'email'));
+    const list = data.contacts ?? [];
+    setContacts(list);
+    setHasEmail(list.some((c) => c.contact_type === 'email'));
   };
 
   useEffect(() => {
@@ -273,6 +296,79 @@ function ProfilePage() {
     return (
       <div className="profile-page">
         <Skeleton rows={6} />
+      </div>
+    );
+  }
+
+  if (isSuper) {
+    const renderContacts = (list: ProfileContact[], title: string) =>
+      list.length > 0 ? (
+        <div className="contact-group" key={title}>
+          <div className="contact-group-title">{title}</div>
+          {list.map((c) => (
+            <div key={c.id} className="contact-row">
+              <div className="contact-main">
+                <span className="contact-value">{c.value}</span>
+                <span className="contact-badges">
+                  {c.is_primary && <span className="badge badge-primary">основной</span>}
+                  <span
+                    className={`badge ${c.is_verified ? 'badge-verified' : 'badge-unverified'}`}
+                  >
+                    {verifyLabel(c)}
+                  </span>
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null;
+
+    return (
+      <div className="profile-page">
+        <div className="page-header">
+          <div>
+            <h1>👤 Мой профиль</h1>
+            <p>Способы входа, пароль и контакты суперпользователя</p>
+          </div>
+        </div>
+
+        <BindingsCard
+          vkBound={vkBound}
+          yandexBound={yandexBound}
+          maxBound={maxBound}
+          maxUsername={maxUsername}
+          onChanged={refreshAuthFlags}
+          onMaxLink={() => setMaxLinkOpen(true)}
+        />
+
+        <PasswordCard hasPassword={hasPassword} hasEmail={hasEmail} />
+
+        <div className="card" style={{ marginBottom: 16 }}>
+          <h3>📱 Контакты</h3>
+          <p className="profile-card-hint">
+            Телефон и почта аккаунта. «Подтверждён» появляется после входа через соцсеть или ввода
+            кода из письма.
+          </p>
+          {renderContacts(
+            contacts.filter((c) => c.contact_type === 'phone'),
+            'Телефоны',
+          )}
+          {renderContacts(
+            contacts.filter((c) => c.contact_type === 'email'),
+            'Почты',
+          )}
+          {contacts.length === 0 && <p className="profile-card-hint">Пока пусто.</p>}
+        </div>
+
+        {/* MAX link roundtrip: login code flow, then refresh in place. */}
+        {maxLinkOpen && (
+          <LoginModal
+            isOpen
+            initialMode="max"
+            onClose={() => setMaxLinkOpen(false)}
+            onAuthSuccess={refreshAuthFlags}
+          />
+        )}
       </div>
     );
   }

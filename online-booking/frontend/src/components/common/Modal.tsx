@@ -11,6 +11,8 @@ interface ModalProps {
   className?: string;
   /** Wider dialog (forms with many fields). */
   wide?: boolean;
+  /** Hide the ✕ in the header (the entry widget closes via overlay/Esc). */
+  hideClose?: boolean;
 }
 
 /**
@@ -43,6 +45,7 @@ export default function Modal({
   children,
   className = '',
   wide = false,
+  hideClose = false,
 }: ModalProps) {
   const boxRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
@@ -81,7 +84,7 @@ export default function Modal({
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
-        {title !== undefined && (
+        {title !== undefined && !hideClose && (
           <div className="modal-header">
             <h3 className="modal-title">{title}</h3>
             <button type="button" className="modal-close" onClick={onClose} aria-label="Закрыть">

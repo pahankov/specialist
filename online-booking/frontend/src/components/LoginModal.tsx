@@ -64,7 +64,7 @@ function LoginModal({
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [showRegisterPassword, setShowRegisterPassword] = useState(false);
   /** Unified entry: the entered phone turned out to be a social-only account
-      — the hint above the social buttons replaces the password form. */
+      — the hint points at the social block above the form. */
   const [socialNotice, setSocialNotice] = useState(false);
   const loginPasswordRef = useRef<HTMLInputElement>(null);
 
@@ -418,9 +418,7 @@ function LoginModal({
   const forgotForm =
     forgotStep === 'email' ? (
       <form onSubmit={handleForgotSend}>
-        <p className="login-note">
-          Укажите почту аккаунта — пришлём код для сброса пароля.
-        </p>
+        <p className="login-note">Укажите почту аккаунта — пришлём код для сброса пароля.</p>
         <div className="login-group">
           <label>Email</label>
           <input
@@ -446,15 +444,14 @@ function LoginModal({
           </a>
         </p>
         <p className="login-note">
-          Аккаунт создан по номеру без почты? Войдите через VK, Яндекс или MAX —
-          пароль для этого не нужен.
+          Аккаунт создан по номеру без почты? Войдите через VK, Яндекс или MAX — пароль для этого не
+          нужен.
         </p>
       </form>
     ) : (
       <form onSubmit={handleForgotReset}>
         <p className="login-note">
-          Код отправлен на <strong>{forgotEmail.trim()}</strong>. Проверьте почту
-          (и папку «Спам»).
+          Код отправлен на <strong>{forgotEmail.trim()}</strong>. Проверьте почту (и папку «Спам»).
         </p>
         <div className="login-group">
           <label>Код из письма</label>
@@ -632,6 +629,7 @@ function LoginModal({
     </form>
   );
 
+  // The entry widget has no ✕ (owner's call): it closes by overlay click/Esc.
   return (
     <Modal
       open={isOpen}
@@ -646,10 +644,42 @@ function LoginModal({
               : 'Вход и регистрация через MAX'
       }
       className="login-modal"
+      hideClose
     >
       {mode === 'login' ? (
         /* ─── LOGIN FORM ─── */
         <form onSubmit={handleLogin}>
+          {/* Social login FIRST: one tap via VK/OK/Mail (the official
+              OAuthList widget) plus the Yandex/MAX tiles; the manual
+              email/phone form sits under the divider. */}
+          {/* VK + OK + Mail: the official OAuthList widget rendered INLINE —
+              no separate screen, no consent checkbox (taken at registration). */}
+          <VkIdWidget onSuccess={landAfterAuth} />
+
+          {/* Yandex: the official «мгновенная авторизация» widget; the plain
+              redirect button only appears if the widget cannot run here. */}
+          <div style={{ marginTop: 8 }}>
+            {yandexRedirect ? (
+              <SocialAuthButton
+                provider="yandex"
+                action="login"
+                disabled={loading}
+                onClick={handleYandexStart}
+              />
+            ) : (
+              <YandexSuggestButton
+                variant="login"
+                onSuccess={landAfterAuth}
+                onUnavailable={() => setYandexRedirect(true)}
+              />
+            )}
+          </div>
+          <div style={{ marginTop: 8 }}>
+            <SocialAuthButton provider="max" action="login" onClick={() => switchMode('max')} />
+          </div>
+
+          <div className="social-auth-divider">или войдите по паролю</div>
+
           <div className="login-group">
             <label>Email или телефон</label>
             <input
@@ -693,60 +723,33 @@ function LoginModal({
                 {showLoginPassword ? '🙈' : '👁️'}
               </button>
             </div>
+            {/* «Забыли пароль?» — right under the password input, not after
+                the submit button. */}
+            <p className="login-forgot">
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  switchMode('forgot');
+                }}
+              >
+                Забыли пароль?
+              </a>
+            </p>
           </div>
 
           {socialNotice && (
             /* Unified entry: the phone was routed to social — no password
-               form can help, point at the buttons below. */
+               form can help, point at the buttons above. */
             <p className="login-social-notice">
-              Этот номер уже привязан к аккаунту через соцсеть или MAX — войдите
-              кнопкой ниже. Пароль здесь не нужен.
+              Этот номер уже привязан к аккаунту через соцсеть или MAX — войдите кнопкой выше.
+              Пароль здесь не нужен.
             </p>
           )}
 
           <button type="submit" className="btn btn-primary btn-submit" disabled={loading}>
             {loading ? 'Входим...' : 'Войти'}
           </button>
-
-          <p className="login-footer" style={{ marginTop: 10 }}>
-            <a
-              href="#"
-              onClick={(e) => {
-                e.preventDefault();
-                switchMode('forgot');
-              }}
-            >
-              Забыли пароль?
-            </a>
-          </p>
-
-          <div className="social-auth-divider">или</div>
-
-          {/* VK + OK + Mail: the official OAuthList widget rendered INLINE —
-              no separate screen, no consent checkbox (taken at registration). */}
-          <VkIdWidget onSuccess={landAfterAuth} />
-
-          {/* Yandex: the official «мгновенная авторизация» widget; the plain
-              redirect button only appears if the widget cannot run here. */}
-          <div style={{ marginTop: 8 }}>
-            {yandexRedirect ? (
-              <SocialAuthButton
-                provider="yandex"
-                action="login"
-                disabled={loading}
-                onClick={handleYandexStart}
-              />
-            ) : (
-              <YandexSuggestButton
-                variant="login"
-                onSuccess={landAfterAuth}
-                onUnavailable={() => setYandexRedirect(true)}
-              />
-            )}
-          </div>
-          <div style={{ marginTop: 8 }}>
-            <SocialAuthButton provider="max" action="login" onClick={() => switchMode('max')} />
-          </div>
 
           <p className="login-footer">
             Нет аккаунта?{' '}

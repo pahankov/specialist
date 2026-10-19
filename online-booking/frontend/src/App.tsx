@@ -177,6 +177,9 @@ function App() {
             <Route path="schedule" element={<SchedulePage />} />
             <Route path="notifications" element={<NotificationsPage />} />
             <Route path="logs" element={<LogsPage />} />
+            {/* Super's own profile: bindings + password + contacts (slim
+                variant of the master profile — master blocks stay off). */}
+            <Route path="profile" element={<ProfilePage />} />
           </Route>
 
           {/* Catch all */}

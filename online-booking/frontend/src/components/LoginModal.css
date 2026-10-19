@@ -195,7 +195,8 @@
   line-height: 1.45;
 }
 
-/* Social-only phone routed at the entry: sits above the social buttons. */
+/* Social-only phone routed at the entry: the hint points at the social
+   block above the form. */
 .login-social-notice {
   margin: 4px 0 0;
   padding: 10px 14px;
@@ -205,6 +206,23 @@
   font-size: 13px;
   color: #3730a3;
   line-height: 1.45;
+}
+
+/* «Забыли пароль?» — right under the password input. */
+.login-forgot {
+  margin: 6px 0 0;
+  text-align: right;
+  font-size: 13px;
+}
+
+.login-forgot a {
+  color: #ff6b9d;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.login-forgot a:hover {
+  text-decoration: underline;
 }
 
 /* ─── City Dropdown ─── */

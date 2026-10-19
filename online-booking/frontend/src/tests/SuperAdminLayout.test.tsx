@@ -30,6 +30,8 @@ describe('SuperAdminLayout', () => {
     expect(screen.getByText('🛡️ Суперпанель')).toBeInTheDocument();
     const mastersLink = screen.getByText('Мастера').closest('a');
     expect(mastersLink?.getAttribute('href')).toBe('/super/masters');
+    const profileLink = screen.getByText(/Профиль/).closest('a');
+    expect(profileLink?.getAttribute('href')).toBe('/super/profile');
     expect(screen.queryByText('Мои услуги')).not.toBeInTheDocument();
   });
 });

@@ -93,9 +93,7 @@ function ContactsCard({ contacts, onChanged }: ContactsCardProps) {
               <span className="contact-value">{c.value}</span>
               <span className="contact-badges">
                 {c.is_primary && <span className="badge badge-primary">основной</span>}
-                <span
-                  className={`badge ${c.is_verified ? 'badge-verified' : 'badge-unverified'}`}
-                >
+                <span className={`badge ${c.is_verified ? 'badge-verified' : 'badge-unverified'}`}>
                   {verifyLabel(c)}
                 </span>
               </span>
@@ -131,9 +129,8 @@ function ContactsCard({ contacts, onChanged }: ContactsCardProps) {
     <div className="card" style={{ marginBottom: 16 }}>
       <h3>📱 Контакты</h3>
       <p className="profile-card-hint">
-        Основной телефон — вход по паролю; основной email — письма и
-        восстановление пароля. «Подтверждён» появляется после входа через
-        соцсеть или кода из письма.
+        Основной телефон — вход по паролю; основной email — письма и восстановление пароля.
+        «Подтверждён» появляется после входа через соцсеть или кода из письма.
       </p>
 
       {renderList(phones, 'Телефоны')}
@@ -155,11 +152,7 @@ function ContactsCard({ contacts, onChanged }: ContactsCardProps) {
           <option value="email">Email</option>
         </select>
         {newType === 'phone' ? (
-          <PhoneInput
-            value={newValue}
-            onChange={setNewValue}
-            placeholder="+7 (999) 123-45-67"
-          />
+          <PhoneInput value={newValue} onChange={setNewValue} placeholder="+7 (999) 123-45-67" />
         ) : (
           <input
             type="email"

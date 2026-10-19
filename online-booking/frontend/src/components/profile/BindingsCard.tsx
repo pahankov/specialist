@@ -62,8 +62,8 @@ function BindingsCard({
     <div className="card" style={{ marginBottom: 16 }}>
       <h3>🔑 Вход и привязки</h3>
       <p className="profile-card-hint">
-        Привязанная соцсеть впускает в этот же аккаунт в один тап — пароль и код
-        не нужны. Почта и телефон при этом не меняются.
+        Привязанная соцсеть впускает в этот же аккаунт в один тап — пароль и код не нужны. Почта и
+        телефон при этом не меняются.
       </p>
 
       <div className="bind-list">
@@ -76,11 +76,7 @@ function BindingsCard({
           {vkBound ? (
             <span className="bind-done">✅ Привязан</span>
           ) : vkOpen ? null : (
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              onClick={() => setVkOpen(true)}
-            >
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setVkOpen(true)}>
               Привязать
             </button>
           )}
@@ -137,8 +133,8 @@ function BindingsCard({
 
       {!maxBound && (
         <p className="profile-card-hint" style={{ marginTop: 10, marginBottom: 0 }}>
-          MAX привязывается по номеру: войдите в бота с телефоном, который есть в
-          ваших контактах ниже.
+          MAX привязывается по номеру: войдите в бота с телефоном, который есть в ваших контактах
+          ниже.
         </p>
       )}
     </div>

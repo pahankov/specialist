@@ -51,10 +51,9 @@ function openLogin() {
 }
 
 function fillIdentifier(value: string) {
-  fireEvent.change(
-    screen.getByPlaceholderText('email@example.com или +7 (999) 123-45-67'),
-    { target: { value } },
-  );
+  fireEvent.change(screen.getByPlaceholderText('email@example.com или +7 (999) 123-45-67'), {
+    target: { value },
+  });
 }
 
 function submit() {
@@ -75,9 +74,7 @@ describe('Unified entry — the phone decides (phone/status)', () => {
     fillIdentifier('+79991234567');
     submit();
 
-    await waitFor(() =>
-      expect(mocked.phoneStatus).toHaveBeenCalledWith(MASKED),
-    );
+    await waitFor(() => expect(mocked.phoneStatus).toHaveBeenCalledWith(MASKED));
     // Registration replaces the password form, phone already filled in.
     expect(await screen.findByText('Зарегистрироваться')).toBeInTheDocument();
     expect(screen.getByDisplayValue(MASKED)).toBeInTheDocument();
@@ -93,9 +90,7 @@ describe('Unified entry — the phone decides (phone/status)', () => {
     fillIdentifier('+79991234567');
     submit();
 
-    await waitFor(() =>
-      expect(toast.info).toHaveBeenCalledWith('Аккаунт найден — введите пароль'),
-    );
+    await waitFor(() => expect(toast.info).toHaveBeenCalledWith('Аккаунт найден — введите пароль'));
     expect(mocked.loginUnified).not.toHaveBeenCalled();
   });
 
@@ -108,7 +103,7 @@ describe('Unified entry — the phone decides (phone/status)', () => {
     fillIdentifier('+79991234567');
     submit();
 
-    expect(await screen.findByText(/войдите кнопкой ниже/)).toBeInTheDocument();
+    expect(await screen.findByText(/войдите кнопкой выше/)).toBeInTheDocument();
     expect(mocked.loginUnified).not.toHaveBeenCalled();
   });
 
@@ -132,9 +127,7 @@ describe('Unified entry — the phone decides (phone/status)', () => {
     });
     submit();
 
-    await waitFor(() =>
-      expect(mocked.loginUnified).toHaveBeenCalledWith(MASKED, 'Secret123!'),
-    );
+    await waitFor(() => expect(mocked.loginUnified).toHaveBeenCalledWith(MASKED, 'Secret123!'));
     expect(mocked.phoneStatus).not.toHaveBeenCalled();
   });
 });
@@ -156,9 +149,7 @@ describe('Forgot password — code by email', () => {
     } as never);
     fireEvent.click(screen.getByRole('button', { name: 'Отправить код' }));
 
-    await waitFor(() =>
-      expect(mocked.forgotPassword).toHaveBeenCalledWith('user@example.com'),
-    );
+    await waitFor(() => expect(mocked.forgotPassword).toHaveBeenCalledWith('user@example.com'));
 
     // Step 2: the code from the letter + the new password.
     fireEvent.change(await screen.findByPlaceholderText('6 цифр'), {
@@ -202,9 +193,7 @@ describe('Forgot password — code by email', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Сбросить пароль и войти' }));
 
-    await waitFor(() =>
-      expect(toast.error).toHaveBeenCalledWith('Код — 6 цифр из письма'),
-    );
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Код — 6 цифр из письма'));
     expect(mocked.resetPassword).not.toHaveBeenCalled();
   });
 });

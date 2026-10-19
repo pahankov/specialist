@@ -4,6 +4,9 @@ import './SuperAdminLayout.css';
 
 const SUPER_NAV = [
   { path: `${SUPER_PREFIX}/dashboard`, label: '📊 Обзор' },
+  // Personal profile (bindings, password, contacts) — second, same as the
+  // master nav, so it is never lost among the global sections.
+  { path: `${SUPER_PREFIX}/profile`, label: '👤 Профиль' },
   { path: `${SUPER_PREFIX}/revenue`, label: '💰 Доход' },
   { path: `${SUPER_PREFIX}/masters`, label: '👨‍💼 Мастера' },
   { path: `${SUPER_PREFIX}/appointments`, label: '📅 Все записи' },

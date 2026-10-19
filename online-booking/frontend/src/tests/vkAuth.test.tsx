@@ -114,9 +114,7 @@ describe('VK ID widget (inline OAuthList: VK + OK + Mail)', () => {
 
     // The widget fetches a signed state + inits the SDK + renders the block.
     // Link=false: the login widget binds a NEW session, not a profile bind.
-    await waitFor(() =>
-      expect(mocked.vkStart).toHaveBeenCalledWith('test-code-challenge', false),
-    );
+    await waitFor(() => expect(mocked.vkStart).toHaveBeenCalledWith('test-code-challenge', false));
     await waitFor(() => expect(sdk.rendered).toBe(true));
     expect(sdk.configInit).toMatchObject({
       app: HEX_CLIENT_ID, // verbatim string, never Number()
