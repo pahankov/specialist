@@ -199,17 +199,21 @@ async def resolve_social_user(
         await _apply_link_fields(user, link_fields, only_empty=False)
         db.add(user)
         if defer_creation:
-            # Flush to get the auto-generated ID, but don't commit.
-            # The frontend will call /auth/consent/complete which commits.
+            # Flush to get the auto-generated ID, then commit the user immediately.
+            # The user IS created in the DB (without consent stamped).
+            # The frontend will call /auth/consent/complete to stamp consent
+            # and create the JWT session.
             await db.flush()
-            logger.info("Deferred user creation via %s: user_id=%s (pending consent)", provider, user.id)
-            # Attach contacts before returning (they are outside the if/else block).
+            await db.commit()
+            logger.info("Deferred user created (pending consent): user_id=%s", user.id)
+            # Attach contacts in the now-open transaction.
             if phone:
                 await _attach_provider_contact(db, user, CONTACT_PHONE, phone,
                                                confirmed=phone_confirmed)
             if email:
                 await _attach_provider_contact(db, user, CONTACT_EMAIL, email,
                                                confirmed=email_confirmed)
+            await db.commit()
             return user, True
         await db.flush()
         from app.services.clients import get_or_create_profile
@@ -253,7 +257,10 @@ async def resolve_social_user(
 
 
 async def complete_social_login(db: AsyncSession, user: User) -> str:
-    """Mint the JWT session for a resolved social user (commit included)."""
+    """Mint the JWT session for a resolved social user.
+
+    NOTE: does NOT commit — the caller (router) handles the commit.
+    """
     access_token = create_access_token({
         "sub": str(user.id),
         "role": user.role.value,
@@ -265,7 +272,6 @@ async def complete_social_login(db: AsyncSession, user: User) -> str:
         user.id, user.email or "")
     db.add(RefreshToken(user_id=user.id, token=refresh_value,
                         expires_at=expires_at))
-    await db.commit()
     return access_token
 
 
