@@ -57,6 +57,7 @@ echo "=== SEED CITIES (idempotent top-up) ==="
 DATABASE_URL="${DATABASE_URL}" python3.12 seed_cities.py
 echo "=== SEED CITIES DONE ==="
 
-echo "=== MINIMAL REVIEWS ==="
-DATABASE_URL="${DATABASE_URL}" python3.12 create_minimal_reviews.py
-echo "=== MINIMAL REVIEWS DONE ==="
+# Demo seeding (create_minimal_reviews.py) is NOT run in prod since 1.79.1:
+# it writes only into empty tables, and after the pre-launch wipe a deploy
+# would re-inject 3 sample masters + 5 clients + 10 appointments/reviews.
+# The script stays in the repo for local/dev stands — run it manually there.

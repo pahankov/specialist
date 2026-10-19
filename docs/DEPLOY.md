@@ -172,7 +172,8 @@ python3.12 fix_production_masters.py
 
 # 11. Сиды
 python3.12 seed_production.py
-python3.12 create_minimal_reviews.py
+# create_minimal_reviews.py в прод-деплое не запускается с 1.79.1
+# (демо-данные: 3 мастера + 5 клиентов + 10 записей — только для локальных стендов)
 
 # 12. Фронтенд
 cd ../frontend
