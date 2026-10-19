@@ -7,6 +7,7 @@ import { passwordError } from '../utils/password';
 import SocialAuthButton, { SocialAuthIconButton } from './common/SocialAuthButton';
 import VkIdWidget from './common/VkIdWidget';
 import YandexSuggestButton from './common/YandexSuggestButton';
+import ConsentScreen from './common/ConsentScreen';
 import MaxIcon from './common/icons/MaxIcon';
 import type { MaxStartResponse } from '../api/auth';
 import PhoneInput, { maskPhone, isCompletePhone, PHONE_MAX_DIGITS } from './common/PhoneInput';
@@ -98,6 +99,9 @@ function LoginModal({
   const [maxCodeInput, setMaxCodeInput] = useState('');
   /** Resend cool-down: seconds left before «Запросить новый код» unlocks. */
   const [maxCooldown, setMaxCooldown] = useState(0);
+  /** MAX: a new account without consent comes back as a challenge token —
+      the ConsentScreen completes the 152-FZ flow before the session. */
+  const [maxChallenge, setMaxChallenge] = useState<string | null>(null);
   const maxCooling = maxCooldown > 0;
 
   // One interval while the countdown is live (setTimeout chains need a
@@ -259,10 +263,10 @@ function LoginModal({
 
   /* Yandex OAuth redirect — the fallback path (the official suggest widget
      handles the normal case; this one works even without third-party
-     cookies). No separate consent screen: 152-FZ consent is taken at
-     registration, and a first social login IS a registration that stamps it
-     implicitly. Fetch a signed state + authorize URL, stash the state, hand
-     the browser to Yandex; the callback posts the code back for a
+     cookies). 152-FZ consent is collected on the callback page: a new
+     account comes back as a challenge and the ConsentScreen asks there.
+     Fetch a signed state + authorize URL, stash the state, hand the
+     browser to Yandex; the callback posts the code back for a
      server-side exchange. */
   const handleYandexStart = async () => {
     setLoading(true);
@@ -270,7 +274,6 @@ function LoginModal({
       const resp = await authApi.yandexStart();
       try {
         sessionStorage.setItem('yandex_state', resp.data.state);
-        sessionStorage.setItem('yandex_consent', '1');
       } catch {
         /* storage unavailable — the callback will rely on the echoed state */
       }
@@ -318,9 +321,14 @@ function LoginModal({
     }
     setLoading(true);
     try {
-      // consent=true: a first MAX login is a registration (stamps 152-FZ);
-      // for returning users the backend only backfills legacy NULL consent.
-      const resp = await authApi.maxVerify(maxPhone, maxCodeInput.trim(), true);
+      // consent=false: a NEW MAX account must not be created silently —
+      // the backend answers with a challenge and the ConsentScreen below
+      // collects the 152-FZ consent before the session is issued.
+      const resp = await authApi.maxVerify(maxPhone, maxCodeInput.trim(), false);
+      if (resp.data.challenge) {
+        setMaxChallenge(resp.data.challenge);
+        return;
+      }
       toast.success(
         resp.data.is_new_user ? 'Добро пожаловать! Аккаунт создан.' : 'Вход через MAX выполнен!',
       );
@@ -337,6 +345,7 @@ function LoginModal({
     setMaxOffer(null);
     setMaxCodeInput('');
     setMaxCooldown(0);
+    setMaxChallenge(null);
   };
 
   /** Forgot password step 1: send a 6-digit code to the account email. */
@@ -651,8 +660,9 @@ function LoginModal({
           {/* Social login FIRST: one tap via VK/OK/Mail (the official
               OAuthList widget) plus the Yandex/MAX tiles; the manual
               email/phone form sits under the divider. */}
-          {/* VK + OK + Mail: the official OAuthList widget rendered INLINE —
-              no separate screen, no consent checkbox (taken at registration). */}
+          {/* VK + OK + Mail: the official OAuthList widget rendered INLINE.
+              A new account comes back as a consent challenge — the widget
+              shows the ConsentScreen; returning users log in with one tap. */}
           <VkIdWidget onSuccess={landAfterAuth} />
 
           {/* Yandex: the official «мгновенная авторизация» widget; the plain
@@ -897,6 +907,19 @@ function LoginModal({
             </a>
           </p>
         </form>
+      )}
+
+      {/* MAX registration: a new account without consent comes back as a
+          challenge — collect the 152-FZ consent above the modal, then land. */}
+      {maxChallenge && (
+        <ConsentScreen
+          challenge={maxChallenge}
+          onSuccess={() => {
+            setMaxChallenge(null);
+            landAfterAuth();
+          }}
+          onError={() => setMaxChallenge(null)}
+        />
       )}
     </Modal>
   );

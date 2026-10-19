@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import './ConsentScreen.css';
 
 interface ConsentScreenProps {
-  /** The challenge token from the backend (phone/status or OAuth verify). */
+  /** The challenge token from OAuth verify (VK/Yandex/MAX). */
   challenge: string;
   /** Called when consent is accepted and the session is established. */
   onSuccess: () => void;
@@ -13,15 +13,15 @@ interface ConsentScreenProps {
 }
 
 /**
- * ConsentScreen — overlay shown after OAuth verify or phone/status returns
- * a challenge token for a new account without consent (152-FZ, 1.80.0).
+ * ConsentScreen — overlay shown when OAuth verify returns a challenge
+ * token for a new/pending account without consent (152-FZ, 1.80.0).
  *
  * The user must explicitly accept the privacy policy and offer before the
- * account is committed. If rejected, the flow is aborted.
+ * account session is issued. If rejected, the flow is aborted.
  *
- * Two paths:
- * 1. Phone register: /phone/status → challenge → /register-unified with challenge
- * 2. OAuth verify: /vk/verify (or /yandex/verify) → challenge → /consent/complete
+ * OAuth verify: /vk/verify (or /yandex/verify, /max/verify) → challenge
+ * → /auth/consent/complete. Phone registration asks consent on the
+ * register form itself and goes through /auth/register-unified.
  */
 export default function ConsentScreen({ challenge, onSuccess, onError }: ConsentScreenProps) {
   const [loading, setLoading] = useState(false);
@@ -29,29 +29,11 @@ export default function ConsentScreen({ challenge, onSuccess, onError }: Consent
   const handleAccept = async () => {
     setLoading(true);
     try {
-      // Try /auth/consent/complete first (OAuth verify path).
-      // If it fails with 400 (user_id=0, orphan challenge), fall back to
-      // /auth/register-unified with the challenge (phone/status path).
-      try {
-        await authApi.consentComplete(challenge, true);
-        toast.success('Добро пожаловать! Аккаунт создан.');
-        onSuccess();
-      } catch (err: unknown) {
-        const e = err as { response?: { status?: number } };
-        // 400 = orphan challenge (phone/status path) → try register-unified.
-        if (e?.response?.status === 400) {
-          await authApi.registerUnified({
-            phone: '',
-            password: '',
-            consent: true,
-            challenge,
-          });
-          toast.success('Добро пожаловать! Аккаунт создан.');
-          onSuccess();
-        } else {
-          throw err;
-        }
-      }
+      // Completes the 2-step flow: the backend stamps consent, creates the
+      // cabinet profile, writes the welcome note and returns a session.
+      await authApi.consentComplete(challenge, true);
+      toast.success('Добро пожаловать! Аккаунт создан.');
+      onSuccess();
     } catch (err: unknown) {
       const e = err as { response?: { data?: { detail?: string } } };
       const msg = e?.response?.data?.detail || 'Ошибка подтверждения согласия';

@@ -18,6 +18,7 @@ vi.mock('../api/client', () => ({
     yandexStart: vi.fn(),
     yandexVerify: vi.fn(),
     yandexVerifyToken: vi.fn(),
+    consentComplete: vi.fn(),
   },
 }));
 
@@ -135,7 +136,7 @@ describe('Yandex official widget («мгновенная авторизация�
 
     renderLogin();
 
-    await waitFor(() => expect(mocked.yandexVerifyToken).toHaveBeenCalledWith('ya-tok', true));
+    await waitFor(() => expect(mocked.yandexVerifyToken).toHaveBeenCalledWith('ya-tok', false));
     await waitFor(() =>
       expect(toast.success).toHaveBeenCalledWith('Добро пожаловать! Аккаунт создан.'),
     );
@@ -193,7 +194,6 @@ describe('Yandex official widget («мгновенная авторизация�
     // The fallback is the same tested redirect flow: click → state + redirect.
     fireEvent.click(btn);
     await waitFor(() => expect(sessionStorage.getItem('yandex_state')).toBe('s1'));
-    expect(sessionStorage.getItem('yandex_consent')).toBe('1');
   });
 
   it('falls back when the widget is not configured server-side', async () => {
@@ -233,7 +233,6 @@ describe('Yandex OAuth redirect (fallback path)', () => {
     fireEvent.click(btn);
 
     await waitFor(() => expect(sessionStorage.getItem('yandex_state')).toBe('s1'));
-    expect(sessionStorage.getItem('yandex_consent')).toBe('1');
   });
 
   it('reports a 503 as "not configured"', async () => {
@@ -262,18 +261,35 @@ describe('Yandex callback exchange', () => {
 
   it('exchanges the code and lands a client in the cabinet', async () => {
     sessionStorage.setItem('yandex_state', 'st');
-    sessionStorage.setItem('yandex_consent', '1');
     vi.mocked(mocked.yandexVerify).mockResolvedValue({
       data: { access_token: 't', token_type: 'bearer', is_new_user: true },
     } as never);
 
     renderCallback('?code=c1&state=st');
 
-    await waitFor(() => expect(mocked.yandexVerify).toHaveBeenCalledWith('c1', 'st', true));
+    await waitFor(() => expect(mocked.yandexVerify).toHaveBeenCalledWith('c1', 'st', false));
     await waitFor(() => expect(screen.getByText('CABINET')).toBeInTheDocument());
     // One-shot keys are consumed.
     expect(sessionStorage.getItem('yandex_state')).toBeNull();
-    expect(sessionStorage.getItem('yandex_consent')).toBeNull();
+  });
+
+  it('asks for 152-FZ consent on the callback page for a new account', async () => {
+    sessionStorage.setItem('yandex_state', 'st');
+    vi.mocked(mocked.yandexVerify).mockResolvedValue({
+      data: { access_token: 'ch', token_type: 'bearer', is_new_user: true, challenge: 'ch' },
+    } as never);
+    vi.mocked(mocked.consentComplete).mockResolvedValue({
+      data: { access_token: 't', token_type: 'bearer' },
+    } as never);
+
+    renderCallback('?code=c1&state=st');
+
+    expect(await screen.findByText('Подтверждение согласия')).toBeInTheDocument();
+    expect(screen.queryByText('CABINET')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Принимаю'));
+    await waitFor(() => expect(mocked.consentComplete).toHaveBeenCalledWith('ch', true));
+    await waitFor(() => expect(screen.getByText('CABINET')).toBeInTheDocument());
   });
 
   it('shows an error when the user declines on Yandex', () => {

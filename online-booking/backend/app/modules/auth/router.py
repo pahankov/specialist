@@ -594,6 +594,20 @@ async def consent_complete(
     """
     payload = service._decode_challenge_token(req.challenge)
     user_id = int(payload["sub"])
+    if user_id == 0:
+        # phone/status challenge — that path registers via /register-unified.
+        raise HTTPException(
+            status_code=400,
+            detail="Сессия не найдена. Начните вход заново.",
+        )
+    if not req.consent:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Подтвердите согласие на обработку персональных данных — "
+                "без него регистрация невозможна"
+            ),
+        )
     user = await db.get(User, user_id)
     if user is None:
         raise HTTPException(
@@ -617,14 +631,9 @@ async def consent_complete(
         _set_auth_cookies(response, access_token, refresh_value)
         return {"access_token": access_token, "token_type": "bearer"}
 
-    # Stamp consent if given.
-    if req.consent:
-        now = datetime.now(dt_timezone.utc)
-        user.consent_at = now
-        user.consent_policy_version = service.POLICY_VERSION
-        user.consent_offer_version = service.OFFER_VERSION
-
-    # Commit the user (with profile, contacts, welcome bell).
+    # Consent is required (guarded above); commit_pending_user stamps
+    # consent_at + policy/offer versions, creates the ClientProfile and
+    # writes the welcome bell.
     await service.commit_pending_user(user, db, consent=req.consent)
 
     # Mint JWT session.

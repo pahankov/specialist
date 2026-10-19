@@ -11,11 +11,12 @@
 | `POST` | `/api/v1/auth/register` | Регистрация мастера (с выбором города) |
 | `POST` | `/api/v1/auth/login` | Вход мастера (JWT + refresh token в cookies) |
 | `POST` | `/api/v1/auth/login-unified` | Вход по email ИЛИ телефону (мастера и клиенты; пишет login в аудит) |
-| `POST` | `/api/v1/auth/register-unified` | Быстрая регистрация: только `phone` + `password` + `consent` (152-ФЗ) — всегда CLIENT, сразу входит: access_token + cookies; email/имя/адрес заполняются позже в кабинете |
+| `POST` | `/api/v1/auth/register-unified` | Быстрая регистрация: только `phone` + `password` + `consent` (152-ФЗ) — всегда CLIENT, сразу входит: access_token + cookies; email/имя/адрес заполняются позже в кабинете. Без `consent` — 400 (согласие обязательно) |
 | `POST` | `/api/v1/auth/become-master` | Заявка в мастера (адрес/описание/опыт) — профиль inactive, роль остаётся CLIENT до аппрува админа; повторная заявка 400 |
 | `POST` | `/api/v1/auth/send-otp` | Отправка SMS-кода клиенту |
 | `POST` | `/api/v1/auth/verify-otp` | Проверка кода, вход/регистрация клиента |
-| `POST` | `/api/v1/auth/phone/status` | Единый вход: чем ответить на телефон — `new` (аккаунта нет → регистрация), `password` (есть пароль → в фокус), `social` (только соцвход/MAX → кнопки); сам не входит и ничего не создаёт |
+| `POST` | `/api/v1/auth/phone/status` | Единый вход: чем ответить на телефон — `new` (аккаунта нет → регистрация), `password` (есть пароль → в фокус), `social` (только соцвход/MAX → кнопки); для `new` возвращает `challenge` (JWT, TTL 5 мин) для 2-шагового флоу согласия (152-ФЗ); сам не входит и ничего не создаёт |
+| `POST` | `/api/v1/auth/consent/complete` | Завершение 2-шагового согласия (OAuth verify): `challenge` + `consent=true` → стемпит `consent_at` и версии документов, создаёт профиль клиента и welcome-уведомление, возвращает JWT-сессию + cookies; `consent=false` → 400; 10/min |
 | `POST` | `/api/v1/auth/password/change` | Смена пароля текущего аккаунта (любая роль с паролем): `current_password` + `new_password`; 10/min |
 | `POST` | `/api/v1/auth/password/forgot` | «Забыли пароль»: код на почту; ответ одинаков для известной и неизвестной почты (без энумерации); 5/min |
 | `POST` | `/api/v1/auth/password/reset` | Новый пароль по коду из письма + авто-вход: access_token + cookies; успех подтверждает почту (`verified_via="code"`), все прежние сессии отзываются; 10/min |
@@ -27,7 +28,7 @@
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
 | `POST` | `/api/v1/auth/max/start` | Заявка на код: `deeplink` (один клик, автовстреча), `delivered` (push в известный диалог), иначе — share-number flow; 10/min |
-| `POST` | `/api/v1/auth/max/verify` | Проверка кода с сайта, JWT-сессия + cookies (10/min) |
+| `POST` | `/api/v1/auth/max/verify` | Проверка кода с сайта, JWT-сессия + cookies (10/min); для нового аккаунта без согласия — `challenge` вместо сессии (152-ФЗ) |
 | `POST` | `/api/max/webhook` | Приём MAX Bot API updates (`message_created`, `bot_started`; секрет `X-Max-Bot-Api-Secret`) |
 
 Флоу: сайт берёт телефон → юзер делится номером с ботом (текст или кнопка
@@ -44,17 +45,25 @@
 `MAX_WEBHOOK_URL`, проверка при старте и раз в 10 минут) — MAX автоотписывает
 бота, если вебхук 8 часов не отвечал успешно.
 
+**Challenge token (1.80.0):** для нового аккаунта без согласия `/max/verify`
+возвращает `challenge` (JWT с `sub`, `phone`, `iat`, TTL 5 мин) вместо JWT-сессии
+и не ставит cookies. Фронт показывает `ConsentScreen` → пользователь принимает
+согласие → `POST /auth/consent/complete` {`challenge`, `consent: true`} → бэкенд
+стемпит `consent_at`, создаёт профиль клиента и welcome-уведомление, возвращает
+JWT-сессию. То же — для существующего аккаунта без `consent_at` (брошенная
+регистрация): молчаливого входа нет, согласие спрашивается снова.
+
 ### VK ID auth (виджет VK + Одноклассники + Mail; OAuth 2.0 + PKCE)
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
 | `POST` | `/api/v1/auth/vk/start` | Подписанный `state` (HMAC, TTL 10 мин) + `redirect_uri` + `client_id` + полный `authorize_url` по `code_challenge` (браузерный PKCE); 10/min |
-| `POST` | `/api/v1/auth/vk/verify` | Обмен `code`+`device_id`+`state`+`code_verifier` на токены **на сервере** (сервисный ключ не уходит в браузер), create/bind аккаунта, JWT-сессия + cookies; 10/min |
+| `POST` | `/api/v1/auth/vk/verify` | Обмен `code`+`device_id`+`state`+`code_verifier` на токены **на сервере** (сервисный ключ не уходит в браузер), create/bind аккаунта, JWT-сессия + cookies; для нового аккаунта без согласия — `challenge` вместо сессии (152-ФЗ); 10/min |
 
 Флоу (официальный виджет `@vkid/sdk`, блок OAuthList с кнопками VK/OK/Mail):
 фронт генерирует PKCE `code_verifier` и шлёт только его SHA-256 (`code_challenge`)
 в `/vk/start` → получает подписанный `state` + `redirect_uri` + `client_id` →
 передаёт **свой** `state` и `code_verifier` в `Config.init` (`responseMode=Callback`)
-→ рисует виджет. После галочки согласия 152-ФЗ и одобрения внутри VK срабатывает
+→ рисует виджет. После одобрения внутри VK срабатывает
 `LOGIN_SUCCESS` (`code` + `device_id`) → фронт постит их + `state` + `code_verifier`
 + `consent` в `/vk/verify` → бэкенд меняет `code` на токены у
 `id.vk.ru/oauth2/auth`, читает профиль (`/oauth2/user_info`), создаёт/привязывает
@@ -62,11 +71,21 @@
 попадают; `state`, переданный в SDK, проходит HMAC-проверку на бэке — ручной
 редирект на `id.vk.ru` больше не используется.
 
+**Challenge token (1.80.0):** для нового аккаунта без согласия `/vk/verify`
+возвращает `challenge` (JWT с `sub=user_id`, `phone`, `iat`, TTL 5 мин) вместо
+JWT-сессии и не ставит cookies. Фронт показывает `ConsentScreen` (ссылки на
+оферту и политику) → пользователь принимает → `POST /auth/consent/complete`
+{`challenge`, `consent: true`} → бэкенд стемпит `consent_at`, создаёт профиль
+клиента и welcome-уведомление, возвращает JWT-сессию. Аккаунт без `consent_at`
+(в т.ч. брошенная регистрация) снова получает `challenge` — молчаливого входа
+нет. Фронт всегда шлёт `consent=false` и решает по ответу: `challenge` или
+готовые cookies.
+
 ### Yandex ID auth (официальный виджет suggest + Authorization Code, редирект-фолбэк)
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
 | `POST` | `/api/v1/auth/yandex/start` | Подписанный `state` (HMAC, TTL 10 мин) + `redirect_uri` + `client_id` + `suggest_redirect_uri` (страница-приёмник виджета; пусто = виджет выключен) + полный `authorize_url` на `oauth.yandex.ru/authorize`; 10/min |
-| `POST` | `/api/v1/auth/yandex/verify` | Либо обмен `code`+`state` на токены **на сервере** (OAuth-секрет не уходит в браузер), либо проверка `access_token` виджета (`login.yandex.ru/info`); create/bind аккаунта, JWT-сессия + cookies; ровно один способ, иначе 422; 10/min |
+| `POST` | `/api/v1/auth/yandex/verify` | Либо обмен `code`+`state` на токены **на сервере** (OAuth-секрет не уходит в браузер), либо проверка `access_token` виджета (`login.yandex.ru/info`); create/bind аккаунта, JWT-сессия + cookies; для нового аккаунта без согласия — `challenge`; ровно один способ, иначе 422; 10/min |
 
 Два флоу, у обоих один хвост (create/bind аккаунта, новый всегда CLIENT,
 ключ — `yandex_user_id`, штамп `consent_*`):
@@ -80,13 +99,17 @@
   Дальше токен в браузере не используется. Если SDK не может работать (нет
   сторонних cookie, нет конфига, CDN недоступен) — фронт сам рендерит кнопку
   редирект-флоу ниже.
-- **Редирект** (фолбэк, без PKCE — подтверждает `client_secret`): фронт после
-  галочки согласия 152-ФЗ шлёт `/yandex/start` → получает подписанный `state` +
-  `authorize_url` → стешит `state`/`consent` в sessionStorage и редиректит
-  браузер на Яндекс → Яндекс возвращает на `/auth/yandex/callback?code&state`
-  → фронт сверяет `state` со стешенным и постит `code`+`state`+`consent` в
-  `/yandex/verify` → бэкенд меняет `code` на токен у `oauth.yandex.ru/token`
-  (серверный `client_secret`). `state` проходит HMAC-проверку на бэке.
+- **Редирект** (фолбэк, без PKCE — подтверждает `client_secret`): фронт шлёт
+  `/yandex/start` → получает подписанный `state` + `authorize_url` → стешит
+  `state` в sessionStorage и редиректит браузер на Яндекс → Яндекс возвращает
+  на `/auth/yandex/callback?code&state` → фронт сверяет `state` со стешенным
+  и постит `code`+`state` в `/yandex/verify` → бэкенд меняет `code` на токен
+  у `oauth.yandex.ru/token` (серверный `client_secret`). `state` проходит
+  HMAC-проверку на бэке.
+
+**Challenge token (1.80.0):** как у VK — новый аккаунт без согласия получает
+`challenge` вместо сессии; `ConsentScreen` показывается и в виджете, и на
+callback-странице редирект-флоу, дальше — `/auth/consent/complete`.
 
 ### Geography
 | Метод | Endpoint | Описание |

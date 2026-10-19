@@ -59,8 +59,8 @@ class TestRegisterUnified:
         assert user.consent_policy_version == POLICY_VERSION
         assert user.consent_offer_version == OFFER_VERSION
 
-    async def test_register_without_consent_leaves_blank(self, client, session):
-        """consent=False does NOT stamp consent_at (checkbox not ticked)."""
+    async def test_register_without_consent_rejected(self, client, session):
+        """consent=False → 400: no account exists without explicit consent."""
         from sqlalchemy import select
         from app.models.user import User
 
@@ -69,12 +69,36 @@ class TestRegisterUnified:
             "password": "SecurePass123!",
             "consent": False,
         })
-        assert resp.status_code == 201
+        assert resp.status_code == 400
+        assert "согласие" in resp.json()["detail"].lower()
         user = (await session.execute(
             select(User).where(User.phone == "+7 (999) 111-22-45")
+        )).scalar_one_or_none()
+        assert user is None
+
+    async def test_register_writes_welcome_bell(self, client, session):
+        """Owner item 5: a new account gets the how-to note in the bell."""
+        from sqlalchemy import select
+        from app.models.user import User
+        from app.models.notification import Notification
+
+        resp = await client.post("/api/v1/auth/register-unified", json={
+            "phone": "+79993335566",
+            "password": "SecurePass123!",
+            "consent": True,
+        })
+        assert resp.status_code == 201, resp.text
+        user = (await session.execute(
+            select(User).where(User.phone == "+7 (999) 333-55-66")
         )).scalar_one()
-        assert user.consent_at is None
-        assert user.consent_policy_version is None
+        notes = (await session.execute(
+            select(Notification).where(
+                Notification.recipient_id == user.id))).scalars().all()
+        assert len(notes) == 1
+        assert notes[0].audience == "system"
+        assert notes[0].link == "appointments"
+        assert "Добро пожаловать" in notes[0].text
+        assert "Мой профиль" in notes[0].text
 
     async def test_register_always_creates_client(self, client, session):
         """There is no master path anymore — every account is CLIENT."""

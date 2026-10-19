@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { toast } from 'sonner';
 import { authApi } from '../api/client';
@@ -14,6 +14,7 @@ vi.mock('../api/client', () => ({
     maxVerify: vi.fn(),
     vkStart: vi.fn(),
     vkVerify: vi.fn(),
+    consentComplete: vi.fn(),
   },
 }));
 
@@ -127,13 +128,14 @@ describe('VK ID widget (inline OAuthList: VK + OK + Mail)', () => {
     sdk.loginSuccess?.({ code: 'c1', device_id: 'd1' });
 
     // Server-side exchange reuses the existing /vk/verify with our state+verifier.
+    // consent=false: the backend decides whether a consent challenge is needed.
     await waitFor(() =>
       expect(mocked.vkVerify).toHaveBeenCalledWith(
         'c1',
         'd1',
         's1',
         'test-code-verifier-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-        true,
+        false,
       ),
     );
     await waitFor(() =>
@@ -147,6 +149,37 @@ describe('VK ID widget (inline OAuthList: VK + OK + Mail)', () => {
 
     await waitFor(() => expect(screen.getByText('Вход через VK не настроен')).toBeInTheDocument());
     expect(mocked.vkVerify).not.toHaveBeenCalled();
+  });
+
+  it('asks for 152-FZ consent when VK returns a new-account challenge', async () => {
+    renderLogin();
+    vi.mocked(mocked.vkStart).mockResolvedValue({
+      data: {
+        authorize_url: 'https://id.vk.ru/authorize?client_id=54828785&state=s1',
+        state: 's1',
+        client_id: '54828785',
+        redirect_uri: 'https://beauty-specialist.ru/auth/vk/callback',
+      },
+    } as never);
+    vi.mocked(mocked.vkVerify).mockResolvedValue({
+      data: { access_token: 'ch', token_type: 'bearer', is_new_user: true, challenge: 'ch' },
+    } as never);
+    vi.mocked(mocked.consentComplete).mockResolvedValue({
+      data: { access_token: 't', token_type: 'bearer' },
+    } as never);
+
+    await waitFor(() => expect(sdk.rendered).toBe(true));
+    sdk.loginSuccess?.({ code: 'c1', device_id: 'd1' });
+
+    // A new account gets the consent overlay instead of a session.
+    expect(await screen.findByText('Подтверждение согласия')).toBeInTheDocument();
+    expect(mocked.consentComplete).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByText('Принимаю'));
+    await waitFor(() => expect(mocked.consentComplete).toHaveBeenCalledWith('ch', true));
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith('Добро пожаловать! Аккаунт создан.'),
+    );
   });
 
   it('surfaces a backend verify error detail', async () => {
@@ -191,7 +224,6 @@ describe('VK callback exchange', () => {
   it('exchanges the code and lands a client in the cabinet', async () => {
     sessionStorage.setItem('vk_code_verifier', 'ver');
     sessionStorage.setItem('vk_state', 'st');
-    sessionStorage.setItem('vk_consent', '1');
     vi.mocked(mocked.vkVerify).mockResolvedValue({
       data: { access_token: 't', token_type: 'bearer', is_new_user: true },
     } as never);
@@ -199,11 +231,29 @@ describe('VK callback exchange', () => {
     renderCallback('?code=c1&device_id=d1&state=st');
 
     await waitFor(() =>
-      expect(mocked.vkVerify).toHaveBeenCalledWith('c1', 'd1', 'st', 'ver', true),
+      expect(mocked.vkVerify).toHaveBeenCalledWith('c1', 'd1', 'st', 'ver', false),
     );
     await waitFor(() => expect(screen.getByText('CABINET')).toBeInTheDocument());
     // One-shot keys are consumed.
     expect(sessionStorage.getItem('vk_code_verifier')).toBeNull();
+  });
+
+  it('asks for consent on the callback page when the account is new', async () => {
+    sessionStorage.setItem('vk_code_verifier', 'ver');
+    sessionStorage.setItem('vk_state', 'st');
+    vi.mocked(mocked.vkVerify).mockResolvedValue({
+      data: { access_token: 'ch', token_type: 'bearer', is_new_user: true, challenge: 'ch' },
+    } as never);
+    vi.mocked(mocked.consentComplete).mockResolvedValue({
+      data: { access_token: 't', token_type: 'bearer' },
+    } as never);
+
+    renderCallback('?code=c1&device_id=d1&state=st');
+
+    expect(await screen.findByText('Подтверждение согласия')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Принимаю'));
+    await waitFor(() => expect(mocked.consentComplete).toHaveBeenCalledWith('ch', true));
+    await waitFor(() => expect(screen.getByText('CABINET')).toBeInTheDocument());
   });
 
   it('shows an error when the user declines on VK', async () => {

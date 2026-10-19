@@ -7,12 +7,12 @@ import { takeReturnUrl } from '../../utils/redirect';
 import { takeSocialLinkReturn } from '../../utils/socialLink';
 import { ADMIN_PREFIX, SUPER_PREFIX } from '../../utils/section';
 import VkIcon from '../../components/common/icons/VkIcon';
+import ConsentScreen from '../../components/common/ConsentScreen';
 import './VkCallbackPage.css';
 
 /** sessionStorage keys stashed by LoginModal before the VK redirect. */
 const VERIFIER_KEY = 'vk_code_verifier';
 const STATE_KEY = 'vk_state';
-const CONSENT_KEY = 'vk_consent';
 
 function takeKey(key: string): string | null {
   try {
@@ -34,8 +34,30 @@ function VkCallbackPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const [error, setError] = useState<string | null>(null);
+  /** New account without consent → the consent overlay completes the flow. */
+  const [challenge, setChallenge] = useState<string | null>(null);
   // React 18 StrictMode double-invokes effects; guard so we exchange once.
   const started = useRef(false);
+
+  /** Cookies are set by the backend; land by role (dual-role default to the
+      client cabinet, admins/master to their sections). */
+  const finishLanding = () => {
+    const payload = decodeJwtPayload(getCookie('access_token') ?? '');
+    if (payload?.is_admin === true) {
+      navigate(`${SUPER_PREFIX}/dashboard`, { replace: true });
+      return;
+    }
+    const from = takeReturnUrl();
+    if (from) {
+      navigate(from, { replace: true });
+      return;
+    }
+    if (payload?.role === 'MASTER') {
+      navigate(`${ADMIN_PREFIX}/dashboard`, { replace: true });
+      return;
+    }
+    navigate('/cabinet', { replace: true });
+  };
 
   useEffect(() => {
     if (started.current) return;
@@ -65,7 +87,6 @@ function VkCallbackPage() {
 
     const verifier = takeKey(VERIFIER_KEY);
     const expectedState = takeKey(STATE_KEY);
-    const consent = takeKey(CONSENT_KEY) === '1';
 
     if (!verifier) {
       setError('Сессия входа истекла. Попробуйте снова.');
@@ -78,7 +99,10 @@ function VkCallbackPage() {
 
     (async () => {
       try {
-        const resp = await authApi.vkVerify(code, deviceId, state, verifier, consent);
+        // consent=false: a NEW account comes back as a challenge token
+        // (no session, no cookies) — the ConsentScreen below collects the
+        // 152-FZ consent, then /auth/consent/complete issues the session.
+        const resp = await authApi.vkVerify(code, deviceId, state, verifier, false);
         // Link mode (profile «Привязать VK»): same account, back to the
         // profile it started from — no role landing, no new session toast.
         const linkReturn = takeSocialLinkReturn();
@@ -87,26 +111,14 @@ function VkCallbackPage() {
           navigate(linkReturn, { replace: true });
           return;
         }
+        if (resp.data.challenge) {
+          setChallenge(resp.data.challenge);
+          return;
+        }
         toast.success(
           resp.data.is_new_user ? 'Добро пожаловать! Аккаунт создан.' : 'Вход через VK выполнен!',
         );
-        // Cookies are set by the backend; land by role (dual-role default
-        // to the client cabinet, admins/master to their sections).
-        const payload = decodeJwtPayload(getCookie('access_token') ?? '');
-        if (payload?.is_admin === true) {
-          navigate(`${SUPER_PREFIX}/dashboard`, { replace: true });
-          return;
-        }
-        const from = takeReturnUrl();
-        if (from) {
-          navigate(from, { replace: true });
-          return;
-        }
-        if (payload?.role === 'MASTER') {
-          navigate(`${ADMIN_PREFIX}/dashboard`, { replace: true });
-          return;
-        }
-        navigate('/cabinet', { replace: true });
+        finishLanding();
       } catch (err: any) {
         const detail = err.response?.data?.detail;
         setError(typeof detail === 'string' ? detail : 'Не удалось войти через VK');
@@ -126,6 +138,16 @@ function VkCallbackPage() {
           </button>
         </div>
       </div>
+    );
+  }
+
+  if (challenge) {
+    return (
+      <ConsentScreen
+        challenge={challenge}
+        onSuccess={finishLanding}
+        onError={(msg) => setError(msg)}
+      />
     );
   }
 

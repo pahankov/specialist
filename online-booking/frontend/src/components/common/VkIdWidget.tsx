@@ -118,18 +118,18 @@ function VkIdWidget({ onSuccess, onError, link = false }: VkIdWidgetProps) {
               return;
             }
             try {
-              // 4. Server-side exchange: tokens never reach the browser. The
-              //    first successful exchange creates the account and stamps the
-              //    152-FZ consent implicitly (registration = first social login).
+              // 4. Server-side exchange: tokens never reach the browser.
+              //    consent=false: a NEW account gets a challenge instead of a
+              //    session, and the ConsentScreen collects the 152-FZ consent
+              //    before the account is created/session issued.
               const resp = await authApi.vkVerify(
                 payload.code,
                 payload.device_id,
                 state,
                 verifier,
-                true,
+                false,
               );
-              // If a challenge is returned (new account without consent), show
-              // the ConsentScreen overlay.
+              // New/pending account without consent → ConsentScreen overlay.
               if (resp.data.challenge) {
                 setShowConsent(resp.data.challenge);
                 return;

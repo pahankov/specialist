@@ -430,13 +430,13 @@ async def verify_max_code(
         consent=consent,
         defer_creation=(not consent),
     )
-    # For deferred users (new account without consent), return a challenge
-    # token instead of JWT — the frontend shows ConsentScreen, then calls
-    # /auth/consent/complete.
-    if is_new and not consent:
+    # No consent and none stamped yet (new OR abandoned pending account):
+    # return a challenge instead of a session — the frontend shows the
+    # ConsentScreen, then /auth/consent/complete stamps consent + logs in.
+    if not consent and user.consent_at is None:
         from app.modules.auth.service import _create_challenge_token
         challenge = _create_challenge_token(user.id, phone or "")
-        return challenge, user, True
+        return challenge, user, is_new
     access_token = await complete_social_login(db, user)
     logger.info("Client logged in via MAX: user_id=%s is_new=%s", user.id, is_new)
     return access_token, user, is_new

@@ -50,3 +50,34 @@
   font-size: 13px;
   color: #888;
 }
+
+/* Save block moved to the bottom of the page (owner's ask, 1.79.6): it sits
+   outside the form element and submits it via the HTML form= attribute. */
+.client-profile-page .client-profile-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+}
+
+/* Account-delete button (owner's ask, 1.79.6): detached from the pink plaque
+   — white with a thin red outline — and halved in size. Scoped to THIS card:
+   the global .btn-delete (App.css) still dresses the confirm dialog button,
+   which renders through a portal outside .client-profile-page. */
+.client-profile-page .account-danger-card .btn-delete {
+  background: #fff;
+  border: 1.5px solid #fca5a5;
+  color: #b91c1c;
+  padding: 6px 12px;
+  font-size: 13px;
+  border-radius: 8px;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.client-profile-page .account-danger-card .btn-delete:hover:not(:disabled) {
+  background: #fff5f5;
+  border-color: #ef4444;
+  color: #991b1b;
+  transform: none;
+  box-shadow: none;
+}

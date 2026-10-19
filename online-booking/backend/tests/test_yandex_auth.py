@@ -253,6 +253,12 @@ class TestYandexVerify:
         done = await _verify(client, data, consent=False)
         assert done.status_code == 200
 
+        body = done.json()
+        # No consent → a challenge, not a session and not a cookie.
+        assert body["challenge"]
+        assert body["access_token"] == body["challenge"]
+        assert "access_token=" not in done.headers.get("set-cookie", "")
+
         from sqlalchemy import select
         from app.models.user import User
         user = (await session.execute(

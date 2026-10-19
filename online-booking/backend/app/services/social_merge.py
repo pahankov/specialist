@@ -218,6 +218,10 @@ async def resolve_social_user(
         await db.flush()
         from app.services.clients import get_or_create_profile
         await get_or_create_profile(db, user)
+        # Owner item 5: a fresh social account gets the how-to bell too
+        # (deferred accounts get theirs in commit_pending_user, at consent).
+        from app.services.notifications import send_welcome_bell
+        await send_welcome_bell(db, user.id)
         logger.info("New client created via %s: user_id=%s", provider, user.id)
     else:
         if user.is_active is False:

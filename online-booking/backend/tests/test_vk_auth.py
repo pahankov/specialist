@@ -197,11 +197,33 @@ class TestVkVerify:
         done = await _verify(client, data, consent=False)
         assert done.status_code == 200
 
+        body = done.json()
+        # No consent → a challenge, not a session and not a cookie.
+        assert body["challenge"]
+        assert body["access_token"] == body["challenge"]
+        assert "access_token=" not in done.headers.get("set-cookie", "")
+
         from sqlalchemy import select
         from app.models.user import User
         user = (await session.execute(
             select(User).where(User.vk_user_id == 111))).scalar_one()
         assert user.consent_at is None
+
+    async def test_pending_account_asks_consent_again(
+        self, client, vk_enabled, monkeypatch, session
+    ):
+        """An abandoned registration must not log in on the next attempt."""
+        api = _StubVkApi(profile=_profile(), tokens=_tokens())
+        _stub(monkeypatch, api)
+        first = await _verify(client, await _start(client), consent=False)
+        assert first.json()["challenge"]
+
+        second = await _verify(client, await _start(client), consent=False)
+        assert second.status_code == 200
+        body = second.json()
+        assert body["challenge"]  # still pending — ask for consent again
+        assert body["is_new_user"] is False  # same account was found
+        assert "access_token=" not in second.headers.get("set-cookie", "")
 
     async def test_verify_links_existing_email_account(
         self, client, vk_enabled, monkeypatch, session

@@ -58,11 +58,11 @@ function ContactsCard({ contacts, onChanged, api = CABINET_CONTACTS_API }: Conta
     e.preventDefault();
     const value = newValue.trim();
     if (newType === 'phone' && !isCompletePhone(value)) {
-      toast.error('Введите телефон полностью');
+      toast.error('Введите телефон полностью, например +7 (999) 123-45-67');
       return;
     }
     if (newType === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-      toast.error('Введите корректный email');
+      toast.error('Введите корректный email, например name@mail.ru');
       return;
     }
     setBusy('add');
@@ -172,7 +172,11 @@ function ContactsCard({ contacts, onChanged, api = CABINET_CONTACTS_API }: Conta
         <p className="profile-card-hint">Пока пусто — добавьте телефон или почту.</p>
       )}
 
-      <form className="contact-add" onSubmit={add}>
+      {/* noValidate (1.79.6): the browser's own type="email" check used to
+          abort the submit with a native bubble — no request, no toast, felt
+          like a dead button. Validation is ours now (toasts above); the
+          input keeps type=email for the mobile keyboard. */}
+      <form className="contact-add" onSubmit={add} noValidate>
         <select
           value={newType}
           onChange={(e) => {
@@ -192,6 +196,7 @@ function ContactsCard({ contacts, onChanged, api = CABINET_CONTACTS_API }: Conta
             value={newValue}
             onChange={(e) => setNewValue(e.target.value)}
             placeholder="email@example.com"
+            autoFocus
           />
         )}
         <button type="submit" className="btn btn-primary" disabled={busy === 'add'}>

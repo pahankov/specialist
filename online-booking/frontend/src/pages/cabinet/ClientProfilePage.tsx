@@ -2,14 +2,8 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { authApi, cabinetApi, type ClientMe } from '../../api/client';
-import {
-  AddressSelect,
-  BackendImg,
-  CitySelect,
-  ConfirmDialog,
-  Modal,
-  Skeleton,
-} from '../../components/common';
+import apiClient from '../../api/http';
+import { AddressSelect, BackendImg, ConfirmDialog, Modal, Skeleton } from '../../components/common';
 import LoginModal from '../../components/LoginModal';
 import { BindingsCard, ContactsCard, PasswordCard } from '../../components/profile';
 import type { CityOption } from '../../components/common/CitySelect';
@@ -69,6 +63,19 @@ function ClientProfilePage() {
       }
     })();
   }, []);
+
+  /** A DaData address pick carries its city: resolve the name to a local
+      city_id (get-or-create server-side) so masters can still filter by
+      city. A failed resolve keeps the previous city — the address saves. */
+  const resolveAddressCity = async (name: string) => {
+    setAddressCity(name);
+    try {
+      const { data } = await apiClient.post('/api/v1/cities/resolve', { name });
+      setCity({ id: data.id, name: data.name_ru ?? name, source: 'dadata' });
+    } catch {
+      /* city stays as it was — search keeps the last known value */
+    }
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -133,7 +140,7 @@ function ClientProfilePage() {
         </div>
       </div>
 
-      <form onSubmit={handleSave}>
+      <form id="client-profile-form" onSubmit={handleSave}>
         <div className="card" style={{ marginBottom: 16 }}>
           {/* Social avatar: brought over by a VK/Yandex login. */}
           <div className="client-avatar-row">
@@ -172,36 +179,23 @@ function ClientProfilePage() {
 
         <div className="card" style={{ marginBottom: 16 }}>
           <h3>📍 Где вас искать мастерам</h3>
-          <div className="form-row">
-            <CitySelect
-              value={city?.id ?? null}
-              valueName={city?.name ?? ''}
-              onChange={(c) => {
-                setCity(c);
-                if (c) setAddressCity(c.name);
-              }}
-            />
-            <AddressSelect
-              value={address}
-              onChange={(a, pickedCity) => {
-                setAddress(a);
-                if (pickedCity) setAddressCity(pickedCity);
-              }}
-              label="Ваш адрес"
-              placeholder="Город, улица, дом..."
-            />
-          </div>
+          {/* One field (owner's ask): city + street in a single picker. The
+              city is still stored as city_id for the masters search — a
+              DaData pick carries its city, which we resolve to a local id. */}
+          <AddressSelect
+            value={address}
+            onChange={(a, pickedCity, picked) => {
+              setAddress(a);
+              if (picked && pickedCity) void resolveAddressCity(pickedCity);
+            }}
+            label="Город, улица, дом"
+            placeholder="Начните вводить город, улицу и дом..."
+          />
           {(addressCity || city?.name) && (
             <span style={{ fontSize: 12, color: '#666' }}>
               Город для подбора: {addressCity || city?.name}
             </span>
           )}
-        </div>
-
-        <div className="form-actions">
-          <button type="submit" className="btn btn-primary" disabled={saving}>
-            {saving ? 'Сохранение…' : 'Сохранить профиль'}
-          </button>
         </div>
       </form>
 
@@ -222,6 +216,19 @@ function ClientProfilePage() {
         hasEmail={(me?.contacts ?? []).some((c) => c.contact_type === 'email')}
       />
 
+      {/* Save sits at the bottom (owner's ask): outside the form element,
+          wired to it through the HTML form= attribute. */}
+      <div className="client-profile-actions">
+        <button
+          type="submit"
+          form="client-profile-form"
+          className="btn btn-primary"
+          disabled={saving}
+        >
+          {saving ? 'Сохранение…' : 'Сохранить профиль'}
+        </button>
+      </div>
+
       {/* MAX link roundtrip: login code flow, then refresh in place. */}
       {maxLinkOpen && (
         <LoginModal
@@ -232,7 +239,7 @@ function ClientProfilePage() {
         />
       )}
 
-      <div className="card" style={{ marginTop: 16, borderColor: '#e5484d' }}>
+      <div className="card account-danger-card" style={{ marginTop: 16, borderColor: '#e5484d' }}>
         <h3>🗑 Удаление аккаунта</h3>
         <p style={{ fontSize: 13, color: '#666' }}>
           Профиль деактивируется, контакты стираются, будущие записи отменяются. История хранится

@@ -95,9 +95,10 @@ function YandexSuggestButton({ variant, onSuccess, onUnavailable }: YandexSugges
         }
 
         // Server-side validation + account create/bind; sets the cookies.
-        const resp = await authApi.yandexVerifyToken(accessToken, true);
-        // If a challenge is returned (new account without consent), show
-        // the ConsentScreen overlay.
+        // consent=false: a NEW account gets a challenge instead of a session
+        // (ConsentScreen collects the 152-FZ consent first).
+        const resp = await authApi.yandexVerifyToken(accessToken, false);
+        // New/pending account without consent → ConsentScreen overlay.
         if (resp.data.challenge) {
           setShowConsent(resp.data.challenge);
           return;

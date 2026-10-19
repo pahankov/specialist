@@ -73,9 +73,12 @@ async def vk_verify(
         req.code, req.device_id, req.state, req.code_verifier, db,
         consent=req.consent,
     )
-    # If a challenge is returned (new account without consent), don't set
-    # cookies — the frontend shows ConsentScreen, then calls /auth/consent/complete.
-    if req.consent is False and is_new and "challenge" in access_token:
+    # A challenge (new/pending account without consent) is not a session:
+    # don't set cookies — the frontend shows ConsentScreen, then calls
+    # /auth/consent/complete.
+    from app.modules.auth.service import is_challenge_token
+
+    if is_challenge_token(access_token):
         return {
             "access_token": access_token,  # actually a challenge token
             "token_type": "bearer",

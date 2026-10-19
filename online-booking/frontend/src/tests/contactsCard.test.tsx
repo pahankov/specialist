@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { toast } from 'sonner';
 import ContactsCard, { type ContactsApi } from '../components/profile/ContactsCard';
 import type { ClientContact } from '../api/cabinet';
 
@@ -56,6 +57,49 @@ describe('ContactsCard (injected API — super profile reuse)', () => {
       }),
     );
     expect(onChanged).toHaveBeenCalled();
+  });
+
+  it('adds an email through the injected API and refreshes', async () => {
+    const api = makeApi();
+    const onChanged = vi.fn();
+    render(<ContactsCard contacts={[PHONE]} onChanged={onChanged} api={api} />);
+
+    fireEvent.change(screen.getByLabelText('Тип контакта'), { target: { value: 'email' } });
+    fireEvent.change(screen.getByPlaceholderText('email@example.com'), {
+      target: { value: 'client@example.com' },
+    });
+    const btn = screen.getByRole('button', { name: 'Добавить' });
+    // jsdom doesn't submit forms on button click — submit the form directly.
+    fireEvent.submit(btn.closest('form') as HTMLFormElement);
+
+    await waitFor(() =>
+      expect(api.addContact).toHaveBeenCalledWith({
+        contact_type: 'email',
+        value: 'client@example.com',
+      }),
+    );
+    expect(onChanged).toHaveBeenCalled();
+  });
+
+  it('blocks a malformed email locally — the form is noValidate (owner fix)', () => {
+    const api = makeApi();
+    render(<ContactsCard contacts={[PHONE]} onChanged={vi.fn()} api={api} />);
+
+    fireEvent.change(screen.getByLabelText('Тип контакта'), { target: { value: 'email' } });
+    fireEvent.change(screen.getByPlaceholderText('email@example.com'), {
+      target: { value: 'not-an-email@' },
+    });
+    const btn = screen.getByRole('button', { name: 'Добавить' });
+    const form = btn.closest('form') as HTMLFormElement;
+    fireEvent.submit(form);
+
+    // noValidate: our toast owns validation — the native type=email bubble
+    // used to abort the submit silently (no request, no message, dead button).
+    expect(form).toHaveAttribute('novalidate');
+    expect(vi.mocked(toast.error)).toHaveBeenCalledWith(
+      'Введите корректный email, например name@mail.ru',
+    );
+    expect(api.addContact).not.toHaveBeenCalled();
   });
 
   it('promotes and removes through the injected API', async () => {

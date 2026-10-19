@@ -544,16 +544,48 @@ class TestMaxVerify:
         return re.search(r"\d{6}", stub_sender[-1]["text"]).group(0)
 
     async def test_full_flow_new_user(
-        self, client, max_enabled, stub_sender
+        self, client, max_enabled, stub_sender, session
     ):
+        """New number → consent challenge → consent/complete → session.
+
+        152-FZ (owner item 6): no session before the user accepts the
+        policy; the welcome bell arrives with the completed registration
+        (owner item 5).
+        """
+        from sqlalchemy import select
+        from app.models.user import User
+        from app.models.notification import Notification
+
         code = await self._delivered_code(client, stub_sender)
-        done = await client.post(
+        pending = await client.post(
             "/api/v1/auth/max/verify", json={"phone": PHONE, "code": code})
-        assert done.status_code == 200
-        body = done.json()
-        assert body["access_token"]
+        assert pending.status_code == 200
+        body = pending.json()
         assert body["is_new_user"] is True
+        assert body["challenge"]  # consent required — no session yet
+        assert "access_token=" not in pending.headers.get("set-cookie", "")
+
+        # Consent cannot be skipped.
+        denied = await client.post(
+            "/api/v1/auth/consent/complete",
+            json={"challenge": body["challenge"], "consent": False})
+        assert denied.status_code == 400
+
+        done = await client.post(
+            "/api/v1/auth/consent/complete",
+            json={"challenge": body["challenge"], "consent": True})
+        assert done.status_code == 201
+        assert done.json()["access_token"]
         assert "access_token=" in done.headers.get("set-cookie", "")
+
+        user = (await session.execute(
+            select(User).where(User.phone == PHONE_NORM))).scalar_one()
+        assert user.consent_at is not None
+        welcome = (await session.execute(
+            select(Notification).where(
+                Notification.recipient_id == user.id,
+                Notification.audience == "system"))).scalars().all()
+        assert welcome and "Добро пожаловать" in welcome[0].text
 
         # Replay: code consumed
         again = await client.post(
@@ -640,11 +672,15 @@ class TestMaxVerify:
         from app.models.user import User, UserRole
         from app.models.master_profile import MasterProfile
         from app.utils.security import hash_password
+        from datetime import datetime, timezone
 
         user = User(
             name="Master", email="master@example.com", phone=PHONE_NORM,
             hashed_password=hash_password("Password1!"),
             role=UserRole.MASTER, is_active=True, is_verified=True,
+            # An existing account (consent tracked) — the consent overlay
+            # is only for new/pending accounts.
+            consent_at=datetime.now(timezone.utc),
         )
         session.add(user)
         await session.flush()

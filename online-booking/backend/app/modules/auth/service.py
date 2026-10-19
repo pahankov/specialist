@@ -370,6 +370,17 @@ async def register_unified(
     """
     logger.info("Quick registration: %s", phone)
 
+    # 152-FZ: an account cannot be created without explicit consent. The UI
+    # gates the button, but the API enforces it too (owner review 1.80.0).
+    if not consent:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Подтвердите согласие на обработку персональных данных — "
+                "без него регистрация невозможна"
+            ),
+        )
+
     # A phone may live as a contact (new model) or in the legacy column.
     if await find_user_by_contact(db, CONTACT_PHONE, phone) is not None:
         raise HTTPException(
@@ -401,6 +412,11 @@ async def register_unified(
     # it is typed at registration and confirmed by nobody yet («Единый
     # вход»: телефон подтверждается только соцвходом).
     await attach_contact(db, new_user, CONTACT_PHONE, phone, make_primary=True)
+
+    # Owner item 5: a brand-new client immediately gets a short how-to bell.
+    from app.services.notifications import send_welcome_bell
+
+    await send_welcome_bell(db, new_user.id)
 
     await db.commit()
     await db.refresh(new_user)
@@ -576,16 +592,39 @@ def _decode_challenge_token(token: str) -> dict:
             status_code=400,
             detail="Недействительный токен. Начните вход заново.",
         )
-    # Validate age: max CHALLENGE_TTL_SECONDS from issued-at.
+    # Validate age: max CHALLENGE_TTL_SECONDS from issued-at. PyJWT decodes
+    # ``iat`` back as a numeric timestamp (not datetime) — handle both.
     issued_at = payload.get("iat")
-    if isinstance(issued_at, datetime):
-        age = (datetime.now(dt_timezone.utc) - issued_at).total_seconds()
+    if issued_at is not None:
+        if isinstance(issued_at, datetime):
+            issued = issued_at
+            if issued.tzinfo is None:
+                issued = issued.replace(tzinfo=dt_timezone.utc)
+        else:
+            issued = datetime.fromtimestamp(float(issued_at), tz=dt_timezone.utc)
+        age = (datetime.now(dt_timezone.utc) - issued).total_seconds()
         if age > CHALLENGE_TTL_SECONDS:
             raise HTTPException(
                 status_code=400,
                 detail="Чек-бокс согласия истёк. Начните вход заново.",
             )
     return payload
+
+
+def is_challenge_token(token: str) -> bool:
+    """True when ``token`` is a consent challenge, not a session JWT.
+
+    OAuth verify returns a challenge (instead of a session token) for a
+    new/pending account without consent; the routers use this helper to
+    tell the two apart. Challenge claims: sub + phone + iat, no role.
+    """
+    if not token:
+        return False
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except jwt.InvalidTokenError:
+        return False
+    return "phone" in payload and "role" not in payload
 
 
 async def commit_pending_user(

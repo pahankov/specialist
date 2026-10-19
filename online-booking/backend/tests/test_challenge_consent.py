@@ -106,7 +106,6 @@ class TestRegisterUnifiedWithChallenge:
 
 class TestConsentComplete:
     """consent/complete must stamp consent for pending OAuth users."""
-
     async def test_complete_consent_rejects_orphan_challenge(self, client):
         """Challenge from phone/status (user_id=0) → 400 (user not found).
 
@@ -135,3 +134,51 @@ class TestConsentComplete:
             json={"challenge": "invalid_token_xyz", "consent": True},
         )
         assert resp.status_code == 400
+
+
+# ─── Challenge token internals ──────────────────────────────────────
+
+
+class TestChallengeToken:
+    """The challenge is a 5-minute quasi-session — its TTL must be enforced
+    and the routers must be able to tell it apart from a session JWT."""
+
+    def test_challenge_ttl_is_enforced(self):
+        from datetime import datetime, timedelta, timezone
+
+        import jwt
+        from fastapi import HTTPException
+
+        from app.modules.auth.service import (
+            ALGORITHM,
+            CHALLENGE_TTL_SECONDS,
+            SECRET_KEY,
+            _decode_challenge_token,
+        )
+
+        issued = datetime.now(timezone.utc) - timedelta(
+            seconds=CHALLENGE_TTL_SECONDS + 30)
+        token = jwt.encode(
+            {"sub": "1", "phone": "", "iat": issued},
+            SECRET_KEY, algorithm=ALGORITHM,
+        )
+        with pytest.raises(HTTPException) as exc:
+            _decode_challenge_token(token)
+        assert exc.value.status_code == 400
+
+    def test_challenge_is_detected(self):
+        from app.modules.auth.service import (
+            _create_challenge_token,
+            is_challenge_token,
+        )
+
+        challenge = _create_challenge_token(5, "+7 (999) 000-11-22")
+        assert is_challenge_token(challenge) is True
+        # A session JWT is not a challenge.
+        from app.utils.tokens import create_access_token
+
+        session = create_access_token(
+            {"sub": "5", "role": "CLIENT", "name": "", "is_admin": False})
+        assert is_challenge_token(session) is False
+        assert is_challenge_token("") is False
+        assert is_challenge_token("not-a-jwt") is False

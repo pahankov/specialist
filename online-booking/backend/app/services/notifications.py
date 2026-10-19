@@ -9,6 +9,17 @@ from app.logging_config import get_logger
 
 logger = get_logger(__name__)
 
+# First message every new client sees in the bell: a short cabinet guide.
+WELCOME_TEXT = (
+    "Добро пожаловать в Beauty Specialist! 👋\n\n"
+    "Коротко, что можно сделать в кабинете:\n"
+    "• Заполнить профиль — имя, телефон, почта и адрес: «Мой профиль».\n"
+    "• Выбрать мастера и услугу и записаться онлайн: «Записаться».\n"
+    "• Следить за визитами и их статусами: «Мои записи».\n"
+    "• Получать напоминания и ответы мастеров — в этот колокольчик.\n\n"
+    "Спасибо, что вы с нами!"
+)
+
 
 async def notify_user(
     db: AsyncSession,
@@ -31,3 +42,21 @@ async def notify_user(
     await db.flush()
     logger.info("Bell: to=%s audience=%s link=%s", recipient_id, audience, link)
     return note
+
+
+async def send_welcome_bell(
+    db: AsyncSession,
+    recipient_id: int,
+) -> Notification:
+    """Welcome note for a freshly created account (1.80.0, owner item 5).
+
+    Written once, right when the account is created (phone registration or
+    social consent completion), and links to the cabinet («Мои записи»).
+    """
+    return await notify_user(
+        db,
+        recipient_id,
+        WELCOME_TEXT,
+        audience="system",
+        link="appointments",
+    )

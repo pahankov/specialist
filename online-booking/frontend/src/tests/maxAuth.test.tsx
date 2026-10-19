@@ -12,6 +12,7 @@ vi.mock('../api/client', () => ({
     registerUnified: vi.fn(),
     maxStart: vi.fn(),
     maxVerify: vi.fn(),
+    consentComplete: vi.fn(),
   },
 }));
 
@@ -160,7 +161,46 @@ describe('MAX chat-bot login (SMS-style)', () => {
     await vi.waitFor(() => {
       expect(vi.mocked(toast.success)).toHaveBeenCalledWith('Добро пожаловать! Аккаунт создан.');
     });
-    expect(vi.mocked(mocked.maxVerify)).toHaveBeenCalledWith(MASKED, '482910', true);
+    expect(vi.mocked(mocked.maxVerify)).toHaveBeenCalledWith(MASKED, '482910', false);
+  });
+
+  it('asks for 152-FZ consent when MAX returns a new-account challenge', async () => {
+    openMaxTab();
+    fillPhone();
+    vi.mocked(mocked.maxStart).mockResolvedValue({
+      data: {
+        delivered: false,
+        deeplink: '',
+        expires_in: 300,
+        bot_username: 'b',
+        bot_url: '',
+      },
+    } as never);
+    fireEvent.click(screen.getByText('Получить код в MAX'));
+    await screen.findByText(/бот попросит подтвердить номер/);
+
+    vi.mocked(mocked.maxVerify).mockResolvedValue({
+      data: { access_token: 'ch', token_type: 'bearer', is_new_user: true, challenge: 'ch' },
+    } as never);
+    vi.mocked(mocked.consentComplete).mockResolvedValue({
+      data: { access_token: 't', token_type: 'bearer' },
+    } as never);
+    fireEvent.change(screen.getByPlaceholderText('––––––'), {
+      target: { value: '482910' },
+    });
+    fireEvent.click(screen.getByText('Войти'));
+
+    // The overlay blocks the login until consent is accepted.
+    expect(await screen.findByText('Подтверждение согласия')).toBeInTheDocument();
+    expect(vi.mocked(mocked.consentComplete)).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByText('Принимаю'));
+    await vi.waitFor(() =>
+      expect(vi.mocked(mocked.consentComplete)).toHaveBeenCalledWith('ch', true),
+    );
+    await vi.waitFor(() =>
+      expect(vi.mocked(toast.success)).toHaveBeenCalledWith('Добро пожаловать! Аккаунт создан.'),
+    );
   });
 
   it('shows the error on wrong code', async () => {
