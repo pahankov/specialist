@@ -72,6 +72,16 @@ export const adminApi = {
       },
     );
   },
+  /** «Подтвердить почту»: код на собственный email-контакт профиля. */
+  sendProfileContactCode(id: number) {
+    return apiClient.post<{ ok: boolean }>(`/api/v1/admin/profile/contacts/${id}/send-code`);
+  },
+  verifyProfileContactCode(id: number, code: string) {
+    return apiClient.post<import('./cabinet').ClientContact>(
+      `/api/v1/admin/profile/contacts/${id}/verify-code`,
+      { code },
+    );
+  },
   // Dashboard
   getDashboard(params?: {
     period?: 'all' | 'month' | 'today' | 'custom';

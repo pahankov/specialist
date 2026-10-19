@@ -122,6 +122,7 @@ async def login_master(email: str, password: str, db: AsyncSession) -> tuple[str
         "sub": str(user.id),
         "role": user.role.value,
         "name": user.name,
+        "last_name": user.last_name,
         "is_admin": user.role == UserRole.ADMIN,
     })
 
@@ -218,6 +219,7 @@ async def verify_otp(phone: str, code: str, db: AsyncSession) -> tuple[str, User
         "sub": str(user.id),
         "role": user.role.value,
         "name": user.name,
+        "last_name": user.last_name,
         "is_admin": user.role == UserRole.ADMIN,
     })
 
@@ -253,6 +255,7 @@ async def login_client_legacy(phone: str, db: AsyncSession) -> tuple[str, User]:
         "sub": str(user.id),
         "role": user.role.value,
         "name": user.name,
+        "last_name": user.last_name,
     })
     logger.info("Клиент успешно вошёл в систему: %s", phone)
     return access_token, user
@@ -296,6 +299,7 @@ async def login_unified(identifier: str, password: str, db: AsyncSession) -> tup
         "sub": str(user.id),
         "role": user.role.value,
         "name": user.name,
+        "last_name": user.last_name,
         "is_admin": user.role == UserRole.ADMIN,
     })
 
@@ -402,6 +406,7 @@ async def issue_session(user: User, db: AsyncSession) -> tuple[str, str]:
         "sub": str(user.id),
         "role": user.role.value,
         "name": user.name,
+        "last_name": user.last_name,
         "is_admin": user.role == UserRole.ADMIN,
     })
     refresh_token_value, expires_at = create_refresh_token_payload(

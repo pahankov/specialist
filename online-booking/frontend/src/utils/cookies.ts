@@ -10,6 +10,7 @@ export interface JwtPayload {
   role?: string;
   is_admin?: boolean;
   name?: string;
+  last_name?: string | null;
   exp?: number;
 }
 

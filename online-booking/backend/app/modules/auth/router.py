@@ -263,6 +263,7 @@ async def refresh_token(request: Request, db: AsyncSession = Depends(get_db)):
         "sub": str(user.id),
         "role": user.role.value,
         "name": user.name,
+        "last_name": user.last_name,
         "is_admin": user.role == UserRole.ADMIN,
     })
     new_refresh_value, new_expires = create_refresh_token_payload(user.id, user.email or "")
@@ -411,6 +412,7 @@ async def register_unified(
             "sub": str(new_user.id),
             "role": new_user.role.value,
             "name": new_user.name,
+            "last_name": new_user.last_name,
             "is_admin": new_user.role == UserRole.ADMIN,
         })
         refresh_value, expires_at = create_refresh_token_payload(

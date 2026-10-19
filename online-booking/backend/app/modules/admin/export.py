@@ -193,11 +193,16 @@ async def export_masters_csv(
     ids: Optional[str] = Query(None, description="Comma-separated master user ids (selection export)"),
     db: AsyncSession = Depends(get_db)
 ):
-    """Export all masters to CSV (superadmin only)."""
+    """Export all masters to CSV (superadmin only).
+
+    1.79.3: same rule as the list — role MASTER only, so a leftover
+    MasterProfile row on a superadmin never leaks into the CSV.
+    """
     from app.models.city import City
     masters_query = (
         select(User, MasterProfile)
         .join(MasterProfile, User.id == MasterProfile.user_id)
+        .where(User.role == UserRole.MASTER)
         .order_by(User.name)
     )
     if ids:
@@ -216,8 +221,12 @@ async def export_masters_csv(
     lines = ["ID,Имя,Email,Телефон,Telegram,Статус,Активен,Тариф,Триал до,Город"]
     for user, mp in rows:
         trial = mp.trial_ends_at.strftime('%Y-%m-%d') if mp.trial_ends_at else ''
+        # «Имя Фамилия» — matches the panel table (no double last name).
+        full_name = user.name
+        if user.last_name and user.last_name not in full_name:
+            full_name = f"{full_name} {user.last_name}"
         lines.append(
-            f"{user.id},{user.name},{user.email or ''},{user.phone or ''}"
+            f"{user.id},{full_name},{user.email or ''},{user.phone or ''}"
             f",{mp.telegram_username or ''},{mp.status},{user.is_active}"
             f",{mp.tariff or ''},{trial},{city_names.get(user.city_id, '')}"
         )

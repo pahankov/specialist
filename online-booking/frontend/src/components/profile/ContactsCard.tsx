@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { cabinetApi, type ClientContact } from '../../api/client';
 import PhoneInput, { isCompletePhone } from '../common/PhoneInput';
+import EmailVerifyModal from './EmailVerifyModal';
 import { getApiErrorMessage } from '../../utils/apiError';
 import './ProfileCards.css';
 
@@ -29,6 +30,7 @@ function ContactsCard({ contacts, onChanged }: ContactsCardProps) {
   const [newType, setNewType] = useState<'phone' | 'email'>('phone');
   const [newValue, setNewValue] = useState('');
   const [busy, setBusy] = useState<number | 'add' | null>(null);
+  const [verifyContact, setVerifyContact] = useState<ClientContact | null>(null);
 
   const phones = contacts.filter((c) => c.contact_type === 'phone');
   const emails = contacts.filter((c) => c.contact_type === 'email');
@@ -99,6 +101,17 @@ function ContactsCard({ contacts, onChanged }: ContactsCardProps) {
               </span>
             </div>
             <div className="contact-actions">
+              {c.contact_type === 'email' && !c.is_verified && (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  disabled={busy === c.id}
+                  onClick={() => setVerifyContact(c)}
+                  title="Получить код подтверждения на эту почту"
+                >
+                  Подтвердить
+                </button>
+              )}
               {!c.is_primary && (
                 <button
                   type="button"
@@ -130,7 +143,8 @@ function ContactsCard({ contacts, onChanged }: ContactsCardProps) {
       <h3>📱 Контакты</h3>
       <p className="profile-card-hint">
         Основной телефон — вход по паролю; основной email — письма и восстановление пароля.
-        «Подтверждён» появляется после входа через соцсеть или кода из письма.
+        «Подтверждён» появляется после входа через соцсеть или кода из письма — для почты код
+        запрашивается кнопкой «Подтвердить».
       </p>
 
       {renderList(phones, 'Телефоны')}
@@ -165,6 +179,17 @@ function ContactsCard({ contacts, onChanged }: ContactsCardProps) {
           {busy === 'add' ? 'Добавляем…' : 'Добавить'}
         </button>
       </form>
+
+      {verifyContact && (
+        <EmailVerifyModal
+          open
+          email={verifyContact.value}
+          onClose={() => setVerifyContact(null)}
+          sendCode={() => cabinetApi.sendContactCode(verifyContact.id)}
+          verifyCode={(code) => cabinetApi.verifyContactCode(verifyContact.id, code)}
+          onVerified={onChanged}
+        />
+      )}
     </div>
   );
 }

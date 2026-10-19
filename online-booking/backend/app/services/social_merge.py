@@ -240,6 +240,7 @@ async def complete_social_login(db: AsyncSession, user: User) -> str:
         "sub": str(user.id),
         "role": user.role.value,
         "name": user.name,
+        "last_name": user.last_name,
         "is_admin": user.role == UserRole.ADMIN,
     })
     refresh_value, expires_at = create_refresh_token_payload(

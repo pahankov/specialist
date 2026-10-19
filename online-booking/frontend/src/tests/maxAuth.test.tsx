@@ -320,12 +320,13 @@ describe('Registration consent (152-FZ)', () => {
   });
 
   function openRegister() {
+    // The register tab is opened by the unified entry itself (no footer link
+    // since 1.79.3) — render it directly.
     render(
       <MemoryRouter>
-        <LoginModal isOpen onClose={vi.fn()} />
+        <LoginModal isOpen onClose={vi.fn()} initialMode="register" />
       </MemoryRouter>,
     );
-    fireEvent.click(screen.getByText('Зарегистрироваться'));
   }
 
   it('blocks submit without consent', () => {

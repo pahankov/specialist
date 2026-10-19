@@ -71,6 +71,7 @@ async def impersonate_master(
         "sub": str(user.id),
         "role": user.role.value,
         "name": user.name,
+        "last_name": user.last_name,
         "is_admin": False,
         "impersonated_by": admin.id,
     })

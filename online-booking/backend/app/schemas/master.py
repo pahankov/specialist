@@ -49,6 +49,7 @@ class MasterResponse(BaseModel):
     id: int  # master_profile.id
     user_id: int  # user.id
     name: str
+    last_name: Optional[str] = None
     email: str
     phone: Optional[str]
     telegram_username: Optional[str]

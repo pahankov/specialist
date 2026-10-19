@@ -18,6 +18,7 @@ import { clearAuthCookies, decodeJwtPayload, getCookie } from '../../utils/cooki
 import { capitalizeWords, splitFullName } from '../../utils/names';
 import { MasterReviews } from '../../components/reviews';
 import { BindingsCard, PasswordCard } from '../../components/profile';
+import EmailVerifyModal from '../../components/profile/EmailVerifyModal';
 import LoginModal from '../../components/LoginModal';
 import './ProfilePage.css';
 
@@ -91,6 +92,8 @@ function ProfilePage() {
   const avatarInput = useRef<HTMLInputElement>(null);
   const certInput = useRef<HTMLInputElement>(null);
   const [contacts, setContacts] = useState<ProfileContact[]>([]);
+  /** «Подтвердить» next to an unverified email (code roundtrip modal). */
+  const [verifyContact, setVerifyContact] = useState<ProfileContact | null>(null);
 
   /** Superadmin gets a slim profile: auth channels + password + contacts —
       the master-only blocks (photo/certs/reviews/delete) do not apply. */
@@ -318,6 +321,18 @@ function ProfilePage() {
                   </span>
                 </span>
               </div>
+              {c.contact_type === 'email' && !c.is_verified && (
+                <div className="contact-actions">
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => setVerifyContact(c)}
+                    title="Получить код подтверждения на эту почту"
+                  >
+                    Подтвердить
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -347,7 +362,7 @@ function ProfilePage() {
           <h3>📱 Контакты</h3>
           <p className="profile-card-hint">
             Телефон и почта аккаунта. «Подтверждён» появляется после входа через соцсеть или ввода
-            кода из письма.
+            кода из письма — для почты код запрашивается кнопкой «Подтвердить».
           </p>
           {renderContacts(
             contacts.filter((c) => c.contact_type === 'phone'),
@@ -367,6 +382,18 @@ function ProfilePage() {
             initialMode="max"
             onClose={() => setMaxLinkOpen(false)}
             onAuthSuccess={refreshAuthFlags}
+          />
+        )}
+
+        {/* «Подтвердить почту»: code roundtrip for an unverified email. */}
+        {verifyContact && (
+          <EmailVerifyModal
+            open
+            email={verifyContact.value}
+            onClose={() => setVerifyContact(null)}
+            sendCode={() => adminApi.sendProfileContactCode(verifyContact.id)}
+            verifyCode={(code) => adminApi.verifyProfileContactCode(verifyContact.id, code)}
+            onVerified={refreshAuthFlags}
           />
         )}
       </div>

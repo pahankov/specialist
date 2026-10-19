@@ -629,7 +629,7 @@ function LoginModal({
     </form>
   );
 
-  // The entry widget has no ✕ (owner's call): it closes by overlay click/Esc.
+  // Modals close via Esc / overlay click only (no ✕ anywhere — owner's rule).
   return (
     <Modal
       open={isOpen}
@@ -644,7 +644,6 @@ function LoginModal({
               : 'Вход и регистрация через MAX'
       }
       className="login-modal"
-      hideClose
     >
       {mode === 'login' ? (
         /* ─── LOGIN FORM ─── */
@@ -750,19 +749,6 @@ function LoginModal({
           <button type="submit" className="btn btn-primary btn-submit" disabled={loading}>
             {loading ? 'Входим...' : 'Войти'}
           </button>
-
-          <p className="login-footer">
-            Нет аккаунта?{' '}
-            <a
-              href="#"
-              onClick={(e) => {
-                e.preventDefault();
-                switchMode('register');
-              }}
-            >
-              Зарегистрироваться
-            </a>
-          </p>
         </form>
       ) : mode === 'max' ? (
         /* MAX CHAT-BOT FORM (SMS-style: code arrives in MAX, typed here) */

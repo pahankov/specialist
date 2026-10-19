@@ -32,6 +32,15 @@ import { getCookie } from '../../utils/cookies';
 import { startImpersonation } from '../../utils/impersonation';
 import './MastersPage.css';
 
+/** «Имя Фамилия» при наличии: legacy-строки хранят фамилию в name, свежие —
+ * отдельным полем last_name; дубли не показываем. */
+function masterDisplayName(m: Pick<Master, 'name' | 'last_name'>): string {
+  if (m.last_name && !m.name.includes(m.last_name)) {
+    return `${m.name} ${m.last_name}`;
+  }
+  return m.name;
+}
+
 function MastersPage() {
   const navigate = useNavigate();
   const section = useSectionPrefix();
@@ -44,10 +53,6 @@ function MastersPage() {
   const [searchInput, setSearchInput] = usePersistentState('masters.searchInput', '');
   const [filterActive, setFilterActive] = usePersistentState<'all' | 'active' | 'inactive'>(
     'masters.active',
-    'all',
-  );
-  const [filterAdmin, setFilterAdmin] = usePersistentState<'all' | 'admin' | 'user'>(
-    'masters.role',
     'all',
   );
   const { sortKey, sortDir, toggleSort, sortArrow } = useAdminSort<'name' | 'email' | 'status'>(
@@ -83,8 +88,6 @@ function MastersPage() {
       if (search?.trim()) params.search = search.trim();
       if (filterActive === 'active') params.is_active = 'true';
       if (filterActive === 'inactive') params.is_active = 'false';
-      if (filterAdmin === 'admin') params.is_admin = 'true';
-      if (filterAdmin === 'user') params.is_admin = 'false';
       if (sortKey) {
         params.sort_by = sortKey;
         params.sort_dir = sortDir;
@@ -103,7 +106,7 @@ function MastersPage() {
 
   useEffect(() => {
     loadMasters();
-  }, [search, filterActive, filterAdmin, sortKey, sortDir]);
+  }, [search, filterActive, sortKey, sortDir]);
 
   // Debounce search input (400ms) — no request per keystroke
   useEffect(() => {
@@ -299,7 +302,7 @@ function MastersPage() {
               className="master-name-link"
               onClick={() => navigate(`${section}/masters/${master.id}`)}
             >
-              <div className="master-name">{master.name}</div>
+              <div className="master-name">{masterDisplayName(master)}</div>
               {master.telegram_username && (
                 <div className="master-telegram">@{master.telegram_username}</div>
               )}
@@ -552,15 +555,6 @@ function MastersPage() {
             <option value="active">Активные</option>
             <option value="inactive">Заблокированные</option>
           </select>
-          <select
-            value={filterAdmin}
-            onChange={(e) => setFilterAdmin(e.target.value as 'all' | 'admin' | 'user')}
-            className="filter-select"
-          >
-            <option value="all">Все роли</option>
-            <option value="admin">Суперпользователи</option>
-            <option value="user">Обычные мастера</option>
-          </select>
         </div>
       </div>
 
@@ -595,7 +589,7 @@ function MastersPage() {
       <Modal
         open={tariffMaster !== null}
         onClose={() => setTariffMaster(null)}
-        title={`Тариф — ${tariffMaster?.name ?? ''}`}
+        title={`Тариф — ${tariffMaster ? masterDisplayName(tariffMaster) : ''}`}
       >
         <div className="form-group">
           <label>Тариф</label>

@@ -43,6 +43,7 @@ export interface Master {
   id: number;
   user_id: number;
   name: string;
+  last_name?: string | null;
   email: string;
   phone?: string;
   telegram_username?: string;

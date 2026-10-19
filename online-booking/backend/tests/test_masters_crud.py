@@ -87,16 +87,26 @@ class TestGetMasters:
         masters = resp.json()
         assert isinstance(masters, list)
 
-    async def test_list_masters_filter_admin(self, client, super_admin_headers, test_master_data):
-        """Filter by admin status works."""
+    async def test_list_excludes_superadmins(
+        self, client, super_admin_headers, super_admin_user_with_profile,
+        test_master_data
+    ):
+        """1.79.3: «Мастера» lists service providers only (role MASTER).
+
+        The superadmin keeps a leftover MasterProfile row from old seeds —
+        he must not surface in the list (and so never with a tariff).
+        """
         await client.post("/api/v1/auth/register", json=test_master_data)
         resp = await client.get(
-            "/api/v1/admin/masters?is_admin=true",
+            "/api/v1/admin/masters",
             headers=super_admin_headers
         )
         assert resp.status_code == 200
         masters = resp.json()
         assert isinstance(masters, list)
+        ids = {m["id"] for m in masters}
+        assert super_admin_user_with_profile["master_profile"].id not in ids
+        assert all("last_name" in m for m in masters)
 
 
 # ─── GET /api/v1/admin/masters/{id} ─────────────────────────────────

@@ -63,20 +63,6 @@
   font-size: 20px;
 }
 
-.modal-close {
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 18px;
-  color: #666;
-  padding: 4px 8px;
-  line-height: 1;
-}
-
-.modal-close:hover {
-  color: #000;
-}
-
 .modal-message {
   color: #333;
   font-size: 14px;

@@ -1,0 +1,43 @@
+/* «Подтвердить почту» modal (EmailVerifyModal.tsx) — code entry form. */
+
+.email-verify-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.email-verify-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  font-size: 20px;
+  letter-spacing: 6px;
+  text-align: center;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  font-family: inherit;
+  background: #fff;
+}
+
+.email-verify-input:focus {
+  outline: none;
+  border-color: #ff6b9d;
+  box-shadow: 0 0 0 3px rgba(255, 107, 157, 0.18);
+}
+
+.email-verify-resend {
+  display: block;
+  margin: 12px auto 0;
+  background: none;
+  border: none;
+  color: #6b7280;
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.email-verify-resend:disabled {
+  cursor: default;
+  opacity: 0.6;
+  text-decoration: none;
+}

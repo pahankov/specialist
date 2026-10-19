@@ -32,9 +32,12 @@ function getLayoutUser(fallbackName: string): LayoutUser | null {
   if (!token) return null;
   const payload = decodeJwtPayload(token);
   if (!payload?.sub) return null;
+  // Full display name: tokens minted since 1.79.3 carry last_name; older
+  // sessions fall back to the first name until the next login.
+  const fullName = [payload.name, payload.last_name].filter(Boolean).join(' ');
   return {
     id: parseInt(payload.sub, 10),
-    name: payload.name || fallbackName,
+    name: fullName || fallbackName,
   };
 }
 

@@ -3,7 +3,7 @@ import os
 import uuid
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,12 +11,19 @@ from sqlalchemy import select
 
 from app.database import get_db
 from app.dependencies.auth import require_master
+from app.middleware.rate_limit import limiter
 from app.models.city import City
 from app.models.master_profile import MasterProfile
 from app.models.user import User, UserRole
+from app.models.user_contact import UserContact
 from app.modules.admin.helpers import get_master_profile_id
 from app.services.audit import log_action
 from app.services.contacts import get_contacts
+from app.services.email_verify import (
+    finish_email_verification,
+    require_email_contact,
+    start_email_verification,
+)
 from app.services.names import set_names
 from app.logging_config import get_logger
 
@@ -42,6 +49,18 @@ def _delete_avatar_file(url: Optional[str]) -> None:
             os.remove(os.path.join(AVATAR_DIR, os.path.basename(url)))
         except OSError:
             pass
+
+
+def _contact_out(c: UserContact) -> dict:
+    """Serialize one own contact (verify flags included)."""
+    return {
+        "id": c.id,
+        "contact_type": c.contact_type,
+        "value": c.value,
+        "is_verified": bool(c.is_verified),
+        "verified_via": c.verified_via,
+        "is_primary": bool(c.is_primary),
+    }
 
 
 class Certificate(BaseModel):
@@ -86,17 +105,7 @@ async def get_my_profile(
         "yandex_bound": master.yandex_user_id is not None,
         "max_bound": master.max_user_id is not None,
         "max_username": master.max_username,
-        "contacts": [
-            {
-                "id": c.id,
-                "contact_type": c.contact_type,
-                "value": c.value,
-                "is_verified": bool(c.is_verified),
-                "verified_via": c.verified_via,
-                "is_primary": bool(c.is_primary),
-            }
-            for c in contacts
-        ],
+        "contacts": [_contact_out(c) for c in contacts],
     }
     if master.role == UserRole.MASTER:
         mp_id = await get_master_profile_id(db, master)
@@ -272,3 +281,57 @@ async def upload_avatar(
     await db.commit()
     logger.info("Avatar uploaded: user=%s url=%s", master.id, url)
     return JSONResponse(content={"avatar_url": url})
+
+
+# ─── Own email confirmation («Подтвердить почту») ─────────────────────
+
+
+class ContactVerify(BaseModel):
+    """Six digits from the letter (a little room for pasted codes)."""
+    code: str = Field(min_length=1, max_length=12)
+
+
+async def _own_contact_or_404(
+    db: AsyncSession, user_id: int, contact_id: int
+) -> UserContact:
+    contact = (await db.execute(
+        select(UserContact).where(
+            UserContact.id == contact_id,
+            UserContact.user_id == user_id,
+        )
+    )).scalar_one_or_none()
+    if contact is None:
+        raise HTTPException(status_code=404, detail="Контакт не найден")
+    return contact
+
+
+@router.post("/profile/contacts/{contact_id}/send-code", response_model=dict)
+@limiter.limit("5/minute")
+async def send_my_contact_code(
+    request: Request,
+    contact_id: int,
+    master: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db),
+):
+    """Email a confirm code for an own email contact (superadmin included)."""
+    contact = await _own_contact_or_404(db, master.id, contact_id)
+    require_email_contact(contact)
+    await start_email_verification(db, contact)
+    return {"ok": True}
+
+
+@router.post("/profile/contacts/{contact_id}/verify-code")
+async def verify_my_contact_code(
+    contact_id: int,
+    data: ContactVerify,
+    master: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db),
+):
+    """Check the emailed code and mark the contact verified."""
+    contact = await _own_contact_or_404(db, master.id, contact_id)
+    require_email_contact(contact)
+    contact = await finish_email_verification(db, contact, data.code)
+    await log_action(db, master.id, "contact_verify", "user_contact", contact.id,
+                     f"Почта подтверждена: {contact.value}", level="info")
+    await db.commit()
+    return _contact_out(contact)

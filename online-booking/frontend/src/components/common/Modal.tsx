@@ -11,8 +11,6 @@ interface ModalProps {
   className?: string;
   /** Wider dialog (forms with many fields). */
   wide?: boolean;
-  /** Hide the ✕ in the header (the entry widget closes via overlay/Esc). */
-  hideClose?: boolean;
 }
 
 /**
@@ -37,7 +35,10 @@ function unlockScroll() {
   if (scrollLocks === 0) document.body.style.overflow = savedOverflow;
 }
 
-/** Single modal implementation: portal, Esc, overlay click, scroll lock, aria. */
+/** Single modal implementation: portal, Esc, overlay click, scroll lock, aria.
+ *
+ * Modals close ONLY via Esc or a click on the overlay (owner's rule: no ✕
+ * anywhere) — the header keeps just the title. */
 export default function Modal({
   open,
   onClose,
@@ -45,7 +46,6 @@ export default function Modal({
   children,
   className = '',
   wide = false,
-  hideClose = false,
 }: ModalProps) {
   const boxRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
@@ -84,12 +84,9 @@ export default function Modal({
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
-        {title !== undefined && !hideClose && (
+        {title !== undefined && (
           <div className="modal-header">
             <h3 className="modal-title">{title}</h3>
-            <button type="button" className="modal-close" onClick={onClose} aria-label="Закрыть">
-              ✕
-            </button>
           </div>
         )}
         {children}

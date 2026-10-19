@@ -30,6 +30,11 @@ from app.services.contacts import (
     remove_contact,
     set_primary,
 )
+from app.services.email_verify import (
+    finish_email_verification,
+    require_email_contact,
+    start_email_verification,
+)
 from app.services.inbox import (
     client_inbox,
     client_mark_read,
@@ -173,6 +178,11 @@ class ClientContactCreate(BaseModel):
     value: str = Field(min_length=1, max_length=255)
 
 
+class ClientContactVerify(BaseModel):
+    """Six digits from the letter (a little room for pasted codes)."""
+    code: str = Field(min_length=1, max_length=12)
+
+
 async def _own_contact_or_404(
     db: AsyncSession, user_id: int, contact_id: int
 ) -> UserContact:
@@ -266,6 +276,38 @@ async def make_my_contact_primary(
     """Move a contact into the primary slot of its type."""
     contact = await _own_contact_or_404(db, user.id, contact_id)
     contact = await set_primary(db, user, contact.contact_type, contact.value)
+    await db.commit()
+    return _contact_out(contact)
+
+
+@router.post("/contacts/{contact_id}/send-code", response_model=dict)
+@limiter.limit("5/minute")
+async def send_my_contact_code(
+    request: Request,
+    contact_id: int,
+    user: User = Depends(require_client),
+    db: AsyncSession = Depends(get_db),
+):
+    """Email a confirm code for an own email contact («Подтвердить почту»)."""
+    contact = await _own_contact_or_404(db, user.id, contact_id)
+    require_email_contact(contact)
+    await start_email_verification(db, contact)
+    return {"ok": True}
+
+
+@router.post("/contacts/{contact_id}/verify-code", response_model=ClientContactOut)
+async def verify_my_contact_code(
+    contact_id: int,
+    data: ClientContactVerify,
+    user: User = Depends(require_client),
+    db: AsyncSession = Depends(get_db),
+):
+    """Check the emailed code and mark the contact verified."""
+    contact = await _own_contact_or_404(db, user.id, contact_id)
+    require_email_contact(contact)
+    contact = await finish_email_verification(db, contact, data.code)
+    await log_action(db, user.id, "contact_verify", "user_contact", contact.id,
+                     f"Почта подтверждена: {contact.value}", level="info")
     await db.commit()
     return _contact_out(contact)
 

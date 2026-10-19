@@ -27,6 +27,7 @@ def _to_response(user: User, master_profile: MasterProfile) -> dict:
         "id": master_profile.id,
         "user_id": user.id,
         "name": user.name,
+        "last_name": user.last_name,
         # users.email/phone are nullable (legacy/seed rows): one NULL would
         # fail MasterResponse and 500 the whole list — coerce to "".
         "email": user.email or "",
@@ -49,41 +50,44 @@ async def get_all_masters(
     super_admin: User = Depends(require_super_admin),
     search: Optional[str] = Query(None, description="Search by name or email"),
     filter_active: Optional[str] = Query(None, alias="is_active", description="Filter by active status"),
-    filter_admin: Optional[str] = Query(None, alias="is_admin", description="Filter by admin status"),
     sort_by: Optional[str] = Query(None, description="Sort column: name|email|status|created_at"),
     sort_dir: str = Query("asc", description="Sort direction: asc|desc"),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get all masters (superadmin only)."""
+    """Get all masters (superadmin only).
+
+    «Мастера» = service providers: role MASTER only. Superadmins are
+    platform admins, not providers — they never appear here even if a
+    MasterProfile row exists (legacy seeds made the super list himself
+    with a tariff).
+    """
     if search == '':
         search = None
     if filter_active == '':
         filter_active = None
-    if filter_admin == '':
-        filter_admin = None
 
-    logger.info("GET /admin/masters: search=%r is_active=%r is_admin=%r limit=%d offset=%d",
-                search, filter_active, filter_admin, limit, offset)
+    logger.info("GET /admin/masters: search=%r is_active=%r limit=%d offset=%d",
+                search, filter_active, limit, offset)
 
     query = (
         select(User)
         .join(MasterProfile)
         .options(joinedload(User.master_profile))
+        .where(User.role == UserRole.MASTER)
     )
 
     if search:
         search_term = f"%{search}%"
         query = query.where(
-            (User.name.ilike(search_term)) | (User.email.ilike(search_term))
+            (User.name.ilike(search_term))
+            | (User.last_name.ilike(search_term))
+            | (User.email.ilike(search_term))
         )
     if filter_active is not None:
         active_val = filter_active.lower() in ("true", "1", "yes")
         query = query.where(MasterProfile.is_active == active_val)
-    if filter_admin is not None:
-        admin_val = filter_admin.lower() in ("true", "1", "yes")
-        query = query.where(User.role == UserRole.ADMIN if admin_val else UserRole.MASTER)
 
     if sort_by:
         sort_col = _SORTABLE_MASTERS.get(sort_by, MasterProfile.created_at)

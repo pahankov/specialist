@@ -156,10 +156,14 @@ describe('Yandex official widget («мгновенная авторизация�
   it('mounts the icon variant on the register form only after consent', async () => {
     const { sdkInit } = installSuggestSdk();
     vi.mocked(mocked.yandexStart).mockResolvedValue({ data: SUGGEST_START_DATA } as never);
-    renderLogin();
-    await waitFor(() => expect(sdkInit).toHaveBeenCalledTimes(1)); // login tab mounted
+    // The register tab is opened by the unified entry itself (no footer link
+    // since 1.79.3) — render it directly.
+    render(
+      <MemoryRouter>
+        <LoginModal isOpen onClose={vi.fn()} initialMode="register" />
+      </MemoryRouter>,
+    );
 
-    fireEvent.click(screen.getByRole('link', { name: 'Зарегистрироваться' }));
     // 152-FZ gate: nothing social until the box is ticked.
     expect(screen.queryByTestId('yandex-suggest-container')).not.toBeInTheDocument();
 

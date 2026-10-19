@@ -106,6 +106,13 @@ export const cabinetApi = {
   makeContactPrimary(id: number) {
     return apiClient.post<ClientContact>(`/api/v1/client/contacts/${id}/primary`);
   },
+  /** «Подтвердить почту»: письмо с кодом на собственный email-контакт. */
+  sendContactCode(id: number) {
+    return apiClient.post<{ ok: boolean }>(`/api/v1/client/contacts/${id}/send-code`);
+  },
+  verifyContactCode(id: number, code: string) {
+    return apiClient.post<ClientContact>(`/api/v1/client/contacts/${id}/verify-code`, { code });
+  },
   stats() {
     return apiClient.get<ClientStats>('/api/v1/client/stats');
   },

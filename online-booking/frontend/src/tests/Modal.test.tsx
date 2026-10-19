@@ -38,17 +38,17 @@ describe('Modal', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('calls onClose on Escape and on close button', () => {
+  it('calls onClose on Escape and has no close button', () => {
     const onClose = vi.fn();
     render(
       <Modal open={true} onClose={onClose} title="T">
         <span>content</span>
       </Modal>,
     );
+    // Owner's rule: modals close via Esc / overlay only — no ✕ anywhere.
+    expect(screen.queryByLabelText('Закрыть')).not.toBeInTheDocument();
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByLabelText('Закрыть'));
-    expect(onClose).toHaveBeenCalledTimes(2);
   });
 
   it('exposes dialog role', () => {
