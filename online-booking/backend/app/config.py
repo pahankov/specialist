@@ -108,6 +108,19 @@ class Settings(BaseSettings):
     DADATA_API_KEY: str = ""
     DADATA_SECRET: str = ""
 
+    # Outgoing email (1.79.0): account codes, password reset, email confirm.
+    # A regular Yandex mailbox (not Yandex 360): smtp.yandex.ru:465 (SSL) with
+    # an APP PASSWORD (пароль приложения), not the account password. Empty
+    # user/password = sending disabled: letters are only logged (local dev).
+    SMTP_HOST: str = "smtp.yandex.ru"
+    SMTP_PORT: int = 465
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    # Sender name shown in mail clients («Электронная запись»); the address
+    # defaults to SMTP_USER when SMTP_FROM_EMAIL is empty.
+    SMTP_FROM_NAME: str = "Электронная запись"
+    SMTP_FROM_EMAIL: str = ""
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -143,6 +156,16 @@ class Settings(BaseSettings):
             and self.YANDEX_CLIENT_SECRET
             and self.YANDEX_REDIRECT_URI
         )
+
+    @property
+    def smtp_enabled(self) -> bool:
+        """Outgoing email available iff the sender account is configured."""
+        return bool(self.SMTP_USER and self.SMTP_PASSWORD)
+
+    @property
+    def smtp_from_email(self) -> str:
+        """Visible From address: SMTP_FROM_EMAIL, or the sender login itself."""
+        return self.SMTP_FROM_EMAIL or self.SMTP_USER
 
     @property
     def max_verify(self):

@@ -16,6 +16,8 @@ import { getApiErrorMessage } from '../../utils/apiError';
 import { clearAuthCookies } from '../../utils/cookies';
 import { capitalizeWords, splitFullName } from '../../utils/names';
 import { MasterReviews } from '../../components/reviews';
+import { BindingsCard, PasswordCard } from '../../components/profile';
+import LoginModal from '../../components/LoginModal';
 import './ProfilePage.css';
 
 interface Cert {
@@ -65,11 +67,35 @@ function ProfilePage() {
   const [preset, setPreset] = useState<string | null>(null);
   const [certs, setCerts] = useState<Cert[]>([]);
   const [profileId, setProfileId] = useState<number | null>(null);
+  const [hasPassword, setHasPassword] = useState(false);
+  const [hasEmail, setHasEmail] = useState(false);
+  const [vkBound, setVkBound] = useState(false);
+  const [yandexBound, setYandexBound] = useState(false);
+  const [maxBound, setMaxBound] = useState(false);
+  const [maxUsername, setMaxUsername] = useState<string | null>(null);
+  /** «Привязать MAX» opens the login modal in its MAX-code mode. */
+  const [maxLinkOpen, setMaxLinkOpen] = useState(false);
   const [newCertName, setNewCertName] = useState('');
   const [newCertUrl, setNewCertUrl] = useState<string | undefined>(undefined);
   const [uploadingCert, setUploadingCert] = useState(false);
   const avatarInput = useRef<HTMLInputElement>(null);
   const certInput = useRef<HTMLInputElement>(null);
+
+  const applyAuthFlags = (data: {
+    has_password?: boolean;
+    vk_bound?: boolean;
+    yandex_bound?: boolean;
+    max_bound?: boolean;
+    max_username?: string | null;
+    contacts?: { contact_type: string }[];
+  }) => {
+    setHasPassword(Boolean(data.has_password));
+    setVkBound(Boolean(data.vk_bound));
+    setYandexBound(Boolean(data.yandex_bound));
+    setMaxBound(Boolean(data.max_bound));
+    setMaxUsername(data.max_username ?? null);
+    setHasEmail((data.contacts ?? []).some((c) => c.contact_type === 'email'));
+  };
 
   useEffect(() => {
     (async () => {
@@ -91,13 +117,25 @@ function ProfilePage() {
         setPreset(data.avatar_preset || null);
         setCerts(data.certificates || []);
         setProfileId(data.profile_id ?? null);
+        applyAuthFlags(data);
       } catch (err: unknown) {
         toast.error(getApiErrorMessage(err, 'Не удалось загрузить профиль'));
       } finally {
         setLoading(false);
       }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /** Light reload for the bind cards (keeps the form drafts untouched). */
+  const refreshAuthFlags = async () => {
+    try {
+      const { data } = await adminApi.getProfile();
+      applyAuthFlags(data);
+    } catch {
+      /* ignore — the next full reload recovers */
+    }
+  };
 
   // Sidebar rating badge jumps here (#reviews).
   useEffect(() => {
@@ -456,6 +494,18 @@ function ProfilePage() {
         </div>
       </form>
 
+      {/* Auth channels (1.79.0): bind socials, change password. */}
+      <BindingsCard
+        vkBound={vkBound}
+        yandexBound={yandexBound}
+        maxBound={maxBound}
+        maxUsername={maxUsername}
+        onChanged={refreshAuthFlags}
+        onMaxLink={() => setMaxLinkOpen(true)}
+      />
+
+      <PasswordCard hasPassword={hasPassword} hasEmail={hasEmail} />
+
       <div className="card" id="reviews" style={{ marginTop: 16, scrollMarginTop: 12 }}>
         <h3>⭐ Мои отзывы и оценки</h3>
         <p style={{ fontSize: 13, color: '#666' }}>
@@ -480,6 +530,16 @@ function ProfilePage() {
           {deleting ? 'Удаление…' : 'Удалить мой аккаунт'}
         </button>
       </div>
+
+      {/* MAX link roundtrip: login code flow, then refresh in place. */}
+      {maxLinkOpen && (
+        <LoginModal
+          isOpen
+          initialMode="max"
+          onClose={() => setMaxLinkOpen(false)}
+          onAuthSuccess={refreshAuthFlags}
+        />
+      )}
 
       <ConfirmDialog
         open={confirmDelete}

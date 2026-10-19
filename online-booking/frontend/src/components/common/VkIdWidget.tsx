@@ -42,9 +42,12 @@ interface VkIdWidgetProps {
   /** Called after the backend session is established (cookies set). */
   onSuccess: () => void;
   onError?: (message: string) => void;
+  /** Attach VK to the CURRENT account (profile «Привязать») instead of
+      logging in: start requires auth, the signed state carries the uid. */
+  link?: boolean;
 }
 
-function VkIdWidget({ onSuccess, onError }: VkIdWidgetProps) {
+function VkIdWidget({ onSuccess, onError, link = false }: VkIdWidgetProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -60,7 +63,7 @@ function VkIdWidget({ onSuccess, onError }: VkIdWidgetProps) {
         // 1. PKCE + signed state from the backend.
         const verifier = generateCodeVerifier();
         const challenge = await generateCodeChallenge(verifier);
-        const resp = await authApi.vkStart(challenge);
+        const resp = await authApi.vkStart(challenge, link);
         const { state, client_id: clientId, redirect_uri: redirectUri } = resp.data;
 
         if (disposed) return;
@@ -114,9 +117,11 @@ function VkIdWidget({ onSuccess, onError }: VkIdWidgetProps) {
                 true,
               );
               toast.success(
-                resp.data.is_new_user
-                  ? 'Добро пожаловать! Аккаунт создан.'
-                  : 'Вход через VK выполнен!',
+                link
+                  ? 'VK привязан к аккаунту'
+                  : resp.data.is_new_user
+                    ? 'Добро пожаловать! Аккаунт создан.'
+                    : 'Вход через VK выполнен!',
               );
               onSuccess();
             } catch (err: unknown) {

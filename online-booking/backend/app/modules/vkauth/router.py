@@ -1,11 +1,15 @@
 """VK ID auth endpoints (OAuth 2.0 Authorization Code Flow + PKCE)."""
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import get_db
+from app.dependencies.auth import get_current_user_optional
 from app.logging_config import get_logger
 from app.middleware.rate_limit import limiter
+from app.models.user import User
 from app.modules.vkauth import schemas
 from app.modules.vkauth import service
 from app.services.audit import log_action
@@ -18,16 +22,30 @@ router = APIRouter()
 
 @router.post("/vk/start", response_model=schemas.VkStartResponse)
 @limiter.limit("10/minute")
-async def vk_start(request: Request, req: schemas.VkStartRequest):
+async def vk_start(
+    request: Request,
+    req: schemas.VkStartRequest,
+    user: Optional[User] = Depends(get_current_user_optional),
+):
     """Mint a signed state + the VK authorize URL for the browser redirect.
 
     The PKCE code_challenge is generated in the browser and only its digest
     travels here, so the code_verifier never leaves the client until the
-    final /vk/verify exchange.
+    final /vk/verify exchange. With link=True the signed state names the
+    current account («Привязать VK»), so the callback binds the profile
+    there instead of logging in.
     """
     if not settings.vk_enabled:
         raise HTTPException(status_code=503, detail="Вход через VK не настроен")
-    state = service.make_state()
+    if req.link:
+        if user is None:
+            raise HTTPException(
+                status_code=401,
+                detail="Войдите в аккаунт, чтобы привязать профиль",
+            )
+        state = service.make_state(link_user_id=user.id)
+    else:
+        state = service.make_state()
     return {
         "authorize_url": service.build_authorize_url(state, req.code_challenge),
         "state": state,

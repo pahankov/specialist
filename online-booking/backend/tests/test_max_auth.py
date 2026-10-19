@@ -357,10 +357,17 @@ class TestMaxWebhook:
 
         from sqlalchemy import select
         from app.models.user import User
+        from app.models.user_contact import UserContact
         user = (await session.execute(
             select(User).where(User.phone == PHONE_NORM))).scalar_one()
-        assert user.is_verified is True  # HMAC-proven number
         assert user.consent_at is not None  # 152-FZ checkbox
+        contact = (await session.execute(
+            select(UserContact).where(
+                UserContact.contact_type == "phone",
+                UserContact.value == PHONE_NORM))).scalar_one()
+        assert contact.is_verified is True  # HMAC-proven number
+        assert contact.verified_via == "social"
+        assert contact.is_primary is True
 
     async def test_typed_phone_still_needs_site_request(
         self, client, max_enabled, stub_sender, session
@@ -596,7 +603,7 @@ class TestMaxVerify:
     async def test_contact_share_verifies_existing_user(
         self, client, max_enabled, stub_sender, session
     ):
-        """HMAC-proven contact upgrades is_verified for an existing account."""
+        """HMAC-proven contact marks the phone verified for an existing account."""
         import hashlib
         import hmac as hmac_mod
         from sqlalchemy import select
@@ -625,8 +632,56 @@ class TestMaxVerify:
         assert done.json()["is_new_user"] is False
         user = (await session.execute(
             select(User).where(User.phone == PHONE_NORM))).scalar_one()
-        assert user.is_verified is True
         assert user.max_user_id == 777
+        from app.models.user_contact import UserContact
+        contact = (await session.execute(
+            select(UserContact).where(
+                UserContact.contact_type == "phone",
+                UserContact.value == PHONE_NORM))).scalar_one()
+        assert contact.is_verified is True
+        assert contact.verified_via == "social"
+        assert contact.user_id == user.id
+
+    async def test_bound_user_shares_new_phone_keeps_account(
+        self, client, max_enabled, stub_sender, session
+    ):
+        """MAX id wins: a new shared phone does not fork a second account."""
+        import hashlib
+        import hmac as hmac_mod
+        from sqlalchemy import func, select
+        from app.models.user import User, UserRole
+        from app.models.user_contact import UserContact
+
+        bound = User(name="Bound", role=UserRole.CLIENT, is_active=True,
+                     max_user_id=777, phone="+7 (900) 111-22-33")
+        session.add(bound)
+        await session.commit()
+
+        vcf = ("BEGIN:VCARD\r\nVERSION:3.0\r\n"
+               "TEL;TYPE=cell:79995554433\r\nFN:Ivan\r\nEND:VCARD\r\n")
+        digest = hmac_mod.new(b"test-token", vcf.encode(),
+                              hashlib.sha256).hexdigest()
+        resp = await _hook(client, _msg_update(
+            None, contact={"vcf_info": vcf, "hash": digest}))
+        assert resp.json()["outcome"] == "delivered"
+        code = re.search(r"\d{6}", stub_sender[-1]["text"]).group(0)
+
+        done = await client.post(
+            "/api/v1/auth/max/verify",
+            json={"phone": "+79995554433", "code": code})
+        assert done.status_code == 200
+        assert done.json()["is_new_user"] is False
+
+        # The new number joined the SAME account as a verified contact.
+        contact = (await session.execute(
+            select(UserContact).where(
+                UserContact.value == "+7 (999) 555-44-33"))).scalar_one()
+        assert contact.user_id == bound.id
+        assert contact.is_verified is True
+        # …and no duplicate account was created.
+        users_total = (await session.execute(
+            select(func.count()).select_from(User))).scalar_one()
+        assert users_total == 1
 
     async def test_consent_backfilled_on_login(
         self, client, max_enabled, stub_sender, session

@@ -6,7 +6,9 @@ from typing import Optional, Union
 class YandexStartRequest(BaseModel):
     # Yandex uses a plain Authorization Code flow (no PKCE), so the start
     # call carries no challenge — the backend just mints a signed state.
-    pass
+    # link=True (authenticated) mints a state that binds the profile to the
+    # CURRENT account («Привязать Яндекс») instead of logging in.
+    link: bool = False
 
 
 class YandexStartResponse(BaseModel):

@@ -10,6 +10,7 @@ Shared dependencies used across all modules:
 """
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from typing import Optional
 import jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -24,6 +25,34 @@ from app.logging_config import get_logger
 logger = get_logger(__name__)
 
 security = HTTPBearer()
+security_optional = HTTPBearer(auto_error=False)
+
+
+async def get_current_user_optional(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_optional),
+    db: AsyncSession = Depends(get_db),
+) -> Optional[User]:
+    """Like get_current_user, but None instead of 401 without a token.
+
+    Used by endpoints that work anonymously but behave differently for a
+    signed-in user (e.g. social «Привязать» start calls).
+    """
+    if credentials is None:
+        return None
+    try:
+        payload = jwt.decode(
+            credentials.credentials,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+        )
+        user_id = int(payload.get("sub"))
+    except (jwt.PyJWTError, TypeError, ValueError):
+        return None
+    user = (await db.execute(
+        select(User).where(User.id == user_id))).scalar_one_or_none()
+    if user is None or user.is_active is False:
+        return None
+    return user
 
 
 async def get_current_user(

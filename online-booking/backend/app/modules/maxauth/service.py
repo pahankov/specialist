@@ -13,9 +13,8 @@ account without typing the phone on site first.
 Trust model (see https://dev.max.ru, request_contact section):
 - The code reaches a dialog ONLY for a PROVEN number: `request_contact`
   attachment whose HMAC-SHA256(access_token, vcf_info) matches `hash` is
-  platform-vouched to be the sender's number -> created users get
-  is_verified=True; the same proof upgrades is_verified for existing
-  accounts at /max/verify.
+  platform-vouched to be the sender's number -> the phone contact is
+  created/upgraded as verified-by-social at /max/verify.
 - Opening a deeplink (?start=...) or typing a number/text in the dialog
   proves NOTHING about number ownership (anyone can type anyone's number):
   those paths only ever get the share-number keyboard, never a code. The
@@ -41,15 +40,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.logging_config import get_logger
-from app.models.client_profile import ClientProfile
 from app.models.otp_code import OtpCode
 from app.models.refresh_token import RefreshToken
-from app.models.user import User, UserRole
-from app.services.names import name_fields, split_full_name
-from app.services.social_merge import merge_social_profile
+from app.models.user import User
+from app.services.names import split_full_name
+from app.services.social_merge import complete_social_login, resolve_social_user
 from app.utils.phone import normalize_phone
 from app.utils.security import hash_otp_code
-from app.utils.tokens import create_access_token, create_refresh_token_payload
 
 logger = get_logger(__name__)
 
@@ -166,8 +163,7 @@ async def prepare_push_code(phone: str, db: AsyncSession) -> Optional[tuple[int,
     otp.max_user_id = user.max_user_id
     otp.max_user_name = user.name[:200] if user.name else None
     # The bound dialog was proven with an HMAC-verified share earlier, so
-    # the number is platform-vouched for this delivery too. (user.is_verified
-    # is a broader flag — e.g. email checks — and must not stand in here.)
+    # the number is platform-vouched for this delivery too.
     otp.max_verified_phone = True
     await db.commit()
     logger.info("MAX code prepared for push: otp_id=%s phone=%s", otp.id, phone)
@@ -376,96 +372,28 @@ async def verify_max_code(
     otp.is_used = True
     await db.commit()
 
-    from app.modules.auth.service import OFFER_VERSION, POLICY_VERSION
-
-    result = await db.execute(select(User).where(User.phone == phone))
-    user = result.scalar_one_or_none()
-    is_new = False
-    if not user:
-        is_new = True
-        logger.info("Creating new client via MAX: phone=%s", phone)
-        max_name, max_last = name_fields(otp.max_user_name)
-        # Email from the contact vCard is self-reported profile data: take it
-        # only when it does not collide with an existing account.
-        email = otp.max_user_email
-        if email:
-            taken = (await db.execute(
-                select(User.id).where(User.email == email)
-            )).scalar_one_or_none()
-            if taken is not None:
-                logger.info("MAX vCard email already taken, skipping: %s", email)
-                email = None
-        user = User(
-            name=max_name,
-            last_name=max_last,
-            phone=phone,
-            email=email,
-            role=UserRole.CLIENT,
-            hashed_password=None,  # MAX-only auth (same as OTP path)
-            # Verified only when the number came from a contact share
-            # whose HMAC matched (proven MAX-bound number).
-            is_verified=bool(otp.max_verified_phone),
-            max_user_id=otp.max_user_id,  # bind account for push-code login
-            max_username=otp.max_username,  # @nickname for support/UX
-            # name came from MAX's display name: a later social login may
-            # refresh it; a human edit ("user") will not be overwritten.
-            name_source=("max" if max_name else None),
-            # 152-FZ: same consent stamp as register-unified, taken from
-            # the checkbox on the MAX login form.
-            consent_at=(
-                datetime.now(dt_timezone.utc) if consent else None),
-            consent_policy_version=POLICY_VERSION if consent else None,
-            consent_offer_version=OFFER_VERSION if consent else None,
-        )
-        db.add(user)
-        await db.flush()
-        from app.services.clients import get_or_create_profile
-        await get_or_create_profile(db, user)
-        await db.commit()
-        await db.refresh(user)
-        logger.info("New client created via MAX: user_id=%s", user.id)
-    else:
-        changed = False
-        if user.max_user_id is None and otp.max_user_id is not None:
-            # Link a pre-existing account (e.g. password-registered master)
-            # to the MAX account that just proved the number.
-            user.max_user_id = otp.max_user_id
-            changed = True
-            logger.info("Linked MAX account to user_id=%s", user.id)
-        if user.max_username is None and otp.max_username:
-            user.max_username = otp.max_username
-            changed = True
-        # Smart merge: name from MAX's display name, fill a missing email, only
-        # ever raise is_verified (the HMAC-proven number) — a human-set
-        # name/email is never overwritten.
-        max_first, max_last_name = split_full_name(otp.max_user_name or "")
-        merged = await merge_social_profile(
-            db, user, provider="max",
-            first_name=max_first, last_name=max_last_name,
-            email=otp.max_user_email,
-            avatar_url=None,  # MAX carries no avatar
-            verified=bool(otp.max_verified_phone),
-        )
-        changed = changed or merged
-        if consent and user.consent_at is None:
-            # Backfill consent for accounts created before consent tracking.
-            user.consent_at = datetime.now(dt_timezone.utc)
-            user.consent_policy_version = POLICY_VERSION
-            user.consent_offer_version = OFFER_VERSION
-            changed = True
-        if changed:
-            await db.commit()
-
-    access_token = create_access_token({
-        "sub": str(user.id),
-        "role": user.role.value,
-        "name": user.name,
-        "is_admin": user.role == UserRole.ADMIN,
-    })
-    refresh_value, expires_at = create_refresh_token_payload(user.id, user.email or "")
-    db.add(RefreshToken(user_id=user.id, token=refresh_value, expires_at=expires_at))
-    await db.commit()
-
+    # One shared resolution for every social login («Единый вход»): the MAX
+    # user id bound to the sender first, then the HMAC-proven phone, then
+    # create; contacts land on the account through the contact service.
+    # The vCard email is self-reported: attached unverified, skipped when
+    # another account holds it, never a lookup key.
+    max_first, max_last_name = split_full_name(otp.max_user_name or "")
+    user, is_new = await resolve_social_user(
+        db,
+        provider="max",
+        social_id=otp.max_user_id,
+        social_field="max_user_id",
+        link_fields={"max_username": otp.max_username},
+        first_name=max_first,
+        last_name=max_last_name,
+        phone=phone,
+        phone_confirmed=bool(otp.max_verified_phone),
+        email=otp.max_user_email,
+        email_confirmed=False,
+        avatar_url=None,  # MAX carries no avatar
+        consent=consent,
+    )
+    access_token = await complete_social_login(db, user)
     logger.info("Client logged in via MAX: user_id=%s is_new=%s", user.id, is_new)
     return access_token, user, is_new
 

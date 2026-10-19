@@ -1,0 +1,163 @@
+/* ─── Shared profile cards: bindings, password, contacts ─── */
+
+.profile-card-hint {
+  font-size: 13px;
+  color: #666;
+  margin: 0 0 12px;
+  line-height: 1.5;
+}
+
+/* ─── Bindings (VK / Yandex / MAX) ─── */
+
+.bind-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bind-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid #eee;
+  border-radius: 10px;
+}
+
+.bind-icon {
+  display: inline-flex;
+  align-items: center;
+}
+
+.bind-name {
+  flex: 1;
+  font-weight: 500;
+  color: #333;
+}
+
+.bind-done {
+  font-size: 13px;
+  color: #2e7d32;
+  font-weight: 600;
+}
+
+.bind-widget {
+  padding: 4px 0 8px;
+}
+
+/* The VK widget is wider than the card on narrow screens. */
+.bind-widget .vkid-widget {
+  overflow-x: auto;
+}
+
+/* ─── Contacts ─── */
+
+.contact-group {
+  margin-bottom: 12px;
+}
+
+.contact-group-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #999;
+  margin-bottom: 6px;
+}
+
+.contact-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid #f2f2f2;
+  flex-wrap: wrap;
+}
+
+.contact-row:last-child {
+  border-bottom: none;
+}
+
+.contact-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.contact-value {
+  font-weight: 500;
+  color: #333;
+}
+
+.contact-badges {
+  display: inline-flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.badge {
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.badge-primary {
+  background: #fff0f5;
+  color: #d6336c;
+}
+
+.badge-verified {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.badge-unverified {
+  background: #f5f5f5;
+  color: #888;
+}
+
+.contact-actions {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.contact-add {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.contact-add select {
+  padding: 10px 12px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 14px;
+  background: white;
+}
+
+.contact-add input {
+  flex: 1;
+  min-width: 180px;
+  padding: 12px 16px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 15px;
+  box-sizing: border-box;
+}
+
+.contact-add input:focus,
+.contact-add select:focus {
+  outline: none;
+  border-color: #ff6b9d;
+}
+
+.btn.btn-sm {
+  padding: 6px 12px;
+  font-size: 13px;
+}

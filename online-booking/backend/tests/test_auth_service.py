@@ -141,6 +141,69 @@ class TestRegisterUnified:
         assert resp.status_code == 422  # validation error
 
 
+# ─── POST /api/v1/auth/phone/status ──────────────────────────────────
+
+
+class TestPhoneStatus:
+    """Unified entry («Единый вход»): password / social / new hint."""
+
+    async def test_new_phone_is_new(self, client):
+        resp = await client.post("/api/v1/auth/phone/status",
+                                 json={"phone": "+7 999 000-77-66"})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["state"] == "new"
+        assert body["phone"] == "+7 (999) 000-77-66"  # normalized echo
+
+    async def test_registered_phone_asks_password(self, client):
+        await client.post("/api/v1/auth/register-unified", json={
+            "phone": "+79990007711",
+            "password": "SecurePass123!",
+            "consent": True,
+        })
+        resp = await client.post("/api/v1/auth/phone/status",
+                                 json={"phone": "+79990007711"})
+        assert resp.json()["state"] == "password"
+
+    async def test_passwordless_account_is_social(self, client, session):
+        """No password (social/OTP account) -> social entry hint."""
+        from app.models.user import User, UserRole
+        from app.services.contacts import attach_contact
+
+        user = User(name="Social Guy", role=UserRole.CLIENT,
+                    hashed_password=None)
+        session.add(user)
+        await session.flush()
+        await attach_contact(session, user, "phone", "+7 999 000-77-22",
+                             verified_via="social")
+        await session.commit()
+
+        resp = await client.post("/api/v1/auth/phone/status",
+                                 json={"phone": "+79990007722"})
+        assert resp.json()["state"] == "social"
+
+    async def test_legacy_phone_falls_back(self, client, session):
+        """Legacy accounts (users.phone only) still resolve."""
+        from app.models.user import User, UserRole
+        from app.utils.security import hash_password
+
+        session.add(User(
+            name="Legacy", phone="+7 (999) 000-77-33",
+            hashed_password=hash_password("SecurePass123!"),
+            role=UserRole.CLIENT,
+        ))
+        await session.commit()
+
+        resp = await client.post("/api/v1/auth/phone/status",
+                                 json={"phone": "+7 (999) 000-77-33"})
+        assert resp.json()["state"] == "password"
+
+    async def test_invalid_phone_rejected(self, client):
+        resp = await client.post("/api/v1/auth/phone/status",
+                                 json={"phone": "12"})
+        assert resp.status_code == 422
+
+
 # ─── POST /api/v1/auth/login-unified ─────────────────────────────────
 
 

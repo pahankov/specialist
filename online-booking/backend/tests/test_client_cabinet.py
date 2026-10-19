@@ -99,6 +99,151 @@ class TestClientMe:
         assert (await client.get("/api/v1/client/me")).status_code in (401, 403)
 
 
+class TestMyContacts:
+    """1.79.0 contact model: cabinet can add/remove/promote contacts."""
+
+    async def test_me_exposes_contacts_and_password_flag(
+        self, client, client_user, session
+    ):
+        from app.services.contacts import attach_contact
+        from app.models.user import User
+
+        user_id, headers = client_user
+        user = await session.get(User, user_id)
+        await attach_contact(session, user, "phone", "+7 999 000 11 11")
+        await session.commit()
+
+        resp = await client.get("/api/v1/client/me", headers=headers)
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["has_password"] is False
+        assert [c["value"] for c in body["contacts"]] == ["+7 (999) 000-11-11"]
+        assert body["contacts"][0]["is_primary"] is True
+
+    async def test_add_contact_lands_unverified(self, client, client_user):
+        _, headers = client_user
+        resp = await client.post(
+            "/api/v1/client/contacts",
+            json={"contact_type": "email", "value": " My.Mail@Example.COM "},
+            headers=headers,
+        )
+        assert resp.status_code == 201, resp.text
+        body = resp.json()
+        assert body["value"] == "my.mail@example.com"
+        assert body["is_verified"] is False
+        assert body["verified_via"] is None
+        assert body["is_primary"] is True  # first email of the account
+
+    async def test_add_taken_contact_rejected(
+        self, client, client_user, session
+    ):
+        from app.models.user import User, UserRole
+
+        session.add(User(name="Owner", role=UserRole.CLIENT,
+                         email="taken@example.com"))
+        await session.commit()
+
+        _, headers = client_user
+        resp = await client.post(
+            "/api/v1/client/contacts",
+            json={"contact_type": "email", "value": "taken@example.com"},
+            headers=headers,
+        )
+        assert resp.status_code == 409
+
+    async def test_add_invalid_phone_rejected(self, client, client_user):
+        _, headers = client_user
+        resp = await client.post(
+            "/api/v1/client/contacts",
+            json={"contact_type": "phone", "value": "not-a-phone"},
+            headers=headers,
+        )
+        assert resp.status_code == 422
+
+    async def test_promote_second_phone_to_primary(
+        self, client, client_user, session
+    ):
+        from app.services.contacts import attach_contact
+        from app.models.user import User
+        from app.models.user_contact import UserContact
+        from sqlalchemy import select
+
+        user_id, headers = client_user
+        user = await session.get(User, user_id)
+        await attach_contact(session, user, "phone", "+7 999 000 11 11")
+        second, _ = await attach_contact(
+            session, user, "phone", "+7 999 000 22 22")
+        await session.commit()
+
+        resp = await client.post(
+            f"/api/v1/client/contacts/{second.id}/primary", headers=headers)
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["is_primary"] is True
+
+        rows = (await session.execute(
+            select(UserContact).where(
+                UserContact.user_id == user_id,
+                UserContact.contact_type == "phone",
+            ).order_by(UserContact.id)
+        )).scalars().all()
+        assert [c.is_primary for c in rows] == [False, True]
+
+    async def test_remove_contact_clears_legacy_mirror(
+        self, client, client_user, session
+    ):
+        from app.services.contacts import attach_contact
+        from app.models.user import User
+
+        user_id, headers = client_user
+        user = await session.get(User, user_id)
+        user.email = None  # start clean: mirror must fill and clear again
+        contact, _ = await attach_contact(
+            session, user, "email", "to.del@example.com")
+        await session.commit()
+        assert user.email == "to.del@example.com"  # mirror filled
+
+        resp = await client.delete(
+            f"/api/v1/client/contacts/{contact.id}", headers=headers)
+        assert resp.status_code == 200
+        await session.refresh(user)
+        assert user.email is None  # mirror cleared with the contact
+
+    async def test_password_account_cannot_lose_last_contact(
+        self, client, client_user, session
+    ):
+        from app.services.contacts import attach_contact
+        from app.models.user import User
+        from app.utils.security import hash_password
+
+        user_id, headers = client_user
+        user = await session.get(User, user_id)
+        user.hashed_password = hash_password("SecurePass123!")
+        contact, _ = await attach_contact(
+            session, user, "email", "only@example.com")
+        await session.commit()
+
+        resp = await client.delete(
+            f"/api/v1/client/contacts/{contact.id}", headers=headers)
+        assert resp.status_code == 400
+        assert "последний контакт" in resp.json()["detail"]
+
+    async def test_foreign_contact_not_found(self, client, client_user, session):
+        from app.services.contacts import attach_contact
+        from app.models.user import User, UserRole
+
+        other = User(name="Other", role=UserRole.CLIENT)
+        session.add(other)
+        await session.flush()
+        foreign, _ = await attach_contact(
+            session, other, "email", "foreign@example.com")
+        await session.commit()
+
+        _, headers = client_user
+        resp = await client.delete(
+            f"/api/v1/client/contacts/{foreign.id}", headers=headers)
+        assert resp.status_code == 404
+
+
 class TestMyAppointments:
     async def test_list_only_own(self, client, client_user, seeded_appointments):
         _, headers = client_user

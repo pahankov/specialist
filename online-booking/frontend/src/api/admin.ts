@@ -18,6 +18,15 @@ export const adminApi = {
       last_name?: string | null;
       city_id?: number | null;
       city_name?: string | null;
+      /** Whether a password is set (password card in the profile). */
+      has_password?: boolean;
+      /** Bound social logins (bind buttons in the profile). */
+      vk_bound?: boolean;
+      yandex_bound?: boolean;
+      max_bound?: boolean;
+      max_username?: string | null;
+      /** Phones/emails of the account (contact model). */
+      contacts?: import('./cabinet').ClientContact[];
       telegram_username?: string | null;
       description?: string | null;
       avatar_url?: string | null;

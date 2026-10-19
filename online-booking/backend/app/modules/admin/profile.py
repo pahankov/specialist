@@ -16,6 +16,7 @@ from app.models.master_profile import MasterProfile
 from app.models.user import User, UserRole
 from app.modules.admin.helpers import get_master_profile_id
 from app.services.audit import log_action
+from app.services.contacts import get_contacts
 from app.services.names import set_names
 from app.logging_config import get_logger
 
@@ -72,12 +73,30 @@ async def get_my_profile(
         city_name = (await db.execute(
             select(City.name_ru).where(City.id == master.city_id)
         )).scalar_one_or_none()
+    contacts = await get_contacts(db, master.id)
     out = {
         "id": master.id,
         "name": master.name,
         "last_name": master.last_name,
         "city_id": master.city_id,
         "city_name": city_name,
+        # Auth channels (1.79.0): bind buttons + password form in the profile.
+        "has_password": master.hashed_password is not None,
+        "vk_bound": master.vk_user_id is not None,
+        "yandex_bound": master.yandex_user_id is not None,
+        "max_bound": master.max_user_id is not None,
+        "max_username": master.max_username,
+        "contacts": [
+            {
+                "id": c.id,
+                "contact_type": c.contact_type,
+                "value": c.value,
+                "is_verified": bool(c.is_verified),
+                "verified_via": c.verified_via,
+                "is_primary": bool(c.is_primary),
+            }
+            for c in contacts
+        ],
     }
     if master.role == UserRole.MASTER:
         mp_id = await get_master_profile_id(db, master)

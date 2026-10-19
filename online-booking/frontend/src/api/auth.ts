@@ -60,6 +60,13 @@ export interface YandexVerifyResponse {
   is_new_user?: boolean;
 }
 
+/** Unified entry: what the entered phone number means (login vs register). */
+export interface PhoneStatusResponse {
+  /** "new" — no account; "password" — has a password; "social" — social-only. */
+  state: 'new' | 'password' | 'social';
+  phone: string;
+}
+
 export const authApi = {
   login: (email: string, password: string) =>
     apiClient.post<LoginResponse>('/api/v1/auth/login', { email, password }),
@@ -80,6 +87,25 @@ export const authApi = {
   logout: () => apiClient.post('/api/v1/auth/logout'),
   loginUnified: (identifier: string, password: string) =>
     apiClient.post<LoginResponse>('/api/v1/auth/login-unified', { identifier, password }),
+  /** Unified entry step 1: does this phone belong to an account, and which
+      kind of login does it need? Enumeration-proof by design (the answer
+      only routes the UI; no account details leak). */
+  phoneStatus: (phone: string) =>
+    apiClient.post<PhoneStatusResponse>('/api/v1/auth/phone/status', { phone }),
+  forgotPassword: (email: string) =>
+    apiClient.post<{ message: string }>('/api/v1/auth/password/forgot', { email }),
+  /** Reset by emailed code + auto-login (cookies are set by the backend). */
+  resetPassword: (email: string, code: string, newPassword: string) =>
+    apiClient.post<LoginResponse>('/api/v1/auth/password/reset', {
+      email,
+      code,
+      new_password: newPassword,
+    }),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    apiClient.post<{ message: string }>('/api/v1/auth/password/change', {
+      current_password: currentPassword,
+      new_password: newPassword,
+    }),
   becomeMaster: (data?: {
     cabinet_address?: string;
     description?: string;
@@ -91,9 +117,12 @@ export const authApi = {
     apiClient.post<MaxStartResponse>('/api/v1/auth/max/start', { phone }),
   maxVerify: (phone: string, code: string, consent = false) =>
     apiClient.post<MaxVerifyResponse>('/api/v1/auth/max/verify', { phone, code, consent }),
-  vkStart: (codeChallenge: string) =>
+  /** link=true: attach VK to the CURRENT account (auth required) instead of
+      logging in — the signed state carries the uid, conflicts answer 409. */
+  vkStart: (codeChallenge: string, link = false) =>
     apiClient.post<VkStartResponse>('/api/v1/auth/vk/start', {
       code_challenge: codeChallenge,
+      link,
     }),
   vkVerify: (
     code: string,
@@ -109,7 +138,9 @@ export const authApi = {
       code_verifier: codeVerifier,
       consent,
     }),
-  yandexStart: () => apiClient.post<YandexStartResponse>('/api/v1/auth/yandex/start', {}),
+  /** link=true: attach Yandex to the CURRENT account (auth required). */
+  yandexStart: (link = false) =>
+    apiClient.post<YandexStartResponse>('/api/v1/auth/yandex/start', { link }),
   yandexVerify: (code: string, state: string, consent = false) =>
     apiClient.post<YandexVerifyResponse>('/api/v1/auth/yandex/verify', {
       code,

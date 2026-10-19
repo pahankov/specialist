@@ -1,6 +1,17 @@
 import apiClient from './http';
 import type { Appointment } from './types';
 
+/** One phone/email of the account (1.79.0 contact model). */
+export interface ClientContact {
+  id: number;
+  contact_type: 'phone' | 'email' | string;
+  value: string;
+  is_verified: boolean;
+  /** Verification level: null (self-typed) | "social" | "code". */
+  verified_via?: string | null;
+  is_primary: boolean;
+}
+
 export interface ClientMe {
   id: number;
   name: string;
@@ -8,6 +19,10 @@ export interface ClientMe {
   phone?: string | null;
   email?: string | null;
   is_verified: boolean;
+  /** All phones/emails with verify flags (contact model, 1.79.0). */
+  contacts?: ClientContact[];
+  /** Whether a password is set (password section visibility). */
+  has_password?: boolean;
   /** Bound MAX account (chat-bot login available). */
   max_bound?: boolean;
   /** Public MAX nickname (@username) for support. */
@@ -80,6 +95,16 @@ export const cabinetApi = {
     return apiClient.delete<{ detail: string; cancelled_appointments: number }>(
       '/api/v1/client/me',
     );
+  },
+  // ── Contacts (contact model): add / remove / promote ──────────────
+  addContact(data: { contact_type: 'phone' | 'email'; value: string }) {
+    return apiClient.post<ClientContact>('/api/v1/client/contacts', data);
+  },
+  removeContact(id: number) {
+    return apiClient.delete<{ ok: boolean }>(`/api/v1/client/contacts/${id}`);
+  },
+  makeContactPrimary(id: number) {
+    return apiClient.post<ClientContact>(`/api/v1/client/contacts/${id}/primary`);
   },
   stats() {
     return apiClient.get<ClientStats>('/api/v1/client/stats');

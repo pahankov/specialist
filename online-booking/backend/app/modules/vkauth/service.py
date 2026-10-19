@@ -33,11 +33,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.logging_config import get_logger
 from app.models.refresh_token import RefreshToken
-from app.models.user import User, UserRole
-from app.services.names import compose_full_name
-from app.services.social_merge import merge_social_profile
+from app.models.user import User
+from app.services.social_merge import (
+    bind_social_login,
+    complete_social_login,
+    resolve_social_user,
+)
 from app.services.vk_api import VkApiError, get_vk_api
-from app.utils.tokens import create_access_token, create_refresh_token_payload
 
 logger = get_logger(__name__)
 
@@ -50,34 +52,46 @@ def _state_key() -> bytes:
     return settings.SECRET_KEY.encode()
 
 
-def make_state() -> str:
+def make_state(link_user_id: Optional[int] = None) -> str:
     """Tamper-proof state binding a callback to an authorize start.
 
-    Format `<ts>_<nonce>_<hmac32>` — carries its own issued-at so /vk/verify
-    can reject stale callbacks without a DB round-trip.
+    Format `<ts>_<nonce>_<uid>_<hmac32>` — carries its own issued-at so
+    /vk/verify can reject stale callbacks without a DB round-trip. uid is
+    the account asking to LINK this profile (0 = plain login); it sits
+    inside the MAC, so a state can never be re-pointed at another user.
     """
     ts = str(int(datetime.now(dt_timezone.utc).timestamp()))
     # Hex nonce: never contains the "_" delimiter, so the state can always
-    # be split back into exactly (ts, nonce, mac) on parse.
+    # be split back into exactly (ts, nonce, uid, mac) on parse.
     nonce = secrets.token_hex(8)
-    mac = hmac.new(_state_key(), f"{ts}_{nonce}".encode(), hashlib.sha256)
-    return f"{ts}_{nonce}_{mac.hexdigest()[:32]}"
+    uid = int(link_user_id or 0)
+    mac = hmac.new(_state_key(), f"{ts}_{nonce}_{uid}".encode(), hashlib.sha256)
+    return f"{ts}_{nonce}_{uid}_{mac.hexdigest()[:32]}"
+
+
+def _parse_state(state: str) -> tuple[bool, Optional[int]]:
+    """(valid, link_user_id) — format/MAC/TTL checked, uid inside the MAC."""
+    try:
+        ts_raw, nonce, uid_raw, mac = (state or "").split("_", 3)
+        issued_at = int(ts_raw)
+        link_user_id = int(uid_raw)
+    except (ValueError, AttributeError):
+        return False, None
+    expect = hmac.new(
+        _state_key(), f"{ts_raw}_{nonce}_{uid_raw}".encode(), hashlib.sha256
+    ).hexdigest()[:32]
+    if not hmac.compare_digest(expect, mac):
+        return False, None
+    age = datetime.now(dt_timezone.utc).timestamp() - issued_at
+    if not (0 <= age <= STATE_TTL_SECONDS):
+        return False, None
+    return True, (link_user_id or None)
 
 
 def parse_state(state: str) -> bool:
     """True when the state was minted by us and is still fresh."""
-    try:
-        ts_raw, nonce, mac = (state or "").split("_", 2)
-        issued_at = int(ts_raw)
-    except (ValueError, AttributeError):
-        return False
-    expect = hmac.new(
-        _state_key(), f"{ts_raw}_{nonce}".encode(), hashlib.sha256
-    ).hexdigest()[:32]
-    if not hmac.compare_digest(expect, mac):
-        return False
-    age = datetime.now(dt_timezone.utc).timestamp() - issued_at
-    return 0 <= age <= STATE_TTL_SECONDS
+    ok, _ = _parse_state(state)
+    return ok
 
 
 # VK consent screen (server-side constant — not a secret, just the entry URL).
@@ -117,7 +131,8 @@ async def verify_vk_code(
     """
     if not settings.vk_enabled:
         raise HTTPException(status_code=503, detail="Вход через VK не настроен")
-    if not parse_state(state):
+    state_ok, link_user_id = _parse_state(state)
+    if not state_ok:
         raise HTTPException(
             status_code=400,
             detail="Неверная или просроченная сессия входа. Попробуйте снова.",
@@ -147,82 +162,42 @@ async def verify_vk_code(
     # VK ID returns a ready-made avatar URL on the profile block.
     avatar_url = (vk_user.get("avatar") or "").strip() or None
 
-    from app.modules.auth.service import OFFER_VERSION, POLICY_VERSION
-
-    result = await db.execute(
-        select(User).where(User.vk_user_id == vk_user_id))
-    user = result.scalar_one_or_none()
-    is_new = False
-
-    if user is None and email:
-        # A pre-existing account with the same email: link it to VK instead of
-        # creating a duplicate (same progressive-profiling rule as MAX).
-        result = await db.execute(select(User).where(User.email == email))
-        user = result.scalar_one_or_none()
-        if user is not None:
-            user.vk_user_id = vk_user_id
-            logger.info("Linked VK account to existing user_id=%s", user.id)
-
-    if user is None:
-        is_new = True
-        logger.info("Creating new client via VK: vk_user_id=%s", vk_user_id)
-        user = User(
-            name=compose_full_name(first, last) or "VK Пользователь",
-            last_name=last or None,
+    # One shared resolution for every social login («Единый вход»): vk-id →
+    # confirmed phone → confirmed email → create; contacts land on the
+    # account through the contact service. VK's grey "verified" tick no
+    # longer feeds users.is_verified — verification lives on contacts now.
+    # The phone scope is not requested yet, hence no phone here.
+    if link_user_id is not None:
+        # «Привязать VK»: the signed state names the current account — the
+        # profile is linked to it, never re-resolved by fields.
+        user = await bind_social_login(
+            db,
+            user_id=link_user_id,
+            provider="vk",
+            social_id=vk_user_id,
+            social_field="vk_user_id",
+            first_name=first,
+            last_name=last,
             email=email,
-            phone=None,  # phone only arrives with the extended scope
-            role=UserRole.CLIENT,
-            hashed_password=None,  # VK-only auth (same as OTP/MAX paths)
-            # VK vouches the account, so the profile is trusted; the grey
-            # "verified" tick further confirms the personal data.
-            is_verified=bool(vk_user.get("verified")),
-            vk_user_id=vk_user_id,
+            email_confirmed=bool(email),  # an email from VK is provider-vouched
             avatar_url=avatar_url,
-            # name came from VK: a later social login may refresh it, a human
-            # edit (which sets "user") will not be overwritten.
-            name_source="vk",
-            # 152-FZ: consent checkbox on the VK login form.
-            consent_at=(datetime.now(dt_timezone.utc) if consent else None),
-            consent_policy_version=POLICY_VERSION if consent else None,
-            consent_offer_version=OFFER_VERSION if consent else None,
         )
-        db.add(user)
-        await db.flush()
-        from app.services.clients import get_or_create_profile
-        await get_or_create_profile(db, user)
-        logger.info("New client created via VK: user_id=%s", user.id)
+        is_new = False
     else:
-        if user.is_active is False:
-            raise HTTPException(
-                status_code=403, detail="Аккаунт заблокирован.")
-        # Smart merge: refresh name/avatar from VK, fill a missing email, only
-        # ever raise is_verified — a human-set name/email is never overwritten.
-        changed = await merge_social_profile(
-            db, user, provider="vk",
-            first_name=first, last_name=last,
-            email=email, avatar_url=avatar_url,
-            verified=bool(vk_user.get("verified")),
+        user, is_new = await resolve_social_user(
+            db,
+            provider="vk",
+            social_id=vk_user_id,
+            social_field="vk_user_id",
+            first_name=first,
+            last_name=last,
+            email=email,
+            email_confirmed=bool(email),  # an email from VK is provider-vouched
+            avatar_url=avatar_url,
+            fallback_name="VK Пользователь",
+            consent=consent,
         )
-        if consent and user.consent_at is None:
-            user.consent_at = datetime.now(dt_timezone.utc)
-            user.consent_policy_version = POLICY_VERSION
-            user.consent_offer_version = OFFER_VERSION
-            changed = True
-        if changed:
-            await db.commit()
-
-    access_token = create_access_token({
-        "sub": str(user.id),
-        "role": user.role.value,
-        "name": user.name,
-        "is_admin": user.role == UserRole.ADMIN,
-    })
-    refresh_value, expires_at = create_refresh_token_payload(
-        user.id, user.email or "")
-    db.add(RefreshToken(user_id=user.id, token=refresh_value,
-                        expires_at=expires_at))
-    await db.commit()
-
+    access_token = await complete_social_login(db, user)
     logger.info("User logged in via VK: user_id=%s is_new=%s", user.id, is_new)
     return access_token, user, is_new
 

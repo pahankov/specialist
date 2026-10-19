@@ -17,9 +17,18 @@ from app.models.client_profile import ClientProfile
 from app.models.master_profile import MasterProfile
 from app.models.service import Service
 from app.models.user import User
+from app.models.user_contact import UserContact
 from app.models.working_hour import WorkingHour
 from app.modules.client.schemas import (
-    ClientMeResponse, ClientMeUpdate, ClientStatsResponse,
+    ClientContactOut, ClientMeResponse, ClientMeUpdate, ClientStatsResponse,
+)
+from app.services.contacts import (
+    ContactTaken,
+    InvalidContact,
+    attach_contact,
+    get_contacts,
+    remove_contact,
+    set_primary,
 )
 from app.services.inbox import (
     client_inbox,
@@ -65,6 +74,18 @@ def _to_details(a: Appointment) -> dict:
     }
 
 
+def _contact_out(c: UserContact) -> dict:
+    """Serialize one contact for the cabinet (verify flags included)."""
+    return {
+        "id": c.id,
+        "contact_type": c.contact_type,
+        "value": c.value,
+        "is_verified": bool(c.is_verified),
+        "verified_via": c.verified_via,
+        "is_primary": bool(c.is_primary),
+    }
+
+
 @router.get("/me", response_model=ClientMeResponse)
 async def get_me(
     user: User = Depends(require_client),
@@ -77,6 +98,7 @@ async def get_me(
         city_name = (await db.execute(
             select(City.name_ru).where(City.id == user.city_id)
         )).scalar_one_or_none()
+    contacts = await get_contacts(db, user.id)
     return {
         "id": user.id,
         "name": user.name,
@@ -84,6 +106,8 @@ async def get_me(
         "phone": user.phone,
         "email": user.email,
         "is_verified": bool(user.is_verified),
+        "contacts": [_contact_out(c) for c in contacts],
+        "has_password": user.hashed_password is not None,
         "max_bound": user.max_user_id is not None,
         "max_username": user.max_username,
         "vk_bound": user.vk_user_id is not None,
@@ -139,6 +163,111 @@ async def delete_me(
     """
     from app.services.account_deletion import delete_own_account
     return await delete_own_account(db, user)
+
+
+# ─── Contacts (1.79.0 contact model) ──────────────────────────────────
+
+
+class ClientContactCreate(BaseModel):
+    contact_type: str = Field(pattern="^(phone|email)$")
+    value: str = Field(min_length=1, max_length=255)
+
+
+async def _own_contact_or_404(
+    db: AsyncSession, user_id: int, contact_id: int
+) -> UserContact:
+    contact = (await db.execute(
+        select(UserContact).where(
+            UserContact.id == contact_id,
+            UserContact.user_id == user_id,
+        )
+    )).scalar_one_or_none()
+    if contact is None:
+        raise HTTPException(status_code=404, detail="Контакт не найден")
+    return contact
+
+
+@router.post("/contacts", response_model=ClientContactOut, status_code=201)
+@limiter.limit("10/minute")
+async def add_my_contact(
+    request: Request,
+    data: ClientContactCreate,
+    user: User = Depends(require_client),
+    db: AsyncSession = Depends(get_db),
+):
+    """Add a phone/email to own account (lands unverified by design).
+
+    Verification levels come from social logins / emailed codes, never from
+    self-typing. A value held by another account — as a contact row OR in
+    the legacy column — is rejected: transfers happen only on
+    provider-confirmed logins, not from a profile screen.
+    """
+    from app.services.contacts import find_user_by_contact
+
+    holder = await find_user_by_contact(db, data.contact_type, data.value)
+    if holder is not None and holder.id != user.id:
+        raise HTTPException(
+            status_code=409,
+            detail="Этот контакт уже привязан к другому аккаунту",
+        )
+    try:
+        contact, _ = await attach_contact(db, user, data.contact_type, data.value)
+    except InvalidContact:
+        raise HTTPException(
+            status_code=422,
+            detail=("Некорректный телефон" if data.contact_type == "phone"
+                    else "Некорректный email"),
+        )
+    except ContactTaken:
+        raise HTTPException(
+            status_code=409,
+            detail="Этот контакт уже привязан к другому аккаунту",
+        )
+    await log_action(db, user.id, "contact_add", "user_contact", contact.id,
+                     f"Добавлен контакт {contact.contact_type}", level="info")
+    await db.commit()
+    return _contact_out(contact)
+
+
+@router.delete("/contacts/{contact_id}", response_model=dict)
+async def remove_my_contact(
+    contact_id: int,
+    user: User = Depends(require_client),
+    db: AsyncSession = Depends(get_db),
+):
+    """Detach an own contact (another of the type becomes primary).
+
+    A password account must keep at least one contact — otherwise no
+    identifier maps to it and password login becomes impossible.
+    """
+    contact = await _own_contact_or_404(db, user.id, contact_id)
+    if user.hashed_password is not None:
+        all_contacts = await get_contacts(db, user.id)
+        if len(all_contacts) <= 1:
+            raise HTTPException(
+                status_code=400,
+                detail="Это последний контакт аккаунта — иначе вход по "
+                       "паролю станет невозможен. Сначала добавьте другой.",
+            )
+    removed_type = contact.contact_type
+    await remove_contact(db, user, contact.contact_type, contact.value)
+    await log_action(db, user.id, "contact_remove", "user_contact", contact_id,
+                     f"Удалён контакт {removed_type}", level="info")
+    await db.commit()
+    return {"ok": True}
+
+
+@router.post("/contacts/{contact_id}/primary", response_model=ClientContactOut)
+async def make_my_contact_primary(
+    contact_id: int,
+    user: User = Depends(require_client),
+    db: AsyncSession = Depends(get_db),
+):
+    """Move a contact into the primary slot of its type."""
+    contact = await _own_contact_or_404(db, user.id, contact_id)
+    contact = await set_primary(db, user, contact.contact_type, contact.value)
+    await db.commit()
+    return _contact_out(contact)
 
 
 @router.get("/stats", response_model=ClientStatsResponse)

@@ -61,3 +61,80 @@ class TokenRefreshResponse(BaseModel):
 
 class TokenRefreshRequest(BaseModel):
     pass  # refresh token comes from cookie
+
+
+# ─── Password management (1.79.0) ────────────────────────────────────
+
+def _clean_email(v: str) -> str:
+    v = (v or "").strip().lower()
+    if "@" not in v or v.startswith("@") or v.endswith("@"):
+        raise ValueError('Введите корректный email')
+    return v
+
+
+class ChangePasswordRequest(BaseModel):
+    """Change the current account's password (any role that has one)."""
+    current_password: str
+    new_password: str
+
+    @field_validator('new_password')
+    @classmethod
+    def validate_new_password(cls, v: str) -> str:
+        return validate_password_strength(v)
+
+
+class ForgotPasswordRequest(BaseModel):
+    """«Забыли пароль»: a reset code is emailed to the account address."""
+    email: str
+
+    @field_validator('email')
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        return _clean_email(v)
+
+
+class ResetPasswordRequest(BaseModel):
+    """Finish the reset: the emailed code + the new password."""
+    email: str
+    code: str
+    new_password: str
+
+    @field_validator('email')
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        return _clean_email(v)
+
+    @field_validator('code')
+    @classmethod
+    def validate_code(cls, v: str) -> str:
+        if not v.isdigit() or len(v) != 6:
+            raise ValueError('Код должен содержать 6 цифр')
+        return v
+
+    @field_validator('new_password')
+    @classmethod
+    def validate_new_password(cls, v: str) -> str:
+        return validate_password_strength(v)
+
+
+# ─── Unified entry (1.79.0) ──────────────────────────────────────────
+
+class PhoneStatusRequest(BaseModel):
+    """First step of the unified entry: what awaits this phone number."""
+    phone: str
+
+    @field_validator('phone')
+    @classmethod
+    def validate_phone(cls, v: str) -> str:
+        return normalize_phone(v)
+
+
+class PhoneStatusResponse(BaseModel):
+    """Unified-entry hint for one phone («Единый вход», шаг 1).
+
+    state: "new"      — no account: offer phone+password signup;
+           "password" — an account with a password: ask for it;
+           "social"   — an account without a password: VK/Яндекс/MAX entry.
+    """
+    state: str
+    phone: str  # normalized, echoed back for the next step

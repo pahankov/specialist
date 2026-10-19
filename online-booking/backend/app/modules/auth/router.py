@@ -16,7 +16,18 @@ from app.models.refresh_token import RefreshToken
 from app.models.country import Country
 from app.schemas.user import UserCreate, UserLoginByEmail, UserLoginByPhone
 from app.schemas.otp import SendOtpRequest, VerifyOtpRequest, OtpResponse
-from app.schemas.auth import TokenResponse, TokenRefreshResponse, TokenRefreshRequest, UnifiedLoginRequest, UnifiedRegisterRequest
+from app.schemas.auth import (
+    ChangePasswordRequest,
+    ForgotPasswordRequest,
+    PhoneStatusRequest,
+    PhoneStatusResponse,
+    ResetPasswordRequest,
+    TokenResponse,
+    TokenRefreshResponse,
+    TokenRefreshRequest,
+    UnifiedLoginRequest,
+    UnifiedRegisterRequest,
+)
 from app.config import settings
 from app.logging_config import get_logger
 from app.services.audit import log_action
@@ -351,6 +362,23 @@ async def login_unified(
         raise HTTPException(status_code=500, detail="Ошибка авторизации")
 
 
+@router.post("/phone/status", response_model=PhoneStatusResponse)
+@limiter.limit("10/minute")
+async def phone_status(
+    request: Request,
+    req: PhoneStatusRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Unified entry («Единый вход») step 1: password / social / new hint.
+
+    The single entry screen posts the typed phone here and then shows the
+    matching step: password field for password accounts, a «войдите через
+    VK/Яндекс/MAX» hint for social-only accounts, phone+password signup
+    for new numbers.
+    """
+    return await service.phone_status(req.phone, db)
+
+
 # ─── Unified Registration ────────────────────────────────────────────
 
 @router.post("/register-unified", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
@@ -446,3 +474,78 @@ async def become_master(
     await db.commit()
     logger.info("User %s applied for master", user.id)
     return {"detail": "Заявка отправлена, профиль появится после проверки"}
+
+
+# ─── Password management (1.79.0) ────────────────────────────────────
+
+@router.post("/password/change")
+@limiter.limit("10/minute")
+async def change_password(
+    request: Request,
+    req: ChangePasswordRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Change password for the current account (any role with a password)."""
+    try:
+        await service.change_password(user, req.current_password,
+                                      req.new_password, db)
+        return {"message": "Пароль изменён"}
+    except HTTPException:
+        logger.warning("Change password failed: user_id=%s", user.id)
+        raise
+    except Exception as e:
+        logger.error("Change password failed (unexpected): user_id=%s, error=%s",
+                     user.id, e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Ошибка смены пароля")
+
+
+@router.post("/password/forgot")
+@limiter.limit("5/minute")
+async def forgot_password(
+    request: Request,
+    req: ForgotPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """«Забыли пароль»: email a reset code.
+
+    The reply is identical for known and unknown addresses — no account
+    enumeration; the address owner either gets a letter or does not.
+    """
+    try:
+        await service.request_password_reset(req.email, db)
+    except Exception as e:
+        logger.error("Forgot password failed (unexpected): email=%s, error=%s",
+                     req.email, e, exc_info=True)
+    return {"message": "Если такая почта есть в системе, мы отправили код. "
+                       "Проверьте почту и папку «Спам»."}
+
+
+@router.post("/password/reset", response_model=TokenResponse)
+@limiter.limit("10/minute")
+async def reset_password(
+    request: Request,
+    response: Response,
+    req: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Set a new password with the emailed code; logs the user in."""
+    try:
+        user = await service.reset_password(req.email, req.code,
+                                            req.new_password, db)
+        access_token, refresh_value = await service.issue_session(user, db)
+        await log_action(
+            db, user.id, "login", "auth", user.id,
+            f"Вход после сброса пароля: {user.email or user.phone}",
+            level="info",
+        )
+        await db.commit()
+        _set_auth_cookies(response, access_token, refresh_value)
+        return {"access_token": access_token, "token_type": "bearer"}
+    except HTTPException:
+        logger.warning("Reset password failed: email=%s", req.email)
+        raise
+    except Exception as e:
+        logger.error("Reset password failed (unexpected): email=%s, error=%s",
+                     req.email, e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Ошибка сброса пароля")

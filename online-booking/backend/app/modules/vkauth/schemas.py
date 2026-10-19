@@ -7,6 +7,9 @@ class VkStartRequest(BaseModel):
     # PKCE challenge: BASE64URL(SHA256(code_verifier)), generated on the
     # frontend. The verifier itself never leaves the browser until /vk/verify.
     code_challenge: str = Field(min_length=43, max_length=128)
+    # link=True (authenticated) mints a state that binds the profile to the
+    # CURRENT account («Привязать VK») instead of logging in / registering.
+    link: bool = False
 
 
 class VkStartResponse(BaseModel):

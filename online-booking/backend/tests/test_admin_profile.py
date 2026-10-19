@@ -19,6 +19,39 @@ class TestAdminProfile:
         assert body["trial_ends_at"]
         assert body["auto_complete"] is False
 
+    async def test_profile_exposes_auth_flags_and_contacts(
+        self, client, session, auth_headers
+    ):
+        """1.79.0: bind buttons + password card need flags and contacts."""
+        from sqlalchemy import select
+        from app.models.user import User
+        from app.services.contacts import attach_contact
+        from app.utils.security import hash_password
+
+        me = (await session.execute(
+            select(User).where(User.role == "MASTER")
+        )).scalar_one()
+        me.hashed_password = hash_password("MasterPass123!")
+        await attach_contact(session, me, "email", "master@example.com",
+                             verified_via="code")
+        await session.commit()
+
+        r = await client.get("/api/v1/admin/profile", headers=auth_headers)
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["has_password"] is True
+        assert body["vk_bound"] is False
+        assert body["yandex_bound"] is False
+        assert body["max_bound"] is False
+        emails = [c for c in body["contacts"] if c["contact_type"] == "email"]
+        attached = [c for c in emails if c["value"] == "master@example.com"]
+        assert len(attached) == 1
+        assert attached[0]["verified_via"] == "code"
+        # The fixture's own email keeps the primary slot.
+        primaries = [c for c in emails if c["is_primary"]]
+        assert len(primaries) == 1
+        assert primaries[0]["value"] != "master@example.com"
+
     async def test_master_profile_with_city(self, client, session, auth_headers):
         from sqlalchemy import select
         from app.models.city import City

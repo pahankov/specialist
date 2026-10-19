@@ -15,6 +15,10 @@
 | `POST` | `/api/v1/auth/become-master` | Заявка в мастера (адрес/описание/опыт) — профиль inactive, роль остаётся CLIENT до аппрува админа; повторная заявка 400 |
 | `POST` | `/api/v1/auth/send-otp` | Отправка SMS-кода клиенту |
 | `POST` | `/api/v1/auth/verify-otp` | Проверка кода, вход/регистрация клиента |
+| `POST` | `/api/v1/auth/phone/status` | Единый вход: чем ответить на телефон — `new` (аккаунта нет → регистрация), `password` (есть пароль → в фокус), `social` (только соцвход/MAX → кнопки); сам не входит и ничего не создаёт |
+| `POST` | `/api/v1/auth/password/change` | Смена пароля текущего аккаунта (любая роль с паролем): `current_password` + `new_password`; 10/min |
+| `POST` | `/api/v1/auth/password/forgot` | «Забыли пароль»: код на почту; ответ одинаков для известной и неизвестной почты (без энумерации); 5/min |
+| `POST` | `/api/v1/auth/password/reset` | Новый пароль по коду из письма + авто-вход: access_token + cookies; успех подтверждает почту (`verified_via="code"`), все прежние сессии отзываются; 10/min |
 | `POST` | `/api/v1/auth/refresh` | Обновление access token (refresh token rotation) |
 | `POST` | `/api/v1/auth/logout` | Выход (очистка cookies) |
 | `POST` | `/api/v1/auth/client/login` | Legacy вход клиента по телефону |
@@ -147,8 +151,11 @@
 > (400) and hidden from the wizard.
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
-| `GET` | `/api/v1/client/me` | Свой профиль (имя/фамилия/телефон/город/адрес) |
+| `GET` | `/api/v1/client/me` | Свой профиль (имя/фамилия/телефон/город/адрес + `contacts` и `has_password` для карточек профиля) |
 | `PATCH` | `/api/v1/client/me` | Имя/фамилия/город/адрес (`city_id` проверяется, 404) |
+| `POST` | `/api/v1/client/contacts` | Добавить свой телефон/почту (`contact_type` + `value`; занятое значение — 409, включая легаси-колонки) |
+| `DELETE` | `/api/v1/client/contacts/{id}` | Удалить свой контакт (парольный аккаунт не может остаться без контактов — 400) |
+| `POST` | `/api/v1/client/contacts/{id}/primary` | Сделать контакт основным (в своём типе: телефон/почта) |
 | `GET` | `/api/v1/client/stats` | Дашборд: траты, визиты, предстоящие, любимые мастер/услуга |
 | `GET` | `/api/v1/client/appointments` | Свои записи (все, новые сверху; фронт делит на будущие/историю) |
 | `POST` | `/api/v1/client/appointments` | Своя запись из визарда (`master_id` + ровно один из `service_id`/`bundle_id` + date, проверка конфликтов по длительностям; статус `pending` или сразу `confirmed` при `auto_confirm` мастера; мастеру падает в колокольчик вместе с комментарием клиента) |

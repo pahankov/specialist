@@ -74,7 +74,7 @@ app = FastAPI(
         "Все API-эндпоинты версионированы: `/api/v1/`. "
         "Список изменений: `GET /api/v1/admin/changelog`."
     ),
-    version="1.74.1",
+    version="1.79.0",
     contact={
         "name": "Support",
         "email": "support@beauty-specialist.ru",

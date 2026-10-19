@@ -87,6 +87,9 @@ class User(Base):
     # Relationships
     master_profile = relationship("MasterProfile", back_populates="user", uselist=False)
     client_profile = relationship("ClientProfile", back_populates="user", uselist=False)
+    # Multi-contact model (1.79.0): phones/emails with per-contact verify flags.
+    contacts = relationship("UserContact", back_populates="user",
+                            cascade="all, delete-orphan")
     refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
     audit_logs = relationship("AuditLog", back_populates="user")
 

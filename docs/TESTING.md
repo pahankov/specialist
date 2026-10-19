@@ -1,19 +1,19 @@
 # Тестирование
 
-> Backend: 55 файлов, 600 тестов (pytest, SQLite-файл на тест). Frontend: 36 файлов, 193 теста (Vitest).
+> Backend: 58 файлов, 661 тест (pytest, SQLite-файл на тест). Frontend: 37 файлов, 200 тестов (Vitest).
 > Чек-лист перед коммитом — только в [RULES.md](RULES.md), правила деплоя — в [DEPLOYMENT_RULES.md](DEPLOYMENT_RULES.md).
 
 ## Запуск
 
 ```powershell
-# Backend (600 passed, ~10 мин)
+# Backend (661 passed, ~11 мин)
 cd online-booking\backend
 $env:PYTHONPATH='.'
 pytest tests/ -v                          # всё
 pytest tests/test_reviews.py -v           # один файл
 pytest tests/ -q --cov=app --cov-report=term-missing --cov-fail-under=55  # с гейтом (как в CI)
 
-# Frontend (193 passed, ~20 сек)
+# Frontend (200 passed, ~20 сек)
 cd online-booking\frontend
 npx vitest run                            # всё
 npx tsc --noEmit                          # типы (обязательно: ловят то, что тесты не ловят)
@@ -132,7 +132,7 @@ npx prettier --check src/                 # стиль (конфиг .prettierrc
 
 | Gate | Где | Fail → |
 |---|---|---|
-| pytest 600 + `--cov-fail-under=55` | `ci.yml` backend-tests | PR/деплой blocked |
+| pytest 661 + `--cov-fail-under=55` | `ci.yml` backend-tests | PR/деплой blocked |
 | eslint (0 errors) + `tsc --noEmit` + `vitest run` + `prettier --check` | `ci.yml` frontend-lint | PR/деплой blocked |
 | pytest (джоба `test` на раннере) | `deploy.yml` (`needs: test`) | деплой не стартует |
 | pg_dump перед миграциями | `deploy.yml` | warn, continue |

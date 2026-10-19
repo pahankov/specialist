@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 TOKEN_URL = "https://oauth.yandex.ru/token"
 INFO_URL = "https://login.yandex.ru/info"
+TOKEN_INFO_URL = "https://oauth.yandex.ru/info"
 
 
 class YandexApiError(Exception):
@@ -88,6 +89,27 @@ class YandexAuthApi:
         except Exception as e:
             raise YandexApiError(f"Yandex ID unreachable: {e}")
         return self._parse(resp, "info")
+
+    async def token_client_id(self, access_token: str) -> str:
+        """Client id of the app this OAuth token was issued to ("" if none).
+
+        The widget («мгновенная авторизация») hands the site a raw token:
+        it must belong to THIS app — a token minted for another client_id
+        must never log anyone into our site. Docs: oauth.yandex.ru/info.
+        """
+        if not self.enabled:
+            raise YandexApiError("Yandex ID is not configured")
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                resp = await client.get(
+                    TOKEN_INFO_URL,
+                    params={"format": "json", "oauth_token": access_token},
+                )
+        except Exception as e:
+            raise YandexApiError(f"Yandex ID unreachable: {e}")
+        payload = self._parse(resp, "token-info")
+        client_id = payload.get("client_id")
+        return str(client_id) if client_id else ""
 
     @staticmethod
     def _parse(resp: httpx.Response, where: str) -> dict:

@@ -38,11 +38,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.logging_config import get_logger
 from app.models.refresh_token import RefreshToken
-from app.models.user import User, UserRole
-from app.services.names import compose_full_name
-from app.services.social_merge import merge_social_profile
+from app.models.user import User
+from app.services.social_merge import (
+    bind_social_login,
+    complete_social_login,
+    resolve_social_user,
+)
 from app.services.yandex_api import YandexApiError, get_yandex_api
-from app.utils.tokens import create_access_token, create_refresh_token_payload
+from app.utils.phone import normalize_phone
 
 logger = get_logger(__name__)
 
@@ -55,34 +58,46 @@ def _state_key() -> bytes:
     return settings.SECRET_KEY.encode()
 
 
-def make_state() -> str:
+def make_state(link_user_id: Optional[int] = None) -> str:
     """Tamper-proof state binding a callback to an authorize start.
 
-    Format `<ts>_<nonce>_<hmac32>` — carries its own issued-at so
-    /yandex/verify can reject stale callbacks without a DB round-trip.
+    Format `<ts>_<nonce>_<uid>_<hmac32>` — carries its own issued-at so
+    /yandex/verify can reject stale callbacks without a DB round-trip. uid
+    is the account asking to LINK this profile (0 = plain login); it sits
+    inside the MAC, so a state can never be re-pointed at another user.
     """
     ts = str(int(datetime.now(dt_timezone.utc).timestamp()))
     # Hex nonce: never contains the "_" delimiter, so the state can always
-    # be split back into exactly (ts, nonce, mac) on parse.
+    # be split back into exactly (ts, nonce, uid, mac) on parse.
     nonce = secrets.token_hex(8)
-    mac = hmac.new(_state_key(), f"{ts}_{nonce}".encode(), hashlib.sha256)
-    return f"{ts}_{nonce}_{mac.hexdigest()[:32]}"
+    uid = int(link_user_id or 0)
+    mac = hmac.new(_state_key(), f"{ts}_{nonce}_{uid}".encode(), hashlib.sha256)
+    return f"{ts}_{nonce}_{uid}_{mac.hexdigest()[:32]}"
+
+
+def _parse_state(state: str) -> tuple[bool, Optional[int]]:
+    """(valid, link_user_id) — format/MAC/TTL checked, uid inside the MAC."""
+    try:
+        ts_raw, nonce, uid_raw, mac = (state or "").split("_", 3)
+        issued_at = int(ts_raw)
+        link_user_id = int(uid_raw)
+    except (ValueError, AttributeError):
+        return False, None
+    expect = hmac.new(
+        _state_key(), f"{ts_raw}_{nonce}_{uid_raw}".encode(), hashlib.sha256
+    ).hexdigest()[:32]
+    if not hmac.compare_digest(expect, mac):
+        return False, None
+    age = datetime.now(dt_timezone.utc).timestamp() - issued_at
+    if not (0 <= age <= STATE_TTL_SECONDS):
+        return False, None
+    return True, (link_user_id or None)
 
 
 def parse_state(state: str) -> bool:
     """True when the state was minted by us and is still fresh."""
-    try:
-        ts_raw, nonce, mac = (state or "").split("_", 2)
-        issued_at = int(ts_raw)
-    except (ValueError, AttributeError):
-        return False
-    expect = hmac.new(
-        _state_key(), f"{ts_raw}_{nonce}".encode(), hashlib.sha256
-    ).hexdigest()[:32]
-    if not hmac.compare_digest(expect, mac):
-        return False
-    age = datetime.now(dt_timezone.utc).timestamp() - issued_at
-    return 0 <= age <= STATE_TTL_SECONDS
+    ok, _ = _parse_state(state)
+    return ok
 
 
 # Yandex consent screen (server-side constant — not a secret, entry URL).
@@ -119,7 +134,8 @@ async def verify_yandex_code(
     if not settings.yandex_enabled:
         raise HTTPException(
             status_code=503, detail="Вход через Яндекс не настроен")
-    if not parse_state(state):
+    state_ok, link_user_id = _parse_state(state)
+    if not state_ok:
         raise HTTPException(
             status_code=400,
             detail="Неверная или просроченная сессия входа. Попробуйте снова.",
@@ -135,7 +151,7 @@ async def verify_yandex_code(
             status_code=400,
             detail="Не удалось войти через Яндекс. Попробуйте позже.",
         )
-    return await _login_with_profile(db, profile, consent)
+    return await _login_with_profile(db, profile, consent, link_user_id)
 
 
 async def verify_yandex_token(
@@ -145,15 +161,34 @@ async def verify_yandex_token(
 ) -> tuple[str, User, bool]:
     """Widget flow: the official sdk-suggest widget delivered a token.
 
-    Unlike the code flow there is no redirect and no signed state — owning a
-    valid OAuth token IS the proof of authentication. We validate it the only
-    way Yandex allows (a profile read; revoked/foreign tokens fail there) and
-    then reuse the same create/bind path as the code flow.
+    Unlike the code flow there is no redirect and no signed state — a valid
+    OAuth token IS the proof of authentication, but only for the app it was
+    issued to: we first check oauth.yandex.ru/info that the token belongs to
+    OUR client_id (fail closed), then read the profile (revoked tokens fail
+    there) and reuse the same create/bind path as the code flow.
     """
     if not settings.yandex_enabled:
         raise HTTPException(
             status_code=503, detail="Вход через Яндекс не настроен")
     api = get_yandex_api()
+    try:
+        token_client = await api.token_client_id(access_token)
+    except YandexApiError as e:
+        logger.warning("Yandex ID token info call failed: %s", e)
+        raise HTTPException(
+            status_code=401,
+            detail="Не удалось подтвердить вход через Яндекс. "
+                   "Попробуйте снова.",
+        )
+    if not token_client or token_client != settings.YANDEX_CLIENT_ID:
+        logger.warning(
+            "Yandex widget token issued to client_id=%r (expected %r)",
+            token_client, settings.YANDEX_CLIENT_ID)
+        raise HTTPException(
+            status_code=401,
+            detail="Токен выдан другому приложению. "
+                   "Войдите через Яндекс заново.",
+        )
     try:
         profile = await api.user_info(access_token)
     except YandexApiError as e:
@@ -167,9 +202,15 @@ async def verify_yandex_token(
 
 
 async def _login_with_profile(
-    db: AsyncSession, profile: dict, consent: bool
+    db: AsyncSession, profile: dict, consent: bool,
+    link_user_id: Optional[int] = None,
 ) -> tuple[str, User, bool]:
-    """Shared tail of both verify flows: profile -> account -> JWT session."""
+    """Shared tail of both verify flows: profile -> account -> JWT session.
+
+    link_user_id (from a signed start state) switches the tail into the
+    «Привязать Яндекс» mode: the profile binds to that account instead of
+    being used to find or create one.
+    """
     raw_id = profile.get("id")
     if raw_id is None:
         raise HTTPException(
@@ -179,87 +220,52 @@ async def _login_with_profile(
     first = (profile.get("first_name") or "").strip()
     last = (profile.get("last_name") or "").strip()
     email = _clean_email(profile.get("default_email"))
+    # default_phone appears once the app carries the login:phone scope; the
+    # number is confirmed by Yandex to belong to this very account.
+    phone = _clean_phone((profile.get("default_phone") or {}).get("number"))
     # Yandex exposes the avatar as an id, not a URL — build the CDN link.
     avatar_id = (profile.get("default_avatar_id") or "").strip()
     avatar_url = (f"https://avatars.yandex.net/get-yapic/{avatar_id}/islands-200"
                   if avatar_id else None)
 
-    from app.modules.auth.service import OFFER_VERSION, POLICY_VERSION
-
-    result = await db.execute(
-        select(User).where(User.yandex_user_id == yandex_user_id))
-    user = result.scalar_one_or_none()
-    is_new = False
-
-    if user is None and email:
-        # A pre-existing account with the same email: link it to Yandex instead
-        # of creating a duplicate (same progressive-profiling rule as VK/MAX).
-        result = await db.execute(select(User).where(User.email == email))
-        user = result.scalar_one_or_none()
-        if user is not None:
-            user.yandex_user_id = yandex_user_id
-            logger.info("Linked Yandex account to existing user_id=%s", user.id)
-
-    if user is None:
-        is_new = True
-        logger.info("Creating new client via Yandex: yandex_user_id=%s",
-                    yandex_user_id)
-        user = User(
-            name=compose_full_name(first, last) or "Яндекс Пользователь",
-            last_name=last or None,
+    # One shared resolution for every social login («Единый вход»): yandex-id
+    # → confirmed phone → confirmed email → create; contacts land on the
+    # account through the contact service (verified_via="social").
+    if link_user_id is not None:
+        # «Привязать Яндекс»: the signed state names the current account —
+        # the profile is linked to it, never re-resolved by fields.
+        user = await bind_social_login(
+            db,
+            user_id=link_user_id,
+            provider="yandex",
+            social_id=yandex_user_id,
+            social_field="yandex_user_id",
+            first_name=first,
+            last_name=last,
+            phone=phone,
+            phone_confirmed=bool(phone),
             email=email,
-            phone=None,
-            role=UserRole.CLIENT,
-            hashed_password=None,  # Yandex-only auth (same as OTP/MAX/VK paths)
-            # Yandex vouches the account + its verified default_email, so the
-            # profile is trusted.
-            is_verified=bool(email),
-            yandex_user_id=yandex_user_id,
+            email_confirmed=bool(email),
             avatar_url=avatar_url,
-            # name came from Yandex: a later social login may refresh it, a
-            # human edit ("user") will not be overwritten.
-            name_source="yandex",
-            # 152-FZ: consent checkbox on the Yandex login form.
-            consent_at=(datetime.now(dt_timezone.utc) if consent else None),
-            consent_policy_version=POLICY_VERSION if consent else None,
-            consent_offer_version=OFFER_VERSION if consent else None,
         )
-        db.add(user)
-        await db.flush()
-        from app.services.clients import get_or_create_profile
-        await get_or_create_profile(db, user)
-        logger.info("New client created via Yandex: user_id=%s", user.id)
+        is_new = False
     else:
-        if user.is_active is False:
-            raise HTTPException(status_code=403, detail="Аккаунт заблокирован.")
-        # Smart merge: refresh name/avatar from Yandex, fill a missing email,
-        # only ever raise is_verified — human-set fields are never lost.
-        changed = await merge_social_profile(
-            db, user, provider="yandex",
-            first_name=first, last_name=last,
-            email=email, avatar_url=avatar_url,
-            verified=bool(email),
+        user, is_new = await resolve_social_user(
+            db,
+            provider="yandex",
+            social_id=yandex_user_id,
+            social_field="yandex_user_id",
+            first_name=first,
+            last_name=last,
+            phone=phone,
+            phone_confirmed=bool(phone),
+            email=email,
+            email_confirmed=bool(email),
+            avatar_url=avatar_url,
+            fallback_name="Яндекс Пользователь",
+            consent=consent,
         )
-        if consent and user.consent_at is None:
-            user.consent_at = datetime.now(dt_timezone.utc)
-            user.consent_policy_version = POLICY_VERSION
-            user.consent_offer_version = OFFER_VERSION
-            changed = True
-        if changed:
-            await db.commit()
-
-    access_token = create_access_token({
-        "sub": str(user.id),
-        "role": user.role.value,
-        "name": user.name,
-        "is_admin": user.role == UserRole.ADMIN,
-    })
-    refresh_value, expires_at = create_refresh_token_payload(
-        user.id, user.email or "")
-    db.add(RefreshToken(user_id=user.id, token=refresh_value,
-                        expires_at=expires_at))
-    await db.commit()
-
+    access_token = await complete_social_login(db, user)
     logger.info("User logged in via Yandex: user_id=%s is_new=%s",
                 user.id, is_new)
     return access_token, user, is_new
@@ -273,6 +279,16 @@ def _clean_email(raw: Optional[str]) -> Optional[str]:
     if not email or "@" not in email or " " in email:
         return None
     return email
+
+
+def _clean_phone(raw: Optional[str]) -> Optional[str]:
+    """Normalize a phone from the Yandex profile; None when unparseable."""
+    if not raw:
+        return None
+    try:
+        return normalize_phone(str(raw))
+    except ValueError:
+        return None
 
 
 async def get_latest_refresh_token_value(

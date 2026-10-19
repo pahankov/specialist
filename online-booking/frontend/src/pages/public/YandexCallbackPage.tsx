@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { authApi } from '../../api/client';
 import { getCookie, decodeJwtPayload } from '../../utils/cookies';
 import { takeReturnUrl } from '../../utils/redirect';
+import { takeSocialLinkReturn } from '../../utils/socialLink';
 import { ADMIN_PREFIX, SUPER_PREFIX } from '../../utils/section';
 import YandexIcon from '../../components/common/icons/YandexIcon';
 import './YandexCallbackPage.css';
@@ -44,6 +45,14 @@ function YandexCallbackPage() {
     const state = params.get('state');
 
     if (oauthError) {
+      // Link mode: send the user back to the profile instead of stranding
+      // them on this page after a cancelled bind.
+      const linkReturn = takeSocialLinkReturn();
+      if (linkReturn) {
+        toast.error('Привязка Яндекса отменена');
+        navigate(linkReturn, { replace: true });
+        return;
+      }
       setError('Вы отклонили вход через Яндекс');
       return;
     }
@@ -63,6 +72,14 @@ function YandexCallbackPage() {
     (async () => {
       try {
         const resp = await authApi.yandexVerify(code, state, consent);
+        // Link mode (profile «Привязать Яндекс»): same account, back to the
+        // profile it started from — no role landing, no new session toast.
+        const linkReturn = takeSocialLinkReturn();
+        if (linkReturn) {
+          toast.success('Яндекс привязан к аккаунту');
+          navigate(linkReturn, { replace: true });
+          return;
+        }
         toast.success(
           resp.data.is_new_user
             ? 'Добро пожаловать! Аккаунт создан.'

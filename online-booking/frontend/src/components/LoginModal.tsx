@@ -20,11 +20,15 @@ interface LoginModalProps {
   onClose: () => void;
   /** After any successful auth, land here instead of the role default. */
   redirectTo?: string | null;
+  /** Open directly in a given mode (profile «Привязать MAX»). */
+  initialMode?: ModalMode;
+  /** Profile context: refresh the page data instead of landing by role. */
+  onAuthSuccess?: () => void;
 }
 
 /** Modes: VK widget inline, Yandex — the official suggest widget (with the
     plain redirect button as fallback). */
-type ModalMode = 'login' | 'register' | 'max';
+type ModalMode = 'login' | 'register' | 'max' | 'forgot';
 
 interface LoginFormState {
   identifier: string; // email or phone
@@ -37,10 +41,16 @@ interface RegisterFormState {
   consent: boolean;
 }
 
-function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
+function LoginModal({
+  isOpen,
+  onClose,
+  redirectTo,
+  initialMode = 'login',
+  onAuthSuccess,
+}: LoginModalProps) {
   const navigate = useNavigate();
 
-  const [mode, setMode] = useState<ModalMode>('login');
+  const [mode, setMode] = useState<ModalMode>(initialMode);
   const [loginForm, setLoginForm] = useState<LoginFormState>({
     identifier: '',
     password: '',
@@ -53,6 +63,17 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
   const [loading, setLoading] = useState(false);
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [showRegisterPassword, setShowRegisterPassword] = useState(false);
+  /** Unified entry: the entered phone turned out to be a social-only account
+      — the hint above the social buttons replaces the password form. */
+  const [socialNotice, setSocialNotice] = useState(false);
+  const loginPasswordRef = useRef<HTMLInputElement>(null);
+
+  // Forgot password: code by email → new password → auto-login.
+  const [forgotStep, setForgotStep] = useState<'email' | 'code'>('email');
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotCode, setForgotCode] = useState('');
+  const [forgotPassword, setForgotPassword] = useState('');
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
   /** The 152-FZ checkbox on the register form — it gates the social block
       above the manual fields, so the consent-gate hint can jump back to it. */
   const consentRef = useRef<HTMLInputElement>(null);
@@ -96,6 +117,19 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
     }, 800);
   };
 
+  /** Post-auth landing: profile-style callers refresh their data in place;
+      everyone else goes through the role landing. */
+  const landAfterAuth = () => {
+    if (onAuthSuccess) {
+      setTimeout(() => {
+        onClose();
+        onAuthSuccess();
+      }, 500);
+      return;
+    }
+    landByRole();
+  };
+
   // Live identifier mode: mask while the input is unambiguously a phone
   // (starts with +/7/8, digits only); free text otherwise. Emails may start
   // with digits too ("123user@mail.ru"), so digit-led input stays unmasked
@@ -103,6 +137,7 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
   const handleIdentifierChange = (value: string) => {
     if (value === '') {
       setLoginForm((prev) => ({ ...prev, identifier: '' }));
+      setSocialNotice(false);
       return;
     }
     if (value.includes('@') || /[a-zа-яё]/i.test(value)) {
@@ -111,13 +146,40 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
       // case stays visible and editable — never a dead end).
       const cleaned = value.replace(/[\s()]/g, '').replace(/^\+/, '');
       setLoginForm((prev) => ({ ...prev, identifier: cleaned }));
+      setSocialNotice(false);
       return;
     }
+    setSocialNotice(false);
     if (/^[+78]/.test(value)) {
       setLoginForm((prev) => ({ ...prev, identifier: maskPhone(value) }));
       return;
     }
     setLoginForm((prev) => ({ ...prev, identifier: value }));
+  };
+
+  /** Unified entry step 1 (phone, no password): ask the backend what this
+      number needs and route the user to the right form. */
+  const dispatchPhone = async (phone: string) => {
+    setLoading(true);
+    setSocialNotice(false);
+    try {
+      const { data } = await authApi.phoneStatus(phone);
+      if (data.state === 'new') {
+        toast.info('Аккаунта нет — создадим за минуту');
+        switchMode('register');
+        setRegisterForm({ phone, password: '', consent: false });
+      } else if (data.state === 'password') {
+        toast.info('Аккаунт найден — введите пароль');
+        loginPasswordRef.current?.focus();
+      } else {
+        // Social-only account: password login is impossible by design.
+        setSocialNotice(true);
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Не удалось проверить номер');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -152,11 +214,22 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
       }
       identifier = maskPhone(raw);
     }
+    // Unified entry: a phone WITHOUT a password asks the backend what this
+    // number needs — registration, the password form, or a social hint.
+    if (!loginForm.password) {
+      if (!identifier.includes('@')) {
+        await dispatchPhone(identifier);
+        return;
+      }
+      toast.error('Введите пароль');
+      loginPasswordRef.current?.focus();
+      return;
+    }
     setLoading(true);
     try {
       await authApi.loginUnified(identifier, loginForm.password);
       toast.success('Вход выполнен!');
-      landByRole();
+      landAfterAuth();
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Ошибка входа');
     } finally {
@@ -225,7 +298,7 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
       toast.success(
         resp.data.is_new_user ? 'Добро пожаловать! Аккаунт создан.' : 'Вход через MAX выполнен!',
       );
-      landByRole();
+      landAfterAuth();
     } catch (err: any) {
       const detail = err.response?.data?.detail;
       toast.error(typeof detail === 'string' ? detail : 'Неверный код');
@@ -237,6 +310,54 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
   const resetMaxState = () => {
     setMaxOffer(null);
     setMaxCodeInput('');
+  };
+
+  /** Forgot password step 1: send a 6-digit code to the account email. */
+  const handleForgotSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const email = forgotEmail.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast.error('Введите корректный email');
+      return;
+    }
+    setLoading(true);
+    try {
+      await authApi.forgotPassword(email);
+      setForgotCode('');
+      setForgotPassword('');
+      setForgotStep('code');
+      toast.success('Код отправлен — проверьте почту');
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Не удалось отправить письмо');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /** Forgot password step 2: code + new password → auto-login (the backend
+      sets the session cookies during the reset). */
+  const handleForgotReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!/^\d{6}$/.test(forgotCode.trim())) {
+      toast.error('Код — 6 цифр из письма');
+      return;
+    }
+    const pwdErr = passwordError(forgotPassword);
+    if (pwdErr) {
+      toast.error(pwdErr);
+      return;
+    }
+    setLoading(true);
+    try {
+      await authApi.resetPassword(forgotEmail.trim(), forgotCode.trim(), forgotPassword);
+      toast.success('Пароль обновлён — вы вошли в аккаунт');
+      landAfterAuth();
+    } catch (err: any) {
+      const detail = err.response?.data?.detail;
+      toast.error(typeof detail === 'string' ? detail : 'Неверный или истёкший код');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -259,7 +380,7 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
       // register-unified logs in immediately: everyone lands in the client
       // cabinet — profile is filled in later, becoming a master is separate.
       toast.success('Добро пожаловать! Вы вошли в аккаунт.');
-      landByRole();
+      landAfterAuth();
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Ошибка регистрации');
     } finally {
@@ -281,6 +402,10 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
     });
     setShowLoginPassword(false);
     setShowRegisterPassword(false);
+    setSocialNotice(false);
+    setForgotStep('email');
+    setForgotCode('');
+    setForgotPassword('');
   };
 
   /* ── Register validation: mirrors backend rules, submit stays disabled
@@ -288,6 +413,112 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
   const registerPwdError = passwordError(registerForm.password);
   const registerPhoneOk = isCompletePhone(registerForm.phone);
   const registerValid = registerPhoneOk && registerPwdError === null && registerForm.consent;
+
+  /* Forgot password: email → code + new password → auto-login. */
+  const forgotForm =
+    forgotStep === 'email' ? (
+      <form onSubmit={handleForgotSend}>
+        <p className="login-note">
+          Укажите почту аккаунта — пришлём код для сброса пароля.
+        </p>
+        <div className="login-group">
+          <label>Email</label>
+          <input
+            type="email"
+            value={forgotEmail}
+            onChange={(e) => setForgotEmail(e.target.value)}
+            placeholder="email@example.com"
+            required
+          />
+        </div>
+        <button type="submit" className="btn btn-primary btn-submit" disabled={loading}>
+          {loading ? 'Отправляем...' : 'Отправить код'}
+        </button>
+        <p className="login-footer">
+          <a
+            href="#"
+            onClick={(e) => {
+              e.preventDefault();
+              switchMode('login');
+            }}
+          >
+            ← Назад ко входу
+          </a>
+        </p>
+        <p className="login-note">
+          Аккаунт создан по номеру без почты? Войдите через VK, Яндекс или MAX —
+          пароль для этого не нужен.
+        </p>
+      </form>
+    ) : (
+      <form onSubmit={handleForgotReset}>
+        <p className="login-note">
+          Код отправлен на <strong>{forgotEmail.trim()}</strong>. Проверьте почту
+          (и папку «Спам»).
+        </p>
+        <div className="login-group">
+          <label>Код из письма</label>
+          <input
+            value={forgotCode}
+            onChange={(e) => setForgotCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            placeholder="6 цифр"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            required
+          />
+        </div>
+        <div className="login-group">
+          <label>Новый пароль</label>
+          <div style={{ position: 'relative' }}>
+            <input
+              type={showForgotPassword ? 'text' : 'password'}
+              value={forgotPassword}
+              onChange={(e) => setForgotPassword(e.target.value)}
+              placeholder={PASSWORD_PLACEHOLDER}
+              required
+              style={{ paddingRight: 44 }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowForgotPassword(!showForgotPassword)}
+              style={{
+                position: 'absolute',
+                right: 8,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: 18,
+                padding: '4px 8px',
+                color: '#666',
+                lineHeight: 1,
+              }}
+              title={showForgotPassword ? 'Скрыть пароль' : 'Показать пароль'}
+            >
+              {showForgotPassword ? '🙈' : '👁️'}
+            </button>
+          </div>
+          {forgotPassword !== '' && passwordError(forgotPassword) && (
+            <p className="error-message">{passwordError(forgotPassword)}</p>
+          )}
+        </div>
+        <button type="submit" className="btn btn-primary btn-submit" disabled={loading}>
+          {loading ? 'Проверяем...' : 'Сбросить пароль и войти'}
+        </button>
+        <p className="login-footer">
+          <a
+            href="#"
+            onClick={(e) => {
+              e.preventDefault();
+              setForgotStep('email');
+            }}
+          >
+            ← Ввести другую почту
+          </a>
+        </p>
+      </form>
+    );
 
   const maxForm = !maxOffer ? (
     <form onSubmit={handleMaxStart}>
@@ -410,7 +641,9 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
           ? 'Вход в систему'
           : mode === 'register'
             ? 'Регистрация'
-            : 'Вход и регистрация через MAX'
+            : mode === 'forgot'
+              ? 'Восстановление пароля'
+              : 'Вход и регистрация через MAX'
       }
       className="login-modal"
     >
@@ -432,11 +665,11 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
             <label>Пароль</label>
             <div style={{ position: 'relative' }}>
               <input
+                ref={loginPasswordRef}
                 type={showLoginPassword ? 'text' : 'password'}
                 value={loginForm.password}
                 onChange={(e) => setLoginForm((prev) => ({ ...prev, password: e.target.value }))}
                 placeholder="Введите пароль"
-                required
                 style={{ paddingRight: 44 }}
               />
               <button
@@ -462,15 +695,36 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
             </div>
           </div>
 
+          {socialNotice && (
+            /* Unified entry: the phone was routed to social — no password
+               form can help, point at the buttons below. */
+            <p className="login-social-notice">
+              Этот номер уже привязан к аккаунту через соцсеть или MAX — войдите
+              кнопкой ниже. Пароль здесь не нужен.
+            </p>
+          )}
+
           <button type="submit" className="btn btn-primary btn-submit" disabled={loading}>
             {loading ? 'Входим...' : 'Войти'}
           </button>
+
+          <p className="login-footer" style={{ marginTop: 10 }}>
+            <a
+              href="#"
+              onClick={(e) => {
+                e.preventDefault();
+                switchMode('forgot');
+              }}
+            >
+              Забыли пароль?
+            </a>
+          </p>
 
           <div className="social-auth-divider">или</div>
 
           {/* VK + OK + Mail: the official OAuthList widget rendered INLINE —
               no separate screen, no consent checkbox (taken at registration). */}
-          <VkIdWidget onSuccess={landByRole} />
+          <VkIdWidget onSuccess={landAfterAuth} />
 
           {/* Yandex: the official «мгновенная авторизация» widget; the plain
               redirect button only appears if the widget cannot run here. */}
@@ -485,7 +739,7 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
             ) : (
               <YandexSuggestButton
                 variant="login"
-                onSuccess={landByRole}
+                onSuccess={landAfterAuth}
                 onUnavailable={() => setYandexRedirect(true)}
               />
             )}
@@ -510,6 +764,9 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
       ) : mode === 'max' ? (
         /* MAX CHAT-BOT FORM (SMS-style: code arrives in MAX, typed here) */
         maxForm
+      ) : mode === 'forgot' ? (
+        /* FORGOT PASSWORD (code by email → new password → auto-login) */
+        forgotForm
       ) : (
         /* ─── REGISTER FORM (the only place 152-FZ consent is asked) ─── */
         <form onSubmit={handleRegister}>
@@ -546,7 +803,7 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
               no tick, no social sign-up. */}
           {registerForm.consent ? (
             <>
-              <VkIdWidget onSuccess={landByRole} />
+              <VkIdWidget onSuccess={landAfterAuth} />
               <div className="social-icon-row">
                 {yandexRedirect ? (
                   <SocialAuthIconButton
@@ -558,7 +815,7 @@ function LoginModal({ isOpen, onClose, redirectTo }: LoginModalProps) {
                 ) : (
                   <YandexSuggestButton
                     variant="register"
-                    onSuccess={landByRole}
+                    onSuccess={landAfterAuth}
                     onUnavailable={() => setYandexRedirect(true)}
                   />
                 )}

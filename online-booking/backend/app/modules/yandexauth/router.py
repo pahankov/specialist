@@ -1,11 +1,15 @@
 """Yandex ID auth endpoints (OAuth 2.0 Authorization Code Flow)."""
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import get_db
+from app.dependencies.auth import get_current_user_optional
 from app.logging_config import get_logger
 from app.middleware.rate_limit import limiter
+from app.models.user import User
 from app.modules.yandexauth import schemas
 from app.modules.yandexauth import service
 from app.services.audit import log_action
@@ -18,16 +22,30 @@ router = APIRouter()
 
 @router.post("/yandex/start", response_model=schemas.YandexStartResponse)
 @limiter.limit("10/minute")
-async def yandex_start(request: Request, req: schemas.YandexStartRequest):
+async def yandex_start(
+    request: Request,
+    req: schemas.YandexStartRequest,
+    user: Optional[User] = Depends(get_current_user_optional),
+):
     """Mint a signed state + the Yandex authorize URL for the redirect.
 
     Yandex has no PKCE, so the start call only produces the HMAC state and
-    the consent URL — the app secret never leaves the backend.
+    the consent URL — the app secret never leaves the backend. With
+    link=True the signed state names the current account («Привязать
+    Яндекс»), so the callback binds the profile there.
     """
     if not settings.yandex_enabled:
         raise HTTPException(
             status_code=503, detail="Вход через Яндекс не настроен")
-    state = service.make_state()
+    if req.link:
+        if user is None:
+            raise HTTPException(
+                status_code=401,
+                detail="Войдите в аккаунт, чтобы привязать профиль",
+            )
+        state = service.make_state(link_user_id=user.id)
+    else:
+        state = service.make_state()
     return {
         "authorize_url": service.build_authorize_url(state),
         "state": state,

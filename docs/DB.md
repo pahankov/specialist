@@ -398,6 +398,41 @@
 
 **Индексы:** `ix_coupon_uses_coupon_id`
 
+### 20. user_contacts
+
+**Назначение:** контакты аккаунта (телефоны/почты) с собственными флагами верификации — основа «Единого входа» 1.79.0; `users.phone/email` остаются легаси-зеркалом на время перехода
+
+| Колонка | Тип | Ограничения | Описание |
+|---------|-----|-------------|----------|
+| id | INTEGER | PK | Автоинкремент |
+| user_id | INTEGER | NOT NULL, FK -> users.id ON DELETE CASCADE | Владелец контакта |
+| contact_type | VARCHAR(10) | NOT NULL | `phone` или `email` |
+| value | VARCHAR(255) | NOT NULL | Телефон в формате `+7 (XXX) XXX-XX-XX`; почта в нижнем регистре |
+| is_verified | BOOLEAN | NOT NULL, DEFAULT FALSE | Подтверждён ли контакт |
+| verified_via | VARCHAR(16) | NULLABLE | Чем подтверждён: `social` (соцвход) или `code` (код на почту) |
+| verified_at | TIMESTAMP WITH TIME ZONE | NULLABLE | Когда подтверждён |
+| is_primary | BOOLEAN | NOT NULL, DEFAULT FALSE | Основной в своём типе (телефон приоритетнее почты) |
+| created_at / updated_at | TIMESTAMP WITH TIME ZONE | | |
+
+**Индексы:** `ix_user_contacts_user_id`; уникальный `ix_user_contacts_type_value (contact_type, value)` — значение живёт ровно на одном аккаунте; перенос «занятого» подтверждённого контакта пишется в аудит
+
+### 21. email_codes
+
+**Назначение:** одноразовые шестизначные коды на почту («Забыли пароль», подтверждение почты); в БД хранится только хэш
+
+| Колонка | Тип | Ограничения | Описание |
+|---------|-----|-------------|----------|
+| id | INTEGER | PK | Автоинкремент |
+| email | VARCHAR(255) | NOT NULL | Адрес получателя (нижний регистр) |
+| purpose | VARCHAR(20) | NOT NULL | Назначение (например, `password_reset`) |
+| code_hash | VARCHAR(64) | NOT NULL | SHA-256 код (открытый текст не хранится) |
+| expires_at | TIMESTAMP WITH TIME ZONE | NOT NULL | Срок жизни кода |
+| is_used | BOOLEAN | NOT NULL, DEFAULT FALSE | Одноразовость |
+| attempts | INTEGER | NOT NULL, DEFAULT 0 | Неверные попытки (после лимита код сгорает) |
+| created_at | TIMESTAMP WITH TIME ZONE | | |
+
+**Индексы:** `ix_email_codes_email`, `ix_email_codes_email_purpose`
+
 ---
 
 ## Связи (Relationships)
@@ -427,6 +462,7 @@
 | coupons | coupon_uses | 1:N | CASCADE |
 | appointments | coupon_uses | 1:N | SET NULL |
 | users | coupon_uses | 1:N | SET NULL |
+| users | user_contacts | 1:N | CASCADE |
 
 ### N:1 (Many-to-One)
 
@@ -452,6 +488,7 @@
 | notification_broadcasts | users | sender_id |
 | master_hidden_clients | master_profiles | master_profile_id |
 | master_hidden_clients | client_profiles | client_profile_id |
+| user_contacts | users | user_id |
 | coupons | master_profiles | master_id |
 | coupon_uses | coupons | coupon_id |
 | coupon_uses | appointments | appointment_id |
@@ -508,8 +545,10 @@
 | 31 | 21a1b2c3d4e6 | 20a1b2c3d4e5 | `users.yandex_user_id` (unique, привязка Yandex ID) | 2026-10-17 |
 | 32 | 22a1b2c3d4e7 | 21a1b2c3d4e6 | `users.avatar_url/name_source` (соц-профиль клиента) | 2026-10-18 |
 | 33 | 23a1b2c3d4e8 | 22a1b2c3d4e7 | DROP `otp_codes.code` — легаси-колонка с открытым текстом, ломавшая INSERT на проде | 2026-10-18 |
+| 34 | 24a1b2c3d4e9 | 23a1b2c3d4e8 | `user_contacts` (несколько телефонов/почт, флаги верификации; бэкфилл из `users.email/phone`, 1.79.0) | 2026-10-19 |
+| 35 | 25a1b2c3d4ea | 24a1b2c3d4e9 | `email_codes` (одноразовые коды на почту: сброс пароля и подтверждение, 1.79.0) | 2026-10-19 |
 
-**Head:** `23a1b2c3d4e8`
+**Head:** `25a1b2c3d4ea`
 
 > Старая цепочка из 12 миграций (`9a9c2edb` → `b2c3d4e5f6a7`) удалена после squash —
 > история сохранена в git (`git log -- alembic/versions/`). Прод-БД со старым head

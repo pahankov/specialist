@@ -8,6 +8,8 @@ from app.models.review import Review
 from app.models.country import Country
 from app.models.city import City
 from app.models.user import User, UserRole
+from app.models.user_contact import UserContact
+from app.models.email_code import EmailCode
 from app.models.master_profile import MasterProfile
 from app.models.client_profile import ClientProfile
 from app.models.otp_code import OtpCode

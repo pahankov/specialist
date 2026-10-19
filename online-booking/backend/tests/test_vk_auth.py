@@ -175,9 +175,18 @@ class TestVkVerify:
         assert user.last_name == "Petrov"
         assert user.email == "ivan@vk.example"
         assert user.role.value == "CLIENT"
-        assert user.is_verified is True
         assert user.consent_at is not None
         assert user.consent_policy_version
+
+        from app.models.user_contact import UserContact
+        contact = (await session.execute(
+            select(UserContact).where(
+                UserContact.user_id == user.id,
+                UserContact.contact_type == "email"))).scalar_one()
+        assert contact.value == "ivan@vk.example"
+        assert contact.is_verified is True
+        assert contact.verified_via == "social"
+        assert contact.is_primary is True
 
     async def test_verify_stamps_no_consent_when_absent(
         self, client, vk_enabled, monkeypatch, session
@@ -382,23 +391,32 @@ class TestVkProfileSync:
         assert bound.name == "Своё Имя"  # untouched
         assert bound.name_source == "user"
 
-    async def test_verified_only_ever_upgrades(
+    async def test_confirmed_email_upgrades_unverified_contact(
         self, client, vk_enabled, monkeypatch, session
     ):
+        """A contact is upgraded (never downgraded) by a social vouch."""
         from app.models.user import User, UserRole
-        bound = User(name="Proved", role=UserRole.CLIENT, vk_user_id=111,
-                     is_verified=True, name_source="user")
-        session.add(bound)
-        await session.commit()
+        from app.services.contacts import attach_contact
 
-        api = _StubVkApi(profile=_profile(verified=False), tokens=_tokens())
+        bound = User(name="Proved", role=UserRole.CLIENT, vk_user_id=111,
+                     name_source="user")
+        session.add(bound)
+        await session.flush()
+        contact, _ = await attach_contact(
+            session, bound, "email", "proved@vk.example")
+        await session.commit()
+        assert contact.is_verified is False
+
+        api = _StubVkApi(profile=_profile(email="proved@vk.example"),
+                         tokens=_tokens())
         _stub(monkeypatch, api)
         data = await _start(client)
         done = await _verify(client, data)
         assert done.status_code == 200
 
-        await session.refresh(bound)
-        assert bound.is_verified is True  # never downgraded
+        await session.refresh(contact)
+        assert contact.is_verified is True
+        assert contact.verified_via == "social"
 
     async def test_email_fills_when_empty_and_free(
         self, client, vk_enabled, monkeypatch, session
@@ -417,17 +435,33 @@ class TestVkProfileSync:
         assert done.status_code == 200
 
         await session.refresh(bound)
-        assert bound.email == "fresh@vk.example"
+        assert bound.email == "fresh@vk.example"  # legacy mirror filled
 
-    async def test_email_never_steals_a_taken_address(
+        from sqlalchemy import select
+        from app.models.user_contact import UserContact
+        contact = (await session.execute(
+            select(UserContact).where(
+                UserContact.user_id == bound.id,
+                UserContact.contact_type == "email"))).scalar_one()
+        assert contact.value == "fresh@vk.example"
+        assert contact.verified_via == "social"
+
+    async def test_confirmed_email_transfers_from_another_account(
         self, client, vk_enabled, monkeypatch, session
     ):
+        """Provider-confirmed email moves to the VK account (audit-logged)."""
+        from sqlalchemy import select
         from app.models.user import User, UserRole
+        from app.models.user_contact import UserContact
+        from app.services.contacts import attach_contact
+
         owner = User(name="Owner", email="busy@vk.example",
                      role=UserRole.CLIENT)
         bound = User(name="No Email", role=UserRole.CLIENT, vk_user_id=111,
                      name_source="user")
         session.add_all([owner, bound])
+        await session.flush()
+        await attach_contact(session, owner, "email", "busy@vk.example")
         await session.commit()
 
         api = _StubVkApi(profile=_profile(email="busy@vk.example"),
@@ -437,5 +471,93 @@ class TestVkProfileSync:
         done = await _verify(client, data)
         assert done.status_code == 200
 
+        contact = (await session.execute(
+            select(UserContact).where(
+                UserContact.contact_type == "email",
+                UserContact.value == "busy@vk.example"))).scalar_one()
+        assert contact.user_id == bound.id  # moved to the VK account
+        assert contact.verified_via == "social"
+        await session.refresh(owner)
         await session.refresh(bound)
-        assert bound.email is None  # taken by `owner`, skipped
+        assert owner.email is None  # donor's legacy mirror cleared
+        assert bound.email == "busy@vk.example"
+
+
+class TestVkLink:
+    """«Привязать VK»: the signed state names the current account."""
+
+    async def _token_for(self, user):
+        from app.utils.tokens import create_access_token
+        return create_access_token({
+            "sub": str(user.id), "role": user.role.value, "name": user.name,
+        })
+
+    async def test_link_binds_profile_to_current_account(
+        self, client, vk_enabled, monkeypatch, session
+    ):
+        from sqlalchemy import func, select
+        from app.models.user import User, UserRole
+
+        me = User(name="Me", role=UserRole.CLIENT)
+        session.add(me)
+        await session.commit()
+        token = await self._token_for(me)
+
+        api = _StubVkApi(profile=_profile(email="me@vk.example"),
+                         tokens=_tokens())
+        _stub(monkeypatch, api)
+        start = await client.post(
+            "/api/v1/auth/vk/start",
+            json={"code_challenge": CHALLENGE, "link": True},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert start.status_code == 200
+
+        done = await _verify(client, start.json())
+        assert done.status_code == 200
+        assert done.json()["is_new_user"] is False
+
+        await session.refresh(me)
+        assert me.vk_user_id == 111  # bound to ME, not a new account
+        assert me.email == "me@vk.example"
+        total = (await session.execute(
+            select(func.count()).select_from(User))).scalar_one()
+        assert total == 1  # no account was forked
+
+    async def test_link_requires_auth(self, client, vk_enabled):
+        resp = await client.post(
+            "/api/v1/auth/vk/start",
+            json={"code_challenge": CHALLENGE, "link": True},
+        )
+        assert resp.status_code == 401
+
+    async def test_link_conflict_when_vk_bound_elsewhere(
+        self, client, vk_enabled, monkeypatch, session
+    ):
+        from app.models.user import User, UserRole
+
+        other = User(name="Other", role=UserRole.CLIENT, vk_user_id=111)
+        me = User(name="Me", role=UserRole.CLIENT)
+        session.add_all([other, me])
+        await session.commit()
+        token = await self._token_for(me)
+
+        _stub(monkeypatch, _StubVkApi(profile=_profile(), tokens=_tokens()))
+        start = await client.post(
+            "/api/v1/auth/vk/start",
+            json={"code_challenge": CHALLENGE, "link": True},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert start.status_code == 200
+        done = await _verify(client, start.json())
+        assert done.status_code == 409
+
+    async def test_link_state_uid_is_tamper_proof(self):
+        from app.modules.vkauth.service import make_state, _parse_state
+        state = make_state(link_user_id=42)
+        ok, uid = _parse_state(state)
+        assert ok is True and uid == 42
+        # Swap the uid — the MAC must break.
+        parts = state.split("_")
+        parts[2] = "43"
+        assert _parse_state("_".join(parts))[0] is False

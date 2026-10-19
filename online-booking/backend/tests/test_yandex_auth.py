@@ -32,19 +32,25 @@ class _StubYandexApi:
     """Stands in for YandexAuthApi: canned token + profile, records calls."""
 
     def __init__(self, profile=None, tokens=None, exchange_exc=None,
-                 info_exc=None):
+                 info_exc=None, client_id="test-client-id"):
         self._profile = profile or {}
         self._tokens = tokens or {}
         self._exchange_exc = exchange_exc
         self._info_exc = info_exc
+        self._client_id = client_id
         self.exchange_calls = []
         self.info_calls = []
+        self.token_calls = []
 
     async def exchange_code(self, code):
         self.exchange_calls.append({"code": code})
         if self._exchange_exc:
             raise self._exchange_exc
         return self._tokens
+
+    async def token_client_id(self, access_token):
+        self.token_calls.append(access_token)
+        return self._client_id
 
     async def user_info(self, access_token):
         self.info_calls.append(access_token)
@@ -163,9 +169,80 @@ class TestYandexVerify:
         assert user.last_name == "Petrov"
         assert user.email == "ivan@ya.example"
         assert user.role.value == "CLIENT"
-        assert user.is_verified is True
         assert user.consent_at is not None
         assert user.consent_policy_version
+
+        from app.models.user_contact import UserContact
+        contact = (await session.execute(
+            select(UserContact).where(
+                UserContact.user_id == user.id,
+                UserContact.contact_type == "email"))).scalar_one()
+        assert contact.value == "ivan@ya.example"
+        assert contact.is_verified is True
+        assert contact.verified_via == "social"
+        assert contact.is_primary is True
+
+    async def test_verify_attaches_confirmed_phone_contact(
+        self, client, yandex_enabled, monkeypatch, session
+    ):
+        """default_phone is Yandex-confirmed → verified phone contact."""
+        from sqlalchemy import select
+        from app.models.user import User
+        from app.models.user_contact import UserContact
+
+        api = _StubYandexApi(
+            profile={**_profile(email="ivan@ya.example"),
+                     "default_phone": {"id": "p1",
+                                       "number": "+7 916 123-45-67"}},
+            tokens=_tokens())
+        _stub(monkeypatch, api)
+        data = await _start(client)
+        done = await _verify(client, data)
+        assert done.status_code == 200
+
+        user = (await session.execute(
+            select(User).where(User.yandex_user_id == 111))).scalar_one()
+        assert user.phone == "+7 (916) 123-45-67"  # legacy mirror filled
+        contact = (await session.execute(
+            select(UserContact).where(
+                UserContact.user_id == user.id,
+                UserContact.contact_type == "phone"))).scalar_one()
+        assert contact.value == "+7 (916) 123-45-67"
+        assert contact.is_verified is True
+        assert contact.verified_via == "social"
+        assert contact.is_primary is True
+
+    async def test_verified_phone_logs_into_existing_account(
+        self, client, yandex_enabled, monkeypatch, session
+    ):
+        """Lookup order: yandex-id → confirmed phone → email → create."""
+        from sqlalchemy import select
+        from app.models.user import User, UserRole
+        from app.services.contacts import attach_contact
+
+        existing = User(name="Phone Owner", role=UserRole.CLIENT)
+        session.add(existing)
+        await session.flush()
+        contact, _ = await attach_contact(
+            session, existing, "phone", "+7 916 123-45-67")
+        await session.commit()
+
+        api = _StubYandexApi(
+            profile={**_profile(uid="222"),  # a different Yandex id
+                     "default_phone": {"id": "p1",
+                                       "number": "+79161234567"}},
+            tokens=_tokens())
+        _stub(monkeypatch, api)
+        data = await _start(client)
+        done = await _verify(client, data, consent=True)
+        assert done.status_code == 200
+        assert done.json()["is_new_user"] is False
+
+        await session.refresh(existing)
+        await session.refresh(contact)
+        assert existing.yandex_user_id == 222  # Yandex id got bound
+        assert contact.is_verified is True  # confirmed by this very login
+        assert contact.verified_via == "social"
 
     async def test_verify_stamps_no_consent_when_absent(
         self, client, yandex_enabled, monkeypatch, session
@@ -275,17 +352,25 @@ class TestYandexSuggestTokenVerify:
         )
         assert resp.status_code == 200, resp.text
         assert resp.json()["is_new_user"] is True
-        # The token goes straight to user_info — no code exchange.
+        # client_id is verified first, then the token goes straight to
+        # user_info — no code exchange.
+        assert api.token_calls == ["ya-widget-token"]
         assert api.info_calls == ["ya-widget-token"]
         assert api.exchange_calls == []
 
         from sqlalchemy import select
         from app.models.user import User
+        from app.models.user_contact import UserContact
         user = (await session.execute(
             select(User).where(User.yandex_user_id == 111))).scalar_one()
         assert user.name == "Ivan Petrov"
         assert user.email == "ivan@ya.example"
         assert user.consent_at is not None
+        contact = (await session.execute(
+            select(UserContact).where(
+                UserContact.user_id == user.id,
+                UserContact.contact_type == "email"))).scalar_one()
+        assert contact.verified_via == "social"
 
     async def test_token_verify_existing_yandex_user_is_login(
         self, client, yandex_enabled, monkeypatch, session
@@ -316,6 +401,19 @@ class TestYandexSuggestTokenVerify:
             json={"access_token": "bad-token"},
         )
         assert resp.status_code == 401
+
+    async def test_token_verify_rejects_foreign_app_token(
+        self, client, yandex_enabled, monkeypatch
+    ):
+        """A token minted for another client_id must never log anyone in."""
+        api = _StubYandexApi(profile=_profile(), client_id="other-app")
+        _stub(monkeypatch, api)
+        resp = await client.post(
+            "/api/v1/auth/yandex/verify",
+            json={"access_token": "ya-widget-token"},
+        )
+        assert resp.status_code == 401
+        assert api.info_calls == []  # rejected before any profile read
 
     async def test_token_verify_blocked_account_rejected(
         self, client, yandex_enabled, monkeypatch, session
@@ -406,3 +504,85 @@ class TestYandexHelpers:
         assert _clean_email(None) is None
         assert _clean_email("no-at-sign") is None
         assert _clean_email("has space@x.ru") is None
+
+    def test_clean_phone(self):
+        from app.modules.yandexauth.service import _clean_phone
+        assert _clean_phone("89161234567") == "+7 (916) 123-45-67"
+        assert _clean_phone("+7 916 123-45-67") == "+7 (916) 123-45-67"
+        assert _clean_phone("") is None
+        assert _clean_phone(None) is None
+        assert _clean_phone("not-a-phone") is None
+
+
+class TestYandexLink:
+    """«Привязать Яндекс»: the signed state names the current account."""
+
+    async def test_link_binds_profile_to_current_account(
+        self, client, yandex_enabled, monkeypatch, session
+    ):
+        from sqlalchemy import func, select
+        from app.models.user import User, UserRole
+        from app.utils.tokens import create_access_token
+
+        me = User(name="Me", role=UserRole.CLIENT)
+        session.add(me)
+        await session.commit()
+        token = create_access_token({
+            "sub": str(me.id), "role": me.role.value, "name": me.name,
+        })
+
+        _stub(monkeypatch, _StubYandexApi(
+            profile=_profile(email="me@ya.example"), tokens=_tokens()))
+        start = await client.post(
+            "/api/v1/auth/yandex/start",
+            json={"link": True},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert start.status_code == 200
+
+        done = await client.post(
+            "/api/v1/auth/yandex/verify",
+            json={"code": "auth-code", "state": start.json()["state"]},
+        )
+        assert done.status_code == 200
+        assert done.json()["is_new_user"] is False
+
+        await session.refresh(me)
+        assert me.yandex_user_id == 111  # bound to ME, not a new account
+        assert me.email == "me@ya.example"
+        total = (await session.execute(
+            select(func.count()).select_from(User))).scalar_one()
+        assert total == 1  # no account was forked
+
+    async def test_link_requires_auth(self, client, yandex_enabled):
+        resp = await client.post("/api/v1/auth/yandex/start",
+                                 json={"link": True})
+        assert resp.status_code == 401
+
+    async def test_link_conflict_when_yandex_bound_elsewhere(
+        self, client, yandex_enabled, monkeypatch, session
+    ):
+        from app.models.user import User, UserRole
+        from app.utils.tokens import create_access_token
+
+        other = User(name="Other", role=UserRole.CLIENT, yandex_user_id=111)
+        me = User(name="Me", role=UserRole.CLIENT)
+        session.add_all([other, me])
+        await session.commit()
+        token = create_access_token({
+            "sub": str(me.id), "role": me.role.value, "name": me.name,
+        })
+
+        _stub(monkeypatch, _StubYandexApi(
+            profile=_profile(), tokens=_tokens()))
+        start = await client.post(
+            "/api/v1/auth/yandex/start",
+            json={"link": True},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert start.status_code == 200
+        done = await client.post(
+            "/api/v1/auth/yandex/verify",
+            json={"code": "auth-code", "state": start.json()["state"]},
+        )
+        assert done.status_code == 409

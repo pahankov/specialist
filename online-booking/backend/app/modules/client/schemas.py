@@ -1,6 +1,18 @@
 """Pydantic schemas for client self-service."""
 from pydantic import BaseModel, ConfigDict, field_validator
-from typing import Optional
+from typing import List, Optional
+
+
+class ClientContactOut(BaseModel):
+    """One phone/email of the account (contact model, 1.79.0)."""
+    id: int
+    contact_type: str  # "phone" | "email"
+    value: str
+    is_verified: bool = False
+    verified_via: Optional[str] = None  # None | "social" | "code"
+    is_primary: bool = False
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ClientMeResponse(BaseModel):
@@ -10,6 +22,10 @@ class ClientMeResponse(BaseModel):
     phone: Optional[str] = None
     email: Optional[str] = None
     is_verified: bool = False
+    # Contact model (1.79.0): every phone/email with verify flags.
+    contacts: List[ClientContactOut] = []
+    # Whether a password is set (password section visibility in the cabinet).
+    has_password: bool = False
     # Bound MAX account (login via chat-bot): id + @nickname for support.
     max_bound: bool = False
     max_username: Optional[str] = None

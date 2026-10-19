@@ -10,6 +10,8 @@ import {
   Modal,
   Skeleton,
 } from '../../components/common';
+import LoginModal from '../../components/LoginModal';
+import { BindingsCard, ContactsCard, PasswordCard } from '../../components/profile';
 import type { CityOption } from '../../components/common/CitySelect';
 import { getApiErrorMessage } from '../../utils/apiError';
 import { clearAuthCookies } from '../../utils/cookies';
@@ -31,6 +33,19 @@ function ClientProfilePage() {
   const [city, setCity] = useState<CityOption | null>(null);
   const [address, setAddress] = useState('');
   const [addressCity, setAddressCity] = useState('');
+  /** «Привязать MAX» opens the login modal in its MAX-code mode. */
+  const [maxLinkOpen, setMaxLinkOpen] = useState(false);
+
+  /** Re-read only the me payload (contacts/bindings) without touching the
+      form drafts the person may be editing. */
+  const refreshMe = async () => {
+    try {
+      const { data } = await cabinetApi.me();
+      setMe(data);
+    } catch {
+      /* keep the previous payload — the next reload recovers */
+    }
+  };
 
   useEffect(() => {
     (async () => {
@@ -153,35 +168,6 @@ function ClientProfilePage() {
               />
             </div>
           </div>
-          <div className="form-row">
-            <div className="form-group">
-              <label>Телефон</label>
-              <input value={me?.phone || ''} disabled className="input-disabled" />
-            </div>
-            <div className="form-group">
-              <label>Email</label>
-              <input value={me?.email || '—'} disabled className="input-disabled" />
-            </div>
-          </div>
-          {me?.max_bound && (
-            /* MAX chat-bot binding: quick login channel + @nickname for support. */
-            <p style={{ fontSize: 13, color: '#666', margin: '4px 0 0' }}>
-              ✅ Вход через MAX включён
-              {me.max_username ? ` (@${me.max_username})` : ''}
-            </p>
-          )}
-          {me?.vk_bound && (
-            /* VK ID binding: login via the VK/OK/Mail widget. */
-            <p style={{ fontSize: 13, color: '#666', margin: '4px 0 0' }}>
-              ✅ Вход через VK включён
-            </p>
-          )}
-          {me?.yandex_bound && (
-            /* Yandex ID binding: login via the Yandex redirect. */
-            <p style={{ fontSize: 13, color: '#666', margin: '4px 0 0' }}>
-              ✅ Вход через Яндекс включён
-            </p>
-          )}
         </div>
 
         <div className="card" style={{ marginBottom: 16 }}>
@@ -218,6 +204,33 @@ function ClientProfilePage() {
           </button>
         </div>
       </form>
+
+      {/* Contact model (1.79.0): all phones/emails with verify flags. */}
+      <ContactsCard contacts={me?.contacts ?? []} onChanged={refreshMe} />
+
+      <BindingsCard
+        vkBound={me?.vk_bound}
+        yandexBound={me?.yandex_bound}
+        maxBound={me?.max_bound}
+        maxUsername={me?.max_username}
+        onChanged={refreshMe}
+        onMaxLink={() => setMaxLinkOpen(true)}
+      />
+
+      <PasswordCard
+        hasPassword={me?.has_password}
+        hasEmail={(me?.contacts ?? []).some((c) => c.contact_type === 'email')}
+      />
+
+      {/* MAX link roundtrip: login code flow, then refresh in place. */}
+      {maxLinkOpen && (
+        <LoginModal
+          isOpen
+          initialMode="max"
+          onClose={() => setMaxLinkOpen(false)}
+          onAuthSuccess={refreshMe}
+        />
+      )}
 
       <div className="card" style={{ marginTop: 16, borderColor: '#e5484d' }}>
         <h3>🗑 Удаление аккаунта</h3>
