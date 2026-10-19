@@ -125,16 +125,27 @@ def make_start_deeplink(otp_id: int) -> str:
     return f"https://max.ru/{username}?start={make_start_payload(otp_id)}"
 
 
+# Callback payload of the «Начать заново» button under the code message.
+RESTART_CALLBACK = "restart"
+
+
 def build_code_message(code: str) -> tuple[str, list]:
-    """Bot text + clipboard button for a login code (shared by push/webhook)."""
+    """Bot text + buttons for a login code (shared by push/webhook).
+
+    MAX hides the one-time request_contact keyboard after the first share,
+    which dead-ends a re-opened dialog. The callback button below re-issues
+    that keyboard on demand (see the webhook message_callback branch).
+    """
     text = (f"Ваш код для входа: {code}\n"
             "Введите его на сайте. Никому не сообщайте.")
     attachments = [{
         "type": "inline_keyboard",
-        "payload": {"buttons": [[
-            {"type": "clipboard", "text": "Скопировать код",
-             "payload": code},
-        ]]},
+        "payload": {"buttons": [
+            [{"type": "clipboard", "text": "Скопировать код",
+              "payload": code}],
+            [{"type": "callback", "text": "🔄 Начать заново",
+              "payload": RESTART_CALLBACK}],
+        ]},
     }]
     return text, attachments
 

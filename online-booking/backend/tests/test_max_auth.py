@@ -45,6 +45,11 @@ def stub_sender(monkeypatch):
                          "attachments": attachments})
             return {"ok": True}
 
+        async def answer_callback(self, callback_id, notification=None):
+            sent.append({"answer_callback": callback_id,
+                         "notification": notification})
+            return {"ok": True}
+
     monkeypatch.setattr(max_router_mod, "get_max_api", lambda: StubApi())
     return sent
 
@@ -73,6 +78,21 @@ def _hook(client, update):
         "/api/max/webhook", json=update,
         headers={"X-Max-Bot-Api-Secret": "test-secret"},
     )
+
+
+def _callback_update(callback_id="cb-1", payload="restart", user_id=4242):
+    """Inline button tap (message_callback) inside the dialog."""
+    return {
+        "update_type": "message_callback",
+        "timestamp": 1700000000000,
+        "callback": {
+            "callback_id": callback_id,
+            "payload": payload,
+            "sender": {"user_id": user_id, "first_name": "Ivan"},
+            "message": {"body": {"mid": "m1"},
+                        "recipient": {"chat_id": 1001}},
+        },
+    }
 
 
 async def _request_code(client, phone=PHONE):
@@ -166,6 +186,9 @@ class TestMaxWebhook:
         share = await _share_contact(client, sender_id=4242)
         assert share.json()["outcome"] == "delivered"
         code = re.search(r"\d{6}", stub_sender[1]["text"]).group(0)
+        # The code message carries the «Начать заново» restart button.
+        code_buttons = stub_sender[1]["attachments"][0]["payload"]["buttons"]
+        assert code_buttons[1][0]["type"] == "callback"
 
         done = await client.post(
             "/api/v1/auth/max/verify", json={"phone": PHONE, "code": code})
@@ -384,6 +407,73 @@ class TestMaxWebhook:
             .where(OtpCode.channel == "max")
         )).scalar_one()
         assert count == 0
+
+
+class TestMaxCallbackRestart:
+    """1.79.5: «Начать заново» under the code message re-issues the share
+    keyboard (MAX consumes request_contact after its first use)."""
+
+    async def test_callback_restarts_share_flow(
+        self, client, max_enabled, stub_sender
+    ):
+        resp = await _hook(client, _callback_update())
+        assert resp.json()["outcome"] == "share_required"
+        answers = [s for s in stub_sender if "answer_callback" in s]
+        msgs = [s for s in stub_sender if "attachments" in s]
+        assert answers == [{
+            "answer_callback": "cb-1",
+            "notification": "Отправляю кнопку ещё раз…",
+        }]
+        assert msgs and msgs[0]["user_id"] == 4242
+        buttons = msgs[0]["attachments"][0]["payload"]["buttons"]
+        assert buttons[0][0]["type"] == "request_contact"
+
+    async def test_callback_without_sender_is_ignored(
+        self, client, max_enabled, stub_sender
+    ):
+        update = _callback_update()
+        update["callback"]["sender"] = {}
+        resp = await _hook(client, update)
+        assert resp.json() == {"ok": True}
+        assert stub_sender == []
+
+    async def test_callback_ack_failure_is_quiet(
+        self, client, max_enabled, monkeypatch
+    ):
+        """A failed /answers must not stop the keyboard re-issue."""
+        import sys
+        from app.services.max_api import MaxApiError
+        mod = sys.modules["app.modules.maxauth.router"]
+        sent = []
+
+        class HalfApi:
+            async def send_message(self, user_id, text, attachments=None):
+                sent.append(("message", user_id))
+                return {"ok": True}
+
+            async def answer_callback(self, callback_id, notification=None):
+                raise MaxApiError("MAX API 400: callback expired")
+
+        monkeypatch.setattr(mod, "get_max_api", lambda: HalfApi())
+        resp = await _hook(client, _callback_update())
+        assert resp.status_code == 200
+        assert resp.json()["outcome"] == "share_required"
+        assert sent == [("message", 4242)]
+
+
+class TestBuildCodeMessage:
+    def test_code_message_carries_copy_and_restart_buttons(self):
+        from app.modules.maxauth.service import (
+            RESTART_CALLBACK, build_code_message,
+        )
+
+        text, attachments = build_code_message("123456")
+        assert "123456" in text
+        buttons = attachments[0]["payload"]["buttons"]
+        assert buttons[0][0]["type"] == "clipboard"
+        assert buttons[0][0]["payload"] == "123456"
+        assert buttons[1][0]["type"] == "callback"
+        assert buttons[1][0]["payload"] == RESTART_CALLBACK
 
 
 class TestTakeoverRegression:

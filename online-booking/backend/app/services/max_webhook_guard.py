@@ -23,7 +23,9 @@ logger = get_logger(__name__)
 INTERVAL_SECONDS = 10 * 60
 
 # Same set the subscribe helper registers (MaxBotApi.set_webhook).
-EXPECTED_UPDATE_TYPES = {"message_created", "bot_started"}
+# message_callback powers the in-chat «Начать заново» button (1.79.5):
+# without it the tap never reaches us and the dialog stays dead-ended.
+EXPECTED_UPDATE_TYPES = {"message_created", "bot_started", "message_callback"}
 
 
 async def ensure_webhook_subscription(api=None) -> bool:

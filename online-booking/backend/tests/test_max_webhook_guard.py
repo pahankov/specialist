@@ -41,7 +41,10 @@ class FakeApi:
         return {"success": True}
 
 
-def _subscription(url=URL, update_types=("message_created", "bot_started")):
+def _subscription(
+    url=URL,
+    update_types=("message_created", "bot_started", "message_callback"),
+):
     return {"url": url, "update_types": list(update_types), "time": 1}
 
 
@@ -58,9 +61,17 @@ class TestEnsureWebhookSubscription:
 
     async def test_noop_when_types_superset(self, max_guard_cfg):
         api = FakeApi(subscriptions=[_subscription(
-            update_types=("message_created", "bot_started", "chat_created"))])
+            update_types=("message_created", "bot_started",
+                          "message_callback", "chat_created"))])
         assert await guard.ensure_webhook_subscription(api) is False
         assert api.set_calls == []
+
+    async def test_resubscribes_when_callback_type_missing(self, max_guard_cfg):
+        """Pre-1.79.5 subscription (no message_callback) must be upgraded."""
+        api = FakeApi(subscriptions=[_subscription(
+            update_types=("message_created", "bot_started"))])
+        assert await guard.ensure_webhook_subscription(api) is True
+        assert api.set_calls == [(URL, "test-secret")]
 
     async def test_resubscribes_when_wrong_url(self, max_guard_cfg):
         api = FakeApi(subscriptions=[_subscription(url="https://old.example/hook")])

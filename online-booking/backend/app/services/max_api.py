@@ -76,7 +76,7 @@ class MaxBotApi:
         marker: Optional[int] = None,
         timeout: int = 30,
         limit: int = 100,
-        types: str = "message_created,bot_started",
+        types: str = "message_created,bot_started,message_callback",
     ) -> dict:
         """Long-poll updates — dev/test only, production uses webhook."""
         params: dict = {"timeout": timeout, "limit": limit, "types": types}
@@ -89,8 +89,24 @@ class MaxBotApi:
         return await self._request(
             "POST", "/subscriptions",
             json={"url": url,
-                  "update_types": ["message_created", "bot_started"],
+                  "update_types": ["message_created", "bot_started",
+                                   "message_callback"],
                   "secret": secret},
+        )
+
+    async def answer_callback(
+        self, callback_id: str, notification: Optional[str] = None
+    ) -> dict:
+        """Ack a button tap (POST /answers): stops the client-side spinner.
+
+        Best-effort: callers swallow failures — the visible effect (a fresh
+        share-number keyboard) is a separate send_message.
+        """
+        body: dict = {}
+        if notification:
+            body["notification"] = notification[:200]
+        return await self._request(
+            "POST", "/answers", params={"callback_id": callback_id}, json=body,
         )
 
     async def delete_webhook(self) -> dict:

@@ -97,6 +97,8 @@ describe('MAX chat-bot login (SMS-style)', () => {
       'href',
       'https://max.ru/test_bot?start=1_abcd',
     );
+    // Dead-end escape: MAX consumes the share button after its first use.
+    expect(screen.getByText(/Начать заново/)).toBeInTheDocument();
     expect(vi.mocked(mocked.maxStart)).toHaveBeenCalledWith(MASKED);
   });
 

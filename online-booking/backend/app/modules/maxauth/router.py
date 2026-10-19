@@ -21,6 +21,11 @@ webhook_router = APIRouter()
 # (dialog creation races the event delivery).
 DIALOG_RETRY_DELAY = 4
 
+# Reply to the «Начать заново» callback: re-issue the one-time
+# request_contact keyboard so the dialog can run the flow again.
+RESTART_TEXT = ("Хорошо! Нажмите «Поделиться номером» ниже — "
+                "пришлю новый код для входа.")
+
 
 def _bot_card() -> dict:
     return {
@@ -101,7 +106,7 @@ async def max_webhook(
     background: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
-    """Receive MAX Bot API updates (message_created/bot_started).
+    """Receive MAX Bot API updates (message_created/bot_started/message_callback).
 
     Secret check first (X-Max-Bot-Api-Secret); always 200 on processed
     updates so MAX stops retrying (retries x10 with backoff otherwise).
@@ -151,6 +156,27 @@ async def max_webhook(
         background.add_task(_reply_with_keyboard, update, text)
         return ({"ok": True, "outcome": "share_required"} if pending
                 else {"ok": True})
+
+    if update_type == "message_callback":
+        # Inline button tap. The only callback button we send is «Начать
+        # заново» (under the code message): MAX consumes the request_contact
+        # keyboard after its first use, so this button is the one in-chat way
+        # to bring it back. The /answers ack is best-effort — it only stops
+        # the tapped button's spinner; failures must not drop the reply.
+        callback = (update or {}).get("callback") or {}
+        sender = callback.get("sender") or {}
+        sender_id = sender.get("user_id")
+        if sender_id is None:
+            return {"ok": True}
+        logger.info(
+            "MAX webhook: callback payload=%s (share keyboard re-issued)",
+            callback.get("payload"),
+        )
+        callback_id = callback.get("callback_id")
+        if callback_id:
+            background.add_task(_answer_callback, str(callback_id))
+        background.add_task(_reply_with_keyboard, update, RESTART_TEXT)
+        return {"ok": True, "outcome": "share_required"}
 
     if update_type == "message_created":
         message = (update or {}).get("message") or {}
@@ -206,17 +232,24 @@ async def max_webhook(
 
 
 def _resolve_target(update: dict):
-    """Dialog reply target: message sender, then update user, then chat.
+    """Dialog reply target: message sender, then update user, then callback
+    sender, then chat.
 
-    bot_started carries `user` but no message.sender; chat_id is the last
-    resort (a stale/wrong chat id yields dialog.not.found — retried below).
+    bot_started carries `user` but no message.sender; message_callback keeps
+    the tap author in `callback.sender`; chat_id is the last resort (a
+    stale/wrong chat id yields dialog.not.found — retried below).
     """
     update = update or {}
     message = update.get("message") or {}
     sender = message.get("sender") or {}
     user = update.get("user") or {}
+    callback = update.get("callback") or {}
+    callback_sender = callback.get("sender") or {}
     return (
-        sender.get("user_id") or user.get("user_id") or update.get("chat_id")
+        sender.get("user_id")
+        or user.get("user_id")
+        or callback_sender.get("user_id")
+        or update.get("chat_id")
     )
 
 
@@ -236,6 +269,15 @@ async def _send_with_dialog_retry(target: int, text: str, attachments=None) -> N
         )
         await asyncio.sleep(DIALOG_RETRY_DELAY)
         await get_max_api().send_message(target, text, attachments)
+
+
+async def _answer_callback(callback_id: str) -> None:
+    """Best-effort /answers ack so the tapped button stops its spinner."""
+    try:
+        await get_max_api().answer_callback(
+            callback_id, "Отправляю кнопку ещё раз…")
+    except (MaxApiError, ValueError, TypeError) as e:
+        logger.warning("MAX callback ack failed (best-effort): %s", e)
 
 
 async def _reply_with_keyboard(update: dict, text: str) -> None:
