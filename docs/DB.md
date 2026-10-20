@@ -106,7 +106,7 @@
 | trial_ends_at | TIMESTAMP WITH TIME ZONE | NULLABLE | Конец триала (новым: +180 дней) |
 | work_start_hour | INTEGER | NOT NULL, DEFAULT 8 | Начало дневного окна (границы гранул расписания) |
 | work_end_hour | INTEGER | NOT NULL, DEFAULT 22 | Конец дневного окна (границы гранул расписания) |
-| cabinet_address | VARCHAR(500) | NULLABLE | Адрес кабинета (выбирается через DaData-подсказки) |
+| cabinet_address | VARCHAR(500) | NULLABLE | Адрес кабинета (выбирается через DaData-подсказки; для активации нужен номер дома) |
 | certificates | JSON | NOT NULL, DEFAULT [] | Сертификаты [{name, url?}] |
 | created_at | TIMESTAMP WITH TIME ZONE | | Дата создания |
 | updated_at | TIMESTAMP WITH TIME ZONE | | Дата обновления |

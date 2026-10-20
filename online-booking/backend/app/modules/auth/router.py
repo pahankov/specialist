@@ -634,10 +634,10 @@ def _draft_response(
 def _missing_profile_items(readiness: dict) -> list[str]:
     labels = {
         "names": "имя и фамилия",
-        "cabinet_address": "адрес кабинета",
+        "cabinet_address": "адрес кабинета с номером дома",
         "phone": "телефон",
         "verified_email": "подтверждённая почта",
-        "social": "привязанная соцсеть (VK, Яндекс или MAX)",
+        "social": "привязанная соцсеть (VK ID, Яндекс или MAX)",
     }
     return [label for key, label in labels.items() if not readiness.get(key)]
 
@@ -652,7 +652,9 @@ async def get_master_draft(
         raise HTTPException(status_code=403,
                             detail="Суперпользователь не становится мастером")
     mp = await _get_draft(db, user)
-    profile, readiness = await master_profile_snapshot(db, user, mp)
+    profile, readiness = await master_profile_snapshot(
+        db, user, mp, client_address_fallback=True,
+    )
     return _draft_response(user, mp, profile, readiness)
 
 

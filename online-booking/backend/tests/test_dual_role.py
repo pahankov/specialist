@@ -168,6 +168,70 @@ class TestBecomeMaster:
         detail = act.json()["detail"].lower()
         assert "почт" in detail and "соцсет" in detail
 
+    async def test_draft_prefills_address_from_client_profile(self, client, session):
+        """The first draft load uses the address already stored in the cabinet."""
+        token, _, _ = await self._register_client(
+            client, session, "+79991115558", "prefill@example.com", social=False)
+
+        saved = await client.patch(
+            "/api/v1/client/me",
+            headers=_auth(token),
+            json={"address": "Москва, ул. Ленина, д. 5"},
+        )
+        assert saved.status_code == 200, saved.text
+
+        draft = await client.get("/api/v1/auth/become-master", headers=_auth(token))
+        assert draft.status_code == 200, draft.text
+        body = draft.json()
+        assert body["status"] in ("none", "draft")
+        assert body["profile"]["cabinet_address"] == "Москва, ул. Ленина, д. 5"
+        assert body["readiness"]["cabinet_address"] is True
+
+        # A draft saved before this fix may already exist with no address —
+        # it should still be prefilled from the client profile.
+        saved_draft = await client.patch(
+            "/api/v1/auth/become-master",
+            headers=_auth(token),
+            json=self._payload(cabinet_address=None),
+        )
+        assert saved_draft.status_code == 200, saved_draft.text
+        again = await client.get("/api/v1/auth/become-master", headers=_auth(token))
+        assert again.status_code == 200, again.text
+        assert again.json()["profile"]["cabinet_address"] == "Москва, ул. Ленина, д. 5"
+        assert again.json()["readiness"]["cabinet_address"] is True
+
+        # Once the draft has its own address, it wins over the client profile.
+        own = await client.patch(
+            "/api/v1/auth/become-master",
+            headers=_auth(token),
+            json=self._payload(cabinet_address="Москва, ул. Тверская, 7"),
+        )
+        assert own.status_code == 200, own.text
+        own_get = await client.get("/api/v1/auth/become-master", headers=_auth(token))
+        assert own_get.status_code == 200, own_get.text
+        assert own_get.json()["profile"]["cabinet_address"] == "Москва, ул. Тверская, 7"
+
+    async def test_activation_requires_house_number(self, client, session):
+        """A street without a house is not a complete cabinet address."""
+        token, email_id, _ = await self._register_client(
+            client, session, "+79991115559", "house@example.com")
+        await self._verify_email(session, email_id)
+
+        bad = await client.post(
+            "/api/v1/auth/become-master/activate",
+            headers=_auth(token),
+            json=self._payload(cabinet_address="Москва, ул. Ленина"),
+        )
+        assert bad.status_code == 400, bad.text
+        assert "номер" in bad.json()["detail"].lower()
+
+        ok = await client.post(
+            "/api/v1/auth/become-master/activate",
+            headers=_auth(token),
+            json=self._payload(cabinet_address="Москва, ул. Ленина, д. 5"),
+        )
+        assert ok.status_code == 200, ok.text
+
     async def test_activation_requires_verified_email(
         self, client, session, super_admin_headers,
     ):

@@ -39,7 +39,6 @@ function BindingsCard({
   onMaxLink,
   socialOnly = false,
 }: BindingsCardProps) {
-  const [vkOpen, setVkOpen] = useState(false);
   const [yandexBusy, setYandexBusy] = useState(false);
 
   const startYandexLink = async () => {
@@ -70,74 +69,71 @@ function BindingsCard({
       </p>
       {socialOnly && (
         <p className="profile-social-only">
-          🔐 Вход в кабинет мастера — только через VK, Яндекс или MAX. Пароль для мастера не
-          используется.
+          🔐 Вход в кабинет мастера — только через VK ID (ВКонтакте, Одноклассники, Mail), Яндекс
+          или MAX. Пароль для мастера не используется.
         </p>
       )}
 
       <div className="bind-list">
-        {/* ── VK (VK/OK/Mail widget, link mode) ── */}
-        <div className="bind-row">
-          <span className="bind-icon">
-            <VkIcon size={20} />
-          </span>
-          <span className="bind-name">ВКонтакте</span>
-          {vkBound ? (
+        {/* ── VK ID: official VK / OK / Mail buttons, link mode ── */}
+        {vkBound ? (
+          <div className="bind-row">
+            <span className="bind-icon">
+              <VkIcon size={20} />
+            </span>
+            <span className="bind-name">ВКонтакте, Одноклассники, Mail</span>
             <span className="bind-done">✅ Привязан</span>
-          ) : vkOpen ? null : (
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setVkOpen(true)}>
-              Привязать
-            </button>
-          )}
-        </div>
-        {!vkBound && vkOpen && (
-          <div className="bind-widget">
-            <VkIdWidget
-              link
-              onSuccess={() => {
-                setVkOpen(false);
-                onChanged();
-              }}
-            />
+          </div>
+        ) : (
+          <div className="bind-official">
+            <div className="bind-official-head">
+              <VkIcon size={20} />
+              <span>ВКонтакте, Одноклассники или Mail</span>
+            </div>
+            <VkIdWidget link onSuccess={onChanged} />
           </div>
         )}
 
         {/* ── Yandex (redirect with a stashed return path) ── */}
-        <div className="bind-row">
-          <span className="bind-icon">
-            <YandexIcon size={20} />
-          </span>
-          <span className="bind-name">Яндекс</span>
-          {yandexBound ? (
+        {yandexBound ? (
+          <div className="bind-row">
+            <span className="bind-icon">
+              <YandexIcon size={20} />
+            </span>
+            <span className="bind-name">Яндекс</span>
             <span className="bind-done">✅ Привязан</span>
-          ) : (
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              disabled={yandexBusy}
-              onClick={startYandexLink}
-            >
-              {yandexBusy ? 'Отправляем…' : 'Привязать'}
-            </button>
-          )}
-        </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="social-auth-btn bind-brand-btn"
+            disabled={yandexBusy}
+            onClick={startYandexLink}
+          >
+            <span className="social-auth-icon">
+              <YandexIcon size={20} />
+            </span>
+            <span>{yandexBusy ? 'Открываем Яндекс…' : 'Привязать Яндекс ID'}</span>
+          </button>
+        )}
 
         {/* ── MAX (code login; the bot attaches by phone match) ── */}
-        <div className="bind-row">
-          <span className="bind-icon">
-            <MaxIcon size={20} />
-          </span>
-          <span className="bind-name">
-            MAX{maxBound && maxUsername ? ` (@${maxUsername})` : ''}
-          </span>
-          {maxBound ? (
+        {maxBound ? (
+          <div className="bind-row">
+            <span className="bind-icon">
+              <MaxIcon size={20} />
+            </span>
+            <span className="bind-name">MAX{maxUsername ? ` (@${maxUsername})` : ''}</span>
             <span className="bind-done">✅ Привязан</span>
-          ) : (
-            <button type="button" className="btn btn-ghost btn-sm" onClick={onMaxLink}>
-              Привязать
-            </button>
-          )}
-        </div>
+          </div>
+        ) : (
+          <button type="button" className="social-auth-btn bind-brand-btn" onClick={onMaxLink}>
+            <span className="social-auth-icon">
+              <MaxIcon size={20} />
+            </span>
+            <span>Привязать MAX</span>
+          </button>
+        )}
       </div>
 
       {!maxBound && (

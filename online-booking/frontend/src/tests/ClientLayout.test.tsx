@@ -3,8 +3,10 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import ClientLayout from '../pages/cabinet/ClientLayout';
 
-function clientCookie() {
-  const payload = btoa(JSON.stringify({ sub: '7', name: 'Client', role: 'CLIENT' }))
+function authCookie(role: 'CLIENT' | 'MASTER') {
+  const payload = btoa(
+    JSON.stringify({ sub: '7', name: role === 'MASTER' ? 'Master' : 'Client', role }),
+  )
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
     .replace(/=+$/, '');
@@ -14,7 +16,7 @@ function clientCookie() {
 describe('ClientLayout', () => {
   beforeEach(() => {
     document.cookie = 'access_token=; path=/; max-age=0';
-    clientCookie();
+    authCookie('CLIENT');
   });
 
   it('renders its own nav under /cabinet, not master items', () => {
@@ -36,5 +38,32 @@ describe('ClientLayout', () => {
     expect(profileLink?.getAttribute('href')).toBe('/cabinet/profile');
     expect(screen.queryByText('Мои услуги')).not.toBeInTheDocument();
     expect(screen.getByText('Клиент')).toBeInTheDocument();
+  });
+
+  it('labels the master draft instead of pretending it is a plain client', () => {
+    render(
+      <MemoryRouter initialEntries={['/cabinet/become-master']}>
+        <Routes>
+          <Route path="/cabinet/become-master" element={<ClientLayout />}>
+            <Route index element={<div>draft</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(screen.getByText('Мастер · черновик')).toBeInTheDocument();
+  });
+
+  it('keeps the master status when an activated master uses the client cabinet', () => {
+    authCookie('MASTER');
+    render(
+      <MemoryRouter initialEntries={['/cabinet']}>
+        <Routes>
+          <Route path="/cabinet" element={<ClientLayout />}>
+            <Route index element={<div>child</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(screen.getByText('Мастер')).toBeInTheDocument();
   });
 });

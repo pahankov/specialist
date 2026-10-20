@@ -928,7 +928,7 @@ function CabinetBookPage() {
             ) : (
               <p className="master-about-sub">Мастер пока ничего не рассказал о себе</p>
             )}
-            <h4>Дипломы и сертификаты</h4>
+            <h4>Дипломы, сертификаты и рабочее место</h4>
             {!aboutMaster.certificates || aboutMaster.certificates.length === 0 ? (
               <p className="master-about-sub">Пока нет</p>
             ) : (

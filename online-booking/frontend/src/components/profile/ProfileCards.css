@@ -41,13 +41,32 @@
   font-weight: 600;
 }
 
-.bind-widget {
-  padding: 4px 0 8px;
+.bind-official {
+  padding: 10px 12px;
+  border: 1px solid #eee;
+  border-radius: 10px;
 }
 
-/* The VK widget is wider than the card on narrow screens. */
-.bind-widget .vkid-widget {
+.bind-official-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: #333;
+  font-weight: 500;
+}
+
+/* The official VK widget is wider than the card on narrow screens. */
+.bind-official .vkid-widget {
   overflow-x: auto;
+}
+
+/* Brand-coloured link buttons sit in the same list as the provider rows. */
+.bind-brand-btn {
+  padding: 10px 12px;
+  border-width: 1px;
+  border-radius: 10px;
+  font-size: 14px;
 }
 
 /* ─── Contacts ─── */

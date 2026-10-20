@@ -1,4 +1,6 @@
+import { useLocation } from 'react-router-dom';
 import BaseLayout from '../admin/BaseLayout';
+import { getUserRole } from '../../utils/cookies';
 import './ClientLayout.css';
 
 const CLIENT_NAV = [
@@ -14,11 +16,19 @@ const CLIENT_NAV = [
  * own navigation and teal theme. Never renders master UI.
  */
 function ClientLayout() {
+  const { pathname } = useLocation();
+  const isDraft = pathname.startsWith('/cabinet/become-master');
+  // An activated master may still use the client cabinet (dual role); the
+  // sidebar should say «Мастер», not «Клиент». A client filling the draft is
+  // a master-in-progress — say so without pretending the role is active yet.
+  const role = getUserRole();
+  const userRole = role === 'MASTER' ? 'Мастер' : isDraft ? 'Мастер · черновик' : 'Клиент';
+
   return (
     <BaseLayout
       navItems={CLIENT_NAV}
       layoutTitle="💅 Кабинет"
-      userRole="Клиент"
+      userRole={userRole}
       userFallbackName="Гость"
       themeClass="client-layout"
     />

@@ -13,6 +13,7 @@ import {
   Skeleton,
 } from '../../components/common';
 import type { CityOption } from '../../components/common/CitySelect';
+import { hasHouseNumber } from '../../utils/address';
 import { getApiErrorMessage } from '../../utils/apiError';
 import { clearAuthCookies, decodeJwtPayload, getCookie } from '../../utils/cookies';
 import { capitalizeWords, splitFullName } from '../../utils/names';
@@ -303,7 +304,7 @@ function ProfilePage({ mode = 'master' }: ProfilePageProps) {
   const addCert = () => {
     const name = newCertName.trim();
     if (!name) {
-      toast.error('Введите название сертификата');
+      toast.error('Введите название диплома или фото');
       return;
     }
     setCerts((prev) => [...prev, newCertUrl ? { name, url: newCertUrl } : { name }]);
@@ -376,6 +377,10 @@ function ProfilePage({ mode = 'master' }: ProfilePageProps) {
 
   const handleActivate = async () => {
     if (!isDraft || activating) return;
+    if (!hasHouseNumber(address)) {
+      toast.error('Укажите адрес кабинета с номером дома');
+      return;
+    }
     const list = collectCerts();
     setActivating(true);
     try {
@@ -429,8 +434,8 @@ function ProfilePage({ mode = 'master' }: ProfilePageProps) {
     },
     {
       key: 'cabinet_address',
-      label: 'Адрес кабинета',
-      done: Boolean(address.trim()),
+      label: 'Адрес кабинета с номером дома',
+      done: hasHouseNumber(address),
     },
     {
       key: 'phone',
@@ -444,7 +449,7 @@ function ProfilePage({ mode = 'master' }: ProfilePageProps) {
     },
     {
       key: 'social',
-      label: 'Привязана соцсеть (VK, Яндекс или MAX)',
+      label: 'Привязана соцсеть (VK ID, Яндекс или MAX)',
       done: vkBound || yandexBound || maxBound,
     },
   ];
@@ -533,7 +538,7 @@ function ProfilePage({ mode = 'master' }: ProfilePageProps) {
           <p>
             {isDraft
               ? 'Заполните профиль мастера — кабинет активируется сразу, как только будут выполнены все условия'
-              : 'Личные данные, фото, адрес кабинета и сертификаты'}
+              : 'Личные данные, фото, адрес кабинета, дипломы и рабочее место'}
           </p>
         </div>
       </div>
@@ -703,6 +708,11 @@ function ProfilePage({ mode = 'master' }: ProfilePageProps) {
             <CitySelect value={city?.id ?? null} valueName={city?.name ?? ''} onChange={setCity} />
             <AddressSelect value={address} onChange={setAddress} />
           </div>
+          {address.trim() && !hasHouseNumber(address) && (
+            <p className="profile-card-hint" style={{ margin: '6px 0 0', color: '#b45309' }}>
+              Добавьте номер дома — без него адрес кабинета не засчитается для активации.
+            </p>
+          )}
           <label className="profile-prefer-master">
             <input
               type="checkbox"
@@ -714,9 +724,13 @@ function ProfilePage({ mode = 'master' }: ProfilePageProps) {
         </div>
 
         <div className="card" style={{ marginBottom: 16 }}>
-          <h3>Дипломы и сертификаты</h3>
+          <h3>Дипломы, сертификаты и рабочее место</h3>
+          <p className="profile-card-hint">
+            Добавьте дипломы, сертификаты или фото кабинета — это необязательно, можно вернуться к
+            этому позже.
+          </p>
           {certs.length === 0 ? (
-            <EmptyState title="Пока нет сертификатов" icon="🎓" />
+            <EmptyState title="Пока нет дипломов и фото" icon="🎓" />
           ) : (
             <div className="cert-list">
               {certs.map((c, i) => (
@@ -736,7 +750,7 @@ function ProfilePage({ mode = 'master' }: ProfilePageProps) {
                     type="button"
                     className="btn btn-sm btn-delete"
                     onClick={() => setCerts((prev) => prev.filter((_, j) => j !== i))}
-                    title="Убрать сертификат"
+                    title="Убрать диплом или фото"
                   >
                     ✖
                   </button>
@@ -748,7 +762,7 @@ function ProfilePage({ mode = 'master' }: ProfilePageProps) {
             <div className="cert-draft">
               <BackendImg
                 src={assetUrl(newCertUrl)}
-                alt="Новое фото сертификата"
+                alt="Новое фото диплома или рабочего места"
                 className="cert-thumb"
               />
               <span className="cert-name">
@@ -760,7 +774,7 @@ function ProfilePage({ mode = 'master' }: ProfilePageProps) {
             <input
               value={newCertName}
               onChange={(e) => setNewCertName(e.target.value)}
-              placeholder="Название сертификата"
+              placeholder="Диплом, сертификат или фото кабинета"
             />
             <input
               ref={certInput}
@@ -777,7 +791,7 @@ function ProfilePage({ mode = 'master' }: ProfilePageProps) {
               className="btn btn-ghost btn-sm"
               disabled={uploadingCert}
               onClick={() => certInput.current?.click()}
-              title="Фото диплома (необязательно)"
+              title="Фото диплома или рабочего места (необязательно)"
             >
               {uploadingCert ? '…' : newCertUrl ? '✓ Фото есть' : '📷 Фото'}
             </button>
