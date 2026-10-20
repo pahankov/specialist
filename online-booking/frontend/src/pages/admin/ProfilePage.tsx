@@ -2,11 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { adminApi, assetUrl, authApi } from '../../api/client';
+import apiClient from '../../api/http';
 import type { ClientContact, MasterDraftData, MasterDraftProfile } from '../../api/client';
 import {
   AddressSelect,
   BackendImg,
-  CitySelect,
   ConfirmDialog,
   EmptyState,
   Modal,
@@ -75,7 +75,7 @@ interface ProfilePageProps {
   mode?: 'master' | 'draft';
 }
 
-/** Master personal data: photo, names, contacts, city, cabinet, certificates. */
+/** Master personal data: photo, names, contacts, cabinet address, certificates. */
 function ProfilePage({ mode = 'master' }: ProfilePageProps) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -95,6 +95,10 @@ function ProfilePage({ mode = 'master' }: ProfilePageProps) {
   const [experience, setExperience] = useState('');
   const [city, setCity] = useState<CityOption | null>(null);
   const [address, setAddress] = useState('');
+  /** City parsed from the address picker, shown as a catalogue hint. */
+  const [addressCity, setAddressCity] = useState('');
+  const [resolvingCity, setResolvingCity] = useState(false);
+  const cityResolveSeq = useRef(0);
   const [avatar, setAvatar] = useState<string | null>(null);
   const [preset, setPreset] = useState<string | null>(null);
   const [certs, setCerts] = useState<Cert[]>([]);
@@ -158,6 +162,7 @@ function ProfilePage({ mode = 'master' }: ProfilePageProps) {
           : null,
       );
       setAddress(data.cabinet_address || '');
+      setAddressCity(data.city_name || '');
       setAvatar(data.avatar_url || null);
       setPreset(data.avatar_preset || null);
       setCerts(data.certificates || []);
@@ -321,6 +326,32 @@ function ProfilePage({ mode = 'master' }: ProfilePageProps) {
     return certs;
   };
 
+  /** One address field still stores a real city for catalogue filters.
+      A DaData pick carries its city; resolve it to a local id (get-or-create
+      on the server). Sequence guard keeps the last pick if answers race. */
+  const resolveAddressCity = async (name: string) => {
+    const seq = ++cityResolveSeq.current;
+    setAddressCity(name);
+    setResolvingCity(true);
+    try {
+      const { data } = await apiClient.post('/api/v1/cities/resolve', { name });
+      if (seq !== cityResolveSeq.current) return;
+      setCity({ id: data.id, name: data.name_ru ?? name, source: 'dadata' });
+    } catch {
+      if (seq === cityResolveSeq.current) {
+        // Keep a city that was already valid for this name; a different one
+        // must not stay tied to the new address.
+        if (city?.name.trim().toLowerCase() !== name.trim().toLowerCase()) {
+          setCity(null);
+          setAddressCity('');
+        }
+        toast.error('Не удалось определить город. Выберите адрес из подсказки ещё раз.');
+      }
+    } finally {
+      if (seq === cityResolveSeq.current) setResolvingCity(false);
+    }
+  };
+
   const basePayload = (list: Cert[]): MasterDraftData => ({
     // Empty names are allowed in a draft; the activation gate enforces both.
     name: firstName.trim() || undefined,
@@ -328,7 +359,7 @@ function ProfilePage({ mode = 'master' }: ProfilePageProps) {
     telegram_username: telegram.trim() || null,
     description: description.trim() || null,
     experience_years: experience.trim() === '' ? null : Number(experience),
-    city_id: city?.id ?? null,
+    city_id: city?.id ?? undefined,
     cabinet_address: address.trim() || null,
     certificates: list,
     prefer_master_cabinet: preferMaster,
@@ -338,6 +369,10 @@ function ProfilePage({ mode = 'master' }: ProfilePageProps) {
     e.preventDefault();
     if (!isDraft && !firstName.trim()) {
       toast.error('Введите имя');
+      return;
+    }
+    if (resolvingCity) {
+      toast.error('Определяем город по адресу — подождите пару секунд');
       return;
     }
     const list = collectCerts();
@@ -377,6 +412,10 @@ function ProfilePage({ mode = 'master' }: ProfilePageProps) {
 
   const handleActivate = async () => {
     if (!isDraft || activating) return;
+    if (resolvingCity) {
+      toast.error('Определяем город по адресу — подождите пару секунд');
+      return;
+    }
     if (!hasHouseNumber(address)) {
       toast.error('Укажите адрес кабинета с номером дома');
       return;
@@ -537,7 +576,7 @@ function ProfilePage({ mode = 'master' }: ProfilePageProps) {
           <h1>{isDraft ? '🎨 Профиль мастера' : '👤 Мой профиль'}</h1>
           <p>
             {isDraft
-              ? 'Заполните профиль мастера — кабинет активируется сразу, как только будут выполнены все условия'
+              ? 'Кабинет мастера неактивен. Заполните профиль — он активируется сразу, как только будут выполнены все условия.'
               : 'Личные данные, фото, адрес кабинета, дипломы и рабочее место'}
           </p>
         </div>
@@ -547,14 +586,14 @@ function ProfilePage({ mode = 'master' }: ProfilePageProps) {
         <div className={`card profile-activation-card${canActivate ? ' ready' : ''}`}>
           <div className="profile-activation-head">
             <div>
-              <h3>Стать мастером</h3>
+              <h3>Активация кабинета мастера</h3>
               <p className="profile-card-hint">
-                Пока кабинет не активирован, вы остаётесь клиентом. Проверьте условия и нажмите
-                кнопку — одобрение администратора больше не требуется.
+                Кабинет пока неактивен, поэтому вы остаётесь клиентом. Проверьте условия и нажмите
+                кнопку — одобрение администратора не требуется.
               </p>
             </div>
             <span className={`profile-activation-badge${canActivate ? ' ready' : ''}`}>
-              {canActivate ? 'Всё готово' : 'Черновик'}
+              {canActivate ? 'Всё готово' : 'Неактивен'}
             </span>
           </div>
           <ul className="profile-activation-list">
@@ -570,10 +609,14 @@ function ProfilePage({ mode = 'master' }: ProfilePageProps) {
           <button
             type="button"
             className="btn btn-primary"
-            disabled={!canActivate || activating}
+            disabled={!canActivate || activating || resolvingCity}
             onClick={handleActivate}
           >
-            {activating ? 'Активируем…' : 'Стать мастером'}
+            {activating
+              ? 'Активируем…'
+              : resolvingCity
+                ? 'Определяем город…'
+                : 'Активировать кабинет'}
           </button>
           {!canActivate && (
             <p className="profile-card-hint" style={{ marginBottom: 0 }}>
@@ -703,11 +746,33 @@ function ProfilePage({ mode = 'master' }: ProfilePageProps) {
         </div>
 
         <div className="card" style={{ marginBottom: 16 }}>
-          <h3>Город и кабинет</h3>
-          <div className="form-row">
-            <CitySelect value={city?.id ?? null} valueName={city?.name ?? ''} onChange={setCity} />
-            <AddressSelect value={address} onChange={setAddress} />
-          </div>
+          <h3>📍 Адрес кабинета</h3>
+          <AddressSelect
+            value={address}
+            onChange={(nextAddress, pickedCity, picked) => {
+              setAddress(nextAddress);
+              if (picked && pickedCity) {
+                void resolveAddressCity(pickedCity);
+              } else if (!nextAddress.trim()) {
+                cityResolveSeq.current += 1;
+                setCity(null);
+                setAddressCity('');
+                setResolvingCity(false);
+              }
+            }}
+            label="Город, улица и дом"
+            placeholder="Начните вводить город, улицу и дом..."
+            style={{ width: '100%' }}
+          />
+          <p className="profile-card-hint" style={{ margin: '8px 0 0' }}>
+            Город определится автоматически из выбранного адреса и сохранится для каталога.
+          </p>
+          {addressCity && (
+            <p className="profile-card-hint" style={{ margin: '4px 0 0' }}>
+              Определён город: <strong>{addressCity}</strong>
+              {resolvingCity ? ' — привязываем…' : ' — сохранится для каталога.'}
+            </p>
+          )}
           {address.trim() && !hasHouseNumber(address) && (
             <p className="profile-card-hint" style={{ margin: '6px 0 0', color: '#b45309' }}>
               Добавьте номер дома — без него адрес кабинета не засчитается для активации.
@@ -802,8 +867,14 @@ function ProfilePage({ mode = 'master' }: ProfilePageProps) {
         </div>
 
         <div className="form-actions">
-          <button type="submit" className="btn btn-primary" disabled={saving}>
-            {saving ? 'Сохранение…' : isDraft ? 'Сохранить черновик' : 'Сохранить профиль'}
+          <button type="submit" className="btn btn-primary" disabled={saving || resolvingCity}>
+            {saving
+              ? 'Сохранение…'
+              : resolvingCity
+                ? 'Определяем город…'
+                : isDraft
+                  ? 'Сохранить черновик'
+                  : 'Сохранить профиль'}
           </button>
         </div>
       </form>

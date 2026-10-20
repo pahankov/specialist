@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { adminApi, authApi, cabinetApi, reviewsApi } from '../../api/client';
 import { Breadcrumb, KeyboardShortcutsHint, NotificationBell } from '../../components/common';
@@ -11,6 +11,8 @@ import './AdminLayout.css';
 export interface BaseNavItem {
   path: string;
   label: string;
+  /** Visible in the shell, but the section only unlocks after activation. */
+  locked?: boolean;
 }
 
 interface BaseLayoutProps {
@@ -20,6 +22,10 @@ interface BaseLayoutProps {
   userFallbackName: string;
   /** Extra root class for section theming (e.g. "super-layout"). */
   themeClass?: string;
+  /** Inactive master preview: keep cabinet links/bell on the client side. */
+  draftMode?: boolean;
+  /** Optional page-wide status notice (draft activation banner). */
+  notice?: ReactNode;
 }
 
 interface LayoutUser {
@@ -56,6 +62,8 @@ function BaseLayout({
   userRole,
   userFallbackName,
   themeClass = '',
+  draftMode = false,
+  notice,
 }: BaseLayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -65,11 +73,13 @@ function BaseLayout({
   const [impersonatedName, setImpersonatedName] = useState<string | null>(null);
   const [unread, setUnread] = useState(0);
 
-  const bellLink = location.pathname.startsWith(SUPER_PREFIX)
-    ? `${SUPER_PREFIX}/notifications`
-    : location.pathname.startsWith('/admin')
-      ? '/admin/notifications'
-      : '/cabinet/notifications';
+  const bellLink = draftMode
+    ? '/cabinet/notifications'
+    : location.pathname.startsWith(SUPER_PREFIX)
+      ? `${SUPER_PREFIX}/notifications`
+      : location.pathname.startsWith('/admin')
+        ? '/admin/notifications'
+        : '/cabinet/notifications';
 
   // Bell badge: panels hit the admin counter, cabinet the client one.
   // No token → skip quietly. After 3 straight failures the interval stops
@@ -228,11 +238,13 @@ function BaseLayout({
   }, [role, inMasterSection]);
 
   // Drag-to-reorder nav (order persists per section in localStorage).
-  const navSection = location.pathname.startsWith(SUPER_PREFIX)
-    ? 'super'
-    : location.pathname.startsWith('/cabinet')
-      ? 'cabinet'
-      : 'admin';
+  const navSection = draftMode
+    ? 'master-draft'
+    : location.pathname.startsWith(SUPER_PREFIX)
+      ? 'super'
+      : location.pathname.startsWith('/cabinet')
+        ? 'cabinet'
+        : 'admin';
   const [navOrder, setNavOrder] = useState<string[] | null>(null);
   const dragFrom = useRef<number | null>(null);
   const [dropAt, setDropAt] = useState<number | null>(null);
@@ -343,11 +355,12 @@ function BaseLayout({
             <Link
               key={item.path}
               to={item.path}
-              draggable
+              draggable={!item.locked}
               onDragStart={() => {
-                dragFrom.current = idx;
+                if (!item.locked) dragFrom.current = idx;
               }}
               onDragOver={(e) => {
+                if (item.locked) return;
                 e.preventDefault();
                 setDropAt(idx);
               }}
@@ -356,7 +369,7 @@ function BaseLayout({
                 const from = dragFrom.current;
                 dragFrom.current = null;
                 setDropAt(null);
-                if (from === null || from === idx) return;
+                if (from === null || from === idx || item.locked) return;
                 const paths = orderedNav.map((n) => n.path);
                 const [moved] = paths.splice(from, 1);
                 paths.splice(idx, 0, moved);
@@ -366,23 +379,40 @@ function BaseLayout({
                 dragFrom.current = null;
                 setDropAt(null);
               }}
-              className={`nav-item ${isActive(item.path) ? 'active' : ''}${dropAt === idx ? ' nav-drop-target' : ''}`}
+              className={`nav-item ${isActive(item.path) ? 'active' : ''}${item.locked ? ' nav-item-locked' : ''}${dropAt === idx ? ' nav-drop-target' : ''}`}
               onClick={() => setMobileMenuOpen(false)}
-              title={sidebarCollapsed ? item.label : 'Потяните, чтобы поменять порядок'}
+              title={
+                item.locked
+                  ? 'Доступно после активации кабинета мастера'
+                  : sidebarCollapsed
+                    ? item.label
+                    : 'Потяните, чтобы поменять порядок'
+              }
             >
               <span className="nav-icon">{item.label.split(' ')[0]}</span>
               {!sidebarCollapsed && (
-                <span className="nav-label">{item.label.split(' ').slice(1).join(' ')}</span>
+                <>
+                  <span className="nav-label">{item.label.split(' ').slice(1).join(' ')}</span>
+                  {item.locked && (
+                    <span className="nav-lock" aria-hidden="true">
+                      🔒
+                    </span>
+                  )}
+                </>
               )}
             </Link>
           ))}
         </nav>
         <div className="sidebar-footer">
-          {role === 'MASTER' && inMasterSection && (
+          {(draftMode || (role === 'MASTER' && inMasterSection)) && (
             <button
               className="btn btn-ghost"
               onClick={() => navigate('/cabinet')}
-              title="Записаться к другому мастеру как клиент"
+              title={
+                draftMode
+                  ? 'Вернуться в кабинет клиента'
+                  : 'Записаться к другому мастеру как клиент'
+              }
             >
               <span className="nav-icon">👤</span>
               {!sidebarCollapsed && <span className="nav-label">Кабинет клиента</span>}
@@ -401,8 +431,8 @@ function BaseLayout({
           {role === 'CLIENT' && inCabinet && (
             <button
               className="btn btn-ghost"
-              onClick={() => navigate('/cabinet/become-master')}
-              title="Заполнить профиль мастера и активировать кабинет"
+              onClick={() => navigate('/admin/become-master')}
+              title="Открыть неактивный кабинет мастера и заполнить профиль"
             >
               <span className="nav-icon">✨</span>
               {!sidebarCollapsed && <span className="nav-label">Стать мастером</span>}
@@ -431,8 +461,9 @@ function BaseLayout({
             </button>
           </div>
         )}
-        {breadcrumbs.length > 0 && <Breadcrumb items={breadcrumbs} />}
+        {!draftMode && breadcrumbs.length > 0 && <Breadcrumb items={breadcrumbs} />}
         <div className="main-content">
+          {notice}
           <Outlet />
         </div>
       </main>

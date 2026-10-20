@@ -291,6 +291,23 @@
   border-left-color: #e94560;
 }
 
+/* Inactive master shell: sections are visible but unlock after activation. */
+.nav-item-locked {
+  color: rgba(255, 255, 255, 0.48);
+}
+
+.nav-item-locked:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.nav-lock {
+  margin-left: auto;
+  font-size: 11px;
+  opacity: 0.75;
+  flex-shrink: 0;
+}
+
 /* Drag-to-reorder: dashed frame shows items can be pulled. */
 .nav-item[draggable='true'] {
   cursor: grab;

@@ -1,4 +1,6 @@
 export { default as AdminLayout } from './AdminLayout';
+export { default as MasterDraftLayout } from './MasterDraftLayout';
+export { default as MasterDraftLockedPage } from './MasterDraftLockedPage';
 export { default as SuperAdminLayout } from './SuperAdminLayout';
 export { default as BaseLayout } from './BaseLayout';
 export { default as DashboardPage } from './DashboardPage';

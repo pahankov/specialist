@@ -1,0 +1,42 @@
+/* Inactive master shell: a clear status band above the profile form. */
+.master-draft-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding: 14px 16px;
+  border: 1px solid #fecdd3;
+  border-left: 4px solid #e11d48;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #fff7f8 0%, #fff1f2 100%);
+  color: #881337;
+  flex-wrap: wrap;
+}
+
+.master-draft-banner-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 220px;
+}
+
+.master-draft-banner-text strong {
+  font-size: 15px;
+}
+
+.master-draft-banner-text span {
+  font-size: 13px;
+  line-height: 1.45;
+  color: #9f1239;
+}
+
+.master-draft-banner .btn {
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .master-draft-banner {
+    align-items: flex-start;
+  }
+}

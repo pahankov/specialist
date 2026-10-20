@@ -40,19 +40,6 @@ describe('ClientLayout', () => {
     expect(screen.getByText('Клиент')).toBeInTheDocument();
   });
 
-  it('labels the master draft instead of pretending it is a plain client', () => {
-    render(
-      <MemoryRouter initialEntries={['/cabinet/become-master']}>
-        <Routes>
-          <Route path="/cabinet/become-master" element={<ClientLayout />}>
-            <Route index element={<div>draft</div>} />
-          </Route>
-        </Routes>
-      </MemoryRouter>,
-    );
-    expect(screen.getByText('Мастер · черновик')).toBeInTheDocument();
-  });
-
   it('keeps the master status when an activated master uses the client cabinet', () => {
     authCookie('MASTER');
     render(

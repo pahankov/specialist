@@ -5,6 +5,8 @@ import VkCallbackPage from './pages/public/VkCallbackPage';
 import YandexCallbackPage from './pages/public/YandexCallbackPage';
 import {
   AdminLayout,
+  MasterDraftLayout,
+  MasterDraftLockedPage,
   DashboardPage,
   AppointmentsPage,
   ServicesPage,
@@ -72,6 +74,26 @@ function RequireMasterSection({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/** Inactive master shell: accessible to CLIENTs filling the master draft.
+    Active masters go straight to their real panel, admins to /super. */
+function RequireMasterDraft({ children }: { children: React.ReactNode }) {
+  const location = useLocation();
+  if (!getIsAuthenticated()) {
+    return <Navigate to="/" replace state={{ from: location.pathname + location.search }} />;
+  }
+  if (getIsAdmin()) {
+    return <Navigate to={`${SUPER_PREFIX}/dashboard`} replace />;
+  }
+  const role = getUserRole();
+  if (role === 'MASTER') {
+    return <Navigate to={`${ADMIN_PREFIX}/profile`} replace />;
+  }
+  if (role !== 'CLIENT') {
+    return <Navigate to="/cabinet" replace />;
+  }
+  return <>{children}</>;
+}
+
 /** Client cabinet: CLIENT and MASTER roles (dual-role: masters book as clients). */
 function RequireClient({ children }: { children: React.ReactNode }) {
   const location = useLocation();
@@ -96,6 +118,18 @@ const masterNavItems = [
   { path: `${ADMIN_PREFIX}/clients`, label: '👥 Клиенты' },
   { path: `${ADMIN_PREFIX}/schedule`, label: '🕐 Расписание' },
   { path: `${ADMIN_PREFIX}/notifications`, label: '🔔 Уведомления' },
+];
+
+// Same master cabinet, but only the profile works until self-activation.
+const DRAFT_MASTER_ROOT = `${ADMIN_PREFIX}/become-master`;
+const masterDraftNavItems = [
+  { path: DRAFT_MASTER_ROOT, label: '👤 Профиль' },
+  { path: `${DRAFT_MASTER_ROOT}/dashboard`, label: '📊 Обзор', locked: true },
+  { path: `${DRAFT_MASTER_ROOT}/appointments`, label: '📅 Мои записи', locked: true },
+  { path: `${DRAFT_MASTER_ROOT}/services`, label: '💇 Мои услуги', locked: true },
+  { path: `${DRAFT_MASTER_ROOT}/clients`, label: '👥 Клиенты', locked: true },
+  { path: `${DRAFT_MASTER_ROOT}/schedule`, label: '🕐 Расписание', locked: true },
+  { path: `${DRAFT_MASTER_ROOT}/notifications`, label: '🔔 Уведомления', locked: true },
 ];
 
 function App() {
@@ -131,7 +165,27 @@ function App() {
             <Route path="coupons" element={<ClientCouponsPage />} />
             <Route path="notifications" element={<CabinetNotificationsPage />} />
             <Route path="profile" element={<ClientProfilePage />} />
-            <Route path="become-master" element={<ProfilePage mode="draft" />} />
+            {/* Old bookmarks go to the real (inactive) master shell. */}
+            <Route path="become-master" element={<Navigate to={DRAFT_MASTER_ROOT} replace />} />
+          </Route>
+
+          {/* Inactive master cabinet: full master shell for a CLIENT who is
+              filling the draft. The backend role stays CLIENT until activation. */}
+          <Route
+            path={DRAFT_MASTER_ROOT}
+            element={
+              <RequireMasterDraft>
+                <MasterDraftLayout navItems={masterDraftNavItems} />
+              </RequireMasterDraft>
+            }
+          >
+            <Route index element={<ProfilePage mode="draft" />} />
+            <Route path="dashboard" element={<MasterDraftLockedPage title="Обзор" />} />
+            <Route path="appointments" element={<MasterDraftLockedPage title="Мои записи" />} />
+            <Route path="services" element={<MasterDraftLockedPage title="Мои услуги" />} />
+            <Route path="clients" element={<MasterDraftLockedPage title="Клиенты" />} />
+            <Route path="schedule" element={<MasterDraftLockedPage title="Расписание" />} />
+            <Route path="notifications" element={<MasterDraftLockedPage title="Уведомления" />} />
           </Route>
 
           {/* Logins happen via modal on home */}
