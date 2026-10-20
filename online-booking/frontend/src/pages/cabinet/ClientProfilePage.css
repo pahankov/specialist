@@ -72,6 +72,8 @@
   border-radius: 8px;
   font-weight: 600;
   box-shadow: none;
+  /* Owner's ask (1.82.0): detach the button from the description text. */
+  margin-top: 14px;
 }
 
 .client-profile-page .account-danger-card .btn-delete:hover:not(:disabled) {

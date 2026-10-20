@@ -16,6 +16,7 @@ from app.models.user_contact import UserContact
 from app.schemas.user import UserCreate, UserLoginByEmail, UserLoginByPhone
 from app.schemas.otp import SendOtpRequest
 from app.services.names import name_fields as _name_fields
+from app.services.master_landing import master_landing_preference
 from app.services import email_codes, mailer
 from app.services.audit import log_action
 from app.services.contacts import (
@@ -135,6 +136,7 @@ async def login_master(email: str, password: str, db: AsyncSession) -> tuple[str
         "name": user.name,
         "last_name": user.last_name,
         "is_admin": user.role == UserRole.ADMIN,
+        "prefer_master": await master_landing_preference(db, user),
     })
 
     refresh_token_value, expires_at = create_refresh_token_payload(user.id, user.email or "")
@@ -232,6 +234,7 @@ async def verify_otp(phone: str, code: str, db: AsyncSession) -> tuple[str, User
         "name": user.name,
         "last_name": user.last_name,
         "is_admin": user.role == UserRole.ADMIN,
+        "prefer_master": await master_landing_preference(db, user),
     })
 
     refresh_token_value, expires_at = create_refresh_token_payload(user.id, user.email or "")
@@ -267,6 +270,7 @@ async def login_client_legacy(phone: str, db: AsyncSession) -> tuple[str, User]:
         "role": user.role.value,
         "name": user.name,
         "last_name": user.last_name,
+        "prefer_master": await master_landing_preference(db, user),
     })
     logger.info("Клиент успешно вошёл в систему: %s", phone)
     return access_token, user
@@ -401,6 +405,7 @@ async def login_unified(
         "name": user.name,
         "last_name": user.last_name,
         "is_admin": user.role == UserRole.ADMIN,
+        "prefer_master": await master_landing_preference(db, user),
     })
 
     refresh_token_value, expires_at = create_refresh_token_payload(user.id, user.email or "")
@@ -535,6 +540,7 @@ async def issue_session(user: User, db: AsyncSession) -> tuple[str, str]:
         "name": user.name,
         "last_name": user.last_name,
         "is_admin": user.role == UserRole.ADMIN,
+        "prefer_master": await master_landing_preference(db, user),
     })
     refresh_token_value, expires_at = create_refresh_token_payload(
         user.id, user.email or "")
@@ -768,6 +774,7 @@ async def complete_consent_flow(
         "name": user.name,
         "last_name": user.last_name,
         "is_admin": user.role == UserRole.ADMIN,
+        "prefer_master": await master_landing_preference(db, user),
     })
     refresh_value, expires_at = create_refresh_token_payload(
         user.id, user.email or "")

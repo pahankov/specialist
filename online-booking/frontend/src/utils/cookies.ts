@@ -11,6 +11,8 @@ export interface JwtPayload {
   is_admin?: boolean;
   name?: string;
   last_name?: string | null;
+  /** Master landing preference: panel (true) vs client cabinet (false). */
+  prefer_master?: boolean;
   exp?: number;
 }
 

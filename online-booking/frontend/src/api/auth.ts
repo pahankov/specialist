@@ -79,6 +79,42 @@ export interface PhoneStatusResponse {
   phone: string;
 }
 
+/** Master application payload (1.82.0): full master profile on submit. */
+export interface BecomeMasterData {
+  name?: string;
+  last_name?: string | null;
+  cabinet_address?: string;
+  city_id?: number | null;
+  description?: string | null;
+  experience_years?: number | null;
+  telegram_username?: string | null;
+  avatar_url?: string | null;
+  certificates?: { name: string; url?: string }[];
+  /** Land straight in the master panel after approval (default true). */
+  prefer_master_cabinet?: boolean;
+}
+
+export interface MasterApplicationData {
+  name: string;
+  last_name?: string | null;
+  city_id?: number | null;
+  cabinet_address?: string | null;
+  description?: string | null;
+  experience_years?: number | null;
+  telegram_username?: string | null;
+  avatar_url?: string | null;
+  certificates?: { name: string; url?: string }[];
+  prefer_master_cabinet: boolean;
+  created_at?: string | null;
+}
+
+/** GET /auth/become-master: none → no application, pending → awaiting
+    approval, active → already a master. */
+export interface MasterApplicationResponse {
+  status: 'none' | 'pending' | 'active';
+  application: MasterApplicationData | null;
+}
+
 export const authApi = {
   login: (email: string, password: string) =>
     apiClient.post<LoginResponse>('/api/v1/auth/login', { email, password }),
@@ -127,11 +163,19 @@ export const authApi = {
       current_password: currentPassword,
       new_password: newPassword,
     }),
-  becomeMaster: (data?: {
-    cabinet_address?: string;
-    description?: string;
-    experience_years?: number;
-  }) => apiClient.post<{ detail: string }>('/api/v1/auth/become-master', data ?? {}),
+  becomeMaster: (data: BecomeMasterData) =>
+    apiClient.post<{ detail: string; status: string }>('/api/v1/auth/become-master', data),
+  masterApplication: () => apiClient.get<MasterApplicationResponse>('/api/v1/auth/become-master'),
+  /** Optional photo/certificate upload for a pending application. */
+  uploadMasterPhoto: (file: File, kind: 'avatar' | 'cert' = 'avatar') => {
+    const form = new FormData();
+    form.append('file', file);
+    return apiClient.post<{ avatar_url: string }>(
+      `/api/v1/auth/become-master/photo?kind=${kind}`,
+      form,
+      { headers: { 'Content-Type': 'multipart/form-data' } },
+    );
+  },
   registerUnified: (data: UnifiedRegisterData) =>
     apiClient.post<UnifiedRegisterResponse>('/api/v1/auth/register-unified', data),
   maxStart: (phone: string) =>

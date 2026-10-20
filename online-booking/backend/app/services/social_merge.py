@@ -36,6 +36,7 @@ from app.services.contacts import (
     find_user_by_contact,
 )
 from app.services.names import compose_full_name
+from app.services.master_landing import master_landing_preference
 from app.utils.tokens import create_access_token, create_refresh_token_payload
 
 logger = get_logger(__name__)
@@ -271,6 +272,7 @@ async def complete_social_login(db: AsyncSession, user: User) -> str:
         "name": user.name,
         "last_name": user.last_name,
         "is_admin": user.role == UserRole.ADMIN,
+        "prefer_master": await master_landing_preference(db, user),
     })
     refresh_value, expires_at = create_refresh_token_payload(
         user.id, user.email or "")

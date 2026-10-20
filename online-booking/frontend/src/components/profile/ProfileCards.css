@@ -161,3 +161,41 @@
   padding: 6px 12px;
   font-size: 13px;
 }
+
+/* ─── Password card (1.82.0) ─── */
+
+/* Eye toggles, same pattern as the login modal: one per field. */
+.password-input-wrap {
+  position: relative;
+}
+
+.password-input-wrap input {
+  padding-right: 44px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.password-eye {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  padding: 4px 8px;
+  color: #666;
+  line-height: 1;
+}
+
+/* Standard button size (not stretched to the field column). */
+.password-form .password-submit {
+  width: auto;
+  align-self: flex-start;
+}
+
+.password-form {
+  display: flex;
+  flex-direction: column;
+}

@@ -55,6 +55,8 @@ export interface Master {
   experience_years?: number | null;
   is_active: boolean;
   is_admin: boolean;
+  /** Pending master application (CLIENT with a master profile, not yet approved). */
+  is_application?: boolean;
   status?: string;
   tariff?: string;
   trial_ends_at?: string | null;

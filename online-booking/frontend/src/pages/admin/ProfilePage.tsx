@@ -95,6 +95,8 @@ function ProfilePage() {
   const avatarInput = useRef<HTMLInputElement>(null);
   const certInput = useRef<HTMLInputElement>(null);
   const [contacts, setContacts] = useState<ProfileContact[]>([]);
+  /** Login landing: open the master panel instead of the client cabinet. */
+  const [preferMaster, setPreferMaster] = useState(true);
   /** Super profile: «Имя и фамилия» save (sidebar refresh follows). */
   const [savingNames, setSavingNames] = useState(false);
 
@@ -146,6 +148,7 @@ function ProfilePage() {
         setPreset(data.avatar_preset || null);
         setCerts(data.certificates || []);
         setProfileId(data.profile_id ?? null);
+        setPreferMaster(data.prefer_master_cabinet !== false);
         applyAuthFlags(data);
       } catch (err: unknown) {
         toast.error(getApiErrorMessage(err, 'Не удалось загрузить профиль'));
@@ -288,6 +291,7 @@ function ProfilePage() {
         cabinet_address: address.trim() || null,
         certificates: list,
         avatar_preset: preset,
+        prefer_master_cabinet: preferMaster,
       });
       // Converge with the server (it echoes the saved profile).
       setCerts(data?.certificates || list);
@@ -533,6 +537,14 @@ function ProfilePage() {
             <CitySelect value={city?.id ?? null} valueName={city?.name ?? ''} onChange={setCity} />
             <AddressSelect value={address} onChange={setAddress} />
           </div>
+          <label className="profile-prefer-master">
+            <input
+              type="checkbox"
+              checked={preferMaster}
+              onChange={(e) => setPreferMaster(e.target.checked)}
+            />
+            <span>После входа открывать панель мастера, а не кабинет клиента</span>
+          </label>
         </div>
 
         <div className="card" style={{ marginBottom: 16 }}>

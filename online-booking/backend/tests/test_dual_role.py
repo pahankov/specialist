@@ -67,35 +67,82 @@ class TestMasterAsClient:
 
 
 class TestBecomeMaster:
-    async def _register_client(self, client):
+    """Application (1.82.0): full profile + verified contacts, admin approval."""
+
+    @staticmethod
+    def _payload(**over):
+        data = {
+            "name": "Тест",
+            "last_name": "Клиент",
+            "cabinet_address": "ул. Тестовая, 1",
+        }
+        data.update(over)
+        return data
+
+    async def _register_client(self, client, phone, email):
+        """Create a client with both contacts (email added, not verified yet)."""
         r = await client.post("/api/v1/auth/register-unified", json={
-            "phone": "+79991115555", "password": "SecurePass123!",
-            "consent": True,
+            "phone": phone, "password": "SecurePass123!", "consent": True,
         })
         assert r.status_code == 201, r.text
-        return r.json()["access_token"]
+        token = r.json()["access_token"]
+        add = await client.post(
+            "/api/v1/client/contacts",
+            headers=_auth(token),
+            json={"contact_type": "email", "value": email},
+        )
+        assert add.status_code in (200, 201), add.text
+        return token, add.json()["id"]
+
+    async def _verify_email(self, session, contact_id):
+        from app.models.user_contact import UserContact
+
+        contact = await session.get(UserContact, contact_id)
+        assert contact is not None
+        contact.is_verified = True
+        contact.verified_via = "code"
+        await session.commit()
 
     async def test_application_flow(self, client, session):
         from sqlalchemy import select
         from app.models.user import User, UserRole
         from app.models.master_profile import MasterProfile
 
-        token = await self._register_client(client)
+        token, email_id = await self._register_client(
+            client, "+79991115555", "flow@example.com")
+        await self._verify_email(session, email_id)
+
         r = await client.post("/api/v1/auth/become-master",
                               headers=_auth(token),
-                              json={"cabinet_address": "ул. Тестовая, 1"})
+                              json=self._payload(
+                                  description="Бровист",
+                                  experience_years=5,
+                                  prefer_master_cabinet=False,
+                              ))
         assert r.status_code == 200, r.text
+        assert r.json()["status"] == "pending"
 
         # Still a client: no panel, invisible publicly.
         user = (await session.execute(
             select(User).where(User.phone == "+7 (999) 111-55-55")
         )).scalar_one()
         assert user.role == UserRole.CLIENT
+        assert user.name == "Тест Клиент" and user.last_name == "Клиент"
         mp = (await session.execute(
             select(MasterProfile).where(MasterProfile.user_id == user.id)
         )).scalar_one()
         assert mp.is_active is False and mp.status == "inactive"
         assert mp.cabinet_address == "ул. Тестовая, 1"
+        assert mp.description == "Бровист"
+        assert mp.prefer_master_cabinet is False
+
+        status = await client.get("/api/v1/auth/become-master",
+                                  headers=_auth(token))
+        assert status.status_code == 200, status.text
+        body = status.json()
+        assert body["status"] == "pending"
+        assert body["application"]["cabinet_address"] == "ул. Тестовая, 1"
+        assert body["application"]["prefer_master_cabinet"] is False
 
         pub = await client.get("/api/v1/masters/")
         assert all(m["user_id"] != user.id for m in pub.json())
@@ -104,14 +151,86 @@ class TestBecomeMaster:
                                  headers=_auth(token))
         assert panel.status_code == 401
 
-    async def test_double_apply_rejected(self, client):
-        token = await self._register_client(client)
+    async def test_double_apply_rejected(self, client, session):
+        token, email_id = await self._register_client(
+            client, "+79991115556", "double@example.com")
+        await self._verify_email(session, email_id)
         assert (await client.post("/api/v1/auth/become-master",
                                   headers=_auth(token),
-                                  json={})).status_code == 200
+                                  json=self._payload())).status_code == 200
         r = await client.post("/api/v1/auth/become-master",
-                              headers=_auth(token), json={})
+                              headers=_auth(token), json=self._payload())
         assert r.status_code == 400, r.text
+
+    async def test_requires_email(self, client, session):
+        token, _ = await self._register_client(
+            client, "+79991115557", "no-email@example.com")
+        # Remove the email: only a phone is left.
+        from sqlalchemy import select
+        from app.models.user_contact import UserContact
+
+        contact = (await session.execute(
+            select(UserContact).where(UserContact.value == "no-email@example.com")
+        )).scalar_one()
+        await session.delete(contact)
+        await session.commit()
+
+        r = await client.post("/api/v1/auth/become-master",
+                              headers=_auth(token), json=self._payload())
+        assert r.status_code == 400, r.text
+        assert "почт" in r.json()["detail"].lower()
+
+    async def test_requires_verified_contact(self, client, session):
+        token, _ = await self._register_client(
+            client, "+79991115558", "unverified@example.com")
+        # Both contact types exist, but neither is verified.
+        r = await client.post("/api/v1/auth/become-master",
+                              headers=_auth(token), json=self._payload())
+        assert r.status_code == 400, r.text
+        assert "подтвердите" in r.json()["detail"].lower()
+
+    async def test_photo_upload_is_optional(self, client, session):
+        token, email_id = await self._register_client(
+            client, "+79991115559", "photo@example.com")
+        await self._verify_email(session, email_id)
+
+        # 1x1 transparent PNG.
+        png = bytes.fromhex(
+            "89504e470d0a1a0a0000000d4948445200000001000000010806000000"
+            "1f15c4890000000d49444154789c6360000000020001e221bc33000000"
+            "0049454e44ae426082"
+        )
+        up = await client.post(
+            "/api/v1/auth/become-master/photo?kind=avatar",
+            headers=_auth(token),
+            files={"file": ("photo.png", png, "image/png")},
+        )
+        assert up.status_code == 200, up.text
+        url = up.json()["avatar_url"]
+        assert url.startswith("/static/avatars/")
+
+        r = await client.post("/api/v1/auth/become-master",
+                              headers=_auth(token),
+                              json=self._payload(avatar_url=url))
+        assert r.status_code == 200, r.text
+
+        from sqlalchemy import select
+        from app.models.user import User
+        from app.models.master_profile import MasterProfile
+
+        user = (await session.execute(
+            select(User).where(User.phone == "+7 (999) 111-55-59")
+        )).scalar_one()
+        mp = (await session.execute(
+            select(MasterProfile).where(MasterProfile.user_id == user.id)
+        )).scalar_one()
+        assert mp.avatar_url == url
+
+        # Tests must not litter the repo.
+        import os as _os
+
+        _os.remove(_os.path.join(
+            "app", "static", "avatars", _os.path.basename(url)))
 
     async def test_admin_activation_opens_panel(
         self, client, session, super_admin_headers,
@@ -120,15 +239,31 @@ class TestBecomeMaster:
         from app.models.user import User, UserRole
         from app.models.master_profile import MasterProfile
 
-        token = await self._register_client(client)
+        token, email_id = await self._register_client(
+            client, "+79991115560", "activation@example.com")
+        await self._verify_email(session, email_id)
         await client.post("/api/v1/auth/become-master",
-                          headers=_auth(token), json={})
+                          headers=_auth(token), json=self._payload())
         user = (await session.execute(
-            select(User).where(User.phone == "+7 (999) 111-55-55")
+            select(User).where(User.phone == "+7 (999) 111-55-60")
         )).scalar_one()
         mp = (await session.execute(
             select(MasterProfile).where(MasterProfile.user_id == user.id)
         )).scalar_one()
+
+        # Applications are visible to the superadmin and marked as such.
+        default_list = await client.get("/api/v1/admin/masters",
+                                        headers=super_admin_headers)
+        assert default_list.status_code == 200
+        assert all(m["user_id"] != user.id for m in default_list.json())
+
+        admin_list = await client.get(
+            "/api/v1/admin/masters?include_applications=true",
+            headers=super_admin_headers,
+        )
+        assert admin_list.status_code == 200, admin_list.text
+        pending = next(m for m in admin_list.json() if m["user_id"] == user.id)
+        assert pending["is_application"] is True
 
         r = await client.post(f"/api/v1/admin/masters/{mp.id}/toggle-active",
                               headers=super_admin_headers)
@@ -138,6 +273,62 @@ class TestBecomeMaster:
         assert user.role == UserRole.MASTER
         pub = await client.get("/api/v1/masters/")
         assert any(m["user_id"] == user.id for m in pub.json())
+
+        approved = await client.get(
+            "/api/v1/admin/masters?include_applications=true",
+            headers=super_admin_headers,
+        )
+        row = next(m for m in approved.json() if m["user_id"] == user.id)
+        assert row["is_application"] is False
+
+    async def test_landing_preference_in_login_token(
+        self, client, session, super_admin_headers,
+    ):
+        import jwt
+        from sqlalchemy import select
+        from app.config import settings
+        from app.models.user import User
+        from app.models.master_profile import MasterProfile
+
+        token, email_id = await self._register_client(
+            client, "+79991115561", "landing@example.com")
+        await self._verify_email(session, email_id)
+        await client.post("/api/v1/auth/become-master",
+                          headers=_auth(token),
+                          json=self._payload(prefer_master_cabinet=False))
+        user = (await session.execute(
+            select(User).where(User.phone == "+7 (999) 111-55-61")
+        )).scalar_one()
+        mp = (await session.execute(
+            select(MasterProfile).where(MasterProfile.user_id == user.id)
+        )).scalar_one()
+        await client.post(f"/api/v1/admin/masters/{mp.id}/toggle-active",
+                          headers=super_admin_headers)
+
+        def claim(access: str) -> dict:
+            return jwt.decode(access, settings.SECRET_KEY,
+                              algorithms=[settings.ALGORITHM])
+
+        login = await client.post("/api/v1/auth/login-unified", json={
+            "identifier": "+7 (999) 111-55-61",
+            "password": "SecurePass123!",
+        })
+        assert login.status_code == 200, login.text
+        assert claim(login.json()["access_token"])["prefer_master"] is False
+
+        # The master can flip it in the panel profile; the next login sees it.
+        upd = await client.patch("/api/v1/admin/profile",
+                                 headers=_auth(login.json()["access_token"]),
+                                 json={"prefer_master_cabinet": True})
+        assert upd.status_code == 200, upd.text
+        assert upd.json()["prefer_master_cabinet"] is True
+
+        login2 = await client.post("/api/v1/auth/login-unified", json={
+            "identifier": "+7 (999) 111-55-61",
+            "password": "SecurePass123!",
+        })
+        assert login2.status_code == 200, login2.text
+        assert claim(login2.json()["access_token"])["prefer_master"] is True
 
     async def test_unauthorized_rejected(self, client):
         assert (await client.post("/api/v1/auth/become-master",

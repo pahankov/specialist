@@ -126,19 +126,22 @@ function LoginModal({
     return () => clearInterval(t);
   }, [maxCooling]);
 
-  /** Land by role: admins → their section, deep-link honored, everyone else
-      (clients AND masters) → the client cabinet. Masters switch to the panel
-      from inside the cabinet; there is no «войти как» switch anymore. */
+  /** Land by role: admins → their section; masters who opted in
+      («заходить сразу под профилем мастера») → the master panel; everyone
+      else → the client cabinet. Deep links still win: a master who clicked
+      «Записаться» lands on that page, not in the panel. */
   const landByRole = () => {
     setTimeout(() => {
       onClose();
+      let payload: { is_admin?: boolean; role?: string; prefer_master?: boolean } | null = null;
       try {
-        if (decodeJwtPayload(getCookie('access_token') ?? '')?.is_admin === true) {
-          navigate(`${SUPER_PREFIX}/dashboard`, { replace: true });
-          return;
-        }
+        payload = decodeJwtPayload(getCookie('access_token') ?? '');
       } catch {
         /* fall through to cabinet */
+      }
+      if (payload?.is_admin === true) {
+        navigate(`${SUPER_PREFIX}/dashboard`, { replace: true });
+        return;
       }
       // Deep-link continue (e.g. carousel "Записаться" → cabinet booking).
       if (redirectTo) {
@@ -148,6 +151,10 @@ function LoginModal({
           /* ignore */
         }
         navigate(redirectTo, { replace: true });
+        return;
+      }
+      if (payload?.role === 'MASTER' && payload?.prefer_master === true) {
+        navigate('/admin/dashboard', { replace: true });
         return;
       }
       navigate('/cabinet', { replace: true });

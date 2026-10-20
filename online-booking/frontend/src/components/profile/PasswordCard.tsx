@@ -24,7 +24,9 @@ function PasswordCard({ hasPassword, hasEmail }: PasswordCardProps) {
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [repeat, setRepeat] = useState('');
-  const [show, setShow] = useState(false);
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNext, setShowNext] = useState(false);
+  const [showRepeat, setShowRepeat] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const nextErr = next !== '' ? passwordError(next) : null;
@@ -70,53 +72,77 @@ function PasswordCard({ hasPassword, hasEmail }: PasswordCardProps) {
             : ' Чтобы задать пароль, сначала добавьте почту в контактах.'}
         </p>
       ) : (
-        <form onSubmit={submit}>
-          <div className="form-row">
-            <div className="form-group">
-              <label>Текущий пароль</label>
+        <form onSubmit={submit} className="password-form">
+          {/* Owner layout (1.82.0): current password on its own row,
+              new + repeat on the second row, standard-size button below. */}
+          <div className="form-group">
+            <label>Текущий пароль</label>
+            <div className="password-input-wrap">
               <input
-                type={show ? 'text' : 'password'}
+                type={showCurrent ? 'text' : 'password'}
                 value={current}
                 onChange={(e) => setCurrent(e.target.value)}
                 autoComplete="current-password"
                 required
               />
-            </div>
-            <div className="form-group">
-              <label>Новый пароль</label>
-              <input
-                type={show ? 'text' : 'password'}
-                value={next}
-                onChange={(e) => setNext(e.target.value)}
-                placeholder={PASSWORD_PLACEHOLDER}
-                autoComplete="new-password"
-                required
-              />
-              {nextErr && <p className="error-message">{nextErr}</p>}
+              <button
+                type="button"
+                className="password-eye"
+                onClick={() => setShowCurrent(!showCurrent)}
+                title={showCurrent ? 'Скрыть пароль' : 'Показать пароль'}
+              >
+                {showCurrent ? '🙈' : '👁️'}
+              </button>
             </div>
           </div>
           <div className="form-row">
             <div className="form-group">
+              <label>Новый пароль</label>
+              <div className="password-input-wrap">
+                <input
+                  type={showNext ? 'text' : 'password'}
+                  value={next}
+                  onChange={(e) => setNext(e.target.value)}
+                  placeholder={PASSWORD_PLACEHOLDER}
+                  autoComplete="new-password"
+                  required
+                />
+                <button
+                  type="button"
+                  className="password-eye"
+                  onClick={() => setShowNext(!showNext)}
+                  title={showNext ? 'Скрыть пароль' : 'Показать пароль'}
+                >
+                  {showNext ? '🙈' : '👁️'}
+                </button>
+              </div>
+              {nextErr && <p className="error-message">{nextErr}</p>}
+            </div>
+            <div className="form-group">
               <label>Повторите новый пароль</label>
-              <input
-                type={show ? 'text' : 'password'}
-                value={repeat}
-                onChange={(e) => setRepeat(e.target.value)}
-                autoComplete="new-password"
-                required
-              />
+              <div className="password-input-wrap">
+                <input
+                  type={showRepeat ? 'text' : 'password'}
+                  value={repeat}
+                  onChange={(e) => setRepeat(e.target.value)}
+                  autoComplete="new-password"
+                  required
+                />
+                <button
+                  type="button"
+                  className="password-eye"
+                  onClick={() => setShowRepeat(!showRepeat)}
+                  title={showRepeat ? 'Скрыть пароль' : 'Показать пароль'}
+                >
+                  {showRepeat ? '🙈' : '👁️'}
+                </button>
+              </div>
               {mismatch && <p className="error-message">Пароли не совпадают</p>}
             </div>
-            <div className="form-group" style={{ justifyContent: 'flex-end' }}>
-              <label className="checkbox-label" style={{ marginBottom: 10 }}>
-                <input type="checkbox" checked={show} onChange={(e) => setShow(e.target.checked)} />
-                <span>Показать пароли</span>
-              </label>
-              <button type="submit" className="btn btn-primary" disabled={saving}>
-                {saving ? 'Меняем…' : 'Сменить пароль'}
-              </button>
-            </div>
           </div>
+          <button type="submit" className="btn btn-primary password-submit" disabled={saving}>
+            {saving ? 'Меняем…' : 'Сменить пароль'}
+          </button>
         </form>
       )}
     </div>

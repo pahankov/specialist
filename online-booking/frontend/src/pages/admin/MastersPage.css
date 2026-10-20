@@ -131,6 +131,11 @@
   color: #991b1b;
 }
 
+.status-badge.status-pending {
+  background: #fef3c7;
+  color: #92400e;
+}
+
 .role-badge {
   display: inline-flex;
   align-items: center;

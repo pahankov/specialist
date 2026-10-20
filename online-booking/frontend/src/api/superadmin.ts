@@ -31,6 +31,8 @@ export const superAdminApi = {
     search?: string;
     is_active?: boolean | string;
     is_admin?: boolean | string;
+    /** Include pending applications (management page only). */
+    include_applications?: boolean | string;
     sort_by?: string;
     sort_dir?: string;
   }) {

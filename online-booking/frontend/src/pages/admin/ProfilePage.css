@@ -89,6 +89,26 @@
   margin-top: 6px;
 }
 
+/* Login landing switch (1.82.0). */
+.profile-prefer-master {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 14px;
+  font-size: 14px;
+  color: #333;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.profile-prefer-master input {
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
+  flex-shrink: 0;
+  accent-color: #ff6b9d;
+}
+
 .cert-list {
   display: flex;
   flex-direction: column;

@@ -52,7 +52,7 @@ function VkCallbackPage() {
       navigate(from, { replace: true });
       return;
     }
-    if (payload?.role === 'MASTER') {
+    if (payload?.role === 'MASTER' && payload?.prefer_master === true) {
       navigate(`${ADMIN_PREFIX}/dashboard`, { replace: true });
       return;
     }

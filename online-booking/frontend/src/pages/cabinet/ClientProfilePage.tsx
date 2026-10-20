@@ -92,6 +92,15 @@ function ClientProfilePage() {
         address: address.trim() || null,
       });
       setMe(data);
+      // Re-mint the JWT so the sidebar shows the new name immediately
+      // (BaseLayout re-reads the token on auth:user-updated). A failed
+      // refresh keeps the old token — the name updates on the next login.
+      try {
+        await authApi.refreshSession();
+      } catch {
+        /* stale token is still valid */
+      }
+      window.dispatchEvent(new Event('auth:user-updated'));
       toast.success('Профиль сохранён');
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'Не удалось сохранить профиль'));

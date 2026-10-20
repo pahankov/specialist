@@ -36,6 +36,8 @@ export const adminApi = {
       certificates?: { name: string; url?: string }[];
       auto_confirm?: boolean | null;
       auto_complete?: boolean | null;
+      /** Login lands in the master panel (1.82.0). */
+      prefer_master_cabinet?: boolean;
       profile_id?: number | null;
       tariff?: string | null;
       trial_ends_at?: string | null;
@@ -53,6 +55,7 @@ export const adminApi = {
     avatar_preset?: string | null;
     auto_confirm?: boolean | null;
     auto_complete?: boolean | null;
+    prefer_master_cabinet?: boolean | null;
   }) {
     return apiClient.patch('/api/v1/admin/profile', data);
   },

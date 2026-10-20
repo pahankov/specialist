@@ -1,8 +1,10 @@
 """Authentication API endpoints — register, login, OTP, refresh, logout."""
-from typing import Optional
-from fastapi import APIRouter, HTTPException, Depends, status, Response, Request
+import os
+import uuid
+from typing import List, Optional
+from fastapi import APIRouter, HTTPException, Depends, status, Response, Request, File, Query, UploadFile
 from fastapi.security import HTTPBearer
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 import jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -12,6 +14,7 @@ from datetime import datetime, timezone as dt_timezone
 from app.database import get_db
 from app.models.user import User, UserRole
 from app.models.master_profile import MasterProfile
+from app.models.city import City
 from app.models.refresh_token import RefreshToken
 from app.models.country import Country
 from app.schemas.user import UserCreate, UserLoginByEmail, UserLoginByPhone
@@ -31,9 +34,19 @@ from app.schemas.auth import (
 from app.config import settings
 from app.logging_config import get_logger
 from app.services.audit import log_action
+from app.services.master_landing import master_landing_preference
+from app.services.contacts import CONTACT_EMAIL, CONTACT_PHONE, get_contacts
+from app.services.names import set_names
 from app.modules.auth import service
 from app.modules.auth.token import create_access_token, create_refresh_token_payload
-from app.dependencies.auth import get_current_user
+from app.modules.admin.profile import (
+    ALLOWED_IMAGE_TYPES,
+    AVATAR_DIR,
+    AVATAR_URL_PREFIX,
+    EXT_BY_TYPE,
+    MAX_AVATAR_BYTES,
+)
+from app.dependencies.auth import get_current_user, require_client
 from app.middleware.rate_limit import limiter
 from app.utils.cookies_http import set_auth_cookies
 
@@ -265,6 +278,7 @@ async def refresh_token(request: Request, db: AsyncSession = Depends(get_db)):
         "name": user.name,
         "last_name": user.last_name,
         "is_admin": user.role == UserRole.ADMIN,
+        "prefer_master": await master_landing_preference(db, user),
     })
     new_refresh_value, new_expires = create_refresh_token_payload(user.id, user.email or "")
     db.add(RefreshToken(user_id=user.id, token=new_refresh_value, expires_at=new_expires))
@@ -464,10 +478,86 @@ async def register_unified(
 
 # ─── Become master (client applies, admin activates) ──────────────
 
+class BecomeMasterCertificate(BaseModel):
+    """One diploma/certificate photo (optional url)."""
+    name: str = Field(min_length=1, max_length=200)
+    url: Optional[str] = Field(default=None, max_length=500)
+
+    @field_validator("url")
+    @classmethod
+    def _safe_url(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        s = v.strip()
+        if not (s.startswith("/") or s.startswith("http://")
+                or s.startswith("https://")):
+            raise ValueError("URL сертификата: только /static/... или http(s)")
+        return s
+
+
 class BecomeMasterRequest(BaseModel):
+    """Full master application (owner review 1.82.0).
+
+    Names and the cabinet address are required; photo/certificates are
+    optional. The account must already have at least one phone and one
+    email, one of them verified, and a password or a social binding.
+    """
+    name: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    last_name: Optional[str] = Field(default=None, max_length=100)
     cabinet_address: Optional[str] = Field(default=None, max_length=500)
+    city_id: Optional[int] = None
     description: Optional[str] = None
     experience_years: Optional[int] = Field(default=None, ge=0, le=80)
+    telegram_username: Optional[str] = Field(default=None, max_length=100)
+    avatar_url: Optional[str] = Field(default=None, max_length=500)
+    certificates: Optional[List[BecomeMasterCertificate]] = Field(
+        default=None, max_length=20)
+    # Login landing: straight to the master panel after approval.
+    prefer_master_cabinet: bool = True
+
+    @field_validator("avatar_url")
+    @classmethod
+    def _safe_avatar(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        s = v.strip()
+        if not (s.startswith("/") or s.startswith("http://")
+                or s.startswith("https://")):
+            raise ValueError("Некорректный адрес фото")
+        return s
+
+
+def _application_out(mp: MasterProfile, user: User) -> dict:
+    return {
+        "name": user.name,
+        "last_name": user.last_name,
+        "city_id": user.city_id,
+        "cabinet_address": mp.cabinet_address,
+        "description": mp.description,
+        "experience_years": mp.experience_years,
+        "telegram_username": mp.telegram_username,
+        "avatar_url": mp.avatar_url,
+        "certificates": mp.certificates or [],
+        "prefer_master_cabinet": bool(mp.prefer_master_cabinet),
+        "created_at": mp.created_at.isoformat() if mp.created_at else None,
+    }
+
+
+@router.get("/become-master", response_model=dict)
+async def get_master_application(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Current application state — lets the form prefill and show the status."""
+    mp = (await db.execute(
+        select(MasterProfile).where(MasterProfile.user_id == user.id)
+    )).scalar_one_or_none()
+    if mp is None:
+        return {"status": "none", "application": None}
+    return {
+        "status": "active" if mp.is_active else "pending",
+        "application": _application_out(mp, user),
+    }
 
 
 @router.post("/become-master", response_model=dict)
@@ -480,9 +570,13 @@ async def become_master(
 ):
     """Apply for a master profile (strict verification, no instant access).
 
-    Creates an INACTIVE MasterProfile; the account stays CLIENT until a
-    superadmin activates it (toggle flips the role too). Nothing is
-    published, no panel access — this closes the one-click self-promotion.
+    Creates an INACTIVE MasterProfile with the full master profile data;
+    the account stays CLIENT until a superadmin activates it (toggle flips
+    the role too). Nothing is published, no panel access.
+
+    Verification (owner review 1.82.0): at least one phone AND one email on
+    the account, at least one of them verified (social login / emailed
+    code), plus a password or a social binding to prove the login channel.
     """
     if user.role != UserRole.CLIENT:
         raise HTTPException(status_code=400, detail="Вы уже мастер")
@@ -492,17 +586,125 @@ async def become_master(
     if existing is not None:
         raise HTTPException(status_code=400,
                             detail="Заявка уже подана, дождитесь проверки")
+
+    first = (data.name if data.name is not None else user.name or "").strip()
+    last = (data.last_name if data.last_name is not None
+            else (user.last_name or "")).strip()
+    if not first:
+        raise HTTPException(status_code=400, detail="Укажите имя")
+    if not last:
+        raise HTTPException(status_code=400, detail="Укажите фамилию")
+    address = (data.cabinet_address or "").strip()
+    if not address:
+        raise HTTPException(status_code=400, detail="Укажите адрес кабинета")
+
+    contacts = await get_contacts(db, user.id)
+    has_phone = (any(c.contact_type == CONTACT_PHONE for c in contacts)
+                 or bool(user.phone))
+    has_email = (any(c.contact_type == CONTACT_EMAIL for c in contacts)
+                 or bool(user.email))
+    if not has_phone:
+        raise HTTPException(
+            status_code=400,
+            detail="Добавьте телефон в контактах — без номера заявка невозможна",
+        )
+    if not has_email:
+        raise HTTPException(
+            status_code=400,
+            detail="Добавьте почту в контактах — без почты заявка невозможна",
+        )
+    verified = (any(c.is_verified for c in contacts)
+                or (bool(user.is_verified) and has_email))
+    if not verified:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Подтвердите хотя бы один контакт: войдите через соцсеть "
+                "или подтвердите почту кодом"
+            ),
+        )
+    if not (user.hashed_password or user.vk_user_id is not None
+            or user.yandex_user_id is not None or user.max_user_id is not None):
+        raise HTTPException(
+            status_code=400,
+            detail="Задайте пароль или привяжите соцсеть для входа",
+        )
+
+    set_names(user, first, last)
+    if data.city_id is not None:
+        city_name = (await db.execute(
+            select(City.name_ru).where(City.id == data.city_id)
+        )).scalar_one_or_none()
+        if city_name is None:
+            raise HTTPException(status_code=404, detail="Город не найден")
+        user.city_id = data.city_id
+
+    # Optional photo: the uploaded file (or the social avatar the form
+    # prefilled). Anything not URL-like is dropped instead of stored.
+    avatar = (data.avatar_url or "").strip() or None
+    if avatar and not (avatar.startswith("/") or avatar.startswith("http://")
+                       or avatar.startswith("https://")):
+        avatar = None
+
     db.add(MasterProfile(
         user_id=user.id, status="inactive", is_active=False,
-        cabinet_address=(data.cabinet_address or "").strip() or None,
+        cabinet_address=address,
         description=(data.description or "").strip() or None,
         experience_years=data.experience_years,
+        telegram_username=(data.telegram_username or "").strip().lstrip("@") or None,
+        avatar_url=avatar,
+        certificates=[c.model_dump(exclude_none=True)
+                      for c in (data.certificates or [])],
+        prefer_master_cabinet=bool(data.prefer_master_cabinet),
     ))
     await log_action(db, user.id, "apply", "auth", user.id,
                      "Заявка на мастера", level="info")
     await db.commit()
     logger.info("User %s applied for master", user.id)
-    return {"detail": "Заявка отправлена, профиль появится после проверки"}
+    return {
+        "detail": "Заявка отправлена, профиль появится после проверки",
+        "status": "pending",
+    }
+
+
+@router.post("/become-master/photo", response_model=dict)
+@limiter.limit("20/minute")
+async def upload_application_photo(
+    request: Request,
+    file: UploadFile = File(...),
+    kind: str = Query("avatar", description="avatar|cert"),
+    user: User = Depends(require_client),
+):
+    """Upload an optional photo for the master application.
+
+    Clients cannot use the master-only /admin/profile/avatar endpoint while
+    their application is pending; this stores the same image format under
+    the same public /static/avatars directory. The returned URL goes into
+    the application payload (photo or certificate).
+    """
+    if kind not in ("avatar", "cert"):
+        raise HTTPException(status_code=400, detail="kind: avatar|cert")
+    if file.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=400, detail="Только JPEG, PNG или WebP")
+    payload = await file.read()
+    if not payload:
+        raise HTTPException(status_code=400, detail="Пустой файл")
+    if len(payload) > MAX_AVATAR_BYTES:
+        raise HTTPException(status_code=400, detail="Файл больше 5 МБ")
+    from app.utils.images import downscale_image
+    try:
+        payload, ext = downscale_image(payload, file.content_type)
+    except Exception:
+        logger.warning("Application image downscale failed, storing as-is")
+        ext = EXT_BY_TYPE[file.content_type]
+    os.makedirs(AVATAR_DIR, exist_ok=True)
+    filename = f"user_{user.id}_{uuid.uuid4().hex[:8]}{ext}"
+    with open(os.path.join(AVATAR_DIR, filename), "wb") as f:
+        f.write(payload)
+    url = f"{AVATAR_URL_PREFIX}/{filename}"
+    logger.info("Application photo uploaded: user=%s kind=%s url=%s",
+                user.id, kind, url)
+    return {"avatar_url": url}
 
 
 # ─── Password management (1.79.0) ────────────────────────────────────
@@ -633,6 +835,7 @@ async def consent_complete(
             "name": user.name,
             "last_name": user.last_name,
             "is_admin": user.role == UserRole.ADMIN,
+            "prefer_master": await master_landing_preference(db, user),
         })
         refresh_value, expires_at = create_refresh_token_payload(
             user.id, user.email or "")

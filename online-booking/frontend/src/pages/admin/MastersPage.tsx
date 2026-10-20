@@ -88,6 +88,9 @@ function MastersPage() {
       if (search?.trim()) params.search = search.trim();
       if (filterActive === 'active') params.is_active = 'true';
       if (filterActive === 'inactive') params.is_active = 'false';
+      // The management page also shows pending applications (CLIENT rows);
+      // dropdowns elsewhere (MasterSelect) keep the default masters-only list.
+      params.include_applications = 'true';
       if (sortKey) {
         params.sort_by = sortKey;
         params.sort_dir = sortDir;
@@ -176,9 +179,13 @@ function MastersPage() {
 
     try {
       await superAdminApi.toggleMasterActive(id);
-      toast.success(isCurrentlyActive ? 'Мастер заблокирован' : 'Мастер разблокирован', {
-        action: { label: 'Отменить', onClick: undoAction },
-      });
+      if (master.is_application) {
+        toast.success('Заявка одобрена — мастер создан');
+      } else {
+        toast.success(isCurrentlyActive ? 'Мастер заблокирован' : 'Мастер разблокирован', {
+          action: { label: 'Отменить', onClick: undoAction },
+        });
+      }
       loadMasters();
     } catch (err: unknown) {
       toast.error(handleError(err));
@@ -194,7 +201,12 @@ function MastersPage() {
   };
 
   const handleBulkToggle = async () => {
-    const ids = Array.from(selectedMasters);
+    // Pending applications are approved individually: a raw is_active flip
+    // would not promote the role and would leave a CLIENT with an active
+    // master profile. Never include them in bulk operations.
+    const ids = masters
+      .filter((m) => selectedMasters.has(m.id) && !m.is_application)
+      .map((m) => m.id);
     if (ids.length === 0) return;
     try {
       const { data } = await superAdminApi.bulkToggleActive(ids);
@@ -207,7 +219,9 @@ function MastersPage() {
   };
 
   const handleBulkSuspend = async () => {
-    const ids = Array.from(selectedMasters);
+    const ids = masters
+      .filter((m) => selectedMasters.has(m.id) && !m.is_application)
+      .map((m) => m.id);
     if (ids.length === 0) return;
     try {
       const { data } = await superAdminApi.bulkSuspend(ids);
@@ -264,23 +278,34 @@ function MastersPage() {
         header: () => (
           <input
             type="checkbox"
-            checked={masters.length > 0 && selectedMasters.size === masters.length}
+            checked={
+              masters.some((m) => !m.is_application) &&
+              masters.filter((m) => !m.is_application).every((m) => selectedMasters.has(m.id))
+            }
             onChange={() => {
-              if (selectedMasters.size === masters.length) {
+              const selectable = masters.filter((m) => !m.is_application);
+              const allSelected =
+                selectable.length > 0 && selectable.every((m) => selectedMasters.has(m.id));
+              if (allSelected) {
                 setSelectedMasters(new Set());
               } else {
-                setSelectedMasters(new Set(masters.map((m) => m.id)));
+                setSelectedMasters(new Set(selectable.map((m) => m.id)));
               }
             }}
           />
         ),
-        cell: ({ row }) => (
-          <input
-            type="checkbox"
-            checked={selectedMasters.has(row.original.id)}
-            onChange={() => toggleSelect(row.original.id)}
-          />
-        ),
+        cell: ({ row }) =>
+          row.original.is_application ? (
+            <span title="Заявка одобряется отдельно" style={{ color: '#cbd5e1' }}>
+              —
+            </span>
+          ) : (
+            <input
+              type="checkbox"
+              checked={selectedMasters.has(row.original.id)}
+              onChange={() => toggleSelect(row.original.id)}
+            />
+          ),
         meta: { defaultWidth: 48, hideable: false, resizable: false, label: '✓' },
       },
       {
@@ -344,9 +369,16 @@ function MastersPage() {
             Статус{sortArrow('status')}
           </span>
         ),
-        accessorFn: (m) => (m.is_active ? 'Активен' : 'Заблокирован'),
+        accessorFn: (m) => (m.is_application ? 'Заявка' : m.is_active ? 'Активен' : 'Заблокирован'),
         cell: ({ row }) => {
           const master = row.original;
+          if (master.is_application) {
+            return (
+              <Tooltip content="Заявка на мастера ждёт одобрения" position="top">
+                <span className="status-badge status-pending">Заявка</span>
+              </Tooltip>
+            );
+          }
           return (
             <Tooltip content={master.is_active ? 'Активен' : 'Заблокирован'} position="top">
               <span
@@ -362,9 +394,17 @@ function MastersPage() {
       {
         id: 'role',
         header: 'Роль',
-        accessorFn: (m) => (m.is_admin ? 'Суперпользователь' : 'Мастер'),
+        accessorFn: (m) =>
+          m.is_application ? 'Клиент (заявка)' : m.is_admin ? 'Суперпользователь' : 'Мастер',
         cell: ({ row }) => {
           const master = row.original;
+          if (master.is_application) {
+            return (
+              <Tooltip content="Клиент подал заявку на мастера" position="top">
+                <span className="role-badge role-user">📝 Заявка</span>
+              </Tooltip>
+            );
+          }
           return (
             <Tooltip
               content={master.is_admin ? 'Суперпользователь' : 'Обычный мастер'}
@@ -384,6 +424,10 @@ function MastersPage() {
         accessorFn: (m) => m.tariff || '—',
         cell: ({ row }) => {
           const master = row.original;
+          // A pending application has no tariff yet — it is set after approval.
+          if (master.is_application) {
+            return <span style={{ color: '#9ca3af' }}>—</span>;
+          }
           return (
             <>
               <Tooltip
@@ -430,35 +474,51 @@ function MastersPage() {
               </Tooltip>
               <Tooltip
                 content={
-                  master.is_active
-                    ? 'Заблокировать (сейчас активен)'
-                    : 'Разблокировать (сейчас заблокирован)'
+                  master.is_application
+                    ? 'Одобрить заявку и создать мастера'
+                    : master.is_active
+                      ? 'Заблокировать (сейчас активен)'
+                      : 'Разблокировать (сейчас заблокирован)'
                 }
                 position="top"
               >
                 <button
-                  className={`btn btn-sm ${master.is_active ? 'btn-ghost' : 'btn-danger'}`}
+                  className={`btn btn-sm ${
+                    master.is_application
+                      ? 'btn-primary'
+                      : master.is_active
+                        ? 'btn-ghost'
+                        : 'btn-danger'
+                  }`}
                   onClick={() => handleToggleActive(master.id)}
                 >
-                  {master.is_active ? '🔓' : '🔒'}
+                  {master.is_application ? '✅' : master.is_active ? '🔓' : '🔒'}
                 </button>
               </Tooltip>
-              <Tooltip content="Войти как мастер (поддержка)" position="top">
-                <button
-                  className="btn btn-sm btn-secondary"
-                  onClick={() => handleImpersonate(master)}
-                >
-                  👁
-                </button>
-              </Tooltip>
-              <Tooltip content="Удалить" position="top">
-                <button
-                  className="btn btn-sm btn-danger"
-                  onClick={() => setDeleteConfirm(master.id)}
-                >
-                  ✖
-                </button>
-              </Tooltip>
+              {/* Applications are CLIENT accounts: «войти как мастер» makes no
+                  sense, and the existing delete endpoint would erase the whole
+                  client account. Approval (✅) is the only action; a rejection
+                  flow is deliberately out of scope for 1.82.0. */}
+              {!master.is_application && (
+                <>
+                  <Tooltip content="Войти как мастер (поддержка)" position="top">
+                    <button
+                      className="btn btn-sm btn-secondary"
+                      onClick={() => handleImpersonate(master)}
+                    >
+                      👁
+                    </button>
+                  </Tooltip>
+                  <Tooltip content="Удалить" position="top">
+                    <button
+                      className="btn btn-sm btn-danger"
+                      onClick={() => setDeleteConfirm(master.id)}
+                    >
+                      ✖
+                    </button>
+                  </Tooltip>
+                </>
+              )}
             </span>
           );
         },
@@ -553,7 +613,7 @@ function MastersPage() {
           >
             <option value="all">Все статусы</option>
             <option value="active">Активные</option>
-            <option value="inactive">Заблокированные</option>
+            <option value="inactive">Заявки и заблокированные</option>
           </select>
         </div>
       </div>

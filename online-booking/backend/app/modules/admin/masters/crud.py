@@ -37,6 +37,9 @@ def _to_response(user: User, master_profile: MasterProfile) -> dict:
         "description": master_profile.description,
         "status": master_profile.status if master_profile.status else "active",
         "is_active": master_profile.is_active,
+        # A CLIENT row with a master profile is a pending application;
+        # after approval toggle-active flips the role to MASTER.
+        "is_application": user.role == UserRole.CLIENT,
         "is_admin": user.is_admin,
         "tariff": master_profile.tariff or "trial",
         "trial_ends_at": master_profile.trial_ends_at,
@@ -50,18 +53,23 @@ async def get_all_masters(
     super_admin: User = Depends(require_super_admin),
     search: Optional[str] = Query(None, description="Search by name or email"),
     filter_active: Optional[str] = Query(None, alias="is_active", description="Filter by active status"),
+    include_applications: bool = Query(
+        False,
+        description="Include pending master applications (CLIENT rows)",
+    ),
     sort_by: Optional[str] = Query(None, description="Sort column: name|email|status|created_at"),
     sort_dir: str = Query("asc", description="Sort direction: asc|desc"),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get all masters (superadmin only).
+    """Get all masters + pending applications (superadmin only).
 
-    «Мастера» = service providers: role MASTER only. Superadmins are
-    platform admins, not providers — they never appear here even if a
-    MasterProfile row exists (legacy seeds made the super list himself
-    with a tariff).
+    «Мастера» = service providers: role MASTER. A CLIENT with a
+    MasterProfile row is an application waiting for approval, so it is
+    listed too (is_application=true) — otherwise the superadmin would have
+    no way to see or activate it. Superadmins are platform admins, not
+    providers — they never appear here even if a MasterProfile row exists.
     """
     if search == '':
         search = None
@@ -75,7 +83,11 @@ async def get_all_masters(
         select(User)
         .join(MasterProfile)
         .options(joinedload(User.master_profile))
-        .where(User.role == UserRole.MASTER)
+        .where(
+            User.role != UserRole.ADMIN
+            if include_applications
+            else User.role == UserRole.MASTER
+        )
     )
 
     if search:

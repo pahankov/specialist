@@ -1,0 +1,56 @@
+/* Master application (1.82.0) — uses the master profile look from
+   /admin/profile (photo, certificates) plus its own checklist. */
+
+.become-master-page .become-summary {
+  display: grid;
+  gap: 6px;
+  margin: 14px 0 18px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: #fafafa;
+  font-size: 14px;
+  color: #333;
+}
+
+.become-master-page .become-checklist {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 6px 18px;
+  margin: 12px 0 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #fafafa;
+  font-size: 13px;
+}
+
+.become-master-page .become-checklist .req {
+  color: #8a8a8a;
+}
+
+.become-master-page .become-checklist .req.ok {
+  color: #2e7d32;
+}
+
+.become-master-page .become-checklist .mark {
+  display: inline-block;
+  width: 16px;
+  font-weight: 700;
+}
+
+.become-master-page .landing-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+  color: #333;
+  cursor: pointer;
+  line-height: 1.4;
+}
+
+.become-master-page .landing-check input {
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
+  flex-shrink: 0;
+  accent-color: #ff6b9d;
+}
