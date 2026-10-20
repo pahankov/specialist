@@ -24,6 +24,11 @@ describe('resolveTarget', () => {
     expect(resolveTarget('/admin/notifications', 'reviews')).toBe('/admin/profile#reviews');
   });
 
+  it('activation bell opens the master profile', () => {
+    expect(resolveTarget('/admin/notifications', 'profile')).toBe('/admin/profile');
+    expect(resolveTarget('/cabinet/notifications', 'profile')).toBe('/cabinet/profile');
+  });
+
   it('cabinet appointments bell opens the cabinet', () => {
     expect(resolveTarget('/cabinet/notifications', 'appointments:9')).toBe('/cabinet');
   });

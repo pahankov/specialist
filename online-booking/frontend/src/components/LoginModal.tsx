@@ -12,6 +12,7 @@ import MaxIcon from './common/icons/MaxIcon';
 import type { MaxStartResponse } from '../api/auth';
 import PhoneInput, { maskPhone, isCompletePhone, PHONE_MAX_DIGITS } from './common/PhoneInput';
 import { getCookie, decodeJwtPayload } from '../utils/cookies';
+import { safePostLoginTarget } from '../utils/redirect';
 import { SUPER_PREFIX } from '../utils/section';
 import Modal from './common/Modal';
 import './LoginModal.css';
@@ -144,13 +145,18 @@ function LoginModal({
         return;
       }
       // Deep-link continue (e.g. carousel "Записаться" → cabinet booking).
+      // An inactive-master draft is never a client landing target: a guest
+      // who opened /admin/become-master returns to the client cabinet.
+      const target = safePostLoginTarget(redirectTo ?? null, payload?.role);
       if (redirectTo) {
         try {
           sessionStorage.removeItem('postLoginTo');
         } catch {
           /* ignore */
         }
-        navigate(redirectTo, { replace: true });
+      }
+      if (target) {
+        navigate(target, { replace: true });
         return;
       }
       if (payload?.role === 'MASTER' && payload?.prefer_master === true) {

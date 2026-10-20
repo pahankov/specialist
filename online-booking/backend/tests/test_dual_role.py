@@ -280,6 +280,19 @@ class TestBecomeMaster:
         )).scalar_one()
         assert mp.is_active is True and mp.status == "active"
 
+        # Activation leaves a welcome note in the bell with a profile link.
+        from app.models.notification import Notification
+        from app.services.notifications import MASTER_ACTIVATED_TEXT
+
+        note = (await session.execute(
+            select(Notification).where(Notification.recipient_id == user.id)
+        )).scalars().all()
+        welcome = next(n for n in note if n.text == MASTER_ACTIVATED_TEXT)
+        assert welcome.audience == "system"
+        assert welcome.link == "profile"
+        assert welcome.sender_id is None
+        assert "Кабинет мастера активирован" in welcome.text
+
         # Master list shows active masters only; no application marker.
         masters = await client.get("/api/v1/admin/masters",
                                    headers=super_admin_headers)

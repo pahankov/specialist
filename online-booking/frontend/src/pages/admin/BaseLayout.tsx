@@ -355,6 +355,7 @@ function BaseLayout({
             <Link
               key={item.path}
               to={item.path}
+              state={draftMode ? { fromClient: true } : undefined}
               draggable={!item.locked}
               onDragStart={() => {
                 if (!item.locked) dragFrom.current = idx;
@@ -431,7 +432,7 @@ function BaseLayout({
           {role === 'CLIENT' && inCabinet && (
             <button
               className="btn btn-ghost"
-              onClick={() => navigate('/admin/become-master')}
+              onClick={() => navigate('/admin/become-master', { state: { fromClient: true } })}
               title="Открыть неактивный кабинет мастера и заполнить профиль"
             >
               <span className="nav-icon">✨</span>

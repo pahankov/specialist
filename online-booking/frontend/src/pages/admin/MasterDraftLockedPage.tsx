@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { EmptyState } from '../../components/common';
 import './ProfilePage.css';
 
@@ -13,6 +13,7 @@ interface MasterDraftLockedPageProps {
  */
 function MasterDraftLockedPage({ title }: MasterDraftLockedPageProps) {
   const navigate = useNavigate();
+  const location = useLocation();
 
   return (
     <div className="profile-page">
@@ -28,7 +29,7 @@ function MasterDraftLockedPage({ title }: MasterDraftLockedPageProps) {
           title="Сначала активируйте кабинет"
           description="Заполните профиль мастера и выполните все условия активации. Это займёт пару минут — одобрение администратора не нужно."
           actionLabel="Перейти к профилю"
-          onAction={() => navigate('/admin/become-master')}
+          onAction={() => navigate('/admin/become-master', { state: location.state })}
         />
       </div>
     </div>

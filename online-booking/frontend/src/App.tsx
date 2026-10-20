@@ -91,6 +91,13 @@ function RequireMasterDraft({ children }: { children: React.ReactNode }) {
   if (role !== 'CLIENT') {
     return <Navigate to="/cabinet" replace />;
   }
+  // Starting the app at the draft URL is not a cabinet choice: an inactive
+  // master lands in the client cabinet and enters here via «Стать мастером».
+  const explicitEntry = (location.state as { fromClient?: boolean } | null)?.fromClient === true;
+  const atDraftRoot = location.pathname.replace(/\/+$/, '') === DRAFT_MASTER_ROOT;
+  if (atDraftRoot && !explicitEntry) {
+    return <Navigate to="/cabinet" replace />;
+  }
   return <>{children}</>;
 }
 
@@ -166,7 +173,10 @@ function App() {
             <Route path="notifications" element={<CabinetNotificationsPage />} />
             <Route path="profile" element={<ClientProfilePage />} />
             {/* Old bookmarks go to the real (inactive) master shell. */}
-            <Route path="become-master" element={<Navigate to={DRAFT_MASTER_ROOT} replace />} />
+            <Route
+              path="become-master"
+              element={<Navigate to={DRAFT_MASTER_ROOT} replace state={{ fromClient: true }} />}
+            />
           </Route>
 
           {/* Inactive master cabinet: full master shell for a CLIENT who is

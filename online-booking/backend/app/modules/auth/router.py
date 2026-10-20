@@ -37,6 +37,7 @@ from app.services.audit import log_action
 from app.services.master_landing import master_landing_preference
 from app.services.master_profile_view import master_profile_snapshot
 from app.services.names import set_names
+from app.services.notifications import send_master_activated_bell
 from app.modules.auth import service
 from app.modules.auth.token import create_access_token, create_refresh_token_payload
 from app.modules.admin.profile import (
@@ -722,6 +723,7 @@ async def activate_master(
     user.role = UserRole.MASTER
     await log_action(db, user.id, "activate", "auth", user.id,
                      "Кабинет мастера активирован", level="info")
+    await send_master_activated_bell(db, user.id)
     await db.commit()
     await db.refresh(user)
     await db.refresh(mp)

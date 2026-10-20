@@ -43,6 +43,10 @@ export function resolveTarget(bellLink: string, link: string | null | undefined)
     if (!inCabinet && base) return `${base}/profile#reviews`;
     return '/cabinet';
   }
+  if (link === 'profile') {
+    if (inCabinet) return '/cabinet/profile';
+    return base ? `${base}/profile` : bellLink;
+  }
   if (link.startsWith('book')) {
     const master = link.split(':')[1];
     return `/cabinet/book${master ? `?master_id=${master}` : ''}`;

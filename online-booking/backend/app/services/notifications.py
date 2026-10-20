@@ -20,6 +20,16 @@ WELCOME_TEXT = (
     "Спасибо, что вы с нами!"
 )
 
+MASTER_ACTIVATED_TEXT = (
+    "Кабинет мастера активирован 🎉\n\n"
+    "Ваш профиль опубликован — клиенты могут найти вас и записаться.\n\n"
+    "Что сделать дальше:\n"
+    "• Проверить услуги, цены и длительность.\n"
+    "• Настроить расписание и часы приёма.\n"
+    "• Добавить фото и сертификаты, если ещё не добавили.\n\n"
+    "Хороших записей!"
+)
+
 
 async def notify_user(
     db: AsyncSession,
@@ -59,4 +69,22 @@ async def send_welcome_bell(
         WELCOME_TEXT,
         audience="system",
         link="appointments",
+    )
+
+
+async def send_master_activated_bell(
+    db: AsyncSession,
+    recipient_id: int,
+) -> Notification:
+    """Welcome-to-the-panel note written once, at self-activation.
+
+    The draft may have lived for days, so this is the master's first message
+    in the new cabinet: confirm publication and point to the next setup steps.
+    """
+    return await notify_user(
+        db,
+        recipient_id,
+        MASTER_ACTIVATED_TEXT,
+        audience="system",
+        link="profile",
     )

@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { authApi } from '../../api/client';
 import { getCookie, decodeJwtPayload } from '../../utils/cookies';
-import { takeReturnUrl } from '../../utils/redirect';
+import { takeReturnUrl, safePostLoginTarget } from '../../utils/redirect';
 import { takeSocialLinkReturn } from '../../utils/socialLink';
 import { ADMIN_PREFIX, SUPER_PREFIX } from '../../utils/section';
 import VkIcon from '../../components/common/icons/VkIcon';
@@ -47,7 +47,7 @@ function VkCallbackPage() {
       navigate(`${SUPER_PREFIX}/dashboard`, { replace: true });
       return;
     }
-    const from = takeReturnUrl();
+    const from = safePostLoginTarget(takeReturnUrl(), payload?.role);
     if (from) {
       navigate(from, { replace: true });
       return;
