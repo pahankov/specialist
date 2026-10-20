@@ -101,6 +101,21 @@
   font-weight: 500;
 }
 
+/* Legal links inside the consent checkbox (Offer / Privacy policy) must be
+   visibly clickable: the global `a { color: inherit; text-decoration: none }`
+   made them look like plain text — the owner's «где ссылка на документы?».
+   Applies to both the signup step and the classic register form. */
+.checkbox-label a {
+  color: #ff6b9d;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.checkbox-label a:hover {
+  color: #ff5a8a;
+}
+
 /* ─── Buttons ─── */
 .btn-submit {
   width: 100%;

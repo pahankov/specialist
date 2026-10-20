@@ -155,6 +155,12 @@ describe('Unified entry — unknown identifier creates a cabinet after consent',
 
     const create = await screen.findByRole('button', { name: 'Создать аккаунт и войти' });
     expect(create).toBeDisabled();
+    // The legal documents must be real, visible links (owner review 1.81.1).
+    expect(screen.getByRole('link', { name: 'Офертой' })).toHaveAttribute('href', '/offer');
+    expect(screen.getByRole('link', { name: 'Политикой обработки ПДн' })).toHaveAttribute(
+      'href',
+      '/privacy',
+    );
     fireEvent.click(screen.getByRole('checkbox'));
     expect(create).not.toBeDisabled();
     fireEvent.click(create);
