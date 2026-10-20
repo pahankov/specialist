@@ -28,14 +28,20 @@ jobs:
           pip install pytest pytest-asyncio pytest-cov httpx aiosqlite
 
       - name: Run tests
+        # PIPESTATUS is mandatory: without it the pipeline exits with tee's
+        # status, so the deploy proceeds even when pytest failed — which is
+        # exactly how six red CI runs (20.10.2026) still reached production.
         run: |
           cd online-booking/backend
+          set +e
           PYTHONPATH=. pytest tests/ -v --tb=short --cov=app --cov-report=term-missing --tb=no 2>&1 | tee test-results.txt
+          status=${PIPESTATUS[0]}
           echo ""
           echo "=== TEST SUMMARY ==="
           # Only match the final summary line: "X passed, Y failed, ..."
           grep -E "^[=]+.*passed.*failed" test-results.txt | tail -1 || \
           grep "passed.*in" test-results.txt | tail -1
+          exit "$status"
 
   deploy:
     needs: test

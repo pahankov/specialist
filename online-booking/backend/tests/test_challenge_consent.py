@@ -10,19 +10,13 @@ For OAuth verify: user_id points to a pending user (created but not committed).
 """
 
 import pytest
-from httpx import AsyncClient, ASGITransport
-from app.main import app
 from app.models.user import User
 from sqlalchemy import select
 
-
-@pytest.fixture
-async def client():
-    """Test client with clean DB."""
-    from app.database import AsyncSessionLocal
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        yield ac
+# NOTE: the tests below use the shared ``client``/``session`` fixtures from
+# tests/conftest.py — they override get_db with an isolated per-test SQLite
+# database. A local client fixture without that override made these tests
+# silently depend on the ambient dev database and fail in CI (empty DB).
 
 
 # ─── POST /api/v1/auth/phone/status ──────────────────────────────────
@@ -51,7 +45,7 @@ class TestPhoneStatusChallenge:
 class TestRegisterUnifiedWithChallenge:
     """register-unified must accept challenge instead of phone."""
 
-    async def test_register_with_challenge_creates_session(self, client):
+    async def test_register_with_challenge_creates_session(self, client, session):
         """Challenge from phone/status → account created with consent."""
         import time
         phone = f"+7 (999) {int(time.time()) % 1000:03d}-66-77"
@@ -76,17 +70,15 @@ class TestRegisterUnifiedWithChallenge:
         assert "access_token" in data
         assert data["token_type"] == "bearer"
 
-        # Verify account exists with consent
-        from app.database import AsyncSessionLocal
-        async with AsyncSessionLocal() as session:
-            result = await session.execute(
-                select(User).where(User.phone == phone)
-            )
-            user = result.scalar_one_or_none()
-            assert user is not None
-            assert user.consent_at is not None
-            assert user.consent_policy_version is not None
-            assert user.is_active is True
+        # Verify account exists with consent (isolated per-test DB session).
+        result = await session.execute(
+            select(User).where(User.phone == phone)
+        )
+        user = result.scalar_one_or_none()
+        assert user is not None
+        assert user.consent_at is not None
+        assert user.consent_policy_version is not None
+        assert user.is_active is True
 
     async def test_register_with_challenge_rejects_invalid_token(self, client):
         """Invalid challenge → 400."""

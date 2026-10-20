@@ -30,9 +30,22 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run tests with pytest
+        # tee keeps the full log; PIPESTATUS keeps pytest's exit code. FAILED
+        # lines are also echoed as check-run annotations: Actions log pages
+        # require repo access, while annotations are visible to anyone.
         run: |
           cd online-booking/backend
-          python -m pytest tests/ -v --tb=short --cov=app --cov-report=term-missing --cov-fail-under=55
+          set +e
+          python -m pytest tests/ -v --tb=short --cov=app --cov-report=term-missing --cov-fail-under=55 2>&1 | tee pytest-output.txt
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            echo "=== FAILED TESTS ==="
+            grep -E "^(FAILED|ERROR) " pytest-output.txt | head -30 || true
+            grep -E "^(FAILED|ERROR) " pytest-output.txt | head -20 | while IFS= read -r line; do
+              echo "::error title=pytest::$line"
+            done
+          fi
+          exit "$status"
 
       - name: Compile-check deploy scripts
         # seed_common.py shipped with an IndentationError once: tests never
