@@ -3,6 +3,7 @@ import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { adminApi, authApi, cabinetApi, reviewsApi } from '../../api/client';
 import { Breadcrumb, KeyboardShortcutsHint, NotificationBell } from '../../components/common';
 import { getCookie, decodeJwtPayload, getUserRole, clearAuthCookies } from '../../utils/cookies';
+import { allowMasterDraftEntry } from '../../utils/masterDraftEntry';
 import { getImpersonation, stopImpersonation } from '../../utils/impersonation';
 import { SUPER_PREFIX } from '../../utils/section';
 import { APP_VERSION } from '../../constants';
@@ -175,6 +176,21 @@ function BaseLayout({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Lock page scroll while the mobile drawer is open and close it on Esc.
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMobileMenuOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [mobileMenuOpen]);
+
   const handleLogout = async () => {
     // Revoke server-side (httpOnly refresh cookie) first, then drop the
     // readable access token.
@@ -286,9 +302,12 @@ function BaseLayout({
     <div className={`admin-layout ${themeClass}`.trim()}>
       {/* Mobile hamburger button */}
       <button
-        className="hamburger-btn"
+        type="button"
+        className={`hamburger-btn${mobileMenuOpen ? ' active' : ''}`}
         onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-        aria-label="Меню"
+        aria-label={mobileMenuOpen ? 'Закрыть меню' : 'Открыть меню'}
+        aria-expanded={mobileMenuOpen}
+        aria-controls="app-sidebar"
       >
         <span className="hamburger-line"></span>
         <span className="hamburger-line"></span>
@@ -301,6 +320,7 @@ function BaseLayout({
       )}
 
       <aside
+        id="app-sidebar"
         className={`admin-sidebar ${sidebarCollapsed ? 'collapsed' : ''} ${mobileMenuOpen ? 'mobile-open' : ''}`}
       >
         <div className="sidebar-header">
@@ -432,7 +452,10 @@ function BaseLayout({
           {role === 'CLIENT' && inCabinet && (
             <button
               className="btn btn-ghost"
-              onClick={() => navigate('/admin/become-master', { state: { fromClient: true } })}
+              onClick={() => {
+                allowMasterDraftEntry();
+                navigate('/admin/become-master', { state: { fromClient: true } });
+              }}
               title="Открыть неактивный кабинет мастера и заполнить профиль"
             >
               <span className="nav-icon">✨</span>

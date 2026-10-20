@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { adminApi, cabinetApi } from '../../api/client';
 import './NotificationBell.css';
@@ -69,10 +70,12 @@ function NotificationBell({ unread, bellLink, scope, onRead }: NotificationBellP
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
-  // Fixed-anchored popover (the sidebar has overflow:hidden, which would
-  // clip an absolutely-positioned child — incl. the collapsed 64px rail).
+  // Portal-anchored popover. The sidebar is a transformed, overflow:hidden
+  // drawer on phones — even position:fixed children are clipped by it, which
+  // cut the dropdown off at the 280px sidebar edge. Rendering into <body>
+  // keeps it above the drawer and inside the real viewport.
   const btnRef = useRef<HTMLButtonElement>(null);
-  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const [pos, setPos] = useState({ top: 0, left: 0, width: 340, maxHeight: 440 });
 
   const api =
     scope === 'cabinet'
@@ -113,10 +116,15 @@ function NotificationBell({ unread, bellLink, scope, onRead }: NotificationBellP
     const place = () => {
       const r = btnRef.current?.getBoundingClientRect();
       if (!r) return;
-      const w = 340;
+      const margin = 8;
+      const width = Math.max(200, Math.min(340, window.innerWidth - margin * 2));
+      const top = Math.max(margin, Math.min(r.bottom + 8, window.innerHeight - 120));
+      const left = Math.max(margin, Math.min(r.right - width, window.innerWidth - width - margin));
       setPos({
-        top: r.bottom + 8,
-        left: Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8)),
+        top,
+        left,
+        width,
+        maxHeight: Math.max(160, window.innerHeight - top - margin),
       });
     };
     place();
@@ -188,64 +196,71 @@ function NotificationBell({ unread, bellLink, scope, onRead }: NotificationBellP
         {unread > 0 && <span className="bell-badge">{unread > 99 ? '99+' : unread}</span>}
       </button>
 
-      {open && (
-        <>
-          <div className="bell-backdrop" onClick={() => setOpen(false)} aria-hidden="true" />
-          <div
-            className="bell-pop"
-            role="menu"
-            aria-label="Уведомления"
-            style={{ top: pos.top, left: pos.left }}
-          >
-            <div className="bell-pop-head">
-              <span>Уведомления{unread > 0 ? ` · ${unread} новых` : ''}</span>
-              {unread > 0 && (
-                <button type="button" className="bell-read-all" onClick={handleReadAll}>
-                  Прочитать все
-                </button>
-              )}
-            </div>
-            <div className="bell-pop-list">
-              {loading ? (
-                <div className="bell-empty">Загрузка…</div>
-              ) : failed ? (
-                <div className="bell-empty">
-                  Нет связи с сервером — он перезапускается или недоступен.
-                  <button type="button" className="bell-retry" onClick={fetchRecent}>
-                    Повторить
+      {open &&
+        createPortal(
+          <>
+            <div className="bell-backdrop" onClick={() => setOpen(false)} aria-hidden="true" />
+            <div
+              className="bell-pop"
+              role="menu"
+              aria-label="Уведомления"
+              style={{
+                top: pos.top,
+                left: pos.left,
+                width: pos.width,
+                maxHeight: pos.maxHeight,
+              }}
+            >
+              <div className="bell-pop-head">
+                <span>Уведомления{unread > 0 ? ` · ${unread} новых` : ''}</span>
+                {unread > 0 && (
+                  <button type="button" className="bell-read-all" onClick={handleReadAll}>
+                    Прочитать все
                   </button>
-                </div>
-              ) : items.length === 0 ? (
-                <div className="bell-empty">🔕 Пока тихо</div>
-              ) : (
-                items.map((n) => (
-                  <button
-                    key={n.id}
-                    type="button"
-                    className={`bell-item${n.is_read ? '' : ' unread'}${n.link ? ' linked' : ''}`}
-                    onClick={() => handleItemClick(n)}
-                    title={n.link ? 'Открыть' : undefined}
-                  >
-                    <span className="bell-item-dot" aria-hidden="true" />
-                    <span className="bell-item-body">
-                      <span className="bell-item-text">{n.text}</span>
-                      <span className="bell-item-meta">
-                        {n.sender_name ? `${n.sender_name} · ` : ''}
-                        {n.created_at ? new Date(n.created_at).toLocaleString('ru-RU') : ''}
+                )}
+              </div>
+              <div className="bell-pop-list">
+                {loading ? (
+                  <div className="bell-empty">Загрузка…</div>
+                ) : failed ? (
+                  <div className="bell-empty">
+                    Нет связи с сервером — он перезапускается или недоступен.
+                    <button type="button" className="bell-retry" onClick={fetchRecent}>
+                      Повторить
+                    </button>
+                  </div>
+                ) : items.length === 0 ? (
+                  <div className="bell-empty">🔕 Пока тихо</div>
+                ) : (
+                  items.map((n) => (
+                    <button
+                      key={n.id}
+                      type="button"
+                      className={`bell-item${n.is_read ? '' : ' unread'}${n.link ? ' linked' : ''}`}
+                      onClick={() => handleItemClick(n)}
+                      title={n.link ? 'Открыть' : undefined}
+                    >
+                      <span className="bell-item-dot" aria-hidden="true" />
+                      <span className="bell-item-body">
+                        <span className="bell-item-text">{n.text}</span>
+                        <span className="bell-item-meta">
+                          {n.sender_name ? `${n.sender_name} · ` : ''}
+                          {n.created_at ? new Date(n.created_at).toLocaleString('ru-RU') : ''}
+                        </span>
                       </span>
-                    </span>
-                  </button>
-                ))
-              )}
+                    </button>
+                  ))
+                )}
+              </div>
+              <div className="bell-pop-foot">
+                <button type="button" className="bell-all" onClick={() => closeAndGo(bellLink)}>
+                  Все уведомления{total > PAGE_SIZE ? ` (${total})` : ''} →
+                </button>
+              </div>
             </div>
-            <div className="bell-pop-foot">
-              <button type="button" className="bell-all" onClick={() => closeAndGo(bellLink)}>
-                Все уведомления{total > PAGE_SIZE ? ` (${total})` : ''} →
-              </button>
-            </div>
-          </div>
-        </>
-      )}
+          </>,
+          document.body,
+        )}
     </div>
   );
 }

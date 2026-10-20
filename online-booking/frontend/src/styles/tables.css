@@ -4,6 +4,17 @@
 
 .datatable-wrap {
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Horizontal scrolling belongs to the table, never to the page. */
+.datatable-scroll {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .datatable-toolbar {

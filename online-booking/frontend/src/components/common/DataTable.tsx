@@ -281,7 +281,7 @@ export default function DataTable<T>({
           )}
         </div>
       </div>
-      <div style={{ overflowX: 'auto' }}>
+      <div className="datatable-scroll">
         {/* Exact total width: freed space must NOT redistribute to other
             columns (the "shrinking col 3 grows col 1" bug). */}
         <table className="datatable" style={{ width: total }}>

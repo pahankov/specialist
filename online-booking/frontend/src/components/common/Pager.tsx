@@ -1,3 +1,5 @@
+import './Pager.css';
+
 interface PagerProps {
   /** Zero-based current page */
   page: number;
@@ -15,15 +17,7 @@ export default function Pager({ page, totalPages, onChange, label }: PagerProps)
   const btn = (disabled: boolean): React.CSSProperties => ({ opacity: disabled ? 0.5 : 1 });
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        gap: 8,
-        marginTop: 20,
-      }}
-    >
+    <div className="pager">
       <button
         className="btn btn-ghost"
         onClick={() => go(0)}
@@ -42,9 +36,7 @@ export default function Pager({ page, totalPages, onChange, label }: PagerProps)
       >
         ← Назад
       </button>
-      <span style={{ fontSize: 14, color: '#666', minWidth: 120, textAlign: 'center' }}>
-        {label ?? `Страница ${page + 1} из ${total}`}
-      </span>
+      <span className="pager-label">{label ?? `Страница ${page + 1} из ${total}`}</span>
       <button
         className="btn btn-ghost"
         onClick={() => go(page + 1)}

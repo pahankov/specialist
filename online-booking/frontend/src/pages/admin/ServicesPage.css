@@ -115,6 +115,22 @@
   .form-row {
     grid-template-columns: 1fr;
   }
+
+  /* Card headers wrap: long «Собрать комплекс» + «Добавить услугу»
+   * labels must never stretch the page sideways. */
+  .card-header {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .card-header > div {
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .card-header .btn {
+    max-width: 100%;
+  }
 }
 
 /* ─── Bundles (complexes): own cards, visually apart from services ─── */

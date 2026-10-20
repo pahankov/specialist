@@ -1,4 +1,5 @@
 /** Cookie + JWT payload helpers (single copy; used by api client and layout). */
+import { clearMasterDraftEntry } from './masterDraftEntry';
 
 export function getCookie(name: string): string | null {
   const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
@@ -40,4 +41,6 @@ export function clearAuthCookies(): void {
   // (JS delete is a best-effort — server revokes the session on logout).
   document.cookie = 'access_token=; path=/; max-age=0';
   document.cookie = 'refresh_token=; path=/; max-age=0';
+  // A new session must not inherit the previous account's draft ticket.
+  clearMasterDraftEntry();
 }

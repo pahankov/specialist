@@ -62,6 +62,8 @@ describe('NotificationBell', () => {
     fireEvent.click(screen.getByRole('button', { name: /Уведомления/ }));
     expect(await screen.findByText('Новая запись: Петр — Стрижка')).toBeInTheDocument();
     expect(screen.getByText('Напоминание')).toBeInTheDocument();
+    // Portal: not inside the transformed/overflow-hidden sidebar drawer.
+    expect(screen.getByRole('menu').parentElement).toBe(document.body);
     expect(mocked.getNotificationsInbox).toHaveBeenCalledWith({
       page: 1,
       page_size: 10,

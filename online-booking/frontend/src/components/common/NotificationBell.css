@@ -18,19 +18,22 @@
 .bell-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 190;
+  /* Above the mobile sidebar (200) and hamburger (300): the portal is a
+   * viewport-level layer, not a child of the drawer. */
+  z-index: 400;
   background: transparent;
 }
 
 .bell-pop {
   position: fixed;
-  /* top/left come from the bell button rect (JS), clamped to viewport */
+  /* top/left/width/max-height come from the bell button rect (JS),
+   * clamped to the viewport. */
   width: 340px;
-  max-width: min(340px, calc(100vw - 32px));
+  max-width: calc(100vw - 16px);
   max-height: 440px;
   display: flex;
   flex-direction: column;
-  z-index: 200;
+  z-index: 410;
   background: #fff;
   color: #1f2937;
   border-radius: 12px;

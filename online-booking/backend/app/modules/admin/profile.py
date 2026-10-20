@@ -43,9 +43,26 @@ router = APIRouter()
 AVATAR_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
                           "static", "avatars")
 AVATAR_URL_PREFIX = "/static/avatars"
-MAX_AVATAR_BYTES = 5 * 1024 * 1024
-ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
-EXT_BY_TYPE = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
+# Phone photos can be 5-12MB (and iPhone HEIC often >5MB). The image is
+# downscaled to <=1024px before storage, so the upload itself may be larger.
+MAX_AVATAR_BYTES = 15 * 1024 * 1024
+IMAGE_TYPE_ERROR = "Только изображения: JPEG, PNG, WebP или HEIC"
+IMAGE_SIZE_ERROR = "Файл больше 15 МБ"
+
+
+def is_image_content_type(content_type: Optional[str]) -> bool:
+    """Accept phone picker quirks; Pillow validates the actual bytes.
+
+    iOS may send image/heic, an empty string, or application/octet-stream
+    depending on the browser/version. Non-image MIME types are rejected
+    early, while everything image-like is decoded and re-encoded.
+    """
+    ct = (content_type or "").strip().lower()
+    return (
+        not ct
+        or ct.startswith("image/")
+        or ct in {"application/octet-stream", "binary/octet-stream"}
+    )
 # Built-in avatars (stored as-is in master_profiles.avatar_preset,
 # mutually exclusive with an uploaded photo).
 AVATAR_PRESETS = ["🐱", "🐶", "🐥", "🦅", "🦊", "🐼", "🐸", "🦁",
@@ -203,7 +220,7 @@ async def upload_avatar(
     master: User = Depends(require_master),
     db: AsyncSession = Depends(get_db),
 ):
-    """Upload own photo (JPEG/PNG/WebP, ≤5MB). Returns public url.
+    """Upload own photo (JPEG/PNG/WebP/HEIC, ≤15MB). Returns public url.
 
     Stored under backend/static/avatars, served same-origin at /static.
     kind=avatar replaces the profile photo (old file removed best-effort).
@@ -213,20 +230,22 @@ async def upload_avatar(
     """
     if kind not in ("avatar", "cert"):
         raise HTTPException(status_code=400, detail="kind: avatar|cert")
-    if file.content_type not in ALLOWED_IMAGE_TYPES:
-        raise HTTPException(
-            status_code=400, detail="Только JPEG, PNG или WebP")
+    if not is_image_content_type(file.content_type):
+        raise HTTPException(status_code=400, detail=IMAGE_TYPE_ERROR)
     data = await file.read()
     if not data:
         raise HTTPException(status_code=400, detail="Пустой файл")
     if len(data) > MAX_AVATAR_BYTES:
-        raise HTTPException(status_code=400, detail="Файл больше 5 МБ")
+        raise HTTPException(status_code=400, detail=IMAGE_SIZE_ERROR)
     from app.utils.images import downscale_image
     try:
         data, ext = downscale_image(data, file.content_type)
-    except Exception:
-        logger.warning("Image downscale failed, storing as-is")
-        ext = EXT_BY_TYPE[file.content_type]
+    except ValueError:
+        logger.warning("Invalid image upload rejected: user=%s", master.id)
+        raise HTTPException(
+            status_code=400,
+            detail="Не удалось распознать изображение. JPEG, PNG, WebP или HEIC.",
+        )
     os.makedirs(AVATAR_DIR, exist_ok=True)
     filename = f"user_{master.id}_{uuid.uuid4().hex[:8]}{ext}"
     with open(os.path.join(AVATAR_DIR, filename), "wb") as f:

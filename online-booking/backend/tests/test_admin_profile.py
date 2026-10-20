@@ -1,5 +1,15 @@
 """GET /api/v1/admin/profile — own id/name/city for form defaults."""
 
+from io import BytesIO
+
+from PIL import Image
+
+
+def _png_bytes(size=(8, 8), color=(200, 50, 50)) -> bytes:
+    buf = BytesIO()
+    Image.new("RGB", size, color).save(buf, format="PNG")
+    return buf.getvalue()
+
 
 class TestAdminProfile:
     async def test_master_profile_no_city(self, client, auth_headers):
@@ -157,7 +167,7 @@ class TestAvatarUpload:
     async def test_upload_avatar(self, client, auth_headers):
         r = await client.post(
             "/api/v1/admin/profile/avatar",
-            files={"file": ("ava.png", b"\x89PNG\r\n\x1a\n" + b"0" * 100, "image/png")},
+            files={"file": ("ava.png", _png_bytes(), "image/png")},
             headers=auth_headers,
         )
         assert r.status_code == 200, r.text
@@ -181,13 +191,89 @@ class TestAvatarUpload:
         )
         assert r.status_code == 400
 
-    async def test_upload_rejects_oversize(self, client, auth_headers):
+    async def test_upload_rejects_spoofed_image(self, client, auth_headers):
+        """An image MIME type must not bypass actual decoding/re-encoding."""
         r = await client.post(
             "/api/v1/admin/profile/avatar",
-            files={"file": ("big.png", b"0" * (6 * 1024 * 1024), "image/png")},
+            files={"file": ("fake.png", b"<svg>not an image</svg>", "image/png")},
             headers=auth_headers,
         )
         assert r.status_code == 400
+        assert "распознать" in r.json()["detail"]
+
+    async def test_upload_rejects_oversize(self, client, auth_headers):
+        r = await client.post(
+            "/api/v1/admin/profile/avatar",
+            files={"file": ("big.png", b"0" * (16 * 1024 * 1024), "image/png")},
+            headers=auth_headers,
+        )
+        assert r.status_code == 400
+        assert "15 МБ" in r.json()["detail"]
+
+    async def test_upload_accepts_generic_phone_mime(self, client, auth_headers):
+        """Some Android pickers send application/octet-stream; sniff bytes."""
+        img = Image.new("RGB", (120, 80), (20, 120, 80))
+        buf = BytesIO()
+        img.save(buf, format="JPEG")
+        r = await client.post(
+            "/api/v1/admin/profile/avatar",
+            files={"file": ("camera.bin", buf.getvalue(), "application/octet-stream")},
+            headers=auth_headers,
+        )
+        assert r.status_code == 200, r.text
+        import os as _os
+
+        _os.remove(_os.path.join(
+            "app", "static", "avatars", _os.path.basename(r.json()["avatar_url"])))
+
+    async def test_upload_iphone_heic(self, client, auth_headers):
+        from pillow_heif import register_heif_opener
+
+        register_heif_opener()
+        img = Image.new("RGB", (1600, 1200), (210, 90, 120))
+        buf = BytesIO()
+        img.save(buf, format="HEIF", quality=90)
+        r = await client.post(
+            "/api/v1/admin/profile/avatar",
+            files={"file": ("iphone.heic", buf.getvalue(), "image/heic")},
+            headers=auth_headers,
+        )
+        assert r.status_code == 200, r.text
+        url = r.json()["avatar_url"]
+        assert url.endswith(".jpg")
+
+        import os as _os
+
+        path = _os.path.join("app", "static", "avatars", _os.path.basename(url))
+        try:
+            with Image.open(path) as saved:
+                assert saved.format == "JPEG"
+                assert max(saved.size) <= 1024
+        finally:
+            _os.remove(path)
+
+    async def test_exif_orientation_is_applied(self, client, auth_headers):
+        """Phone portrait photos must not stay sideways after re-encoding."""
+        img = Image.new("RGB", (40, 80), (10, 10, 10))
+        exif = Image.Exif()
+        exif[274] = 6  # Orientation: rotate 90° clockwise
+        buf = BytesIO()
+        img.save(buf, format="JPEG", exif=exif)
+        r = await client.post(
+            "/api/v1/admin/profile/avatar",
+            files={"file": ("portrait.jpg", buf.getvalue(), "image/jpeg")},
+            headers=auth_headers,
+        )
+        assert r.status_code == 200, r.text
+        import os as _os
+
+        path = _os.path.join(
+            "app", "static", "avatars", _os.path.basename(r.json()["avatar_url"]))
+        try:
+            with Image.open(path) as saved:
+                assert saved.size == (80, 40)
+        finally:
+            _os.remove(path)
 
     async def test_upload_downscales_big_photo(self, client, auth_headers):
         from io import BytesIO
@@ -217,7 +303,7 @@ class TestAvatarPreset:
     async def test_set_preset_clears_upload(self, client, auth_headers):
         up = await client.post(
             "/api/v1/admin/profile/avatar",
-            files={"file": ("ava.png", b"\x89PNG\r\n\x1a\n" + b"0" * 100, "image/png")},
+            files={"file": ("ava.png", _png_bytes(), "image/png")},
             headers=auth_headers,
         )
         assert up.status_code == 200, up.text
@@ -267,7 +353,7 @@ class TestAvatarPreset:
 
         up = await client.post(
             "/api/v1/admin/profile/avatar",
-            files={"file": ("ava.png", b"\x89PNG\r\n\x1a\n" + b"0" * 100, "image/png")},
+            files={"file": ("ava.png", _png_bytes(), "image/png")},
             headers=auth_headers,
         )
         assert up.status_code == 200, up.text
@@ -275,7 +361,7 @@ class TestAvatarPreset:
 
         cert = await client.post(
             "/api/v1/admin/profile/avatar?kind=cert",
-            files={"file": ("cert.png", b"\x89PNG\r\n\x1a\n" + b"1" * 100, "image/png")},
+            files={"file": ("cert.png", _png_bytes(color=(20, 80, 160)), "image/png")},
             headers=auth_headers,
         )
         assert cert.status_code == 200, cert.text

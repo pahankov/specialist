@@ -881,6 +881,7 @@ function AppointmentsPage() {
           alignItems: 'center',
           justifyContent: 'center',
           gap: 16,
+          flexWrap: 'wrap',
         }}
       >
         <label

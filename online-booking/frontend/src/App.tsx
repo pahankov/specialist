@@ -1,4 +1,5 @@
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { HomePage, BookingPage, PrivacyPolicyPage, OfferPage } from './pages/public';
 import VkCallbackPage from './pages/public/VkCallbackPage';
@@ -28,6 +29,7 @@ import ClientProfilePage from './pages/cabinet/ClientProfilePage';
 import ClientLayout from './pages/cabinet/ClientLayout';
 import ErrorBoundary from './components/ErrorBoundary';
 import { getCookie, decodeJwtPayload, getUserRole } from './utils/cookies';
+import { allowMasterDraftEntry, isMasterDraftEntryAllowed } from './utils/masterDraftEntry';
 import { ADMIN_PREFIX, SUPER_PREFIX } from './utils/section';
 import './App.css';
 
@@ -91,14 +93,25 @@ function RequireMasterDraft({ children }: { children: React.ReactNode }) {
   if (role !== 'CLIENT') {
     return <Navigate to="/cabinet" replace />;
   }
-  // Starting the app at the draft URL is not a cabinet choice: an inactive
-  // master lands in the client cabinet and enters here via «Стать мастером».
-  const explicitEntry = (location.state as { fromClient?: boolean } | null)?.fromClient === true;
-  const atDraftRoot = location.pathname.replace(/\/+$/, '') === DRAFT_MASTER_ROOT;
-  if (atDraftRoot && !explicitEntry) {
+  // The draft is entered only through «Стать мастером» (or its legacy
+  // redirect). This in-memory ticket deliberately dies on a full reload:
+  // browser history state used to survive reloads and re-opened the master
+  // shell for an inactive client on phone startup.
+  if (!isMasterDraftEntryAllowed()) {
     return <Navigate to="/cabinet" replace />;
   }
   return <>{children}</>;
+}
+
+/** Legacy bookmark /cabinet/become-master: count it as explicit intent and
+    replace the URL with the real draft shell. */
+function LegacyMasterDraftEntry() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    allowMasterDraftEntry();
+    navigate(DRAFT_MASTER_ROOT, { replace: true, state: { fromClient: true } });
+  }, [navigate]);
+  return null;
 }
 
 /** Client cabinet: CLIENT and MASTER roles (dual-role: masters book as clients). */
@@ -173,10 +186,7 @@ function App() {
             <Route path="notifications" element={<CabinetNotificationsPage />} />
             <Route path="profile" element={<ClientProfilePage />} />
             {/* Old bookmarks go to the real (inactive) master shell. */}
-            <Route
-              path="become-master"
-              element={<Navigate to={DRAFT_MASTER_ROOT} replace state={{ fromClient: true }} />}
-            />
+            <Route path="become-master" element={<LegacyMasterDraftEntry />} />
           </Route>
 
           {/* Inactive master cabinet: full master shell for a CLIENT who is

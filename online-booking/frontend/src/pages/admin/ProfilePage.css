@@ -231,6 +231,14 @@ span.cert-thumb {
 }
 
 @media (max-width: 640px) {
+  .profile-activation-head {
+    /* A side badge squeezed the explanation into a narrow column. Stack it
+     * above the heading so the text uses the full card width. */
+    flex-direction: column-reverse;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
   .profile-activation-list {
     grid-template-columns: 1fr;
   }

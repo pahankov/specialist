@@ -57,6 +57,7 @@ export default function AutoCompleteSwitch() {
         display: 'inline-flex',
         alignItems: 'center',
         gap: 8,
+        minHeight: 44,
         padding: '8px 16px',
         borderRadius: 999,
         border: `2px solid ${value ? '#667eea' : '#e0e0e0'}`,

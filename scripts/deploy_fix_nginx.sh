@@ -14,6 +14,11 @@ server {
     listen 443 ssl http2;
     server_name beauty-specialist.ru www.beauty-specialist.ru;
 
+    # Phone photos (JPEG/HEIC) are often 5-15MB. Nginx defaults to 1MB,
+    # which rejected uploads with HTML 413 before FastAPI could downscale
+    # them. Keep this above backend MAX_AVATAR_BYTES (15MB).
+    client_max_body_size 20m;
+
     ssl_certificate /etc/letsencrypt/live/beauty-specialist.ru/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/beauty-specialist.ru/privkey.pem;
 

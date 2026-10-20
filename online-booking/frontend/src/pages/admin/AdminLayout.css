@@ -1,6 +1,9 @@
 .admin-layout {
   display: flex;
+  width: 100%;
+  max-width: 100%;
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 /* Impersonation banner (support view-as mode) */
@@ -428,8 +431,8 @@
 .hamburger-btn {
   display: none;
   position: fixed;
-  top: 12px;
-  left: 12px;
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+  left: calc(env(safe-area-inset-left, 0px) + 12px);
   z-index: 300;
   width: 44px;
   height: 44px;
@@ -482,9 +485,15 @@
 
 .admin-main {
   flex: 1;
+  /* A flex item defaults to min-width:auto: wide tables then stretch the
+   * whole layout viewport on phones. Keep the shell at the screen width and
+   * let each table/card scroll internally instead. */
+  min-width: 0;
+  max-width: 100%;
   margin-left: 260px;
   background: #f8f9fb;
   min-height: 100vh;
+  min-height: 100dvh;
   transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   flex-direction: column;
@@ -497,6 +506,7 @@
 
 .main-content {
   flex: 1;
+  min-width: 0;
   padding: 24px 32px;
   max-width: 1200px;
   width: 100%;
@@ -556,12 +566,48 @@
     display: none;
   }
 
+  /* The fixed hamburger sits over the drawer's top-left corner. Reserve
+   * that space so the section title is not hidden behind it. */
+  .admin-sidebar .sidebar-header {
+    padding-top: calc(env(safe-area-inset-top, 0px) + 20px);
+    padding-left: 64px;
+  }
+
+  .admin-sidebar .sidebar-footer {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+  }
+
+  .admin-sidebar .nav-item,
+  .admin-sidebar .sidebar-footer .btn,
+  .admin-sidebar .btn-logout {
+    min-height: 44px;
+  }
+
+  .bell-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+  }
+
   .sidebar-overlay {
     display: block;
   }
 
   .admin-main {
     margin-left: 0 !important;
+  }
+
+  /* Breadcrumb leads the page on desktop. On phones it used to start at
+   * y=0 under the hamburger; give it the same top offset instead. */
+  .breadcrumb {
+    padding: calc(env(safe-area-inset-top, 0px) + 64px) 16px 0;
+    margin-bottom: 0;
+  }
+
+  .breadcrumb + .main-content {
+    padding-top: 16px;
   }
 
   .main-content {
@@ -571,7 +617,18 @@
 }
 
 @media (max-width: 640px) {
+  .breadcrumb {
+    padding: calc(env(safe-area-inset-top, 0px) + 60px) 12px 0;
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+
+  .breadcrumb + .main-content {
+    padding-top: 12px;
+  }
+
   .main-content {
+    min-width: 0;
     padding: 12px;
     padding-top: 60px;
   }
@@ -582,5 +639,41 @@
 
   .stats-grid {
     grid-template-columns: 1fr 1fr !important;
+  }
+
+  /* Wide headers/actions wrap instead of widening the page. */
+  .page-header,
+  .card,
+  .card-header {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .card-header {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .card-header > div {
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
+
+  /* Phone-friendly tap targets (Apple/Google guidance: 44px). */
+  .main-content .btn,
+  .main-content .filter-btn,
+  .main-content .segmented-btn,
+  .main-content .calendar-nav-btn,
+  .main-content .datatable-menu-item,
+  .main-content .filter-check {
+    min-height: 44px;
+  }
+
+  /* 16px prevents iOS Safari from zooming into a focused field. */
+  .main-content input:not([type='checkbox']):not([type='radio']),
+  .main-content select,
+  .main-content textarea {
+    min-height: 44px;
+    font-size: 16px;
   }
 }

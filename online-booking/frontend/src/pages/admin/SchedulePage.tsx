@@ -593,14 +593,22 @@ function SchedulePage() {
     return <div style={{ padding: 60, textAlign: 'center', color: '#666' }}>Загрузка...</div>;
 
   return (
-    <div style={{ padding: '0 20px', maxWidth: 1200, margin: '0 auto' }}>
+    <div className="schedule-page">
       <div style={{ marginBottom: 8, textAlign: 'center' }}>
         <h1 style={{ fontSize: 24, margin: 0, color: '#1a1a2e' }}>📅 Рабочее расписание</h1>
         <p style={{ margin: '4px 0 0', color: '#666', fontSize: 14 }}>
           Нажмите на день чтобы увидеть бронирования
         </p>
         {!isSuperAdmin && (
-          <div style={{ marginTop: 8, display: 'flex', justifyContent: 'center', gap: 8 }}>
+          <div
+            style={{
+              marginTop: 8,
+              display: 'flex',
+              justifyContent: 'center',
+              gap: 8,
+              flexWrap: 'wrap',
+            }}
+          >
             <AutoConfirmSwitch />
             <AutoCompleteSwitch />
           </div>

@@ -16,6 +16,7 @@ import type { CityOption } from '../../components/common/CitySelect';
 import { hasHouseNumber } from '../../utils/address';
 import { getApiErrorMessage } from '../../utils/apiError';
 import { clearAuthCookies, decodeJwtPayload, getCookie } from '../../utils/cookies';
+import { imageUploadError } from '../../utils/imageUpload';
 import { capitalizeWords, splitFullName } from '../../utils/names';
 import { MasterReviews } from '../../components/reviews';
 import { BindingsCard, PasswordCard, ContactsCard } from '../../components/profile';
@@ -255,12 +256,9 @@ function ProfilePage({ mode = 'master' }: ProfilePageProps) {
   }, [location.hash, loading]);
 
   const uploadFile = async (file: File, kind: 'avatar' | 'cert'): Promise<string | null> => {
-    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) {
-      toast.error('Только JPEG, PNG или WebP');
-      return null;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('Файл больше 5 МБ');
+    const fileError = imageUploadError(file);
+    if (fileError) {
+      toast.error(fileError);
       return null;
     }
     const { data } = isDraft
@@ -648,7 +646,7 @@ function ProfilePage({ mode = 'master' }: ProfilePageProps) {
               <input
                 ref={avatarInput}
                 type="file"
-                accept="image/jpeg,image/png,image/webp"
+                accept="image/*,.heic,.heif"
                 style={{ display: 'none' }}
                 onChange={(e) => {
                   handleAvatarPick(e.target.files?.[0]);
@@ -678,7 +676,9 @@ function ProfilePage({ mode = 'master' }: ProfilePageProps) {
                   </button>
                 )}
               </div>
-              <div className="hint">JPEG, PNG или WebP до 5 МБ — или выберите зверя ниже</div>
+              <div className="hint">
+                JPEG, PNG, WebP или HEIC до 15 МБ — или выберите зверя ниже
+              </div>
               <div className="preset-grid" role="group" aria-label="Стандартные аватары">
                 {AVATAR_PRESETS.map((emoji) => (
                   <button
@@ -844,7 +844,7 @@ function ProfilePage({ mode = 'master' }: ProfilePageProps) {
             <input
               ref={certInput}
               type="file"
-              accept="image/jpeg,image/png,image/webp"
+              accept="image/*,.heic,.heif"
               style={{ display: 'none' }}
               onChange={(e) => {
                 handleCertPhoto(e.target.files?.[0]);

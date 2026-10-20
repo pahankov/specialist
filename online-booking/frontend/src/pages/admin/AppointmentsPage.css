@@ -4,6 +4,8 @@
   margin-bottom: 16px;
   flex-wrap: wrap;
   justify-content: center;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .filter-btn {
@@ -31,7 +33,10 @@
 /* Table scrolls INSIDE the card on every viewport — action buttons
  * can never spill past the card edge (was desktop-only overflow). */
 .appointments-table-wrapper {
+  max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   margin: 0 -16px;
   padding: 0 16px;
 }

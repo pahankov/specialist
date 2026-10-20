@@ -338,12 +338,13 @@ class TestBecomeMaster:
             client, session, "+79991115558", "photo@example.com")
         await self._verify_email(session, email_id)
 
-        # 1x1 transparent PNG.
-        png = bytes.fromhex(
-            "89504e470d0a1a0a0000000d4948445200000001000000010806000000"
-            "1f15c4890000000d49444154789c6360000000020001e221bc33000000"
-            "0049454e44ae426082"
-        )
+        from io import BytesIO
+
+        from PIL import Image
+
+        buf = BytesIO()
+        Image.new("RGB", (32, 32), (40, 120, 180)).save(buf, format="PNG")
+        png = buf.getvalue()
         up = await client.post(
             "/api/v1/auth/become-master/photo?kind=avatar",
             headers=_auth(token),

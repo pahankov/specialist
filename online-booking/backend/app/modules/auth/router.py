@@ -41,12 +41,13 @@ from app.services.notifications import send_master_activated_bell
 from app.modules.auth import service
 from app.modules.auth.token import create_access_token, create_refresh_token_payload
 from app.modules.admin.profile import (
-    ALLOWED_IMAGE_TYPES,
     AVATAR_DIR,
     AVATAR_PRESETS,
     AVATAR_URL_PREFIX,
-    EXT_BY_TYPE,
+    IMAGE_SIZE_ERROR,
+    IMAGE_TYPE_ERROR,
     MAX_AVATAR_BYTES,
+    is_image_content_type,
 )
 from app.dependencies.auth import get_current_user, require_client
 from app.middleware.rate_limit import limiter
@@ -768,19 +769,22 @@ async def upload_draft_photo(
     """
     if kind not in ("avatar", "cert"):
         raise HTTPException(status_code=400, detail="kind: avatar|cert")
-    if file.content_type not in ALLOWED_IMAGE_TYPES:
-        raise HTTPException(status_code=400, detail="Только JPEG, PNG или WebP")
+    if not is_image_content_type(file.content_type):
+        raise HTTPException(status_code=400, detail=IMAGE_TYPE_ERROR)
     payload = await file.read()
     if not payload:
         raise HTTPException(status_code=400, detail="Пустой файл")
     if len(payload) > MAX_AVATAR_BYTES:
-        raise HTTPException(status_code=400, detail="Файл больше 5 МБ")
+        raise HTTPException(status_code=400, detail=IMAGE_SIZE_ERROR)
     from app.utils.images import downscale_image
     try:
         payload, ext = downscale_image(payload, file.content_type)
-    except Exception:
-        logger.warning("Application image downscale failed, storing as-is")
-        ext = EXT_BY_TYPE[file.content_type]
+    except ValueError:
+        logger.warning("Master draft photo rejected as invalid: user=%s", user.id)
+        raise HTTPException(
+            status_code=400,
+            detail="Не удалось распознать изображение. JPEG, PNG, WebP или HEIC.",
+        )
     os.makedirs(AVATAR_DIR, exist_ok=True)
     filename = f"user_{user.id}_{uuid.uuid4().hex[:8]}{ext}"
     with open(os.path.join(AVATAR_DIR, filename), "wb") as f:

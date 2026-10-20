@@ -1,0 +1,40 @@
+/* Shared pagination: one row on desktop, two compact rows on phones. */
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  margin-top: 20px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.pager .btn.btn-ghost {
+  width: auto;
+  flex: 0 1 auto;
+}
+
+.pager-label {
+  min-width: 120px;
+  text-align: center;
+  font-size: 14px;
+  color: #666;
+}
+
+@media (max-width: 640px) {
+  .pager-label {
+    order: -1;
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .pager .btn.btn-ghost {
+    flex: 1 1 calc(50% - 4px);
+    width: auto;
+    min-width: 0;
+    padding-left: 10px;
+    padding-right: 10px;
+    font-size: 13px;
+  }
+}
