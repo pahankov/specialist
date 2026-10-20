@@ -62,12 +62,28 @@ function processQueue(error: unknown, token: string | null = null) {
   failedQueue = [];
 }
 
+/**
+ * Auth endpoints where a 401 is a normal answer for the form (wrong password,
+ * expired code, unknown account), not a dead session. Sending them through
+ * /auth/refresh and hard-redirecting to /admin/login used to reload the page
+ * and throw the error toast away: a typo in the password "kicked the user to
+ * the home page" instead of showing «Неверный email/телефон или пароль».
+ *
+ * Everything else (cabinet, admin, /auth/me, …) keeps refresh-and-retry.
+ */
+const AUTH_FORM_401 =
+  /\/api\/v1\/auth\/(login-unified|register-unified|phone\/status|consent\/complete|send-otp|verify-otp|client\/login|login|register|password\/(forgot|reset)|refresh|logout|vk\/|yandex\/|max\/)/;
+
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (
+      error.response?.status === 401 &&
+      !originalRequest._retry &&
+      !AUTH_FORM_401.test(originalRequest.url ?? '')
+    ) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });

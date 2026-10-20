@@ -50,6 +50,15 @@ interface RegisterFormState {
   consent: boolean;
 }
 
+/** FastAPI's `detail` is usually a string; the unified entry also returns an
+    object with a machine-readable code (`registration_required`). */
+function errorText(err: any, fallback: string): string {
+  const detail = err?.response?.data?.detail;
+  if (typeof detail === 'string') return detail;
+  if (detail && typeof detail.message === 'string') return detail.message;
+  return fallback;
+}
+
 function LoginModal({
   isOpen,
   onClose,
@@ -75,6 +84,11 @@ function LoginModal({
   /** Unified entry: the entered phone turned out to be a social-only account
       — the hint points at the social block above the form. */
   const [socialNotice, setSocialNotice] = useState(false);
+  /** Unified entry (1.81.0): the identifier was not found. The credentials
+      typed in the login form are kept here so the consent step can create
+      the cabinet on retry — they are never logged or rendered. */
+  const [signup, setSignup] = useState<LoginFormState | null>(null);
+  const [signupConsent, setSignupConsent] = useState(false);
   const loginPasswordRef = useRef<HTMLInputElement>(null);
 
   // Forgot password: code by email → new password → auto-login.
@@ -255,7 +269,33 @@ function LoginModal({
       toast.success('Вход выполнен!');
       landAfterAuth();
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Ошибка входа');
+      const detail = err.response?.data?.detail;
+      if (err.response?.status === 401 && detail?.code === 'registration_required') {
+        // No matching account: show the 152-FZ consent, then create the
+        // cabinet on retry — the owner's «просто должен создаваться кабинет».
+        setSignup({ identifier, password: loginForm.password });
+        setSignupConsent(false);
+        return;
+      }
+      toast.error(errorText(err, 'Ошибка входа'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /** Unified entry step 2: create the missing cabinet after consent. */
+  const handleSignup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!signup || !signupConsent) return;
+    setLoading(true);
+    try {
+      await authApi.loginUnified(signup.identifier, signup.password, true);
+      toast.success('Аккаунт создан — добро пожаловать!');
+      setSignup(null);
+      setSignupConsent(false);
+      landAfterAuth();
+    } catch (err: any) {
+      toast.error(errorText(err, 'Ошибка создания аккаунта'));
     } finally {
       setLoading(false);
     }
@@ -426,6 +466,8 @@ function LoginModal({
 
   const switchMode = (newMode: ModalMode) => {
     resetMaxState();
+    setSignup(null);
+    setSignupConsent(false);
     setMode(newMode);
     setLoginForm({
       identifier: '',
@@ -447,6 +489,8 @@ function LoginModal({
   /** Esc / outside click only (owner's rule): closing always resets the
       modal to the starting login screen — the next open starts clean. */
   const handleClose = () => {
+    setSignup(null);
+    setSignupConsent(false);
     if (mode !== 'login') switchMode('login');
     onClose();
   };
@@ -644,122 +688,172 @@ function LoginModal({
       open={isOpen}
       onClose={handleClose}
       title={
-        mode === 'login'
-          ? 'Вход в систему'
-          : mode === 'register'
-            ? 'Регистрация'
-            : mode === 'forgot'
-              ? 'Восстановление пароля'
-              : 'Вход и регистрация через MAX'
+        signup
+          ? 'Создание аккаунта'
+          : mode === 'login'
+            ? 'Вход в систему'
+            : mode === 'register'
+              ? 'Регистрация'
+              : mode === 'forgot'
+                ? 'Восстановление пароля'
+                : 'Вход и регистрация через MAX'
       }
       className="login-modal"
     >
       {mode === 'login' ? (
-        /* ─── LOGIN FORM ─── */
-        <form onSubmit={handleLogin}>
-          {/* Social login FIRST: one tap via VK/OK/Mail (the official
-              OAuthList widget) plus the Yandex/MAX tiles; the manual
-              email/phone form sits under the divider. */}
-          {/* VK + OK + Mail: the official OAuthList widget rendered INLINE.
-              A new account comes back as a consent challenge — the widget
-              shows the ConsentScreen; returning users log in with one tap. */}
-          <VkIdWidget onSuccess={landAfterAuth} />
-
-          {/* Yandex: the official «мгновенная авторизация» widget; the plain
-              redirect button only appears if the widget cannot run here. */}
-          <div style={{ marginTop: 8 }}>
-            {yandexRedirect ? (
-              <SocialAuthButton
-                provider="yandex"
-                action="login"
-                disabled={loading}
-                onClick={handleYandexStart}
-              />
-            ) : (
-              <YandexSuggestButton
-                variant="login"
-                onSuccess={landAfterAuth}
-                onUnavailable={() => setYandexRedirect(true)}
-              />
-            )}
-          </div>
-          <div style={{ marginTop: 8 }}>
-            <SocialAuthButton provider="max" action="login" onClick={() => switchMode('max')} />
-          </div>
-
-          <div className="social-auth-divider">или войдите по паролю</div>
-
-          <div className="login-group">
-            <label>Email или телефон</label>
-            <input
-              type="text"
-              value={loginForm.identifier}
-              onChange={(e) => handleIdentifierChange(e.target.value)}
-              placeholder="email@example.com или +7 (999) 123-45-67"
-              required
-            />
-          </div>
-
-          <div className="login-group">
-            <label>Пароль</label>
-            <div style={{ position: 'relative' }}>
-              <input
-                ref={loginPasswordRef}
-                type={showLoginPassword ? 'text' : 'password'}
-                value={loginForm.password}
-                onChange={(e) => setLoginForm((prev) => ({ ...prev, password: e.target.value }))}
-                placeholder="Введите пароль"
-                style={{ paddingRight: 44 }}
-              />
-              <button
-                type="button"
-                onClick={() => setShowLoginPassword(!showLoginPassword)}
-                style={{
-                  position: 'absolute',
-                  right: 8,
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontSize: 18,
-                  padding: '4px 8px',
-                  color: '#666',
-                  lineHeight: 1,
-                }}
-                title={showLoginPassword ? 'Скрыть пароль' : 'Показать пароль'}
-              >
-                {showLoginPassword ? '🙈' : '👁️'}
-              </button>
+        signup ? (
+          /* ─── SIGNUP AFTER CONSENT (unified entry, 1.81.0) ─── */
+          <form onSubmit={handleSignup}>
+            <p className="login-note">
+              Аккаунта с {signup.identifier.includes('@') ? 'этой почтой' : 'этим номером'} пока нет
+              — создадим кабинет. Имя, адрес и остальное добавите позже в профиле.
+            </p>
+            <div className="checkbox-group checkbox-group--first">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={signupConsent}
+                  onChange={(e) => setSignupConsent(e.target.checked)}
+                />
+                <span>
+                  Соглашаюсь с{' '}
+                  <Link to="/offer" target="_blank" rel="noreferrer">
+                    Офертой
+                  </Link>{' '}
+                  и{' '}
+                  <Link to="/privacy" target="_blank" rel="noreferrer">
+                    Политикой обработки ПДн
+                  </Link>
+                </span>
+              </label>
             </div>
-            {/* «Забыли пароль?» — right under the password input, not after
-                the submit button. */}
-            <p className="login-forgot">
+            <button
+              type="submit"
+              className="btn btn-primary btn-submit"
+              disabled={loading || !signupConsent}
+            >
+              {loading ? 'Создаём аккаунт...' : 'Создать аккаунт и войти'}
+            </button>
+            <p className="login-footer">
               <a
                 href="#"
                 onClick={(e) => {
                   e.preventDefault();
-                  switchMode('forgot');
+                  setSignup(null);
+                  setSignupConsent(false);
                 }}
               >
-                Забыли пароль?
+                Назад ко входу
               </a>
             </p>
-          </div>
+          </form>
+        ) : (
+          /* ─── LOGIN FORM ─── */
+          <form onSubmit={handleLogin}>
+            {/* Social login FIRST: one tap via VK/OK/Mail (the official
+              OAuthList widget) plus the Yandex/MAX tiles; the manual
+              email/phone form sits under the divider. */}
+            {/* VK + OK + Mail: the official OAuthList widget rendered INLINE.
+              A new account comes back as a consent challenge — the widget
+              shows the ConsentScreen; returning users log in with one tap. */}
+            <VkIdWidget onSuccess={landAfterAuth} />
 
-          {socialNotice && (
-            /* Unified entry: the phone was routed to social — no password
+            {/* Yandex: the official «мгновенная авторизация» widget; the plain
+              redirect button only appears if the widget cannot run here. */}
+            <div style={{ marginTop: 8 }}>
+              {yandexRedirect ? (
+                <SocialAuthButton
+                  provider="yandex"
+                  action="login"
+                  disabled={loading}
+                  onClick={handleYandexStart}
+                />
+              ) : (
+                <YandexSuggestButton
+                  variant="login"
+                  onSuccess={landAfterAuth}
+                  onUnavailable={() => setYandexRedirect(true)}
+                />
+              )}
+            </div>
+            <div style={{ marginTop: 8 }}>
+              <SocialAuthButton provider="max" action="login" onClick={() => switchMode('max')} />
+            </div>
+
+            <div className="social-auth-divider">или войдите по паролю</div>
+
+            <div className="login-group">
+              <label>Email или телефон</label>
+              <input
+                type="text"
+                value={loginForm.identifier}
+                onChange={(e) => handleIdentifierChange(e.target.value)}
+                placeholder="email@example.com или +7 (999) 123-45-67"
+                required
+              />
+            </div>
+
+            <div className="login-group">
+              <label>Пароль</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  ref={loginPasswordRef}
+                  type={showLoginPassword ? 'text' : 'password'}
+                  value={loginForm.password}
+                  onChange={(e) => setLoginForm((prev) => ({ ...prev, password: e.target.value }))}
+                  placeholder="Введите пароль"
+                  style={{ paddingRight: 44 }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowLoginPassword(!showLoginPassword)}
+                  style={{
+                    position: 'absolute',
+                    right: 8,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: 18,
+                    padding: '4px 8px',
+                    color: '#666',
+                    lineHeight: 1,
+                  }}
+                  title={showLoginPassword ? 'Скрыть пароль' : 'Показать пароль'}
+                >
+                  {showLoginPassword ? '🙈' : '👁️'}
+                </button>
+              </div>
+              {/* «Забыли пароль?» — right under the password input, not after
+                the submit button. */}
+              <p className="login-forgot">
+                <a
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    switchMode('forgot');
+                  }}
+                >
+                  Забыли пароль?
+                </a>
+              </p>
+            </div>
+
+            {socialNotice && (
+              /* Unified entry: the phone was routed to social — no password
                form can help, point at the buttons above. */
-            <p className="login-social-notice">
-              Этот номер уже привязан к аккаунту через соцсеть или MAX — войдите кнопкой выше.
-              Пароль здесь не нужен.
-            </p>
-          )}
+              <p className="login-social-notice">
+                Этот номер уже привязан к аккаунту через соцсеть или MAX — войдите кнопкой выше.
+                Пароль здесь не нужен.
+              </p>
+            )}
 
-          <button type="submit" className="btn btn-primary btn-submit" disabled={loading}>
-            {loading ? 'Входим...' : 'Войти'}
-          </button>
-        </form>
+            <button type="submit" className="btn btn-primary btn-submit" disabled={loading}>
+              {loading ? 'Входим...' : 'Войти'}
+            </button>
+          </form>
+        )
       ) : mode === 'max' ? (
         /* MAX CHAT-BOT FORM (SMS-style: code arrives in MAX, typed here) */
         maxForm

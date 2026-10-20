@@ -76,6 +76,46 @@ describe('refresh interceptor', () => {
     expect(behavior.refreshCalls).toBe(1);
   });
 
+  it('does not refresh or redirect on a 401 from the login form itself', async () => {
+    const behavior = { refreshCalls: 0, refreshSucceeds: false };
+    const adapter = installStubs(behavior);
+
+    // A wrong password / unknown email must stay in the modal: no refresh,
+    // no hard redirect to /admin/login (the owner's «выкидывает на главную»).
+    const originalLocation = window.location;
+    Object.defineProperty(window, 'location', {
+      value: { href: '' },
+      writable: true,
+      configurable: true,
+    });
+    try {
+      await expect(
+        apiClient.post(
+          '/api/v1/auth/login-unified',
+          { identifier: 'owner@example.com', password: 'wrong' },
+          { adapter },
+        ),
+      ).rejects.toBeDefined();
+      expect(behavior.refreshCalls).toBe(0);
+      expect(window.location.href).toBe('');
+    } finally {
+      Object.defineProperty(window, 'location', {
+        value: originalLocation,
+        writable: true,
+        configurable: true,
+      });
+    }
+  });
+
+  it('keeps refresh-and-retry for protected endpoints (guard)', async () => {
+    const behavior = { refreshCalls: 0, refreshSucceeds: true };
+    const adapter = installStubs(behavior);
+
+    const resp = await apiClient.get('/api/v1/cabinet/profile', { adapter });
+    expect(resp.data).toBe('ok');
+    expect(behavior.refreshCalls).toBe(1);
+  });
+
   it('failed refresh rejects instead of hanging (no self-deadlock)', async () => {
     const behavior = { refreshCalls: 0, refreshSucceeds: false };
     const adapter = installStubs(behavior);

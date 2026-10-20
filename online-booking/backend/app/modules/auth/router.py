@@ -329,10 +329,15 @@ async def login_unified(
     req: UnifiedLoginRequest,
     db: AsyncSession = Depends(get_db)
 ):
-    """Login with email OR phone + password. Works for both clients and masters."""
+    """Login with email OR phone + password. Works for both clients and masters.
+
+    Unknown contacts (after the 152-FZ consent retry) create a CLIENT cabinet
+    on the fly — the unified entry has no separate «нет аккаунта» form.
+    """
     logger.info("Unified login attempt: identifier=%s", req.identifier)
     try:
-        access_token, user = await service.login_unified(req.identifier, req.password, db)
+        access_token, user, created = await service.login_unified(
+            req.identifier, req.password, db, consent=req.consent)
         logger.info("Unified login successful: user_id=%s, role=%s", user.id, user.role.value)
 
         # Get the most recent refresh token for this user
@@ -350,8 +355,14 @@ async def login_unified(
 
         _set_auth_cookies(response, access_token, cookie_token)
         await log_action(
-            db, user.id, "login", "auth", user.id,
-            f"Вход: {user.email or user.phone} ({user.role.value})", level="info",
+            db, user.id,
+            "register" if created else "login", "auth", user.id,
+            (
+                f"Регистрация: {user.email or user.phone} ({user.role.value})"
+                if created
+                else f"Вход: {user.email or user.phone} ({user.role.value})"
+            ),
+            level="info",
         )
         await db.commit()
         return {"access_token": access_token, "token_type": "bearer"}

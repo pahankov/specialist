@@ -26,10 +26,16 @@ from app.services.contacts import (
     attach_contact,
     find_user_by_contact,
     normalize_email,
+    normalize_contact_value,
 )
 from app.logging_config import get_logger
 from app.config import settings
-from app.utils.security import hash_password, verify_password, hash_otp_code
+from app.utils.security import (
+    hash_password,
+    verify_password,
+    hash_otp_code,
+    validate_password_strength,
+)
 from app.utils.tokens import create_access_token, create_refresh_token_payload
 from datetime import datetime, timezone as dt_timezone, timedelta
 import secrets
@@ -268,23 +274,112 @@ async def login_client_legacy(phone: str, db: AsyncSession) -> tuple[str, User]:
 
 # ─── Unified Login ───────────────────────────────────────────────────
 
-async def login_unified(identifier: str, password: str, db: AsyncSession) -> tuple[str, User]:
-    """Login with email OR phone + password. Works for both clients and masters."""
+async def _create_password_account(
+    identifier: str, password: str, contact_type: str, db: AsyncSession,
+) -> User:
+    """Create a CLIENT account for the unified-entry signup (1.81.0).
+
+    Unverified by design («неверифицированные данные»): the email/phone is
+    what the visitor typed, confirmed by no code — same as phone signup in
+    1.80.0. Everything else is refined later in the client cabinet profile.
+    Consent (152-FZ) is stamped at creation; the caller has already made
+    sure it was given.
+    """
+    value = normalize_contact_value(contact_type, identifier)
+    if await find_user_by_contact(db, contact_type, value) is not None:
+        # Raced with another signup between the lookup and this point.
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Неверный email/телефон или пароль",
+        )
+    is_email = contact_type == CONTACT_EMAIL
+    new_user = User(
+        name="",
+        email=value if is_email else None,
+        phone=None if is_email else value,
+        hashed_password=hash_password(password),
+        role=UserRole.CLIENT,
+        consent_at=datetime.now(dt_timezone.utc),
+        consent_policy_version=POLICY_VERSION,
+        consent_offer_version=OFFER_VERSION,
+    )
+    db.add(new_user)
+    await db.flush()
+
+    # Every registrant gets a client cabinet profile.
+    db.add(ClientProfile(user_id=new_user.id))
+
+    # Typed contact, NOT verified (no code was sent) — mirrors phone signup.
+    try:
+        await attach_contact(
+            db, new_user, contact_type, value, make_primary=True)
+    except ContactTaken:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Этот контакт уже привязан к другому аккаунту",
+        )
+
+    # Owner item 5: a brand-new client immediately gets a short how-to bell.
+    from app.services.notifications import send_welcome_bell
+
+    await send_welcome_bell(db, new_user.id)
+
+    logger.info("Auto-registered password account: %s", value)
+    return new_user
+
+
+async def login_unified(
+    identifier: str, password: str, db: AsyncSession, consent: bool = False,
+) -> tuple[str, User, bool]:
+    """Login with email OR phone + password; sign up when nothing matches.
+
+    Unified entry (owner review 1.81.0): a first-time visitor types the
+    email/phone + password they want once. If the contact is unknown, the
+    backend asks for 152-FZ consent (401 + ``registration_required``) and
+    creates the cabinet on the retry with ``consent=True`` — no separate
+    «нет аккаунта» registration form. Returns (access_token, user, created).
+    """
     logger.info("Unified login attempt: %s", identifier)
 
     # «Единый вход»: the identifier is a contact — email or phone. The
     # contact service owns both the new model and the legacy fallback.
-    if "@" in (identifier or ""):
-        user = await find_user_by_contact(db, CONTACT_EMAIL, identifier)
-    else:
-        user = await find_user_by_contact(db, CONTACT_PHONE, identifier)
+    is_email = "@" in (identifier or "")
+    contact_type = CONTACT_EMAIL if is_email else CONTACT_PHONE
+    user = await find_user_by_contact(db, contact_type, identifier)
+    created = False
 
-    if not user:
-        logger.warning("User not found: %s", identifier)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Неверный email/телефон или пароль"
-        )
+    if user is None:
+        # Normalize first: garbage must be a 400, not a signup attempt.
+        try:
+            normalize_contact_value(contact_type, identifier)
+        except InvalidContact:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Введите корректный email или телефон",
+            )
+        # A weak password is rejected before the consent screen: the policy
+        # is the same as in register_unified, but only a NEW account needs it
+        # (legacy accounts keep whatever password they already have).
+        try:
+            validate_password_strength(password)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc),
+            )
+        if not consent:
+            # 152-FZ: the cabinet is created only after explicit consent.
+            # The frontend turns this code into the consent step.
+            logger.info("Registration required (no consent yet): %s", identifier)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail={
+                    "code": "registration_required",
+                    "message": "Аккаунта с такими данными пока нет",
+                },
+            )
+        user = await _create_password_account(
+            identifier, password, contact_type, db)
+        created = True
 
     if not user.hashed_password or not verify_password(password, user.hashed_password):
         logger.warning("Invalid password for: %s", identifier)
@@ -313,7 +408,7 @@ async def login_unified(identifier: str, password: str, db: AsyncSession) -> tup
     await db.commit()
 
     logger.info("User successfully logged in: %s", identifier)
-    return access_token, user
+    return access_token, user, created
 
 
 async def phone_status(phone: str, db: AsyncSession) -> dict:

@@ -102,8 +102,12 @@ export const authApi = {
       Bare client on purpose: a failed refresh must not hit the 401
       interceptor (that one logs the user out). */
   refreshSession: () => refreshClient.post<{ access_token: string }>('/api/v1/auth/refresh'),
-  loginUnified: (identifier: string, password: string) =>
-    apiClient.post<LoginResponse>('/api/v1/auth/login-unified', { identifier, password }),
+  loginUnified: (identifier: string, password: string, consent = false) =>
+    apiClient.post<LoginResponse>('/api/v1/auth/login-unified', {
+      identifier,
+      password,
+      consent,
+    }),
   /** Unified entry step 1: does this phone belong to an account, and which
       kind of login does it need? Enumeration-proof by design (the answer
       only routes the UI; no account details leak). */

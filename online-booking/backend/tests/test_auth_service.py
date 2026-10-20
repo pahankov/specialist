@@ -300,6 +300,139 @@ class TestLoginUnified:
         })
         assert resp.status_code == 401
 
+    async def test_login_unknown_email_asks_for_consent(self, client, session):
+        """Unknown email without consent: 401 + machine-readable signup code."""
+        from sqlalchemy import select
+        from app.models.user import User
+
+        resp = await client.post("/api/v1/auth/login-unified", json={
+            "identifier": "brand_new@example.com",
+            "password": "SecurePass123!",
+        })
+        assert resp.status_code == 401
+        assert resp.json()["detail"]["code"] == "registration_required"
+
+        created = (await session.execute(
+            select(User).where(User.email == "brand_new@example.com")
+        )).scalar_one_or_none()
+        assert created is None
+
+    async def test_login_unknown_email_with_consent_creates_cabinet(self, client, session):
+        """The consent retry creates an unverified CLIENT cabinet and logs in."""
+        from sqlalchemy import select
+        from app.models.user import User, UserRole
+        from app.models.client_profile import ClientProfile
+        from app.models.user_contact import UserContact
+        from app.models.notification import Notification
+        from app.services.notifications import WELCOME_TEXT
+
+        resp = await client.post("/api/v1/auth/login-unified", json={
+            "identifier": "New.Client@Example.com",
+            "password": "SecurePass123!",
+            "consent": True,
+        })
+        assert resp.status_code == 200
+        assert resp.json()["access_token"]
+
+        user = (await session.execute(
+            select(User).where(User.email == "new.client@example.com")
+        )).scalar_one()
+        assert user.role == UserRole.CLIENT
+        assert user.is_verified is False  # «неверифицированные данные»
+        assert user.hashed_password
+        assert user.consent_at is not None
+        assert user.consent_policy_version and user.consent_offer_version
+
+        assert (await session.execute(
+            select(ClientProfile).where(ClientProfile.user_id == user.id)
+        )).scalar_one_or_none() is not None
+
+        contact = (await session.execute(
+            select(UserContact).where(
+                UserContact.user_id == user.id,
+                UserContact.contact_type == "email",
+            )
+        )).scalar_one()
+        assert contact.value == "new.client@example.com"
+        assert contact.is_verified is False
+
+        note = (await session.execute(
+            select(Notification).where(Notification.recipient_id == user.id)
+        )).scalar_one()
+        assert note.text == WELCOME_TEXT
+
+        # The same credentials now log in as an existing account.
+        again = await client.post("/api/v1/auth/login-unified", json={
+            "identifier": "new.client@example.com",
+            "password": "SecurePass123!",
+        })
+        assert again.status_code == 200
+
+    async def test_login_unknown_phone_with_consent_creates_cabinet(self, client, session):
+        """A new phone is normalized and gets a cabinet the same way."""
+        from sqlalchemy import select
+        from app.models.user import User
+
+        resp = await client.post("/api/v1/auth/login-unified", json={
+            "identifier": "+7 (999) 555-44-33",
+            "password": "SecurePass123!",
+            "consent": True,
+        })
+        assert resp.status_code == 200
+
+        user = (await session.execute(
+            select(User).where(User.phone == "+7 (999) 555-44-33")
+        )).scalar_one_or_none()
+        assert user is not None
+        assert user.id
+
+    async def test_login_wrong_password_with_consent_does_not_overwrite(self, client, session):
+        """consent=true never bypasses the password check of an existing account."""
+        from sqlalchemy import select
+        from app.models.user import User
+
+        await client.post("/api/v1/auth/login-unified", json={
+            "identifier": "existing@example.com",
+            "password": "SecurePass123!",
+            "consent": True,
+        })
+        resp = await client.post("/api/v1/auth/login-unified", json={
+            "identifier": "existing@example.com",
+            "password": "WrongPassword123!",
+            "consent": True,
+        })
+        assert resp.status_code == 401
+        # A wrong password is still a plain string, not the signup code.
+        assert isinstance(resp.json()["detail"], str)
+
+        matches = (await session.execute(
+            select(User).where(User.email == "existing@example.com")
+        )).scalars().all()
+        assert len(matches) == 1
+
+        ok = await client.post("/api/v1/auth/login-unified", json={
+            "identifier": "existing@example.com",
+            "password": "SecurePass123!",
+        })
+        assert ok.status_code == 200
+
+    async def test_login_unknown_identifier_weak_password_rejected(self, client):
+        """A weak password is a 400 before the consent step — not a signup."""
+        resp = await client.post("/api/v1/auth/login-unified", json={
+            "identifier": "weak@example.com",
+            "password": "short",
+        })
+        assert resp.status_code == 400
+        assert "8 символов" in resp.json()["detail"]
+
+    async def test_login_unknown_invalid_identifier_rejected(self, client):
+        """Garbage that is neither an email nor a phone is a 400."""
+        resp = await client.post("/api/v1/auth/login-unified", json={
+            "identifier": "not-an-identifier",
+            "password": "SecurePass123!",
+        })
+        assert resp.status_code == 400
+
     async def test_login_missing_fields(self, client):
         """Login fails when fields are missing."""
         resp = await client.post("/api/v1/auth/login-unified", json={})

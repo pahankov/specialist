@@ -132,6 +132,59 @@ describe('Unified entry — the phone decides (phone/status)', () => {
   });
 });
 
+describe('Unified entry — unknown identifier creates a cabinet after consent', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('shows the 152-FZ consent step and retries with consent=true', async () => {
+    openLogin();
+    vi.mocked(mocked.loginUnified).mockRejectedValueOnce({
+      response: {
+        status: 401,
+        data: { detail: { code: 'registration_required', message: 'Аккаунта пока нет' } },
+      },
+    } as never);
+    vi.mocked(mocked.loginUnified).mockResolvedValueOnce({ data: {} } as never);
+
+    fillIdentifier('new@example.com');
+    fireEvent.change(screen.getByPlaceholderText('Введите пароль'), {
+      target: { value: 'Secret123!' },
+    });
+    submit();
+
+    const create = await screen.findByRole('button', { name: 'Создать аккаунт и войти' });
+    expect(create).toBeDisabled();
+    fireEvent.click(screen.getByRole('checkbox'));
+    expect(create).not.toBeDisabled();
+    fireEvent.click(create);
+
+    await waitFor(() =>
+      expect(mocked.loginUnified).toHaveBeenLastCalledWith('new@example.com', 'Secret123!', true),
+    );
+  });
+
+  it('keeps a wrong password as a plain error without the consent step', async () => {
+    openLogin();
+    vi.mocked(mocked.loginUnified).mockRejectedValueOnce({
+      response: { status: 401, data: { detail: 'Неверный email/телефон или пароль' } },
+    } as never);
+
+    fillIdentifier('user@example.com');
+    fireEvent.change(screen.getByPlaceholderText('Введите пароль'), {
+      target: { value: 'Secret123!' },
+    });
+    submit();
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith('Неверный email/телефон или пароль'),
+    );
+    expect(
+      screen.queryByRole('button', { name: 'Создать аккаунт и войти' }),
+    ).not.toBeInTheDocument();
+  });
+});
+
 describe('Forgot password — code by email', () => {
   afterEach(() => {
     vi.clearAllMocks();

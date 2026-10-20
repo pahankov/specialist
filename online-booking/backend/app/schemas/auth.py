@@ -13,9 +13,17 @@ class UserRoleEnum(str, Enum):
 
 
 class UnifiedLoginRequest(BaseModel):
-    """Login with email OR phone + password."""
+    """Login/Signup with email OR phone + password.
+
+    ``consent`` stays false on the first attempt. When nothing matches the
+    identifier, the backend answers 401 with ``detail.code ==
+    "registration_required"``; the frontend collects the 152-FZ consent and
+    retries with ``consent=true`` — the cabinet is then created on the fly
+    (unverified data, refined later in the profile).
+    """
     identifier: str  # email or phone
     password: str
+    consent: bool = False
 
     @field_validator('identifier')
     @classmethod
