@@ -1,4 +1,5 @@
 import apiClient, { refreshClient } from './http';
+import type { ClientContact } from './cabinet';
 import type { LoginResponse, UnifiedRegisterResponse } from './types';
 
 // ─── Auth API ──────────────────────────────────────────────────────
@@ -79,40 +80,74 @@ export interface PhoneStatusResponse {
   phone: string;
 }
 
-/** Master application payload (1.82.0): full master profile on submit. */
-export interface BecomeMasterData {
+/** Master profile payload (1.83.0): draft save and self-activation. */
+export interface MasterDraftData {
   name?: string;
   last_name?: string | null;
-  cabinet_address?: string;
+  cabinet_address?: string | null;
   city_id?: number | null;
   description?: string | null;
   experience_years?: number | null;
   telegram_username?: string | null;
   avatar_url?: string | null;
+  avatar_preset?: string | null;
   certificates?: { name: string; url?: string }[];
-  /** Land straight in the master panel after approval (default true). */
+  auto_confirm?: boolean;
+  auto_complete?: boolean;
+  /** Land straight in the master panel after activation (default true). */
   prefer_master_cabinet?: boolean;
 }
 
-export interface MasterApplicationData {
+/** Same shape as GET /admin/profile; the reused form needs no adapter. */
+export interface MasterDraftProfile {
+  id: number;
   name: string;
   last_name?: string | null;
   city_id?: number | null;
-  cabinet_address?: string | null;
-  description?: string | null;
-  experience_years?: number | null;
+  city_name?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  has_password?: boolean;
+  vk_bound?: boolean;
+  yandex_bound?: boolean;
+  max_bound?: boolean;
+  max_username?: string | null;
+  contacts?: ClientContact[];
   telegram_username?: string | null;
+  description?: string | null;
   avatar_url?: string | null;
+  avatar_preset?: string | null;
+  experience_years?: number | null;
+  cabinet_address?: string | null;
   certificates?: { name: string; url?: string }[];
-  prefer_master_cabinet: boolean;
-  created_at?: string | null;
+  auto_confirm?: boolean | null;
+  auto_complete?: boolean | null;
+  prefer_master_cabinet?: boolean;
+  profile_id?: number | null;
+  tariff?: string | null;
+  trial_ends_at?: string | null;
 }
 
-/** GET /auth/become-master: none → no application, pending → awaiting
-    approval, active → already a master. */
-export interface MasterApplicationResponse {
-  status: 'none' | 'pending' | 'active';
-  application: MasterApplicationData | null;
+/** The same five conditions the activation endpoint enforces. */
+export interface MasterReadiness {
+  names: boolean;
+  cabinet_address: boolean;
+  phone: boolean;
+  verified_email: boolean;
+  social: boolean;
+}
+
+export interface MasterDraftResponse {
+  /** none → form untouched, draft → saved but inactive, active → master. */
+  status: 'none' | 'draft' | 'active';
+  profile: MasterDraftProfile;
+  readiness: MasterReadiness;
+  can_activate: boolean;
+}
+
+export interface MasterActivateResponse extends MasterDraftResponse {
+  detail: string;
+  access_token: string;
 }
 
 export const authApi = {
@@ -163,10 +198,15 @@ export const authApi = {
       current_password: currentPassword,
       new_password: newPassword,
     }),
-  becomeMaster: (data: BecomeMasterData) =>
-    apiClient.post<{ detail: string; status: string }>('/api/v1/auth/become-master', data),
-  masterApplication: () => apiClient.get<MasterApplicationResponse>('/api/v1/auth/become-master'),
-  /** Optional photo/certificate upload for a pending application. */
+  /** Save the client-side master profile without activating it. */
+  saveMasterDraft: (data: MasterDraftData) =>
+    apiClient.patch<MasterDraftResponse>('/api/v1/auth/become-master', data),
+  /** Draft state + the full profile/readiness snapshot. */
+  masterDraft: () => apiClient.get<MasterDraftResponse>('/api/v1/auth/become-master'),
+  /** Save the form and activate the master cabinet immediately. */
+  activateMaster: (data: MasterDraftData) =>
+    apiClient.post<MasterActivateResponse>('/api/v1/auth/become-master/activate', data),
+  /** Optional photo/certificate upload while the cabinet is still a draft. */
   uploadMasterPhoto: (file: File, kind: 'avatar' | 'cert' = 'avatar') => {
     const form = new FormData();
     form.append('file', file);

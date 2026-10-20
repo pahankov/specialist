@@ -74,8 +74,10 @@ class TestPasswordReset:
         )
         assert resp.status_code == 400
 
-    async def test_reset_then_login_with_new_password(self, client, super_admin_headers,
-                                                      created_master_id, test_master_data):
+    async def test_reset_does_not_enable_password_login(
+        self, client, super_admin_headers, created_master_id, test_master_data,
+    ):
+        """A password may be stored, but masters still cannot use it to log in."""
         new_pass = "BrandNew456!"
         resp = await client.patch(
             f"/api/v1/admin/masters/{created_master_id}/password",
@@ -87,7 +89,8 @@ class TestPasswordReset:
         login = await client.post("/api/v1/auth/login", json={
             "email": test_master_data["email"], "password": new_pass,
         })
-        assert login.status_code == 200
+        assert login.status_code == 403
+        assert "vk" in login.json()["detail"].lower()
 
     async def test_reset_forbidden_for_master(self, client, auth_context):
         resp = await client.patch(
@@ -99,15 +102,20 @@ class TestPasswordReset:
 
 
 class TestSessions:
-    async def _login_master(self, client, test_master_data):
-        resp = await client.post("/api/v1/auth/login", json={
-            "email": test_master_data["email"], "password": test_master_data["password"],
-        })
-        assert resp.status_code == 200
-        return resp
-    async def test_list_hides_token_values(self, client, super_admin_headers,
+    async def _create_master_session(self, session, test_master_data):
+        """Store a refresh token without the now-blocked password login."""
+        from sqlalchemy import select
+        from app.models.user import User
+        from tests.conftest import issue_master_refresh
+
+        user = (await session.execute(
+            select(User).where(User.email == test_master_data["email"])
+        )).scalar_one()
+        return await issue_master_refresh(session, user)
+
+    async def test_list_hides_token_values(self, client, session, super_admin_headers,
                                             created_master_id, test_master_data):
-        await self._login_master(client, test_master_data)
+        await self._create_master_session(session, test_master_data)
         resp = await client.get(
             f"/api/v1/admin/masters/{created_master_id}/sessions",
             headers=super_admin_headers,
@@ -117,9 +125,9 @@ class TestSessions:
         assert len(items) >= 1
         assert all(set(i) == {"id", "created_at", "expires_at"} for i in items)
 
-    async def test_revoke_kills_refresh(self, client, super_admin_headers,
+    async def test_revoke_kills_refresh(self, client, session, super_admin_headers,
                                         created_master_id, test_master_data):
-        await self._login_master(client, test_master_data)
+        await self._create_master_session(session, test_master_data)
 
         resp = await client.delete(
             f"/api/v1/admin/masters/{created_master_id}/sessions",

@@ -48,7 +48,7 @@ class MasterProfile(Base):
     # Certificates: [{name, url?}] — editable by the master in profile.
     certificates = Column(JSON, nullable=False, default=list)
     # Login landing (1.82.0): a master goes straight to the panel after
-    # login. Unchecked in the application/profile → the client cabinet.
+    # login. Unchecked in the master profile → the client cabinet.
     prefer_master_cabinet = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),

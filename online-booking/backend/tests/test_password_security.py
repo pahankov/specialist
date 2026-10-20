@@ -5,82 +5,67 @@ import pytest
 class TestPasswordHashing:
     """Tests that passwords are properly hashed in the database."""
 
-    async def test_password_is_hashed_not_stored_plain(self, client, test_master_data):
+    async def test_password_is_hashed_not_stored_plain(
+        self, client, session, auth_headers, test_master_data,
+    ):
         """Password stored in DB is a hash, not plain text."""
-        # Register master
-        await client.post("/api/v1/auth/register", json=test_master_data)
+        from sqlalchemy import select
+        from app.models.user import User
 
-        # Login to get token
-        login_resp = await client.post("/api/v1/auth/login", json={
-            "email": test_master_data["email"],
-            "password": test_master_data["password"],
-        })
-        assert login_resp.status_code == 200
+        user = (await session.execute(
+            select(User).where(User.email == test_master_data["email"])
+        )).scalar_one()
+        assert user.hashed_password
+        assert user.hashed_password != test_master_data["password"]
 
-        # Get master data via public endpoint — hashed_password should not be in response
-        token = login_resp.json()["access_token"]
-        headers = {"Authorization": f"Bearer {token}"}
-        resp = await client.get("/api/v1/masters/", headers=headers)
+        # The public listing never exposes the hash either.
+        resp = await client.get("/api/v1/masters/")
         assert resp.status_code == 200
+        master = next(m for m in resp.json()
+                      if m["email"] == test_master_data["email"])
+        assert "hashed_password" not in master
 
-        masters = resp.json()
-        master = next(m for m in masters if m["email"] == test_master_data["email"])
-        assert "hashed_password" not in master  # Never expose password hash in API response
+    async def test_password_hash_is_different_from_plain(
+        self, session, auth_headers, test_master_data,
+    ):
+        """The hashed password in DB verifies while differing from plain text."""
+        from sqlalchemy import select
+        from app.models.user import User
+        from app.utils.security import verify_password
 
-    async def test_password_hash_is_different_from_plain(self, client, test_master_data):
-        """The hashed password in DB is different from the plain password."""
-        # Register
-        await client.post("/api/v1/auth/register", json=test_master_data)
+        user = (await session.execute(
+            select(User).where(User.email == test_master_data["email"])
+        )).scalar_one()
+        assert user.hashed_password != test_master_data["password"]
+        assert verify_password(test_master_data["password"], user.hashed_password)
 
-        # Login
-        login_resp = await client.post("/api/v1/auth/login", json={
-            "email": test_master_data["email"],
-            "password": test_master_data["password"],
-        })
-        assert login_resp.status_code == 200
+    async def test_different_passwords_produce_different_hashes(self, client, session):
+        """Two masters with different passwords get different hashes."""
+        from sqlalchemy import select
+        from app.models.user import User
+        from app.utils.security import verify_password
 
-        # Verify login works (proves password was hashed correctly)
-        assert login_resp.json()["access_token"]
+        for name, email, password, phone in (
+            ("Master One", "master1@example.com", "Password1!", "+79990001111"),
+            ("Master Two", "master2@example.com", "Different2@", "+79990002222"),
+        ):
+            reg = await client.post("/api/v1/auth/register", json={
+                "name": name, "email": email, "password": password,
+                "phone": phone, "role": "MASTER",
+            })
+            assert reg.status_code == 201, reg.text
 
-    async def test_different_passwords_produce_different_hashes(self, client):
-        """Two masters with different passwords can both exist and login."""
-        # Register first master
-        await client.post("/api/v1/auth/register", json={
-            "name": "Master One",
-            "email": "master1@example.com",
-            "password": "Password1!",
-            "phone": "+79990001111",
-            "role": "MASTER",
-        })
+        first = (await session.execute(
+            select(User).where(User.email == "master1@example.com")
+        )).scalar_one()
+        second = (await session.execute(
+            select(User).where(User.email == "master2@example.com")
+        )).scalar_one()
 
-        # Register second master with different password
-        await client.post("/api/v1/auth/register", json={
-            "name": "Master Two",
-            "email": "master2@example.com",
-            "password": "Different2@",
-            "phone": "+79990002222",
-            "role": "MASTER",
-        })
-
-        # Both can login with their own passwords
-        login1 = await client.post("/api/v1/auth/login", json={
-            "email": "master1@example.com",
-            "password": "Password1!",
-        })
-        assert login1.status_code == 200
-
-        login2 = await client.post("/api/v1/auth/login", json={
-            "email": "master2@example.com",
-            "password": "Different2@",
-        })
-        assert login2.status_code == 200
-
-        # Cross-login should fail
-        login_wrong = await client.post("/api/v1/auth/login", json={
-            "email": "master1@example.com",
-            "password": "Different2@",
-        })
-        assert login_wrong.status_code == 401
+        assert first.hashed_password != second.hashed_password
+        assert verify_password("Password1!", first.hashed_password)
+        assert verify_password("Different2@", second.hashed_password)
+        assert not verify_password("Different2@", first.hashed_password)
 
     async def test_password_update_requires_strong_password(self, client, auth_headers):
         """Updating password requires meeting strength requirements."""

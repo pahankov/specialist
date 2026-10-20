@@ -179,7 +179,7 @@ function BaseLayout({
   };
 
   // Dual-role switch: masters move between their panel and the client
-  // cabinet; plain clients get an application page (verified by admin).
+  // cabinet; plain clients open the master profile draft and self-activate.
   const role = getUserRole();
   const inCabinet = location.pathname.startsWith('/cabinet');
   const inMasterSection =
@@ -402,7 +402,7 @@ function BaseLayout({
             <button
               className="btn btn-ghost"
               onClick={() => navigate('/cabinet/become-master')}
-              title="Оставить заявку — профиль откроется после проверки"
+              title="Заполнить профиль мастера и активировать кабинет"
             >
               <span className="nav-icon">✨</span>
               {!sidebarCollapsed && <span className="nav-label">Стать мастером</span>}

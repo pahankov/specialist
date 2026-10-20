@@ -81,19 +81,44 @@ def test_master_data():
     }
 
 
+def master_access_token(user) -> str:
+    """Mint a MASTER JWT directly — password login is social-only (1.83.0)."""
+    from app.modules.auth.token import create_access_token
+
+    return create_access_token({
+        "sub": str(user.id),
+        "role": user.role.value,
+        "name": user.name,
+        "last_name": user.last_name,
+        "is_admin": False,
+    })
+
+
+async def issue_master_refresh(session, user) -> str:
+    """Store a valid refresh token for a master without a password login."""
+    from app.models.refresh_token import RefreshToken
+    from app.utils.tokens import create_refresh_token_payload
+
+    token, expires_at = create_refresh_token_payload(user.id, user.email or "")
+    session.add(RefreshToken(
+        user_id=user.id, token=token, expires_at=expires_at, is_revoked=False,
+    ))
+    await session.commit()
+    return token
+
+
 @pytest.fixture
-async def auth_token(client, test_master_data):
-    """Register a master and return JWT token."""
+async def auth_token(client, session, test_master_data):
+    """Register a master and return a directly minted JWT token."""
+    from sqlalchemy import select
+    from app.models.user import User
+
     resp = await client.post("/api/v1/auth/register", json=test_master_data)
     assert resp.status_code == 201, f"Register failed: {resp.text}"
-
-    login_data = {
-        "email": test_master_data["email"],
-        "password": test_master_data["password"]
-    }
-    resp = await client.post("/api/v1/auth/login", json=login_data)
-    assert resp.status_code == 200, f"Login failed: {resp.text}"
-    return resp.json()["access_token"]
+    user = (await session.execute(
+        select(User).where(User.email == test_master_data["email"])
+    )).scalar_one()
+    return master_access_token(user)
 
 
 @pytest.fixture
@@ -103,19 +128,18 @@ def auth_headers(auth_token):
 
 
 @pytest.fixture
-async def auth_context(client, test_master_data):
-    """Register a master and return both JWT token and master ID."""
+async def auth_context(client, session, test_master_data):
+    """Register a master and return a direct JWT token and master ID."""
+    from sqlalchemy import select
+    from app.models.user import User
+
     reg_resp = await client.post("/api/v1/auth/register", json=test_master_data)
     assert reg_resp.status_code == 201, f"Register failed: {reg_resp.text}"
     master_id = reg_resp.json()["id"]
-
-    login_data = {
-        "email": test_master_data["email"],
-        "password": test_master_data["password"]
-    }
-    login_resp = await client.post("/api/v1/auth/login", json=login_data)
-    assert login_resp.status_code == 200, f"Login failed: {login_resp.text}"
-    token = login_resp.json()["access_token"]
+    user = (await session.execute(
+        select(User).where(User.email == test_master_data["email"])
+    )).scalar_one()
+    token = master_access_token(user)
 
     return {"token": token, "master_id": master_id, "headers": {"Authorization": f"Bearer {token}"}}
 

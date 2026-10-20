@@ -107,10 +107,31 @@ async def register_master(user_data: UserCreate, db: AsyncSession) -> User:
     return new_user
 
 
+MASTER_SOCIAL_LOGIN_DETAIL = (
+    "Мастера входят только через VK, Яндекс или MAX. "
+    "Пароль для кабинета мастера не используется."
+)
+
+
+def _reject_master_password_login(user: User) -> None:
+    """Masters are a social-only role (owner review 1.83.0).
+
+    Password/OTP login would bypass the binding requirement and contradict
+    the «Вход и привязки» model, so every non-social entry path rejects a
+    MASTER account. ADMIN (the superuser) keeps password login.
+    """
+    if user.role == UserRole.MASTER:
+        logger.warning("Password login blocked for master: user_id=%s", user.id)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=MASTER_SOCIAL_LOGIN_DETAIL,
+        )
+
+
 # ─── Login ────────────────────────────────────────────────────────────
 
 async def login_master(email: str, password: str, db: AsyncSession) -> tuple[str, User]:
-    """Login master by email+password. Returns (access_token, user)."""
+    """Email+password login for CLIENT/ADMIN; MASTER is rejected below."""
     logger.info("Запрос на вход мастера: %s", email)
 
     result = await db.execute(select(User).where(User.email == email))
@@ -129,6 +150,8 @@ async def login_master(email: str, password: str, db: AsyncSession) -> tuple[str
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Аккаунт заблокирован. Обратитесь к администратору."
         )
+
+    _reject_master_password_login(user)
 
     access_token = create_access_token({
         "sub": str(user.id),
@@ -228,6 +251,9 @@ async def verify_otp(phone: str, code: str, db: AsyncSession) -> tuple[str, User
         await db.refresh(user)
         logger.info("New client created via OTP: user_id=%s, phone=%s", user.id, phone)
 
+    # An existing MASTER must use a social binding; OTP is not a social login.
+    _reject_master_password_login(user)
+
     access_token = create_access_token({
         "sub": str(user.id),
         "role": user.role.value,
@@ -264,6 +290,8 @@ async def login_client_legacy(phone: str, db: AsyncSession) -> tuple[str, User]:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Аккаунт заблокирован. Обратитесь к администратору."
         )
+
+    _reject_master_password_login(user)
 
     access_token = create_access_token({
         "sub": str(user.id),
@@ -399,6 +427,8 @@ async def login_unified(
             detail="Аккаунт заблокирован. Обратитесь к администратору."
         )
 
+    _reject_master_password_login(user)
+
     access_token = create_access_token({
         "sub": str(user.id),
         "role": user.role.value,
@@ -434,6 +464,10 @@ async def phone_status(phone: str, db: AsyncSession) -> dict:
         state = "new"
         # Create a challenge token for the pending registration.
         challenge = _create_challenge_token(0, phone)
+    elif user.role == UserRole.MASTER:
+        # Masters are social-only even if an old password still exists.
+        state = "social"
+        challenge = None
     elif user.hashed_password:
         state = "password"
         challenge = None
@@ -463,10 +497,10 @@ async def register_unified(
     """Quick registration: phone + password, everyone a CLIENT.
 
     Minimal by design — name/email/address/city are refined later in the
-    client cabinet profile. Becoming a master is a separate, admin-approved
-    application (/become-master), never this path. `name` is nullable and
-    left empty here; the display name is filled in once the user edits
-    their profile.
+    client cabinet profile. Becoming a master is a separate self-service
+    draft (/become-master), never this path. `name` is nullable and left
+    empty here; the display name is filled in once the user edits their
+    profile.
     """
     logger.info("Quick registration: %s", phone)
 
@@ -564,14 +598,20 @@ async def change_password(
     new_password: str,
     db: AsyncSession,
 ) -> None:
-    """Change the password of the current account — any role that has one.
+    """Change the password of a CLIENT or ADMIN account.
 
-    Social / OTP-only accounts have no password by design («пароль
-    соц-юзерам не навязываем»): for them this is a 400 with a hint,
-    never a silent password creation. Sessions stay alive: the user
-    knows their new password already.
+    MASTER accounts are social-only (1.83.0) and always get a 400, even if
+    a legacy password hash remains. Social / OTP-only accounts have no
+    password by design («пароль соц-юзерам не навязываем»): for them this
+    is a 400 with a hint, never a silent password creation. Sessions stay
+    alive: the user knows their new password already.
     """
     logger.info("Change password request: user_id=%s", user.id)
+    if user.role == UserRole.MASTER:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=MASTER_SOCIAL_LOGIN_DETAIL,
+        )
     if not user.hashed_password:
         logger.warning("Change password denied, no password: user_id=%s", user.id)
         raise HTTPException(
@@ -602,7 +642,8 @@ async def request_password_reset(email: str, db: AsyncSession) -> bool:
     Always looks identical from the outside (no account enumeration):
     the caller returns one generic message whatever happens here.
     Accounts without a password may still set one through the reset —
-    it is a deliberate user action, not an imposed password.
+    it is a deliberate user action, not an imposed password. MASTER
+    accounts are social-only, so no code is sent for them.
     """
     try:
         email = normalize_email(email)
@@ -611,6 +652,11 @@ async def request_password_reset(email: str, db: AsyncSession) -> bool:
     user = await find_user_by_contact(db, CONTACT_EMAIL, email)
     if user is None or user.is_active is False:
         logger.info("Password reset for unknown/inactive email: %s", email)
+        return False
+    if user.role == UserRole.MASTER:
+        # Social-only role: a password reset would issue a password session
+        # and silently undo the policy. Keep the generic external response.
+        logger.info("Password reset skipped for master: %s", email)
         return False
     code = await email_codes.issue_code(
         db, email, email_codes.PURPOSE_RESET_PASSWORD)
@@ -643,6 +689,11 @@ async def reset_password(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Аккаунт с такой почтой не найден",
+        )
+    if user.role == UserRole.MASTER:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=MASTER_SOCIAL_LOGIN_DETAIL,
         )
 
     user.hashed_password = hash_password(new_password)

@@ -67,6 +67,15 @@ async def toggle_master_active(
         logger.warning("Admin %s tried to toggle self (id=%s)", super_admin.email, master_id)
         raise HTTPException(status_code=400, detail="Нельзя заблокировать себя")
 
+    # 1.83.0: activation is self-service. A client's draft must never be
+    # switched on from the admin panel; only an existing MASTER can be
+    # blocked/unblocked here.
+    if mp.user.role != UserRole.MASTER:
+        raise HTTPException(
+            status_code=400,
+            detail="Черновик мастера активируется самим клиентом в профиле",
+        )
+
     old_status = mp.status
     # Block = both flags: the UI badge/icon read is_active, schedule logic
     # reads status — flipping only one made the button look dead.
@@ -74,9 +83,6 @@ async def toggle_master_active(
     if mp.is_active:
         mp.status = "active"
         status_str = "включён"
-        # Application approved: a client applicant becomes a master now.
-        if mp.user.role != UserRole.ADMIN:
-            mp.user.role = UserRole.MASTER
     else:
         mp.status = "inactive"
         status_str = "отключён"

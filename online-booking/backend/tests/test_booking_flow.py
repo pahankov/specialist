@@ -15,15 +15,16 @@ from datetime import datetime, timedelta
 class TestBookingFlow:
     """Full booking flow integration tests."""
 
-    async def _login_master(self, client, email, password):
-        """Helper: login master and return auth headers."""
-        login_resp = await client.post("/api/v1/auth/login", json={
-            "email": email,
-            "password": password
-        })
-        assert login_resp.status_code == 200, f"Login failed: {login_resp.text}"
-        token = login_resp.json()["access_token"]
-        return {"Authorization": f"Bearer {token}"}
+    async def _login_master(self, client, session, email, password):
+        """Helper: mint a master token (password login is social-only)."""
+        from sqlalchemy import select
+        from app.models.user import User
+        from tests.conftest import master_access_token
+
+        user = (await session.execute(
+            select(User).where(User.email == email)
+        )).scalar_one()
+        return {"Authorization": f"Bearer {master_access_token(user)}"}
 
     async def _register_master(self, client, email, name, password, phone):
         """Helper: register master and return master_profile_id."""
@@ -68,7 +69,8 @@ class TestBookingFlow:
         )
         
         # Login as master
-        auth_headers = await self._login_master(client, master_email, "SecurePass123!")
+        auth_headers = await self._login_master(
+            client, session, master_email, "SecurePass123!")
 
         # ─── Step 2: Create service for master ───
         service_resp = await client.post(
@@ -178,7 +180,8 @@ class TestBookingFlow:
         )
         
         # Login as master
-        auth_headers = await self._login_master(client, master_email, "SecurePass789!")
+        auth_headers = await self._login_master(
+            client, session, master_email, "SecurePass789!")
 
         # Create service
         service_resp = await client.post(
@@ -266,7 +269,8 @@ class TestBookingFlow:
         )
         
         # Login as master
-        auth_headers = await self._login_master(client, master_email, "SecurePassReview1!")
+        auth_headers = await self._login_master(
+            client, session, master_email, "SecurePassReview1!")
 
         # Create service
         service_resp = await client.post(

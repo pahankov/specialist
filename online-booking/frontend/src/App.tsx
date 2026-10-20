@@ -23,7 +23,6 @@ import CabinetBookPage from './pages/cabinet/CabinetBookPage';
 import CabinetNotificationsPage from './pages/cabinet/CabinetNotificationsPage';
 import ClientCouponsPage from './pages/cabinet/ClientCouponsPage';
 import ClientProfilePage from './pages/cabinet/ClientProfilePage';
-import BecomeMasterPage from './pages/cabinet/BecomeMasterPage';
 import ClientLayout from './pages/cabinet/ClientLayout';
 import ErrorBoundary from './components/ErrorBoundary';
 import { getCookie, decodeJwtPayload, getUserRole } from './utils/cookies';
@@ -132,7 +131,7 @@ function App() {
             <Route path="coupons" element={<ClientCouponsPage />} />
             <Route path="notifications" element={<CabinetNotificationsPage />} />
             <Route path="profile" element={<ClientProfilePage />} />
-            <Route path="become-master" element={<BecomeMasterPage />} />
+            <Route path="become-master" element={<ProfilePage mode="draft" />} />
           </Route>
 
           {/* Logins happen via modal on home */}

@@ -162,6 +162,18 @@
   font-size: 13px;
 }
 
+/* Social-only master login policy inside «Вход и привязки». */
+.profile-social-only {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #3730a3;
+  line-height: 1.45;
+}
+
 /* ─── Password card (1.82.0) ─── */
 
 /* Eye toggles, same pattern as the login modal: one per field. */

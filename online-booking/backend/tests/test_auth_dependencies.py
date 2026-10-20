@@ -112,8 +112,12 @@ class TestRequireAdmin:
         resp = await client.get("/api/v1/admin/masters/", headers=super_admin_headers)
         assert resp.status_code in (200, 307)  # 307 if redirect, 200 if direct
 
-    async def test_non_admin_rejected(self, client):
+    async def test_non_admin_rejected(self, client, session):
         """Non-admin user is rejected from admin endpoints."""
+        from sqlalchemy import select
+        from app.models.user import User
+        from tests.conftest import master_access_token
+
         # Register a master (non-admin)
         reg_resp = await client.post("/api/v1/auth/register", json={
             "name": "Regular Master",
@@ -124,14 +128,10 @@ class TestRequireAdmin:
             "role": "MASTER"
         })
         assert reg_resp.status_code == 201
-
-        # Login
-        login_resp = await client.post("/api/v1/auth/login", json={
-            "email": "regular_master@example.com",
-            "password": "SecurePass123!"
-        })
-        assert login_resp.status_code == 200
-        master_token = login_resp.json()["access_token"]
+        user = (await session.execute(
+            select(User).where(User.email == "regular_master@example.com")
+        )).scalar_one()
+        master_token = master_access_token(user)
 
         # Try to access admin endpoint
         resp = await client.get(

@@ -183,12 +183,13 @@ class TestMasterSelfDelete:
         assert pub.status_code == 200
         assert all(m["id"] != mp.id for m in pub.json())
 
-        # Password login no longer finds the account.
+        # Masters are social-only: password login is blocked even before the
+        # deleted flag is checked (and the public listing is gone either way).
         r = await client.post("/api/v1/auth/login", json={
             "email": "selfdel_master@example.com",
             "password": "Password1!",
         })
-        assert r.status_code in (400, 401, 404)
+        assert r.status_code in (400, 401, 403, 404)
 
     async def test_admin_cannot_delete_self(
         self, client, super_admin_headers,

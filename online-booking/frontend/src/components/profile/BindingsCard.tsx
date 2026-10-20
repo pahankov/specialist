@@ -18,6 +18,8 @@ interface BindingsCardProps {
   onChanged: () => void;
   /** Open the MAX code flow (LoginModal in max mode — owned by the page). */
   onMaxLink: () => void;
+  /** Masters (and the draft) sign in only through socials — no password. */
+  socialOnly?: boolean;
 }
 
 /**
@@ -35,6 +37,7 @@ function BindingsCard({
   maxUsername,
   onChanged,
   onMaxLink,
+  socialOnly = false,
 }: BindingsCardProps) {
   const [vkOpen, setVkOpen] = useState(false);
   const [yandexBusy, setYandexBusy] = useState(false);
@@ -65,6 +68,12 @@ function BindingsCard({
         Привязанная соцсеть впускает в этот же аккаунт в один тап — пароль и код не нужны. Почта и
         телефон при этом не меняются.
       </p>
+      {socialOnly && (
+        <p className="profile-social-only">
+          🔐 Вход в кабинет мастера — только через VK, Яндекс или MAX. Пароль для мастера не
+          используется.
+        </p>
+      )}
 
       <div className="bind-list">
         {/* ── VK (VK/OK/Mail widget, link mode) ── */}

@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { adminApi, assetUrl, authApi } from '../../api/client';
-import type { ClientContact } from '../../api/cabinet';
+import type { ClientContact, MasterDraftData, MasterDraftProfile } from '../../api/client';
 import {
   AddressSelect,
   BackendImg,
@@ -50,6 +50,16 @@ const AVATAR_PRESETS = [
 /** Contact row of GET /admin/profile — the cabinet contact shape. */
 type ProfileContact = ClientContact;
 
+/** Auth-channel flags shared by /admin/profile and the draft snapshot. */
+interface ProfileAuthData {
+  has_password?: boolean;
+  vk_bound?: boolean;
+  yandex_bound?: boolean;
+  max_bound?: boolean;
+  max_username?: string | null;
+  contacts?: ProfileContact[];
+}
+
 /** Admin-profile endpoints for ContactsCard (super reuses the cabinet card). */
 const ADMIN_CONTACTS_API: ContactsApi = {
   addContact: (data) => adminApi.addProfileContact(data),
@@ -59,12 +69,19 @@ const ADMIN_CONTACTS_API: ContactsApi = {
   verifyContactCode: (id, code) => adminApi.verifyProfileContactCode(id, code),
 };
 
+interface ProfilePageProps {
+  /** draft = client fills the same form before activating the master cabinet. */
+  mode?: 'master' | 'draft';
+}
+
 /** Master personal data: photo, names, contacts, city, cabinet, certificates. */
-function ProfilePage() {
+function ProfilePage({ mode = 'master' }: ProfilePageProps) {
   const navigate = useNavigate();
   const location = useLocation();
+  const isDraft = mode === 'draft';
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [activating, setActivating] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmDeleteStep2, setConfirmDeleteStep2] = useState(false);
@@ -83,6 +100,8 @@ function ProfilePage() {
   const [profileId, setProfileId] = useState<number | null>(null);
   const [hasPassword, setHasPassword] = useState(false);
   const [hasEmail, setHasEmail] = useState(false);
+  /** Legacy users.phone fallback for the activation checklist. */
+  const [profilePhone, setProfilePhone] = useState<string | null>(null);
   const [vkBound, setVkBound] = useState(false);
   const [yandexBound, setYandexBound] = useState(false);
   const [maxBound, setMaxBound] = useState(false);
@@ -102,22 +121,17 @@ function ProfilePage() {
 
   /** Superadmin gets a slim profile: auth channels + password + contacts —
       the master-only blocks (photo/certs/reviews/delete) do not apply. */
-  const isSuper = (() => {
-    try {
-      return decodeJwtPayload(getCookie('access_token') ?? '')?.is_admin === true;
-    } catch {
-      return false;
-    }
-  })();
+  const isSuper =
+    !isDraft &&
+    (() => {
+      try {
+        return decodeJwtPayload(getCookie('access_token') ?? '')?.is_admin === true;
+      } catch {
+        return false;
+      }
+    })();
 
-  const applyAuthFlags = (data: {
-    has_password?: boolean;
-    vk_bound?: boolean;
-    yandex_bound?: boolean;
-    max_bound?: boolean;
-    max_username?: string | null;
-    contacts?: ProfileContact[];
-  }) => {
+  const applyAuthFlags = useCallback((data: ProfileAuthData) => {
     setHasPassword(Boolean(data.has_password));
     setVkBound(Boolean(data.vk_bound));
     setYandexBound(Boolean(data.yandex_bound));
@@ -126,43 +140,72 @@ function ProfilePage() {
     const list = data.contacts ?? [];
     setContacts(list);
     setHasEmail(list.some((c) => c.contact_type === 'email'));
-  };
+  }, []);
+
+  /** Fill the reused form from either the master profile or the draft. */
+  const applyProfileData = useCallback(
+    (data: MasterDraftProfile) => {
+      const [first, rest] = splitFullName(data.name || '');
+      setFirstName(first);
+      setLastName(data.last_name || rest);
+      setTelegram(data.telegram_username || '');
+      setDescription(data.description || '');
+      setExperience(data.experience_years != null ? String(data.experience_years) : '');
+      setCity(
+        data.city_id != null
+          ? { id: data.city_id, name: data.city_name || '', source: 'local' }
+          : null,
+      );
+      setAddress(data.cabinet_address || '');
+      setAvatar(data.avatar_url || null);
+      setPreset(data.avatar_preset || null);
+      setCerts(data.certificates || []);
+      setProfileId(data.profile_id ?? null);
+      setProfilePhone(data.phone ?? null);
+      setPreferMaster(data.prefer_master_cabinet !== false);
+      applyAuthFlags(data);
+    },
+    [applyAuthFlags],
+  );
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       try {
-        const { data } = await adminApi.getProfile();
-        const [first, rest] = splitFullName(data.name || '');
-        setFirstName(first);
-        setLastName(data.last_name || rest);
-        setTelegram(data.telegram_username || '');
-        setDescription(data.description || '');
-        setExperience(data.experience_years != null ? String(data.experience_years) : '');
-        setCity(
-          data.city_id != null
-            ? { id: data.city_id, name: data.city_name || '', source: 'local' }
-            : null,
-        );
-        setAddress(data.cabinet_address || '');
-        setAvatar(data.avatar_url || null);
-        setPreset(data.avatar_preset || null);
-        setCerts(data.certificates || []);
-        setProfileId(data.profile_id ?? null);
-        setPreferMaster(data.prefer_master_cabinet !== false);
-        applyAuthFlags(data);
+        if (isDraft) {
+          const { data } = await authApi.masterDraft();
+          if (cancelled) return;
+          if (data.status === 'active') {
+            navigate('/admin/profile', { replace: true });
+            return;
+          }
+          applyProfileData(data.profile);
+        } else {
+          const { data } = await adminApi.getProfile();
+          if (cancelled) return;
+          applyProfileData(data);
+        }
       } catch (err: unknown) {
         toast.error(getApiErrorMessage(err, 'Не удалось загрузить профиль'));
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     })();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [isDraft, navigate, applyProfileData]);
 
   /** Light reload for the bind cards (keeps the form drafts untouched). */
   const refreshAuthFlags = async () => {
     try {
-      const { data } = await adminApi.getProfile();
-      applyAuthFlags(data);
+      if (isDraft) {
+        const { data } = await authApi.masterDraft();
+        applyAuthFlags(data.profile);
+      } else {
+        const { data } = await adminApi.getProfile();
+        applyAuthFlags(data);
+      }
     } catch {
       /* ignore — the next full reload recovers */
     }
@@ -214,7 +257,9 @@ function ProfilePage() {
       toast.error('Файл больше 5 МБ');
       return null;
     }
-    const { data } = await adminApi.uploadAvatar(file, kind);
+    const { data } = isDraft
+      ? await authApi.uploadMasterPhoto(file, kind)
+      : await adminApi.uploadAvatar(file, kind);
     return data.avatar_url;
   };
 
@@ -266,42 +311,87 @@ function ProfilePage() {
     setNewCertUrl(undefined);
   };
 
+  /** A typed-but-unadded certificate goes in automatically on save. */
+  const collectCerts = (): Cert[] => {
+    const draft = newCertName.trim();
+    if (draft && !certs.some((c) => c.name === draft)) {
+      return [...certs, newCertUrl ? { name: draft, url: newCertUrl } : { name: draft }];
+    }
+    return certs;
+  };
+
+  const basePayload = (list: Cert[]): MasterDraftData => ({
+    // Empty names are allowed in a draft; the activation gate enforces both.
+    name: firstName.trim() || undefined,
+    last_name: lastName.trim() || null,
+    telegram_username: telegram.trim() || null,
+    description: description.trim() || null,
+    experience_years: experience.trim() === '' ? null : Number(experience),
+    city_id: city?.id ?? null,
+    cabinet_address: address.trim() || null,
+    certificates: list,
+    prefer_master_cabinet: preferMaster,
+  });
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!firstName.trim()) {
+    if (!isDraft && !firstName.trim()) {
       toast.error('Введите имя');
       return;
     }
-    // A typed-but-unadded draft (name + optional photo, "+ Добавить" not
-    // pressed) goes in automatically — otherwise it silently vanishes.
-    let list = certs;
-    const draft = newCertName.trim();
-    if (draft && !certs.some((c) => c.name === draft)) {
-      list = [...certs, newCertUrl ? { name: draft, url: newCertUrl } : { name: draft }];
-    }
+    const list = collectCerts();
     setSaving(true);
     try {
-      const { data } = await adminApi.updateProfile({
-        name: firstName.trim(),
-        last_name: lastName.trim() || null,
-        telegram_username: telegram.trim() || null,
-        description: description.trim() || null,
-        experience_years: experience.trim() === '' ? null : Number(experience),
-        city_id: city?.id ?? null,
-        cabinet_address: address.trim() || null,
-        certificates: list,
-        avatar_preset: preset,
-        prefer_master_cabinet: preferMaster,
-      });
-      // Converge with the server (it echoes the saved profile).
-      setCerts(data?.certificates || list);
+      if (isDraft) {
+        const { data } = await authApi.saveMasterDraft({
+          ...basePayload(list),
+          avatar_url: preset ? null : avatar,
+          avatar_preset: preset,
+        });
+        applyProfileData(data.profile);
+        toast.success('Черновик сохранён');
+      } else {
+        const { data } = await adminApi.updateProfile({
+          ...basePayload(list),
+          avatar_preset: preset,
+        });
+        // Converge with the server (it echoes the saved profile).
+        setCerts(data?.certificates || list);
+        toast.success('Профиль сохранён');
+      }
+      setCerts(list);
       setNewCertName('');
       setNewCertUrl(undefined);
-      toast.success('Профиль сохранён');
     } catch (err: unknown) {
-      toast.error(getApiErrorMessage(err, 'Не удалось сохранить профиль'));
+      toast.error(
+        getApiErrorMessage(
+          err,
+          isDraft ? 'Не удалось сохранить черновик' : 'Не удалось сохранить профиль',
+        ),
+      );
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleActivate = async () => {
+    if (!isDraft || activating) return;
+    const list = collectCerts();
+    setActivating(true);
+    try {
+      await authApi.activateMaster({
+        ...basePayload(list),
+        avatar_url: preset ? null : avatar,
+        avatar_preset: preset,
+      });
+      toast.success('Кабинет мастера активирован');
+      // Hard navigation: the activation response already set the MASTER
+      // access cookie; the admin layout then loads with the new role.
+      window.location.assign('/admin/profile');
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Не удалось активировать кабинет мастера'));
+    } finally {
+      setActivating(false);
     }
   };
 
@@ -327,6 +417,38 @@ function ProfilePage() {
       setConfirmDelete(false);
     }
   };
+
+  // The same five conditions the backend checks at activation. The email
+  // item is green only for a VERIFIED contact — merely having a row is not
+  // enough (owner review 1.83.0).
+  const draftChecklist = [
+    {
+      key: 'names',
+      label: 'Имя и фамилия',
+      done: Boolean(firstName.trim() && lastName.trim()),
+    },
+    {
+      key: 'cabinet_address',
+      label: 'Адрес кабинета',
+      done: Boolean(address.trim()),
+    },
+    {
+      key: 'phone',
+      label: 'Телефон добавлен',
+      done: contacts.some((c) => c.contact_type === 'phone') || Boolean(profilePhone),
+    },
+    {
+      key: 'verified_email',
+      label: 'Почта подтверждена',
+      done: contacts.some((c) => c.contact_type === 'email' && c.is_verified),
+    },
+    {
+      key: 'social',
+      label: 'Привязана соцсеть (VK, Яндекс или MAX)',
+      done: vkBound || yandexBound || maxBound,
+    },
+  ];
+  const canActivate = draftChecklist.every((item) => item.done);
 
   if (loading) {
     return (
@@ -407,10 +529,54 @@ function ProfilePage() {
     <div className="profile-page">
       <div className="page-header">
         <div>
-          <h1>👤 Мой профиль</h1>
-          <p>Личные данные, фото, адрес кабинета и сертификаты</p>
+          <h1>{isDraft ? '🎨 Профиль мастера' : '👤 Мой профиль'}</h1>
+          <p>
+            {isDraft
+              ? 'Заполните профиль мастера — кабинет активируется сразу, как только будут выполнены все условия'
+              : 'Личные данные, фото, адрес кабинета и сертификаты'}
+          </p>
         </div>
       </div>
+
+      {isDraft && (
+        <div className={`card profile-activation-card${canActivate ? ' ready' : ''}`}>
+          <div className="profile-activation-head">
+            <div>
+              <h3>Стать мастером</h3>
+              <p className="profile-card-hint">
+                Пока кабинет не активирован, вы остаётесь клиентом. Проверьте условия и нажмите
+                кнопку — одобрение администратора больше не требуется.
+              </p>
+            </div>
+            <span className={`profile-activation-badge${canActivate ? ' ready' : ''}`}>
+              {canActivate ? 'Всё готово' : 'Черновик'}
+            </span>
+          </div>
+          <ul className="profile-activation-list">
+            {draftChecklist.map((item) => (
+              <li key={item.key} className={item.done ? 'done' : 'pending'}>
+                <span className="profile-check" aria-hidden="true">
+                  {item.done ? '✓' : '○'}
+                </span>
+                <span>{item.label}</span>
+              </li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={!canActivate || activating}
+            onClick={handleActivate}
+          >
+            {activating ? 'Активируем…' : 'Стать мастером'}
+          </button>
+          {!canActivate && (
+            <p className="profile-card-hint" style={{ marginBottom: 0 }}>
+              Кнопка станет активной, когда все пункты будут отмечены.
+            </p>
+          )}
+        </div>
+      )}
 
       <form onSubmit={handleSave}>
         <div className="card" style={{ marginBottom: 16 }}>
@@ -482,11 +648,11 @@ function ProfilePage() {
           </div>
           <div className="form-row">
             <div className="form-group">
-              <label>Имя *</label>
+              <label>Имя{isDraft ? '' : ' *'}</label>
               <input
                 value={firstName}
                 onChange={(e) => setFirstName(capitalizeWords(e.target.value))}
-                required
+                required={!isDraft}
                 placeholder="Иван"
               />
             </div>
@@ -623,13 +789,14 @@ function ProfilePage() {
 
         <div className="form-actions">
           <button type="submit" className="btn btn-primary" disabled={saving}>
-            {saving ? 'Сохранение…' : 'Сохранить профиль'}
+            {saving ? 'Сохранение…' : isDraft ? 'Сохранить черновик' : 'Сохранить профиль'}
           </button>
         </div>
       </form>
 
-      {/* Auth channels (1.79.0): bind socials, change password. */}
+      {/* Master login is social-only: bind VK/Yandex/MAX; no password card. */}
       <BindingsCard
+        socialOnly
         vkBound={vkBound}
         yandexBound={yandexBound}
         maxBound={maxBound}
@@ -638,32 +805,42 @@ function ProfilePage() {
         onMaxLink={() => setMaxLinkOpen(true)}
       />
 
-      <PasswordCard hasPassword={hasPassword} hasEmail={hasEmail} />
+      {/* Contacts stay editable after activation: the draft uses the client
+          cabinet API, an active master the admin-profile API. */}
+      <ContactsCard
+        contacts={contacts}
+        onChanged={refreshAuthFlags}
+        api={isDraft ? undefined : ADMIN_CONTACTS_API}
+      />
 
-      <div className="card" id="reviews" style={{ marginTop: 16, scrollMarginTop: 12 }}>
-        <h3>⭐ Мои отзывы и оценки</h3>
-        <p style={{ fontSize: 13, color: '#666' }}>
-          Средний рейтинг виден клиентам при записи. Отзыв появляется здесь сразу после оценки
-          визита.
-        </p>
-        <MasterReviews profileId={profileId} />
-      </div>
+      {!isDraft && (
+        <>
+          <div className="card" id="reviews" style={{ marginTop: 16, scrollMarginTop: 12 }}>
+            <h3>⭐ Мои отзывы и оценки</h3>
+            <p style={{ fontSize: 13, color: '#666' }}>
+              Средний рейтинг виден клиентам при записи. Отзыв появляется здесь сразу после оценки
+              визита.
+            </p>
+            <MasterReviews profileId={profileId} />
+          </div>
 
-      <div className="card" style={{ marginTop: 16, borderColor: '#e5484d' }}>
-        <h3>🗑 Удаление аккаунта</h3>{' '}
-        <p style={{ fontSize: 13, color: '#666' }}>
-          Профиль снимется с публикации, контакты сотрутся, будущие записи клиентов отменятся.
-          История хранится обезличенной 3 года согласно политике обработки данных.
-        </p>
-        <button
-          type="button"
-          className="btn btn-delete"
-          disabled={deleting}
-          onClick={() => setConfirmDelete(true)}
-        >
-          {deleting ? 'Удаление…' : 'Удалить мой аккаунт'}
-        </button>
-      </div>
+          <div className="card" style={{ marginTop: 16, borderColor: '#e5484d' }}>
+            <h3>🗑 Удаление аккаунта</h3>{' '}
+            <p style={{ fontSize: 13, color: '#666' }}>
+              Профиль снимется с публикации, контакты сотрутся, будущие записи клиентов отменятся.
+              История хранится обезличенной 3 года согласно политике обработки данных.
+            </p>
+            <button
+              type="button"
+              className="btn btn-delete"
+              disabled={deleting}
+              onClick={() => setConfirmDelete(true)}
+            >
+              {deleting ? 'Удаление…' : 'Удалить мой аккаунт'}
+            </button>
+          </div>
+        </>
+      )}
 
       {/* MAX link roundtrip: login code flow, then refresh in place. */}
       {maxLinkOpen && (

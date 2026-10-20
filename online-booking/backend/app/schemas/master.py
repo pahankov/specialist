@@ -57,9 +57,6 @@ class MasterResponse(BaseModel):
     status: str
     is_active: bool
     is_admin: bool
-    # A pending master application (role CLIENT + MasterProfile, not yet
-    # approved) — shown in the superadmin list with an «Заявка» badge.
-    is_application: bool = False
     city_id: Optional[int] = None
     tariff: str = "trial"
     trial_ends_at: Optional[datetime] = None

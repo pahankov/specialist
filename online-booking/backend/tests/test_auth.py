@@ -62,17 +62,25 @@ class TestRegisterMaster:
 class TestLogin:
     """Tests for POST /api/v1/auth/login"""
 
-    async def test_login_success(self, client, test_master_data):
-        """Login succeeds with correct credentials."""
-        # Register first
-        await client.post("/api/v1/auth/register", json=test_master_data)
+    async def _password_client(self, session, email="login-client@example.com"):
+        from app.models.user import User, UserRole
+        from app.utils.security import hash_password
 
-        # Login
-        login_data = {
-            "email": test_master_data["email"],
-            "password": test_master_data["password"]
-        }
-        resp = await client.post("/api/v1/auth/login", json=login_data)
+        session.add(User(
+            name="Login Client", email=email,
+            hashed_password=hash_password("SecurePass123!"),
+            role=UserRole.CLIENT, is_active=True,
+        ))
+        await session.commit()
+
+    async def test_login_success(self, client, session):
+        """Login succeeds with correct credentials."""
+        await self._password_client(session)
+
+        resp = await client.post("/api/v1/auth/login", json={
+            "email": "login-client@example.com",
+            "password": "SecurePass123!",
+        })
         assert resp.status_code == 200
         data = resp.json()
 
@@ -80,17 +88,42 @@ class TestLogin:
         assert data["token_type"] == "bearer"
         assert len(data["access_token"]) > 0
 
-    async def test_login_wrong_password(self, client, test_master_data):
+    async def test_login_wrong_password(self, client, session):
         """Login fails with wrong password."""
-        await client.post("/api/v1/auth/register", json=test_master_data)
+        await self._password_client(session, "wrong-pass@example.com")
 
-        login_data = {
-            "email": test_master_data["email"],
-            "password": "WrongPassword123"
-        }
-        resp = await client.post("/api/v1/auth/login", json=login_data)
+        resp = await client.post("/api/v1/auth/login", json={
+            "email": "wrong-pass@example.com",
+            "password": "WrongPassword123",
+        })
         assert resp.status_code == 401
         assert "Неверный" in resp.json()["detail"]
+
+    async def test_admin_password_login_still_works(self, client, session):
+        """Password login remains for the superuser/admin role."""
+        import jwt
+        from app.config import settings
+        from app.models.user import User, UserRole
+        from app.utils.security import hash_password
+
+        session.add(User(
+            name="Admin Login", email="admin-login@example.com",
+            hashed_password=hash_password("SecurePass123!"),
+            role=UserRole.ADMIN, is_active=True,
+        ))
+        await session.commit()
+
+        resp = await client.post("/api/v1/auth/login", json={
+            "email": "admin-login@example.com",
+            "password": "SecurePass123!",
+        })
+        assert resp.status_code == 200, resp.text
+        claims = jwt.decode(
+            resp.json()["access_token"], settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+        )
+        assert claims["role"] == "ADMIN"
+        assert claims["is_admin"] is True
 
     async def test_login_nonexistent_user(self, client):
         """Login fails for non-existent email."""

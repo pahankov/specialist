@@ -31,6 +31,8 @@ from app.services.email_verify import (
     require_email_contact,
     start_email_verification,
 )
+from app.services.master_profile_view import contact_out as _contact_out
+from app.services.master_profile_view import master_profile_snapshot
 from app.services.names import set_names
 from app.logging_config import get_logger
 
@@ -58,18 +60,6 @@ def _delete_avatar_file(url: Optional[str]) -> None:
             pass
 
 
-def _contact_out(c: UserContact) -> dict:
-    """Serialize one own contact (verify flags included)."""
-    return {
-        "id": c.id,
-        "contact_type": c.contact_type,
-        "value": c.value,
-        "is_verified": bool(c.is_verified),
-        "verified_via": c.verified_via,
-        "is_primary": bool(c.is_primary),
-    }
-
-
 class Certificate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     url: Optional[str] = Field(default=None, max_length=500)
@@ -93,48 +83,14 @@ async def get_my_profile(
     master: User = Depends(require_master),
     db: AsyncSession = Depends(get_db),
 ):
-    """Own id/name/city — lets panels prefill (e.g. client city = master's)."""
-    city_name = None
-    if master.city_id:
-        city_name = (await db.execute(
-            select(City.name_ru).where(City.id == master.city_id)
-        )).scalar_one_or_none()
-    contacts = await get_contacts(db, master.id)
-    out = {
-        "id": master.id,
-        "name": master.name,
-        "last_name": master.last_name,
-        "city_id": master.city_id,
-        "city_name": city_name,
-        # Auth channels (1.79.0): bind buttons + password form in the profile.
-        "has_password": master.hashed_password is not None,
-        "vk_bound": master.vk_user_id is not None,
-        "yandex_bound": master.yandex_user_id is not None,
-        "max_bound": master.max_user_id is not None,
-        "max_username": master.max_username,
-        "contacts": [_contact_out(c) for c in contacts],
-    }
+    """Own profile — shared shape with the client-side master draft."""
+    mp = None
     if master.role == UserRole.MASTER:
         mp_id = await get_master_profile_id(db, master)
         mp = (await db.execute(
             select(MasterProfile).where(MasterProfile.id == mp_id)
         )).scalar_one_or_none()
-        if mp is not None:
-            out.update({
-                "telegram_username": mp.telegram_username,
-                "description": mp.description,
-                "avatar_url": mp.avatar_url,
-                "avatar_preset": mp.avatar_preset,
-                "experience_years": mp.experience_years,
-                "cabinet_address": mp.cabinet_address,
-                "certificates": mp.certificates or [],
-                "auto_confirm": bool(mp.auto_confirm),
-                "auto_complete": bool(mp.auto_complete),
-                "prefer_master_cabinet": bool(mp.prefer_master_cabinet),
-                "profile_id": mp.id,
-                "tariff": mp.tariff or "trial",
-                "trial_ends_at": mp.trial_ends_at.isoformat() if mp.trial_ends_at else None,
-            })
+    out, _ = await master_profile_snapshot(db, master, mp)
     return out
 
 

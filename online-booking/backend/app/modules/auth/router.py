@@ -35,13 +35,14 @@ from app.config import settings
 from app.logging_config import get_logger
 from app.services.audit import log_action
 from app.services.master_landing import master_landing_preference
-from app.services.contacts import CONTACT_EMAIL, CONTACT_PHONE, get_contacts
+from app.services.master_profile_view import master_profile_snapshot
 from app.services.names import set_names
 from app.modules.auth import service
 from app.modules.auth.token import create_access_token, create_refresh_token_payload
 from app.modules.admin.profile import (
     ALLOWED_IMAGE_TYPES,
     AVATAR_DIR,
+    AVATAR_PRESETS,
     AVATAR_URL_PREFIX,
     EXT_BY_TYPE,
     MAX_AVATAR_BYTES,
@@ -110,7 +111,11 @@ async def register_master(
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit("10/minute")
 async def login(request: Request, response: Response, req: UserLoginByEmail, db: AsyncSession = Depends(get_db)):
-    """Login master by email+password — returns access token in response body, refresh token in httpOnly cookie."""
+    """Email+password login for client/admin — masters are social-only (403).
+
+    Returns the access token in the body and the refresh token in an
+    httpOnly cookie.
+    """
     logger.info("Login attempt by email: %s", req.email)
     try:
         access_token, user = await service.login_master(req.email, req.password, db)
@@ -476,7 +481,7 @@ async def register_unified(
         raise HTTPException(status_code=500, detail="Ошибка регистрации")
 
 
-# ─── Become master (client applies, admin activates) ──────────────
+# ─── Become master (client fills the master profile, self-activates) ──
 
 class BecomeMasterCertificate(BaseModel):
     """One diploma/certificate photo (optional url)."""
@@ -495,14 +500,14 @@ class BecomeMasterCertificate(BaseModel):
         return s
 
 
-class BecomeMasterRequest(BaseModel):
-    """Full master application (owner review 1.82.0).
+class MasterDraftRequest(BaseModel):
+    """Master profile draft / activation payload (1.83.0).
 
-    Names and the cabinet address are required; photo/certificates are
-    optional. The account must already have at least one phone and one
-    email, one of them verified, and a password or a social binding.
+    The client reuses the master profile form. Saving an incomplete draft
+    is allowed; activation additionally requires both names, a cabinet
+    address, a phone, a VERIFIED email and a bound social account.
     """
-    name: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    name: Optional[str] = Field(default=None, max_length=100)
     last_name: Optional[str] = Field(default=None, max_length=100)
     cabinet_address: Optional[str] = Field(default=None, max_length=500)
     city_id: Optional[int] = None
@@ -510,10 +515,12 @@ class BecomeMasterRequest(BaseModel):
     experience_years: Optional[int] = Field(default=None, ge=0, le=80)
     telegram_username: Optional[str] = Field(default=None, max_length=100)
     avatar_url: Optional[str] = Field(default=None, max_length=500)
+    avatar_preset: Optional[str] = Field(default=None, max_length=12)
     certificates: Optional[List[BecomeMasterCertificate]] = Field(
         default=None, max_length=20)
-    # Login landing: straight to the master panel after approval.
-    prefer_master_cabinet: bool = True
+    auto_confirm: Optional[bool] = None
+    auto_complete: Optional[bool] = None
+    prefer_master_cabinet: Optional[bool] = None
 
     @field_validator("avatar_url")
     @classmethod
@@ -527,110 +534,44 @@ class BecomeMasterRequest(BaseModel):
         return s
 
 
-def _application_out(mp: MasterProfile, user: User) -> dict:
-    return {
-        "name": user.name,
-        "last_name": user.last_name,
-        "city_id": user.city_id,
-        "cabinet_address": mp.cabinet_address,
-        "description": mp.description,
-        "experience_years": mp.experience_years,
-        "telegram_username": mp.telegram_username,
-        "avatar_url": mp.avatar_url,
-        "certificates": mp.certificates or [],
-        "prefer_master_cabinet": bool(mp.prefer_master_cabinet),
-        "created_at": mp.created_at.isoformat() if mp.created_at else None,
-    }
+def _draft_status(user: User, mp: Optional[MasterProfile]) -> str:
+    if user.role == UserRole.MASTER:
+        return "active"
+    return "draft" if mp is not None else "none"
 
 
-@router.get("/become-master", response_model=dict)
-async def get_master_application(
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Current application state — lets the form prefill and show the status."""
-    mp = (await db.execute(
+async def _get_draft(db: AsyncSession, user: User) -> Optional[MasterProfile]:
+    return (await db.execute(
         select(MasterProfile).where(MasterProfile.user_id == user.id)
     )).scalar_one_or_none()
+
+
+async def _apply_draft(
+    db: AsyncSession,
+    user: User,
+    mp: Optional[MasterProfile],
+    data: MasterDraftRequest,
+) -> MasterProfile:
+    """Apply the form to a new or existing inactive MasterProfile."""
     if mp is None:
-        return {"status": "none", "application": None}
-    return {
-        "status": "active" if mp.is_active else "pending",
-        "application": _application_out(mp, user),
-    }
-
-
-@router.post("/become-master", response_model=dict)
-@limiter.limit("10/minute")
-async def become_master(
-    request: Request,
-    data: BecomeMasterRequest,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Apply for a master profile (strict verification, no instant access).
-
-    Creates an INACTIVE MasterProfile with the full master profile data;
-    the account stays CLIENT until a superadmin activates it (toggle flips
-    the role too). Nothing is published, no panel access.
-
-    Verification (owner review 1.82.0): at least one phone AND one email on
-    the account, at least one of them verified (social login / emailed
-    code), plus a password or a social binding to prove the login channel.
-    """
-    if user.role != UserRole.CLIENT:
-        raise HTTPException(status_code=400, detail="Вы уже мастер")
-    existing = (await db.execute(
-        select(MasterProfile).where(MasterProfile.user_id == user.id)
-    )).scalar_one_or_none()
-    if existing is not None:
-        raise HTTPException(status_code=400,
-                            detail="Заявка уже подана, дождитесь проверки")
-
-    first = (data.name if data.name is not None else user.name or "").strip()
-    last = (data.last_name if data.last_name is not None
-            else (user.last_name or "")).strip()
-    if not first:
-        raise HTTPException(status_code=400, detail="Укажите имя")
-    if not last:
-        raise HTTPException(status_code=400, detail="Укажите фамилию")
-    address = (data.cabinet_address or "").strip()
-    if not address:
-        raise HTTPException(status_code=400, detail="Укажите адрес кабинета")
-
-    contacts = await get_contacts(db, user.id)
-    has_phone = (any(c.contact_type == CONTACT_PHONE for c in contacts)
-                 or bool(user.phone))
-    has_email = (any(c.contact_type == CONTACT_EMAIL for c in contacts)
-                 or bool(user.email))
-    if not has_phone:
-        raise HTTPException(
-            status_code=400,
-            detail="Добавьте телефон в контактах — без номера заявка невозможна",
+        mp = MasterProfile(
+            user_id=user.id,
+            status="inactive",
+            is_active=False,
+            prefer_master_cabinet=True,
         )
-    if not has_email:
-        raise HTTPException(
-            status_code=400,
-            detail="Добавьте почту в контактах — без почты заявка невозможна",
-        )
-    verified = (any(c.is_verified for c in contacts)
-                or (bool(user.is_verified) and has_email))
-    if not verified:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Подтвердите хотя бы один контакт: войдите через соцсеть "
-                "или подтвердите почту кодом"
-            ),
-        )
-    if not (user.hashed_password or user.vk_user_id is not None
-            or user.yandex_user_id is not None or user.max_user_id is not None):
-        raise HTTPException(
-            status_code=400,
-            detail="Задайте пароль или привяжите соцсеть для входа",
-        )
+        db.add(mp)
+        await db.flush()
 
-    set_names(user, first, last)
+    # Names are optional in draft mode so a half-filled profile can be saved.
+    if data.name is not None or data.last_name is not None:
+        first = (data.name if data.name is not None
+                 else (user.name or "").split(" ")[0]).strip()
+        last = (data.last_name if data.last_name is not None
+                else (user.last_name or "")).strip()
+        if first or last:
+            set_names(user, first, last)
+
     if data.city_id is not None:
         city_name = (await db.execute(
             select(City.name_ru).where(City.id == data.city_id)
@@ -639,48 +580,187 @@ async def become_master(
             raise HTTPException(status_code=404, detail="Город не найден")
         user.city_id = data.city_id
 
-    # Optional photo: the uploaded file (or the social avatar the form
-    # prefilled). Anything not URL-like is dropped instead of stored.
-    avatar = (data.avatar_url or "").strip() or None
-    if avatar and not (avatar.startswith("/") or avatar.startswith("http://")
-                       or avatar.startswith("https://")):
-        avatar = None
+    if data.telegram_username is not None:
+        mp.telegram_username = data.telegram_username.strip().lstrip("@") or None
+    if data.description is not None:
+        mp.description = data.description.strip() or None
+    if data.experience_years is not None:
+        mp.experience_years = data.experience_years
+    if data.cabinet_address is not None:
+        mp.cabinet_address = data.cabinet_address.strip() or None
+    if data.certificates is not None:
+        mp.certificates = [
+            cert.model_dump(exclude_none=True) for cert in data.certificates
+        ]
+    if data.auto_confirm is not None:
+        mp.auto_confirm = bool(data.auto_confirm)
+    if data.auto_complete is not None:
+        mp.auto_complete = bool(data.auto_complete)
+    if data.prefer_master_cabinet is not None:
+        mp.prefer_master_cabinet = bool(data.prefer_master_cabinet)
 
-    db.add(MasterProfile(
-        user_id=user.id, status="inactive", is_active=False,
-        cabinet_address=address,
-        description=(data.description or "").strip() or None,
-        experience_years=data.experience_years,
-        telegram_username=(data.telegram_username or "").strip().lstrip("@") or None,
-        avatar_url=avatar,
-        certificates=[c.model_dump(exclude_none=True)
-                      for c in (data.certificates or [])],
-        prefer_master_cabinet=bool(data.prefer_master_cabinet),
-    ))
-    await log_action(db, user.id, "apply", "auth", user.id,
-                     "Заявка на мастера", level="info")
-    await db.commit()
-    logger.info("User %s applied for master", user.id)
+    # Photo and emoji preset are mutually exclusive. The reused form always
+    # sends both keys, so null means "clear" when the key is present.
+    if "avatar_preset" in data.model_fields_set:
+        if (data.avatar_preset is not None
+                and data.avatar_preset not in AVATAR_PRESETS):
+            raise HTTPException(status_code=400,
+                                detail="Неизвестный стандартный аватар")
+        mp.avatar_preset = data.avatar_preset
+        if data.avatar_preset is not None:
+            mp.avatar_url = None
+    if "avatar_url" in data.model_fields_set and mp.avatar_preset is None:
+        mp.avatar_url = (data.avatar_url or "").strip() or None
+
+    return mp
+
+
+def _draft_response(
+    user: User,
+    mp: Optional[MasterProfile],
+    profile: dict,
+    readiness: dict,
+) -> dict:
     return {
-        "detail": "Заявка отправлена, профиль появится после проверки",
-        "status": "pending",
+        "status": _draft_status(user, mp),
+        "profile": profile,
+        "readiness": readiness,
+        "can_activate": (
+            user.role == UserRole.CLIENT and all(readiness.values())
+        ),
+    }
+
+
+def _missing_profile_items(readiness: dict) -> list[str]:
+    labels = {
+        "names": "имя и фамилия",
+        "cabinet_address": "адрес кабинета",
+        "phone": "телефон",
+        "verified_email": "подтверждённая почта",
+        "social": "привязанная соцсеть (VK, Яндекс или MAX)",
+    }
+    return [label for key, label in labels.items() if not readiness.get(key)]
+
+
+@router.get("/become-master", response_model=dict)
+async def get_master_draft(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Draft state + the same profile shape as /admin/profile."""
+    if user.role == UserRole.ADMIN:
+        raise HTTPException(status_code=403,
+                            detail="Суперпользователь не становится мастером")
+    mp = await _get_draft(db, user)
+    profile, readiness = await master_profile_snapshot(db, user, mp)
+    return _draft_response(user, mp, profile, readiness)
+
+
+@router.patch("/become-master", response_model=dict)
+@limiter.limit("30/minute")
+async def save_master_draft(
+    request: Request,
+    data: MasterDraftRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Save the master profile draft without activating anything."""
+    if user.role != UserRole.CLIENT:
+        raise HTTPException(status_code=400,
+                            detail="Кабинет мастера уже активирован")
+    mp = await _get_draft(db, user)
+    mp = await _apply_draft(db, user, mp, data)
+    await log_action(db, user.id, "master_draft", "auth", user.id,
+                     "Черновик профиля мастера обновлён", level="info")
+    await db.commit()
+    await db.refresh(user)
+    await db.refresh(mp)
+    profile, readiness = await master_profile_snapshot(db, user, mp)
+    return _draft_response(user, mp, profile, readiness)
+
+
+@router.post("/become-master/activate", response_model=dict)
+@limiter.limit("10/minute")
+async def activate_master(
+    request: Request,
+    response: Response,
+    data: MasterDraftRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Save the form and immediately activate the master cabinet.
+
+    No superadmin approval: the profile itself is the gate. The new access
+    JWT (role MASTER) is put into the cookie so the UI can hard-navigate to
+    /admin/profile without an extra refresh round-trip.
+    """
+    if user.role != UserRole.CLIENT:
+        raise HTTPException(status_code=400,
+                            detail="Кабинет мастера уже активирован")
+
+    mp = await _get_draft(db, user)
+    mp = await _apply_draft(db, user, mp, data)
+    await db.flush()
+    _, readiness = await master_profile_snapshot(db, user, mp)
+    missing = _missing_profile_items(readiness)
+    if missing:
+        # Keep the latest draft fields: the person can fix one item and retry.
+        await db.commit()
+        raise HTTPException(
+            status_code=400,
+            detail="Для активации заполните: " + ", ".join(missing),
+        )
+
+    # The social avatar is a valid master photo if none was chosen.
+    if not mp.avatar_url and not mp.avatar_preset and user.avatar_url:
+        mp.avatar_url = user.avatar_url
+
+    mp.is_active = True
+    mp.status = "active"
+    user.role = UserRole.MASTER
+    await log_action(db, user.id, "activate", "auth", user.id,
+                     "Кабинет мастера активирован", level="info")
+    await db.commit()
+    await db.refresh(user)
+    await db.refresh(mp)
+
+    prefer_master = await master_landing_preference(db, user)
+    access_token = create_access_token({
+        "sub": str(user.id),
+        "role": user.role.value,
+        "name": user.name,
+        "last_name": user.last_name,
+        "is_admin": user.role == UserRole.ADMIN,
+        "prefer_master": prefer_master,
+    })
+    set_auth_cookies(response, access_token, request.cookies.get("refresh_token"))
+
+    profile, readiness = await master_profile_snapshot(db, user, mp)
+    logger.info("Master self-activated: user_id=%s profile_id=%s", user.id, mp.id)
+    return {
+        "detail": "Кабинет мастера активирован",
+        "status": "active",
+        "profile": profile,
+        "readiness": readiness,
+        "can_activate": False,
+        "access_token": access_token,
     }
 
 
 @router.post("/become-master/photo", response_model=dict)
 @limiter.limit("20/minute")
-async def upload_application_photo(
+async def upload_draft_photo(
     request: Request,
     file: UploadFile = File(...),
     kind: str = Query("avatar", description="avatar|cert"),
     user: User = Depends(require_client),
 ):
-    """Upload an optional photo for the master application.
+    """Upload an optional photo while filling the master draft.
 
-    Clients cannot use the master-only /admin/profile/avatar endpoint while
-    their application is pending; this stores the same image format under
-    the same public /static/avatars directory. The returned URL goes into
-    the application payload (photo or certificate).
+    Clients cannot use the master-only /admin/profile/avatar endpoint before
+    activation; this stores the same image format under the same public
+    /static/avatars directory. The returned URL goes into the draft payload
+    (photo or certificate).
     """
     if kind not in ("avatar", "cert"):
         raise HTTPException(status_code=400, detail="kind: avatar|cert")
@@ -702,7 +782,7 @@ async def upload_application_photo(
     with open(os.path.join(AVATAR_DIR, filename), "wb") as f:
         f.write(payload)
     url = f"{AVATAR_URL_PREFIX}/{filename}"
-    logger.info("Application photo uploaded: user=%s kind=%s url=%s",
+    logger.info("Master draft photo uploaded: user=%s kind=%s url=%s",
                 user.id, kind, url)
     return {"avatar_url": url}
 
@@ -717,7 +797,7 @@ async def change_password(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Change password for the current account (any role with a password)."""
+    """Change password for a client/admin account (masters are social-only)."""
     try:
         await service.change_password(user, req.current_password,
                                       req.new_password, db)

@@ -789,6 +789,11 @@ function LoginModal({
 
             <div className="social-auth-divider">или войдите по паролю</div>
 
+            <p className="login-master-note">
+              Мастера входят только через VK, Яндекс или MAX — пароль для кабинета мастера не
+              используется.
+            </p>
+
             <div className="login-group">
               <label>Email или телефон</label>
               <input

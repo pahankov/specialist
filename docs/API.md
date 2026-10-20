@@ -8,18 +8,21 @@
 ### Auth
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
-| `POST` | `/api/v1/auth/register` | Регистрация мастера (с выбором города) |
-| `POST` | `/api/v1/auth/login` | Вход мастера (JWT + refresh token в cookies) |
-| `POST` | `/api/v1/auth/login-unified` | Вход по email ИЛИ телефону (мастера и клиенты; пишет login в аудит) |
+| `POST` | `/api/v1/auth/register` | Legacy-регистрация мастера (пароль не используется для входа — мастера входят только через соцсети) |
+| `POST` | `/api/v1/auth/login` | Вход по email + паролю для клиентов/администратора; мастеру — 403 «только VK/Яндекс/MAX» (JWT + refresh token в cookies) |
+| `POST` | `/api/v1/auth/login-unified` | Вход по email ИЛИ телефону (клиенты/админ; мастеру по паролю — 403, соцвходы остаются; пишет login в аудит) |
 | `POST` | `/api/v1/auth/register-unified` | Быстрая регистрация: только `phone` + `password` + `consent` (152-ФЗ) — всегда CLIENT, сразу входит: access_token + cookies; email/имя/адрес заполняются позже в кабинете. Без `consent` — 400 (согласие обязательно) |
-| `POST` | `/api/v1/auth/become-master` | Заявка в мастера (адрес/описание/опыт) — профиль inactive, роль остаётся CLIENT до аппрува админа; повторная заявка 400 |
+| `GET` | `/api/v1/auth/become-master` | Черновик профиля мастера: данные формы, контакты, привязки и чек-лист готовности; для активного мастера — `status=active` |
+| `PATCH` | `/api/v1/auth/become-master` | Сохранить черновик профиля мастера (неполный можно); кабинет остаётся неактивным, роль — CLIENT |
+| `POST` | `/api/v1/auth/become-master/activate` | Сохранить форму и сразу активировать кабинет: проверяет имя+фамилию, адрес, телефон, подтверждённую почту и соцпривязку; меняет роль на MASTER и выдаёт новую access-cookie |
+| `POST` | `/api/v1/auth/become-master/photo` | Фото/сертификат черновика до активации (JPEG/PNG/WebP, до 5 МБ) |
 | `POST` | `/api/v1/auth/send-otp` | Отправка SMS-кода клиенту |
 | `POST` | `/api/v1/auth/verify-otp` | Проверка кода, вход/регистрация клиента |
 | `POST` | `/api/v1/auth/phone/status` | Единый вход: чем ответить на телефон — `new` (аккаунта нет → регистрация), `password` (есть пароль → в фокус), `social` (только соцвход/MAX → кнопки); для `new` возвращает `challenge` (JWT, TTL 5 мин) для 2-шагового флоу согласия (152-ФЗ); сам не входит и ничего не создаёт |
 | `POST` | `/api/v1/auth/consent/complete` | Завершение 2-шагового согласия (OAuth verify): `challenge` + `consent=true` → стемпит `consent_at` и версии документов, создаёт профиль клиента и welcome-уведомление, возвращает JWT-сессию + cookies; `consent=false` → 400; 10/min |
-| `POST` | `/api/v1/auth/password/change` | Смена пароля текущего аккаунта (любая роль с паролем): `current_password` + `new_password`; 10/min |
-| `POST` | `/api/v1/auth/password/forgot` | «Забыли пароль»: код на почту; ответ одинаков для известной и неизвестной почты (без энумерации); 5/min |
-| `POST` | `/api/v1/auth/password/reset` | Новый пароль по коду из письма + авто-вход: access_token + cookies; успех подтверждает почту (`verified_via="code"`), все прежние сессии отзываются; 10/min |
+| `POST` | `/api/v1/auth/password/change` | Смена пароля клиента/администратора: `current_password` + `new_password`; мастеру — 400 (только соцвходы); 10/min |
+| `POST` | `/api/v1/auth/password/forgot` | «Забыли пароль»: код на почту; мастеру код не отправляется; ответ одинаков для известной и неизвестной почты (без энумерации); 5/min |
+| `POST` | `/api/v1/auth/password/reset` | Новый пароль по коду из письма + авто-вход: access_token + cookies; мастеру — 400; успех подтверждает почту (`verified_via="code"`), все прежние сессии отзываются; 10/min |
 | `POST` | `/api/v1/auth/refresh` | Обновление access token (refresh token rotation) |
 | `POST` | `/api/v1/auth/logout` | Выход (очистка cookies) |
 | `POST` | `/api/v1/auth/client/login` | Legacy вход клиента по телефону |
@@ -37,7 +40,8 @@
 привязан к MAX-аккаунту (`is_verified=True`); набранный текстом — нет
 (`is_verified=False`, как в SMS-флоу). Имя из MAX — дефолт нового клиента.
 Роль берётся из существующего юзера: мастер/админ входит по номеру своего
-аккаунта (новый юзер всегда CLIENT; стать мастером — через заявку become-master).
+аккаунта (новый юзер всегда CLIENT; стать мастером — заполнить и сразу
+активировать черновик в `/cabinet/become-master`).
 
 Ответ боту отправляется фоном (`BackgroundTasks`): вебхук отвечает MAX `200`
 сразу после записи в БД, а сообщение в диалог уходит следом. Подписка

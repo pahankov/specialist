@@ -38,8 +38,8 @@ class UnifiedRegisterRequest(BaseModel):
 
     Everything else (name, email, address, city) is refined later in the
     client cabinet profile — registration stays minimal by design. Every
-    account created here is a CLIENT; becoming a master is a separate,
-    admin-approved application (/become-master).
+    account created here is a CLIENT; becoming a master is a separate
+    self-service draft with immediate activation (/become-master).
 
     For the 2-step consent flow (1.80.0), the frontend sends a ``challenge``
     token (from /phone/status) instead of ``phone`` — the phone is embedded

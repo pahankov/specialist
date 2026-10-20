@@ -194,19 +194,23 @@ class TestToggleActiveAdminOnly:
 class TestMasterOwnScope:
     """Masters see strictly their own clients (booked or created by them)."""
 
-    async def _second_master_headers(self, client):
+    async def _second_master_headers(self, client, session):
+        from sqlalchemy import select
+        from app.models.user import User
+        from tests.conftest import master_access_token
+
         reg = await client.post("/api/v1/auth/register", json={
             "name": "Second Master", "email": "second_master@example.com",
             "password": "SecurePass123!", "phone": "+79990009988",
             "role": "MASTER",
         })
         assert reg.status_code == 201, reg.text
-        login = await client.post("/api/v1/auth/login", json={
-            "email": "second_master@example.com", "password": "SecurePass123!"})
-        assert login.status_code == 200, login.text
-        return {"Authorization": f"Bearer {login.json()['access_token']}"}
+        user = (await session.execute(
+            select(User).where(User.email == "second_master@example.com")
+        )).scalar_one()
+        return {"Authorization": f"Bearer {master_access_token(user)}"}
 
-    async def test_master_sees_only_own(self, client, auth_headers):
+    async def test_master_sees_only_own(self, client, session, auth_headers):
         created = await client.post(
             "/api/v1/admin/clients",
             json={"name": "Own Client", "phone": "+79991110011"},
@@ -214,7 +218,7 @@ class TestMasterOwnScope:
         )
         assert created.status_code == 201, created.text
 
-        other = await self._second_master_headers(client)
+        other = await self._second_master_headers(client, session)
         resp = await client.get("/api/v1/admin/clients", headers=other)
         assert resp.status_code == 200
         assert resp.json()["items"] == []
@@ -224,14 +228,16 @@ class TestMasterOwnScope:
         assert mine.status_code == 200
         assert any(c["id"] == created.json()["id"] for c in mine.json()["items"])
 
-    async def test_master_cannot_touch_foreign_client(self, client, auth_headers):
+    async def test_master_cannot_touch_foreign_client(
+        self, client, session, auth_headers,
+    ):
         created = await client.post(
             "/api/v1/admin/clients",
             json={"name": "Foreign", "phone": "+79991110022"},
             headers=auth_headers,
         )
         cid = created.json()["id"]
-        other = await self._second_master_headers(client)
+        other = await self._second_master_headers(client, session)
 
         assert (await client.patch(
             f"/api/v1/admin/clients/{cid}", json={"name": "Hacked"}, headers=other,

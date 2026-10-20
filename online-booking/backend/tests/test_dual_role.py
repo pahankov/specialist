@@ -3,18 +3,25 @@ import pytest
 
 
 @pytest.fixture
-async def master_token(client):
-    """Master registered via API, returns access token."""
+async def master_token(client, session):
+    """Master registered via API, returns a directly minted access token."""
+    from sqlalchemy import select
+    from app.models.user import User
+    from app.modules.auth.token import create_access_token
+
     reg = await client.post("/api/v1/auth/register", json={
         "name": "Dual Master", "email": "dual_master@example.com",
         "password": "SecurePass123!", "phone": "+79991114444",
         "role": "MASTER",
     })
     assert reg.status_code == 201, reg.text
-    login = await client.post("/api/v1/auth/login", json={
-        "email": "dual_master@example.com", "password": "SecurePass123!"})
-    assert login.status_code == 200, login.text
-    return login.json()["access_token"]
+    user = (await session.execute(
+        select(User).where(User.email == "dual_master@example.com")
+    )).scalar_one()
+    return create_access_token({
+        "sub": str(user.id), "role": "MASTER", "name": user.name,
+        "last_name": user.last_name, "is_admin": False,
+    })
 
 
 def _auth(token):
@@ -67,7 +74,7 @@ class TestMasterAsClient:
 
 
 class TestBecomeMaster:
-    """Application (1.82.0): full profile + verified contacts, admin approval."""
+    """Draft profile + self-activation (1.83.0), no admin approval."""
 
     @staticmethod
     def _payload(**over):
@@ -79,8 +86,11 @@ class TestBecomeMaster:
         data.update(over)
         return data
 
-    async def _register_client(self, client, phone, email):
-        """Create a client with both contacts (email added, not verified yet)."""
+    async def _register_client(self, client, session, phone, email,
+                               social=True):
+        """Create a CLIENT with a phone, an unverified email and optionally VK."""
+        from app.services.contacts import find_user_by_contact
+
         r = await client.post("/api/v1/auth/register-unified", json={
             "phone": phone, "password": "SecurePass123!", "consent": True,
         })
@@ -92,7 +102,12 @@ class TestBecomeMaster:
             json={"contact_type": "email", "value": email},
         )
         assert add.status_code in (200, 201), add.text
-        return token, add.json()["id"]
+        user = await find_user_by_contact(session, "phone", phone)
+        assert user is not None
+        if social:
+            user.vk_user_id = int(phone[-7:])
+        await session.commit()
+        return token, add.json()["id"], user
 
     async def _verify_email(self, session, contact_id):
         from app.models.user_contact import UserContact
@@ -103,95 +118,147 @@ class TestBecomeMaster:
         contact.verified_via = "code"
         await session.commit()
 
-    async def test_application_flow(self, client, session):
+    async def _bind_vk(self, session, user, uid):
+        user.vk_user_id = uid
+        await session.commit()
+
+    async def test_incomplete_draft_saves_without_activation(self, client, session):
         from sqlalchemy import select
-        from app.models.user import User, UserRole
+        from app.models.user import UserRole
         from app.models.master_profile import MasterProfile
 
-        token, email_id = await self._register_client(
-            client, "+79991115555", "flow@example.com")
-        await self._verify_email(session, email_id)
+        token, _, user = await self._register_client(
+            client, session, "+79991115555", "draft@example.com", social=False)
 
-        r = await client.post("/api/v1/auth/become-master",
-                              headers=_auth(token),
-                              json=self._payload(
-                                  description="Бровист",
-                                  experience_years=5,
-                                  prefer_master_cabinet=False,
-                              ))
+        # Only an address: the draft endpoint accepts a half-filled profile.
+        r = await client.patch(
+            "/api/v1/auth/become-master",
+            headers=_auth(token),
+            json={"cabinet_address": "ул. Тестовая, 1"},
+        )
         assert r.status_code == 200, r.text
-        assert r.json()["status"] == "pending"
+        body = r.json()
+        assert body["status"] == "draft"
+        assert body["can_activate"] is False
+        assert body["readiness"]["names"] is False
+        assert body["readiness"]["verified_email"] is False
+        assert body["readiness"]["social"] is False
 
-        # Still a client: no panel, invisible publicly.
-        user = (await session.execute(
-            select(User).where(User.phone == "+7 (999) 111-55-55")
-        )).scalar_one()
+        await session.refresh(user)
         assert user.role == UserRole.CLIENT
-        assert user.name == "Тест Клиент" and user.last_name == "Клиент"
         mp = (await session.execute(
             select(MasterProfile).where(MasterProfile.user_id == user.id)
         )).scalar_one()
         assert mp.is_active is False and mp.status == "inactive"
         assert mp.cabinet_address == "ул. Тестовая, 1"
-        assert mp.description == "Бровист"
-        assert mp.prefer_master_cabinet is False
 
-        status = await client.get("/api/v1/auth/become-master",
-                                  headers=_auth(token))
-        assert status.status_code == 200, status.text
-        body = status.json()
-        assert body["status"] == "pending"
-        assert body["application"]["cabinet_address"] == "ул. Тестовая, 1"
-        assert body["application"]["prefer_master_cabinet"] is False
-
+        # Still a client: no panel and no public listing.
+        assert (await client.get("/api/v1/admin/profile",
+                                 headers=_auth(token))).status_code == 401
         pub = await client.get("/api/v1/masters/")
         assert all(m["user_id"] != user.id for m in pub.json())
 
-        panel = await client.get("/api/v1/admin/profile",
-                                 headers=_auth(token))
-        assert panel.status_code == 401
+        # Activation is blocked and names the missing conditions.
+        act = await client.post(
+            "/api/v1/auth/become-master/activate",
+            headers=_auth(token),
+            json=self._payload(),
+        )
+        assert act.status_code == 400, act.text
+        detail = act.json()["detail"].lower()
+        assert "почт" in detail and "соцсет" in detail
 
-    async def test_double_apply_rejected(self, client, session):
-        token, email_id = await self._register_client(
-            client, "+79991115556", "double@example.com")
-        await self._verify_email(session, email_id)
-        assert (await client.post("/api/v1/auth/become-master",
-                                  headers=_auth(token),
-                                  json=self._payload())).status_code == 200
-        r = await client.post("/api/v1/auth/become-master",
-                              headers=_auth(token), json=self._payload())
-        assert r.status_code == 400, r.text
-
-    async def test_requires_email(self, client, session):
-        token, _ = await self._register_client(
-            client, "+79991115557", "no-email@example.com")
-        # Remove the email: only a phone is left.
+    async def test_activation_requires_verified_email(
+        self, client, session, super_admin_headers,
+    ):
         from sqlalchemy import select
-        from app.models.user_contact import UserContact
+        from app.models.user import User, UserRole
+        from app.models.master_profile import MasterProfile
 
-        contact = (await session.execute(
-            select(UserContact).where(UserContact.value == "no-email@example.com")
-        )).scalar_one()
-        await session.delete(contact)
-        await session.commit()
+        token, email_id, user = await self._register_client(
+            client, session, "+79991115556", "activate@example.com")
 
-        r = await client.post("/api/v1/auth/become-master",
-                              headers=_auth(token), json=self._payload())
+        # Social binding and names/address/phone are present, but the email
+        # is only an unverified row: the old green tick must not appear.
+        r = await client.post(
+            "/api/v1/auth/become-master/activate",
+            headers=_auth(token),
+            json=self._payload(prefer_master_cabinet=False),
+        )
         assert r.status_code == 400, r.text
         assert "почт" in r.json()["detail"].lower()
 
-    async def test_requires_verified_contact(self, client, session):
-        token, _ = await self._register_client(
-            client, "+79991115558", "unverified@example.com")
-        # Both contact types exist, but neither is verified.
-        r = await client.post("/api/v1/auth/become-master",
-                              headers=_auth(token), json=self._payload())
-        assert r.status_code == 400, r.text
-        assert "подтвердите" in r.json()["detail"].lower()
+        await self._verify_email(session, email_id)
+        ok = await client.post(
+            "/api/v1/auth/become-master/activate",
+            headers=_auth(token),
+            json=self._payload(prefer_master_cabinet=False),
+        )
+        assert ok.status_code == 200, ok.text
+        result = ok.json()
+        assert result["status"] == "active"
+        assert result["can_activate"] is False
+        assert result["profile"]["prefer_master_cabinet"] is False
+        assert client.cookies.get("access_token") == result["access_token"]
 
-    async def test_photo_upload_is_optional(self, client, session):
-        token, email_id = await self._register_client(
-            client, "+79991115559", "photo@example.com")
+        import jwt
+        from app.config import settings
+
+        claims = jwt.decode(result["access_token"], settings.SECRET_KEY,
+                            algorithms=[settings.ALGORITHM])
+        assert claims["role"] == "MASTER"
+        assert claims["prefer_master"] is False
+
+        await session.refresh(user)
+        assert user.role == UserRole.MASTER
+        mp = (await session.execute(
+            select(MasterProfile).where(MasterProfile.user_id == user.id)
+        )).scalar_one()
+        assert mp.is_active is True and mp.status == "active"
+
+        # Master list shows active masters only; no application marker.
+        masters = await client.get("/api/v1/admin/masters",
+                                   headers=super_admin_headers)
+        assert masters.status_code == 200, masters.text
+        row = next(m for m in masters.json() if m["user_id"] == user.id)
+        assert row["status"] == "active"
+        assert "is_application" not in row
+
+        state = await client.get("/api/v1/auth/become-master", headers=_auth(token))
+        assert state.status_code == 200, state.text
+        assert state.json()["status"] == "active"
+
+        pub = await client.get("/api/v1/masters/")
+        assert any(m["user_id"] == user.id for m in pub.json())
+
+    async def test_activation_requires_social(self, client, session):
+        token, email_id, user = await self._register_client(
+            client, session, "+79991115557", "social@example.com", social=False)
+        await self._verify_email(session, email_id)
+
+        r = await client.post(
+            "/api/v1/auth/become-master/activate",
+            headers=_auth(token),
+            json=self._payload(),
+        )
+        assert r.status_code == 400, r.text
+        assert "соцсет" in r.json()["detail"].lower()
+
+        await self._bind_vk(session, user, 115557)
+        ok = await client.post(
+            "/api/v1/auth/become-master/activate",
+            headers=_auth(token),
+            json=self._payload(),
+        )
+        assert ok.status_code == 200, ok.text
+        assert ok.json()["status"] == "active"
+
+    async def test_photo_upload_and_draft_save(self, client, session):
+        from sqlalchemy import select
+        from app.models.master_profile import MasterProfile
+
+        token, email_id, user = await self._register_client(
+            client, session, "+79991115558", "photo@example.com")
         await self._verify_email(session, email_id)
 
         # 1x1 transparent PNG.
@@ -209,18 +276,14 @@ class TestBecomeMaster:
         url = up.json()["avatar_url"]
         assert url.startswith("/static/avatars/")
 
-        r = await client.post("/api/v1/auth/become-master",
-                              headers=_auth(token),
-                              json=self._payload(avatar_url=url))
-        assert r.status_code == 200, r.text
+        saved = await client.patch(
+            "/api/v1/auth/become-master",
+            headers=_auth(token),
+            json=self._payload(avatar_url=url, avatar_preset=None),
+        )
+        assert saved.status_code == 200, saved.text
+        assert saved.json()["profile"]["avatar_url"] == url
 
-        from sqlalchemy import select
-        from app.models.user import User
-        from app.models.master_profile import MasterProfile
-
-        user = (await session.execute(
-            select(User).where(User.phone == "+7 (999) 111-55-59")
-        )).scalar_one()
         mp = (await session.execute(
             select(MasterProfile).where(MasterProfile.user_id == user.id)
         )).scalar_one()
@@ -232,106 +295,97 @@ class TestBecomeMaster:
         _os.remove(_os.path.join(
             "app", "static", "avatars", _os.path.basename(url)))
 
-    async def test_admin_activation_opens_panel(
+    async def test_admin_list_has_no_draft_and_cannot_activate_it(
         self, client, session, super_admin_headers,
     ):
         from sqlalchemy import select
-        from app.models.user import User, UserRole
         from app.models.master_profile import MasterProfile
 
-        token, email_id = await self._register_client(
-            client, "+79991115560", "activation@example.com")
-        await self._verify_email(session, email_id)
-        await client.post("/api/v1/auth/become-master",
-                          headers=_auth(token), json=self._payload())
-        user = (await session.execute(
-            select(User).where(User.phone == "+7 (999) 111-55-60")
-        )).scalar_one()
+        token, _, user = await self._register_client(
+            client, session, "+79991115559", "list@example.com")
+        await client.patch("/api/v1/auth/become-master",
+                           headers=_auth(token), json=self._payload())
+
+        listed = await client.get("/api/v1/admin/masters",
+                                  headers=super_admin_headers)
+        assert listed.status_code == 200, listed.text
+        assert all(m["user_id"] != user.id for m in listed.json())
+        assert all("is_application" not in m for m in listed.json())
+
         mp = (await session.execute(
             select(MasterProfile).where(MasterProfile.user_id == user.id)
         )).scalar_one()
-
-        # Applications are visible to the superadmin and marked as such.
-        default_list = await client.get("/api/v1/admin/masters",
-                                        headers=super_admin_headers)
-        assert default_list.status_code == 200
-        assert all(m["user_id"] != user.id for m in default_list.json())
-
-        admin_list = await client.get(
-            "/api/v1/admin/masters?include_applications=true",
+        manual = await client.post(
+            f"/api/v1/admin/masters/{mp.id}/toggle-active",
             headers=super_admin_headers,
         )
-        assert admin_list.status_code == 200, admin_list.text
-        pending = next(m for m in admin_list.json() if m["user_id"] == user.id)
-        assert pending["is_application"] is True
+        assert manual.status_code == 400, manual.text
+        assert "самим клиентом" in manual.json()["detail"]
 
-        r = await client.post(f"/api/v1/admin/masters/{mp.id}/toggle-active",
-                              headers=super_admin_headers)
-        assert r.status_code == 200, r.text
-
-        await session.refresh(user)
-        assert user.role == UserRole.MASTER
-        pub = await client.get("/api/v1/masters/")
-        assert any(m["user_id"] == user.id for m in pub.json())
-
-        approved = await client.get(
-            "/api/v1/admin/masters?include_applications=true",
-            headers=super_admin_headers,
-        )
-        row = next(m for m in approved.json() if m["user_id"] == user.id)
-        assert row["is_application"] is False
-
-    async def test_landing_preference_in_login_token(
-        self, client, session, super_admin_headers,
+    async def test_landing_preference_can_be_changed_after_activation(
+        self, client, session,
     ):
-        import jwt
-        from sqlalchemy import select
-        from app.config import settings
-        from app.models.user import User
-        from app.models.master_profile import MasterProfile
-
-        token, email_id = await self._register_client(
-            client, "+79991115561", "landing@example.com")
+        token, email_id, _ = await self._register_client(
+            client, session, "+79991115560", "landing@example.com")
         await self._verify_email(session, email_id)
-        await client.post("/api/v1/auth/become-master",
-                          headers=_auth(token),
-                          json=self._payload(prefer_master_cabinet=False))
-        user = (await session.execute(
-            select(User).where(User.phone == "+7 (999) 111-55-61")
-        )).scalar_one()
-        mp = (await session.execute(
-            select(MasterProfile).where(MasterProfile.user_id == user.id)
-        )).scalar_one()
-        await client.post(f"/api/v1/admin/masters/{mp.id}/toggle-active",
-                          headers=super_admin_headers)
-
-        def claim(access: str) -> dict:
-            return jwt.decode(access, settings.SECRET_KEY,
-                              algorithms=[settings.ALGORITHM])
-
-        login = await client.post("/api/v1/auth/login-unified", json={
-            "identifier": "+7 (999) 111-55-61",
-            "password": "SecurePass123!",
-        })
-        assert login.status_code == 200, login.text
-        assert claim(login.json()["access_token"])["prefer_master"] is False
-
-        # The master can flip it in the panel profile; the next login sees it.
+        act = await client.post(
+            "/api/v1/auth/become-master/activate",
+            headers=_auth(token),
+            json=self._payload(prefer_master_cabinet=False),
+        )
+        assert act.status_code == 200, act.text
+        master_token = act.json()["access_token"]
         upd = await client.patch("/api/v1/admin/profile",
-                                 headers=_auth(login.json()["access_token"]),
+                                 headers=_auth(master_token),
                                  json={"prefer_master_cabinet": True})
         assert upd.status_code == 200, upd.text
         assert upd.json()["prefer_master_cabinet"] is True
 
-        login2 = await client.post("/api/v1/auth/login-unified", json={
-            "identifier": "+7 (999) 111-55-61",
-            "password": "SecurePass123!",
-        })
-        assert login2.status_code == 200, login2.text
-        assert claim(login2.json()["access_token"])["prefer_master"] is True
+    async def test_master_password_login_is_blocked(self, client, session):
+        from app.models.user import User, UserRole
+        from app.modules.auth.token import create_access_token
+        from app.utils.security import hash_password
+
+        master = User(
+            name="Social Master", email="social-master@example.com",
+            phone="+7 (999) 111-55-61",
+            hashed_password=hash_password("SecurePass123!"),
+            role=UserRole.MASTER, is_active=True, vk_user_id=115561,
+        )
+        session.add(master)
+        await session.commit()
+
+        for path, payload in (
+            ("/api/v1/auth/login",
+             {"email": "social-master@example.com",
+              "password": "SecurePass123!"}),
+            ("/api/v1/auth/login-unified",
+             {"identifier": "social-master@example.com",
+              "password": "SecurePass123!"}),
+        ):
+            r = await client.post(path, json=payload)
+            assert r.status_code == 403, (path, r.text)
+            assert "vk" in r.json()["detail"].lower()
+
+        status = await client.post("/api/v1/auth/phone/status",
+                                   json={"phone": "+7 (999) 111-55-61"})
+        assert status.status_code == 200, status.text
+        assert status.json()["state"] == "social"
+
+        master_token = create_access_token(
+            {"sub": str(master.id), "role": "MASTER",
+             "name": master.name, "is_admin": False},
+        )
+        change = await client.post(
+            "/api/v1/auth/password/change",
+            headers=_auth(master_token),
+            json={"current_password": "SecurePass123!",
+                  "new_password": "AnotherPass123!"},
+        )
+        assert change.status_code == 400, change.text
 
     async def test_unauthorized_rejected(self, client):
-        assert (await client.post("/api/v1/auth/become-master",
+        assert (await client.post("/api/v1/auth/become-master/activate",
                                   json={})).status_code in (401, 403)
 
 
