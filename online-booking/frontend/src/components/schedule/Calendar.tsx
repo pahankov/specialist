@@ -29,7 +29,7 @@ interface CalendarProps {
   /** Template preview: active days that will become rest days. */
   previewOffDates?: Set<string>;
   /** Granule size in minutes — shown as a half-filled dot on working days. */
-  slotMinutes?: 30 | 60;
+  slotMinutes?: 60 | 30 | 15;
 }
 
 const LONG_PRESS_MS = 500;

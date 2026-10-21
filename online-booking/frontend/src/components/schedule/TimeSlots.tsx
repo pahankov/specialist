@@ -21,8 +21,8 @@ interface TimeSlotsProps {
   onOpenBooking: (date: Date, slot: number) => void;
   onCancelAppointment: (id: number) => Promise<void>;
   onConfirmAppointment?: (id: number) => Promise<void>;
-  /** Slot size in minutes (30 or 60). */
-  slotMinutes: 30 | 60;
+  /** Slot size in minutes (60 / 30 / 15). */
+  slotMinutes: 60 | 30 | 15;
   /** Applied work window: granules render for [windowStartSlot, windowEndSlot). */
   windowStartSlot?: number;
   windowEndSlot?: number;
@@ -223,7 +223,7 @@ function generateSlots(
   appointments: Appointment[],
   activeHours: Record<string, boolean>,
   _dayPast: boolean,
-  slotMinutes: number,
+  slotMinutes: 60 | 30 | 15,
   onToggle: (dateStr: string, slot: number) => void,
   onOpenBooking: (date: Date, slot: number) => void,
   onCancelAppointment: (id: number) => Promise<void>,

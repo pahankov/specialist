@@ -14,7 +14,7 @@ export async function toggleDayWork(
   masterId?: number | '',
   startSlot = 0,
   endSlot = 0,
-  slotMinutes: 30 | 60 = 60,
+  slotMinutes: 60 | 30 | 15 = 60,
 ): Promise<{
   newSchedule: Record<string, DaySchedule>;
   newActiveHours: Record<string, boolean>;
@@ -133,7 +133,7 @@ export async function handleBookAppointment(
   api: typeof adminApi,
   onClose: () => void,
   masterId?: number | '',
-  slotMinutes: 30 | 60 = 60,
+  slotMinutes: 60 | 30 | 15 = 60,
 ): Promise<boolean> {
   if (
     !bookingForm.date ||

@@ -3,6 +3,8 @@ import { PATTERN_PRESETS } from './pattern';
 import { formatHour } from './helpers';
 import './SchedulePatternPanel.css';
 
+type GranuleSize = 60 | 30 | 15;
+
 interface SchedulePatternPanelProps {
   monthLabel: string;
   value: SchedulePattern;
@@ -11,6 +13,10 @@ interface SchedulePatternPanelProps {
   onChange: (patch: Partial<SchedulePattern>) => void;
   onPreset: (workDays: number, offDays: number) => void;
   onApply: () => void;
+  /** Current granule size in minutes (60 / 30 / 15). */
+  slotMinutes: GranuleSize;
+  onSlotMinutesChange: (size: GranuleSize) => void;
+  onResetMonth: () => void;
 }
 
 function pluralDays(n: number): string {
@@ -92,6 +98,9 @@ export function SchedulePatternPanel({
   onChange,
   onPreset,
   onApply,
+  slotMinutes,
+  onSlotMinutesChange,
+  onResetMonth,
 }: SchedulePatternPanelProps) {
   const fromLabel = preview.from
     ? preview.from.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })
@@ -164,6 +173,42 @@ export function SchedulePatternPanel({
               />
             </div>
           </div>
+
+          {/* Granule size toggle, right next to the cycle controls. */}
+          <div className="pattern-slot-toggle">
+            <span className="pattern-slot-toggle-label">Гранулы:</span>
+            <div
+              className="pattern-slot-toggle-group"
+              role="group"
+              aria-label="Размер гранулы расписания"
+            >
+              <button
+                type="button"
+                className={`pattern-slot-btn ${slotMinutes === 60 ? 'active' : ''}`}
+                onClick={() => onSlotMinutesChange(60)}
+                aria-pressed={slotMinutes === 60}
+              >
+                Час
+              </button>
+              <button
+                type="button"
+                className={`pattern-slot-btn ${slotMinutes === 30 ? 'active' : ''}`}
+                onClick={() => onSlotMinutesChange(30)}
+                aria-pressed={slotMinutes === 30}
+              >
+                Полчаса
+              </button>
+              <button
+                type="button"
+                className={`pattern-slot-btn ${slotMinutes === 15 ? 'active' : ''}`}
+                onClick={() => onSlotMinutesChange(15)}
+                aria-pressed={slotMinutes === 15}
+              >
+                Четверть
+              </button>
+            </div>
+          </div>
+
           <p className="schedule-pattern-hint">
             {value.offDays === 0
               ? `Цикл ${value.workDays}/${value.offDays}: работаем каждый день, без выходных.`
@@ -226,14 +271,24 @@ export function SchedulePatternPanel({
                 <span>В этом месяце уже нет будущих дней для применения.</span>
               )}
             </div>
-            <button
-              type="button"
-              className="btn btn-primary pattern-apply-btn"
-              disabled={applying || !preview.canApply}
-              onClick={onApply}
-            >
-              {applying ? 'Применяем…' : `Применить: ${monthLabel}`}
-            </button>
+            <div className="schedule-pattern-actions">
+              <button
+                type="button"
+                className="btn btn-outline pattern-reset-btn"
+                disabled={applying || !preview.canApply}
+                onClick={onResetMonth}
+              >
+                Сбросить месяц
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary pattern-apply-btn"
+                disabled={applying || !preview.canApply}
+                onClick={onApply}
+              >
+                {applying ? 'Применяем…' : `Применить: ${monthLabel}`}
+              </button>
+            </div>
           </div>
         </div>
       </section>

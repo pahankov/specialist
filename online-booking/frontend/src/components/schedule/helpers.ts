@@ -100,7 +100,7 @@ export function getAppointmentsForSlot(
   appointments: Appointment[],
   date: Date,
   slot: number,
-  slotMinutes: number = 60,
+  slotMinutes: 60 | 30 | 15 = 60,
 ): Appointment[] {
   // Compare via Date parts: backend strings may be naive or carry +03:00/Z,
   // string-splitting breaks across those shapes.
@@ -129,7 +129,7 @@ export function getSlotStatus(slots: Appointment[]): string {
 /** How many granules a booking occupies (slotMinutes=30: 90 мин → 3, 30 мин → 1). */
 export function appointmentSpanSlots(
   a: Pick<Appointment, 'service_duration'>,
-  slotMinutes: number = 60,
+  slotMinutes: 60 | 30 | 15 = 60,
 ): number {
   const dur = Number(a.service_duration);
   if (!Number.isFinite(dur) || dur <= 0) return 1;
@@ -142,7 +142,7 @@ export function appointmentSpanHours(a: Pick<Appointment, 'service_duration'>): 
 }
 
 /** Start slot of a booking on the given day (null when unparsable). */
-function startSlotOnDay(a: Appointment, date: Date, slotMinutes: number): number | null {
+function startSlotOnDay(a: Appointment, date: Date, slotMinutes: 60 | 30 | 15): number | null {
   const d = new Date(a.appointment_date);
   if (Number.isNaN(d.getTime())) return null;
   if (
@@ -160,7 +160,7 @@ export function getCoveringLive(
   appointments: Appointment[],
   date: Date,
   slot: number,
-  slotMinutes: number = 60,
+  slotMinutes: 60 | 30 | 15 = 60,
 ): Appointment | null {
   const lastSlot = Math.ceil((24 * 60) / slotMinutes);
   for (const a of appointments) {
@@ -177,7 +177,7 @@ export function getBlockingLive(
   appointments: Appointment[],
   date: Date,
   slot: number,
-  slotMinutes: number = 60,
+  slotMinutes: 60 | 30 | 15 = 60,
 ) {
   const starters = getAppointmentsForSlot(appointments, date, slot, slotMinutes).filter(
     (s) => s.status !== 'cancelled',
@@ -204,7 +204,7 @@ export function isToday(date: Date): boolean {
   );
 }
 
-export function isSlotPast(date: Date, slot: number, slotMinutes: number = 60): boolean {
+export function isSlotPast(date: Date, slot: number, slotMinutes: 60 | 30 | 15 = 60): boolean {
   const slotDate = new Date(date);
   const totalMinutes = slot * slotMinutes;
   slotDate.setHours(Math.floor(totalMinutes / 60), totalMinutes % 60, 0, 0);

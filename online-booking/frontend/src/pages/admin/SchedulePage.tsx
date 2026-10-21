@@ -52,7 +52,7 @@ import {
  * indices (1 slot = slotMinutes minutes; slot == hour when slotMinutes=60). */
 function buildScheduleState(
   rows: WorkingHour[],
-  slotMinutes: 30 | 60 = 60,
+  slotMinutes: 60 | 30 | 15 = 60,
 ): {
   schedule: Record<string, DaySchedule>;
   activeHours: Record<string, boolean>;
@@ -150,8 +150,8 @@ function SchedulePage() {
   // Master sees own window; superadmin sees the selected master's.
   const [windowStart, setWindowStart] = useState(8);
   const [windowEnd, setWindowEnd] = useState(22);
-  // Granule size: 60 = whole hours (default), 30 = half-hour slots.
-  const [slotMinutes, setSlotMinutes] = usePersistentState<30 | 60>(
+  // Granule size: 60 = whole hours (default), 30 = half-hour, 15 = quarter-hour.
+  const [slotMinutes, setSlotMinutes] = usePersistentState<60 | 30 | 15>(
     'schedule.slotMinutes',
     60,
   );
@@ -162,8 +162,6 @@ function SchedulePage() {
     createDefaultPattern(),
   );
   const [applyingPattern, setApplyingPattern] = useState(false);
-  const [confirmReset, setConfirmReset] = useState(false);
-  const [resettingMonth, setResettingMonth] = useState(false);
   // Regular masters see only their own schedule; superadmin must pick one
   // (they have no profile of their own — empty view means "not chosen",
   // not "everyone is off").
@@ -582,21 +580,16 @@ function SchedulePage() {
   ]);
 
   // Wipe every working hour in the viewed month except days holding live
-  // appointments. Requires explicit confirmation.
+  // appointments.
   const handleResetMonth = useCallback(async () => {
     if (isSuperAdmin && selectedMasterId === '') {
       setError('Выберите мастера, чтобы сбрасывать расписание');
       return;
     }
-    if (!confirmReset) {
-      setConfirmReset(true);
-      return;
-    }
     const base = new Date(`${currentMonthISO}-01T00:00:00`);
     const { from, to } = monthRangeISO(base);
     const masterParam = selectedMasterId !== '' ? selectedMasterId : undefined;
-    setConfirmReset(false);
-    setResettingMonth(true);
+    setApplyingPattern(true);
     setError('');
     try {
       const { data } = await adminApi.resetMonth({
@@ -614,9 +607,9 @@ function SchedulePage() {
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'Не удалось сбросить график месяца'));
     } finally {
-      setResettingMonth(false);
+      setApplyingPattern(false);
     }
-  }, [currentMonthISO, confirmReset, isSuperAdmin, selectedMasterId]);
+  }, [currentMonthISO, isSuperAdmin, selectedMasterId, slotMinutes]);
 
   // ± on a selected working day. Expanding the range may grow the global
   // window; shrinking below a live booking is refused (the backend performs
@@ -786,67 +779,10 @@ function SchedulePage() {
             onChange={handlePatternChange}
             onPreset={handlePatternPreset}
             onApply={handleApplyPattern}
+            slotMinutes={slotMinutes}
+            onSlotMinutesChange={setSlotMinutes}
+            onResetMonth={handleResetMonth}
           />
-          {/* Granule size switch + month reset */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              flexWrap: 'wrap',
-              marginBottom: 16,
-              padding: 14,
-              background: '#f9f9f9',
-              borderRadius: 10,
-              justifyContent: 'center',
-            }}
-          >
-            <span style={{ fontSize: 13, color: '#666', fontWeight: 600 }}>
-              Размер гранулы:
-            </span>
-            <button
-              type="button"
-              className={`btn ${slotMinutes === 60 ? 'btn-primary' : 'btn-ghost'}`}
-              onClick={() => setSlotMinutes(60)}
-              disabled={resettingMonth}
-            >
-              Час
-            </button>
-            <button
-              type="button"
-              className={`btn ${slotMinutes === 30 ? 'btn-primary' : 'btn-ghost'}`}
-              onClick={() => setSlotMinutes(30)}
-              disabled={resettingMonth}
-            >
-              Полчаса
-            </button>
-            <span style={{ fontSize: 11, color: '#999' }}>
-              {slotMinutes === 30
-                ? 'Запись на каждые 30 мин'
-                : 'Запись на каждый час'}
-            </span>
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={handleResetMonth}
-              disabled={resettingMonth || confirmReset === false && false}
-              style={{ marginLeft: 'auto', padding: '6px 14px', fontSize: 13 }}
-            >
-              {resettingMonth ? 'Сбрасываем…' : 'Сбросить месяц'}
-            </button>
-            {confirmReset && (
-              <span
-                style={{
-                  fontSize: 12,
-                  color: '#c62828',
-                  marginLeft: 8,
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                ⚠️ Удалит все незанятые дни месяца. Нажмите ещё раз для подтверждения.
-              </span>
-            )}
-          </div>
           {/* Legend */}
           <div
             style={{
