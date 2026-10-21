@@ -229,8 +229,7 @@ class TestAdminApplySchedule:
             "schedule_date": (start + timedelta(days=2)).isoformat(),
             "start_time": "10:00", "end_time": "12:00",
         }, headers=auth_headers)
-        # A narrow window must expand, never shrink, so 08:00–09:00 stays
-        # available for edge-granule reactivation.
+        # A stale window must be replaced by the template's exact hours.
         narrow = await client.patch("/api/v1/admin/work-window", json={
             "start_hour": 10, "end_hour": 12,
         }, headers=auth_headers)
@@ -268,11 +267,13 @@ class TestAdminApplySchedule:
         for offset in (2, 3, 6):
             assert (start + timedelta(days=offset)).isoformat() not in by_date
 
-    async def test_zero_start_window_is_not_reset(self, client, auth_headers):
-        """A saved 00:00 window start must survive apply (0 is not \"missing\")."""
+    async def test_apply_resets_work_window_to_template_hours(
+        self, client, auth_headers
+    ):
+        """Granules follow the applied template, dropping a wider old window."""
         day = date.today() + timedelta(days=1)
         before = await client.patch("/api/v1/admin/work-window", json={
-            "start_hour": 0, "end_hour": 12,
+            "start_hour": 6, "end_hour": 23,
         }, headers=auth_headers)
         assert before.status_code == 200, before.text
 
@@ -282,8 +283,31 @@ class TestAdminApplySchedule:
             headers=auth_headers,
         )
         assert resp.status_code == 200, resp.text
-        assert resp.json()["window_start_hour"] == 0
+        assert resp.json()["window_start_hour"] == 9
         assert resp.json()["window_end_hour"] == 18
+
+        window = await client.get("/api/v1/admin/work-window", headers=auth_headers)
+        assert window.status_code == 200, window.text
+        assert window.json()["start_hour"] == 9
+        assert window.json()["end_hour"] == 18
+
+    async def test_apply_can_reset_window_to_midnight(
+        self, client, auth_headers
+    ):
+        """00:00 is a real template start, not a missing value."""
+        day = date.today() + timedelta(days=1)
+        payload = self._payload(day, day, work=1, off=0, anchor=day)
+        payload["start_time"] = "00:00"
+        payload["end_time"] = "08:00"
+
+        resp = await client.post(
+            "/api/v1/admin/working-hours/apply",
+            json=payload,
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["window_start_hour"] == 0
+        assert resp.json()["window_end_hour"] == 8
 
     async def test_past_days_are_not_touched(self, client, auth_headers):
         today = date.today()

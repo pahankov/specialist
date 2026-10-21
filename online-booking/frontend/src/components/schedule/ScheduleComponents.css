@@ -235,9 +235,9 @@
   cursor: pointer;
 }
 
-/* Per-day ± controls: extend the working day earlier or later without
- * typing values. The global window stays wide enough to keep edge granules
- * visible (see SchedulePage's expanded window). */
+/* Per-day ± controls: add/remove edge granules without typing values. The
+ * first group adds/removes at the start, the second at the end; expanding
+ * also widens the persisted window so the new granule stays visible. */
 .time-slots-day-hours {
   display: flex;
   align-items: center;

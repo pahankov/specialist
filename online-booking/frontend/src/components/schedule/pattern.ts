@@ -34,9 +34,6 @@ export const PATTERN_PRESETS: PatternPreset[] = [
   { label: '2/2', workDays: 2, offDays: 2, hint: 'Смены' },
   { label: '3/3', workDays: 3, offDays: 3, hint: 'Смены' },
   { label: '1/3', workDays: 1, offDays: 3, hint: 'Сутки через три' },
-  { label: '4/2', workDays: 4, offDays: 2, hint: 'Смены' },
-  { label: '6/1', workDays: 6, offDays: 1, hint: 'Шестидневка' },
-  { label: '7/0', workDays: 7, offDays: 0, hint: 'Без выходных' },
 ];
 
 const DAY_MS = 24 * 60 * 60 * 1000;

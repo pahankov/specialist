@@ -64,20 +64,6 @@ function buildScheduleState(rows: WorkingHour[]): {
   return { schedule, activeHours };
 }
 
-/** Display window must at least cover every saved day (legacy rows may sit
- * outside the stored window after an old shrink). */
-function scheduleBounds(schedule: Record<string, DaySchedule>): {
-  start: number;
-  end: number;
-} {
-  const days = Object.values(schedule);
-  if (days.length === 0) return { start: 8, end: 22 };
-  return {
-    start: Math.min(...days.map((day) => day.start)),
-    end: Math.max(...days.map((day) => day.end)),
-  };
-}
-
 function labelOf(a: Appointment): string {
   const who = a.client_name || 'клиент';
   const what = a.service_name || 'запись';
@@ -154,8 +140,8 @@ function SchedulePage() {
     '',
   );
   // Daily work window (whole hours): drives how many granules render.
-  // It only ever grows when a day/template starts earlier or ends later, so
-  // deactivated edge granules stay visible and can be re-enabled.
+  // Applying a template resets it to the template's hours; the per-day ±
+  // controls grow it when an earlier/later granule is added by click.
   // Master sees own window; superadmin sees the selected master's.
   const [windowStart, setWindowStart] = useState(8);
   const [windowEnd, setWindowEnd] = useState(22);
@@ -209,9 +195,10 @@ function SchedulePage() {
         setActiveHours(built.activeHours);
         setAppointments(apptsResp.data || []);
         setMonthlyStats(statsResp.data || null);
-        const bounds = scheduleBounds(built.schedule);
-        setWindowStart(Math.min(windowResp?.start_hour ?? 8, bounds.start));
-        setWindowEnd(Math.max(windowResp?.end_hour ?? 22, bounds.end));
+        // Exactly the saved window: granules must match the applied schedule.
+        // A selected day with older saved hours still renders its own range.
+        setWindowStart(windowResp?.start_hour ?? 8);
+        setWindowEnd(windowResp?.end_hour ?? 22);
       } catch (err: any) {
         console.error('[SchedulePage] Init error:', err);
         if (!cancelled) {
@@ -541,14 +528,13 @@ function SchedulePage() {
         cycle_anchor: pattern.anchor,
         start_time: hourToTime(pattern.startHour),
         end_time: hourToTime(pattern.endHour),
-        replace_off_days: pattern.replaceOffDays,
+        replace_off_days: true,
       });
 
       const scheduleResp = await adminApi.getWorkingHours(masterParam);
       const built = buildScheduleState(scheduleResp.data);
-      const bounds = scheduleBounds(built.schedule);
-      setWindowStart(Math.min(data.window_start_hour, bounds.start));
-      setWindowEnd(Math.max(data.window_end_hour, bounds.end));
+      setWindowStart(data.window_start_hour);
+      setWindowEnd(data.window_end_hour);
       setSchedule(built.schedule);
       setActiveHours(built.activeHours);
       await refreshMonthAppointments();
@@ -802,7 +788,7 @@ function SchedulePage() {
             onToggleDay={handleToggleDay}
             selectablePast
             previewWorkDates={patternPreview.workDates}
-            previewOffDates={pattern.replaceOffDays ? patternPreview.offDates : undefined}
+            previewOffDates={patternPreview.offDates}
           />
 
           {monthError && (

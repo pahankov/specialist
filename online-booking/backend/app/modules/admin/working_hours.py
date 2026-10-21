@@ -149,8 +149,9 @@ async def apply_schedule_cycle(
       its working hours would strand the booking.
     - The whole operation is one transaction; the audit log gets one entry.
 
-    The displayed work window is expanded (never shrunk) so newly added
-    earlier/later hours stay visible as granules in the schedule.
+    The work window is reset to the template's hours, so the schedule shows
+    exactly the chosen granules. Days that keep older hours (past days or
+    days with live bookings) still render their own saved range in the UI.
     """
     if data.range_start > data.range_end:
         raise HTTPException(status_code=400, detail="Начало периода позже конца")
@@ -252,14 +253,13 @@ async def apply_schedule_cycle(
                     removed += 1
         day += timedelta(days=1)
 
-    # Keep granules for earlier/later starts visible. Never shrink the window
-    # here: a master may still have bookings outside the new template.
+    # Reset the displayed window to the applied template: the master asked
+    # for exactly these granules. Older preserved days (past/booked) are
+    # rendered by the frontend from their own stored range.
     start_hour = data.start_time.hour
     end_hour = data.end_time.hour + (1 if (data.end_time.minute or data.end_time.second) else 0)
-    current_start = profile.work_start_hour if profile.work_start_hour is not None else 8
-    current_end = profile.work_end_hour if profile.work_end_hour is not None else 22
-    profile.work_start_hour = min(current_start, start_hour)
-    profile.work_end_hour = max(current_end, end_hour)
+    profile.work_start_hour = start_hour
+    profile.work_end_hour = end_hour
 
     await log_action(
         db, master.id, "apply", "working_hour", profile.id,

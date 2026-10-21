@@ -21,11 +21,11 @@ interface TimeSlotsProps {
   onOpenBooking: (date: Date, hour: number) => void;
   onCancelAppointment: (id: number) => Promise<void>;
   onConfirmAppointment?: (id: number) => Promise<void>;
-  /** Daily work window: granules render for [windowStart, windowEnd) regardless
-   * of the stored day range (the range is derived from active granules). */
+  /** Applied work window: granules render for [windowStart, windowEnd). */
   windowStart?: number;
   windowEnd?: number;
-  /** Stored range of the selected working day (for the ± hour steppers). */
+  /** Stored range of the selected working day. It can be wider than the
+   * applied window for preserved booked/past days, so it is unioned in. */
   dayStart?: number;
   dayEnd?: number;
   onChangeDayHours?: (dateStr: string, start: number, end: number) => Promise<void> | void;
@@ -49,9 +49,13 @@ export function TimeSlots({
   if (!selectedDate) return null;
 
   const dateStr = formatDate(selectedDate);
-  // Granules come from the work window, not the stored range: deactivating an
-  // edge granule must not hide it, otherwise it cannot be turned back on.
-  const daySchedule = { start: windowStart, end: windowEnd };
+  // The applied window defines the default granule count, but a preserved day
+  // may still hold bookings outside it. Union the selected day's range so
+  // those granules (and their live bookings) never disappear.
+  const daySchedule = {
+    start: Math.min(windowStart, dayStart ?? windowStart),
+    end: Math.max(windowEnd, dayEnd ?? windowEnd),
+  };
   const isDayPast = isPast(selectedDate);
   const allActive = checkAllActive(dateStr, daySchedule, activeHours);
   const dayRange =
@@ -94,13 +98,13 @@ export function TimeSlots({
 
         {dayRange && !isDayPast && onChangeDayHours && (
           <div className="time-slots-day-hours">
-            <span className="time-slots-day-hours-label">Рабочий день</span>
+            <span className="time-slots-day-hours-label">Гранулы дня</span>
             <div className="day-hours-group">
               <button
                 type="button"
                 className="day-hours-btn"
-                title="Начать на час раньше"
-                aria-label="Начать рабочий день на час раньше"
+                title="Добавить час раньше"
+                aria-label="Добавить гранулу раньше"
                 disabled={adjusting || dayRange.start <= 0}
                 onClick={() => applyDayHours(dayRange.start - 1, dayRange.end)}
               >
@@ -110,8 +114,8 @@ export function TimeSlots({
               <button
                 type="button"
                 className="day-hours-btn"
-                title="Начать на час позже"
-                aria-label="Начать рабочий день на час позже"
+                title="Убрать первый час"
+                aria-label="Убрать первую гранулу"
                 disabled={adjusting || dayRange.start + 1 >= dayRange.end}
                 onClick={() => applyDayHours(dayRange.start + 1, dayRange.end)}
               >
@@ -123,8 +127,8 @@ export function TimeSlots({
               <button
                 type="button"
                 className="day-hours-btn"
-                title="Закончить на час раньше"
-                aria-label="Закончить рабочий день на час раньше"
+                title="Убрать последний час"
+                aria-label="Убрать последнюю гранулу"
                 disabled={adjusting || dayRange.end - 1 <= dayRange.start}
                 onClick={() => applyDayHours(dayRange.start, dayRange.end - 1)}
               >
@@ -134,8 +138,8 @@ export function TimeSlots({
               <button
                 type="button"
                 className="day-hours-btn"
-                title="Закончить на час позже"
-                aria-label="Закончить рабочий день на час позже"
+                title="Добавить час позже"
+                aria-label="Добавить гранулу позже"
                 disabled={adjusting || dayRange.end >= 24}
                 onClick={() => applyDayHours(dayRange.start, dayRange.end + 1)}
               >

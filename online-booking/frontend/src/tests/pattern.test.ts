@@ -117,8 +117,8 @@ describe('buildPatternPreview', () => {
     expect(invalidAnchor.canApply).toBe(false);
   });
 
-  it('offers presets covering arbitrary work/rest variants', () => {
+  it('offers only the four compact presets, keeping 7/0 for custom counters', () => {
     const labels = PATTERN_PRESETS.map((preset) => preset.label);
-    expect(labels).toEqual(expect.arrayContaining(['5/2', '2/2', '1/3', '7/0']));
+    expect(labels).toEqual(['5/2', '2/2', '3/3', '1/3']);
   });
 });

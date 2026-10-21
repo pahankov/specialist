@@ -160,6 +160,8 @@ function CabinetBookPage() {
   const [scheduleLoading, setScheduleLoading] = useState(false);
 
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  // A preserved/legacy day can sit outside the applied work window.
+  const selectedDayRange = selectedDate ? schedule[formatDate(selectedDate)] : undefined;
   const [slotHour, setSlotHour] = useState<number | null>(null);
   const [modalServiceId, setModalServiceId] = useState<number | ''>('');
   const [modalBundle, setModalBundle] = useState<Bundle | null>(null);
@@ -673,11 +675,11 @@ function CabinetBookPage() {
                 interactive={false}
               />
               {selectedDate &&
-                (schedule[formatDate(selectedDate)] ? (
+                (selectedDayRange ? (
                   <ClientSlots
                     date={selectedDate}
-                    windowStart={windowRange.start}
-                    windowEnd={windowRange.end}
+                    windowStart={Math.min(windowRange.start, selectedDayRange.start)}
+                    windowEnd={Math.max(windowRange.end, selectedDayRange.end)}
                     activeHours={activeHours}
                     busy={busy}
                     onPick={openSlot}

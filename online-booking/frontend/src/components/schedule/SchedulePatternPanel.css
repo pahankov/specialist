@@ -68,8 +68,13 @@
 }
 
 .pattern-preset {
-  min-width: 54px;
-  padding: 7px 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 60px;
+  height: 38px;
+  padding: 0 14px;
   border: 2px solid #e0e0e0;
   border-radius: 9px;
   background: #fff;
@@ -95,7 +100,7 @@
 
 .pattern-row {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 12px;
 }
 
@@ -103,21 +108,61 @@
   flex-wrap: wrap;
 }
 
+.pattern-controls {
+  row-gap: 10px;
+}
+
+/* Unified cycle controls row: three equal-width fields, labels above controls. */
+.pattern-controls-unified {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.pattern-field-unified {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Stepper and date input stretch to full field width so all three match. */
+.pattern-stepper-full {
+  width: 100%;
+}
+
+.pattern-date-full {
+  width: 100%;
+}
+
+/* Every editor (steppers + date) shares the same label/control rhythm, so
+ * the cycle and hours rows line up as one horizontal level. */
+.pattern-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.pattern-field-label {
+  font-size: 12px;
+  line-height: 16px;
+  color: #666;
+  font-weight: 600;
+}
+
 .pattern-stepper {
   display: inline-flex;
   align-items: center;
+  box-sizing: border-box;
+  height: 38px;
   gap: 4px;
   padding: 3px;
   border: 1px solid #e0e0e0;
   border-radius: 9px;
   background: #fafafa;
-}
-
-.pattern-stepper-label {
-  padding: 0 7px 0 8px;
-  font-size: 12px;
-  color: #666;
-  font-weight: 600;
 }
 
 .pattern-stepper-btn {
@@ -159,17 +204,11 @@
   margin-left: 2px;
 }
 
-.pattern-anchor {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  font-size: 12px;
-  color: #666;
-  font-weight: 600;
-}
-
-.pattern-anchor input {
-  padding: 6px 8px;
+.pattern-date-input {
+  box-sizing: border-box;
+  width: 170px;
+  height: 38px;
+  padding: 0 10px;
   border: 1px solid #d7d7d7;
   border-radius: 8px;
   font-size: 14px;
@@ -178,6 +217,9 @@
 }
 
 .pattern-time-dash {
+  display: inline-flex;
+  align-items: center;
+  height: 38px;
   font-size: 16px;
   color: #999;
 }
@@ -204,6 +246,24 @@
   margin-top: 1px;
   accent-color: #667eea;
   flex-shrink: 0;
+}
+
+.pattern-checkbox-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pattern-checkbox-text strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+}
+
+.pattern-checkbox-text small {
+  font-size: 12px;
+  line-height: 1.4;
+  color: #777;
 }
 
 .schedule-pattern-apply {
@@ -267,13 +327,10 @@
   }
 
   .pattern-preset {
-    min-width: 46px;
-    padding: 6px 9px;
+    min-width: 48px;
+    height: 36px;
+    padding: 0 10px;
     font-size: 13px;
-  }
-
-  .pattern-stepper-label {
-    padding: 0 4px 0 5px;
   }
 
   .pattern-stepper-value {
@@ -281,8 +338,12 @@
     font-size: 13px;
   }
 
-  .pattern-anchor {
+  .pattern-field-unified {
     flex: 1 1 100%;
+  }
+
+  .pattern-date-full {
+    width: 100%;
   }
 
   .schedule-pattern-apply {

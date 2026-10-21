@@ -133,7 +133,7 @@ beauty-specialist/              # корень репозитория
     │   │   └── modules/          # self-contained пакеты: auth, city, user, booking, service, schedule,
     │   │                         # review, client, admin/*, dadata, maxauth, vkauth, yandexauth
     │   ├── alembic/              # миграции PostgreSQL
-    │   ├── tests/                # pytest (751)
+    │   ├── tests/                # pytest (752)
     │   └── requirements.txt
     └── frontend/
         ├── src/
@@ -306,8 +306,8 @@ utils/
 - ESLint + Prettier для форматирования кода
 
 ### ✅ Тесты
-- **Backend:** 751 pytest-тестов (auth, masters, services, appointments, clients, reviews, admin CRUD, bundles, coupons, notifications, billing/ledger/рефералы, visibility/модерация, dual-role, VK/Yandex/MAX auth (в т.ч. виджет Яндекса suggest), MAX webhook guard, rate limiting, refresh tokens, password security, no-show, dadata proxy, superuser, log level)
-- **Frontend:** 256 Vitest-тестов (helpers, hooks, Modal/ConfirmDialog, auth refresh, соц-входы VK/Yandex/MAX (виджет Яндекса), dadata fallback, CabinetPage, CabinetBookPage, BookingWizard, DataTable, NotificationBell, billing/referral pages, ...)
+- **Backend:** 752 pytest-тестов (auth, masters, services, appointments, clients, reviews, admin CRUD, bundles, coupons, notifications, billing/ledger/рефералы, visibility/модерация, dual-role, VK/Yandex/MAX auth (в т.ч. виджет Яндекса suggest), MAX webhook guard, rate limiting, refresh tokens, password security, no-show, dadata proxy, superuser, log level)
+- **Frontend:** 258 Vitest-тестов (helpers, hooks, Modal/ConfirmDialog, auth refresh, соц-входы VK/Yandex/MAX (виджет Яндекса), dadata fallback, CabinetPage, CabinetBookPage, BookingWizard, DataTable, NotificationBell, billing/referral pages, ...)
 - 100% покрытие всех эндпоинтов
 - Файловый SQLite (по файлу на тест) для изоляции тестов
 - pytest-asyncio для асинхронных тестов
@@ -430,13 +430,13 @@ OtpCode (id, phone, code_hash, expires_at, is_used, created_at)
 # Backend
 cd online-booking\backend
 $env:PYTHONPATH='.'
-pytest tests/ -v                          # Все тесты (751)
+pytest tests/ -v                          # Все тесты (752)
 pytest tests/test_reviews.py -v           # Только reviews
 pytest tests/ -v --cov=app                # С покрытием
 
 # Frontend
 cd online-booking\frontend
-npx vitest run                            # Все тесты (256)
+npx vitest run                            # Все тесты (258)
 npx vitest run src/tests/helpers.test.ts  # Только helpers
 npx vitest                              # Watch mode
 ```
@@ -450,6 +450,14 @@ npx vitest                              # Watch mode
 
 
 ## 📚 История версий
+
+### [1.86.0] - 2026-10-21
+
+- **Гранулы после применения графика.** `POST /admin/working-hours/apply` теперь сбрасывает рабочее окно на часы шаблона, а не расширяет его: после «Применить» в дне видны ровно выбранные часы. Дни с сохранёнными записями вне окна по-прежнему показывают свой диапазон.
+- **Добавление/удаление гранул по клику.** В блоке дня кнопки «−»/«+» у начала и конца добавляют или убирают крайние часовые гранулы; подписи явно называют действие. При расширении окно сохраняется, поэтому новая гранула остаётся видимой.
+- **Компактный цикл.** В пресетах остались 5/2, 2/2, 3/3 и 1/3; любые другие N/M (включая 7/0) задаются счётчиками. Пресеты, счётчики и дата выровнены по высоте и одной линии.
+- **Понятный чекбокс.** «Удалять рабочие дни вне нового цикла» получил пояснение: удаляются только существующие рабочие дни, ставшие выходными; дни с записями и прошедшие дни не трогаются.
+- **Тесты:** pytest **752**, vitest **258**, `tsc`/`vite build`, eslint (0 ошибок) и prettier — без ошибок. `APP_VERSION` — 1.86.0; `package-lock.json` синхронизирован.
 
 ### [1.85.0] - 2026-10-21
 
