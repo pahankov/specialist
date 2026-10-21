@@ -133,7 +133,7 @@ beauty-specialist/              # корень репозитория
     │   │   └── modules/          # self-contained пакеты: auth, city, user, booking, service, schedule,
     │   │                         # review, client, admin/*, dadata, maxauth, vkauth, yandexauth
     │   ├── alembic/              # миграции PostgreSQL
-    │   ├── tests/                # pytest (745)
+    │   ├── tests/                # pytest (746)
     │   └── requirements.txt
     └── frontend/
         ├── src/
@@ -306,7 +306,7 @@ utils/
 - ESLint + Prettier для форматирования кода
 
 ### ✅ Тесты
-- **Backend:** 745 pytest-тестов (auth, masters, services, appointments, clients, reviews, admin CRUD, bundles, coupons, notifications, billing/ledger/рефералы, visibility/модерация, dual-role, VK/Yandex/MAX auth (в т.ч. виджет Яндекса suggest), MAX webhook guard, rate limiting, refresh tokens, password security, no-show, dadata proxy, superuser, log level)
+- **Backend:** 746 pytest-тестов (auth, masters, services, appointments, clients, reviews, admin CRUD, bundles, coupons, notifications, billing/ledger/рефералы, visibility/модерация, dual-role, VK/Yandex/MAX auth (в т.ч. виджет Яндекса suggest), MAX webhook guard, rate limiting, refresh tokens, password security, no-show, dadata proxy, superuser, log level)
 - **Frontend:** 239 Vitest-тестов (helpers, hooks, Modal/ConfirmDialog, auth refresh, соц-входы VK/Yandex/MAX (виджет Яндекса), dadata fallback, CabinetPage, CabinetBookPage, BookingWizard, DataTable, NotificationBell, billing/referral pages, ...)
 - 100% покрытие всех эндпоинтов
 - Файловый SQLite (по файлу на тест) для изоляции тестов
@@ -430,7 +430,7 @@ OtpCode (id, phone, code_hash, expires_at, is_used, created_at)
 # Backend
 cd online-booking\backend
 $env:PYTHONPATH='.'
-pytest tests/ -v                          # Все тесты (745)
+pytest tests/ -v                          # Все тесты (746)
 pytest tests/test_reviews.py -v           # Только reviews
 pytest tests/ -v --cov=app                # С покрытием
 
@@ -450,6 +450,11 @@ npx vitest                              # Watch mode
 
 
 ## 📚 История версий
+
+### [1.84.2] - 2026-10-21
+
+- **Исправлено истечение сессии при загрузке файлов.** При отсутствии access-cookie backend отвечал `403`, а фронтенд обновляет сессию только по `401`; загрузка сертификата падала после 30 минут работы. Теперь отсутствующий токен возвращает `401`, сессия автоматически обновляется, действие повторяется.
+- **Добавлены регрессионные тесты.** Проверяется `401` для защищённых клиентских запросов и для загрузки фото/сертификата без токена.
 
 ### [1.84.1] - 2026-10-21
 

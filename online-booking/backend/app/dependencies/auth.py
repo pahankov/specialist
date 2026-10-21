@@ -24,8 +24,19 @@ from app.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-security = HTTPBearer()
+# auto_error=False: a missing access cookie must be a 401, not HTTPBearer's
+# default 403. The frontend refreshes the session on 401; a 403 bypasses that
+# flow and leaves an otherwise valid refresh session stuck.
+security = HTTPBearer(auto_error=False)
 security_optional = HTTPBearer(auto_error=False)
+
+
+def _missing_credentials() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Not authenticated",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 
 async def get_current_user_optional(
@@ -56,10 +67,13 @@ async def get_current_user_optional(
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: AsyncSession = Depends(get_db)
 ) -> User:
     """Extract and validate JWT token, return current user (any role)."""
+    if credentials is None:
+        logger.warning("Authentication failed: missing access token")
+        raise _missing_credentials()
     token = credentials.credentials
 
     try:
@@ -107,7 +121,7 @@ async def get_current_user(
 
 async def get_current_master(
     request: Request,
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: AsyncSession = Depends(get_db)
 ) -> User:
     """Extract and validate JWT token, return current master.
@@ -208,7 +222,7 @@ async def get_current_master(
 
 
 async def get_current_client(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: AsyncSession = Depends(get_db)
 ) -> User:
     """Extract and validate JWT token, return current client.
@@ -217,6 +231,9 @@ async def get_current_client(
     masters as a client). Their ClientProfile is created on first visit
     by the callers (services.clients.get_or_create_profile).
     """
+    if credentials is None:
+        logger.warning("Client authentication failed: missing access token")
+        raise _missing_credentials()
     token = credentials.credentials
 
     try:

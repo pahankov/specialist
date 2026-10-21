@@ -5,7 +5,10 @@ Covers:
 - get_current_master — validates JWT, returns User with master role
 - require_admin — requires admin role
 - Backward compatibility: ADMIN without MasterProfile is allowed
+- Missing access token returns 401 so the frontend can refresh the session
 """
+import base64
+
 import pytest
 
 
@@ -53,11 +56,27 @@ class TestGetCurrentUser:
         assert resp.status_code == 401
 
     async def test_missing_token_rejected(self, client):
-        """Request without Authorization header is rejected."""
-        resp = await client.get("/api/v1/admin/masters")
-        # Without auth, FastAPI returns 403 (require_super_admin) or 401
-        # The exact code depends on whether security header is auto_error
-        assert resp.status_code in (401, 403, 422)
+        """Request without Authorization header is rejected with 401.
+
+        Must be 401, not 403: the frontend only refreshes the session on 401.
+        An expired access cookie used to produce 403 and left the page stuck.
+        """
+        resp = await client.get("/api/v1/client/me")
+        assert resp.status_code == 401
+        assert resp.headers.get("www-authenticate") == "Bearer"
+
+    async def test_missing_token_on_photo_upload_is_401(self, client):
+        """The draft photo endpoint must trigger the refresh flow too."""
+        png = base64.b64decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lE"
+            "QVR42mP8/x8AAusB9Wl2n1sAAAAASUVORK5CYII="
+        )
+        resp = await client.post(
+            "/api/v1/auth/become-master/photo?kind=cert",
+            files={"file": ("cert.png", png, "image/png")},
+        )
+        assert resp.status_code == 401
+        assert resp.headers.get("www-authenticate") == "Bearer"
 
 
 # ─── get_current_master tests ────────────────────────────────────────
