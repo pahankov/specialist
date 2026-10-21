@@ -40,6 +40,16 @@ server {
         expires -1;
     }
 
+    # Uploaded avatars and certificates are stored by FastAPI and must not
+    # fall through to the SPA (index.html).
+    location /static/ {
+        proxy_pass http://127.0.0.1:8000/static/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
     location /api/dadata/ {
         proxy_pass http://127.0.0.1:8000/api/dadata/;
         proxy_set_header Host $host;

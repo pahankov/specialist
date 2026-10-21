@@ -10,6 +10,13 @@ ROOT="${1:?usage: bash scripts/deploy_finalize.sh /var/www/beauty-specialist}"
 sudo chown -R www-data:www-data "$ROOT/online-booking/backend/logs/"
 sudo chmod -R 755 "$ROOT/online-booking/backend/logs/"
 
+# Uploaded photos/certificates are written by the backend under www-data.
+# The deploy starts with `chown -R deploy:deploy`, so restore write access
+# here; otherwise avatar uploads fail with Permission denied.
+sudo mkdir -p "$ROOT/online-booking/backend/app/static/avatars"
+sudo chown -R www-data:www-data "$ROOT/online-booking/backend/app/static"
+sudo chmod -R u+rwX,go+rX "$ROOT/online-booking/backend/app/static"
+
 # Write nginx config with SSL (fixes broken configs from previous deploys)
 if [ ! -f "$ROOT/scripts/deploy_fix_nginx.sh" ]; then
     echo "ERROR: scripts/deploy_fix_nginx.sh not found!"
