@@ -14,3 +14,4 @@ export * from './auth';
 export * from './admin';
 export * from './superadmin';
 export * from './cabinet';
+export * from './billing';

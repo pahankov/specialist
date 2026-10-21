@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type MouseEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cabinetApi } from '../../api/client';
@@ -11,6 +11,9 @@ interface Note {
   text: string;
   audience?: string | null;
   link?: string | null;
+  kind?: string | null;
+  appointment_id?: number | null;
+  resolved_at?: string | null;
   sender_name?: string | null;
   is_read: boolean;
   created_at?: string | null;
@@ -23,6 +26,7 @@ function CabinetNotificationsPage() {
   const [unread, setUnread] = useState(0);
   const [loading, setLoading] = useState(true);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [visitBusy, setVisitBusy] = useState<number | null>(null);
 
   const fetchNotes = async () => {
     try {
@@ -71,6 +75,32 @@ function CabinetNotificationsPage() {
       toast.error(getApiErrorMessage(err, 'Не удалось очистить уведомления'));
     } finally {
       setConfirmClear(false);
+    }
+  };
+
+  const answerVisit = async (note: Note, status: 'confirmed' | 'disputed', event: MouseEvent) => {
+    event.stopPropagation();
+    if (!note.appointment_id || visitBusy !== null) return;
+    setVisitBusy(note.id);
+    try {
+      const { data } = await cabinetApi.confirmVisit(note.appointment_id, status);
+      if (status === 'confirmed') {
+        navigate(data.review_url || `/cabinet?review=${note.appointment_id}`);
+      } else {
+        setNotes((prev) =>
+          prev.map((item) =>
+            item.id === note.id
+              ? { ...item, is_read: true, resolved_at: new Date().toISOString() }
+              : item,
+          ),
+        );
+        setUnread((value) => Math.max(0, value - (note.is_read ? 0 : 1)));
+        toast.success('Спасибо, запись отмечена как спорная');
+      }
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Не удалось сохранить ответ'));
+    } finally {
+      setVisitBusy(null);
     }
   };
 
@@ -127,12 +157,15 @@ function CabinetNotificationsPage() {
               className="cabinet-card"
               onClick={() => {
                 if (n.link === 'reviews') navigate('/cabinet', { state: { scrollTo: 'history' } });
-                else if (n.link && n.link.startsWith('coupons')) {
+                else if (n.link && n.link.startsWith('review:')) {
+                  navigate(`/cabinet?review=${n.link.split(':')[1]}`);
+                } else if (n.link && n.link.startsWith('coupons')) {
                   const id = n.link.split(':')[1];
                   navigate(`/cabinet/coupons${id ? `?highlight=${id}` : ''}`);
                 } else if (n.link && n.link.startsWith('book:'))
                   navigate(`/cabinet/book?master_id=${n.link.split(':')[1]}`);
                 else if (n.link === 'book') navigate('/cabinet/book');
+                else if (n.link === 'billing') navigate('/admin/billing');
                 else if (n.link && n.link.startsWith('appointments')) navigate('/cabinet');
               }}
               style={n.link ? { cursor: 'pointer' } : undefined}
@@ -160,6 +193,24 @@ function CabinetNotificationsPage() {
                 </span>
               </div>
               <div className="cabinet-card-side">
+                {n.kind === 'visit_feedback' && n.appointment_id && !n.resolved_at && (
+                  <>
+                    <button
+                      className="btn btn-sm btn-ghost"
+                      disabled={visitBusy !== null}
+                      onClick={(event) => answerVisit(n, 'disputed', event)}
+                    >
+                      Не был
+                    </button>
+                    <button
+                      className="btn btn-sm btn-primary"
+                      disabled={visitBusy !== null}
+                      onClick={(event) => answerVisit(n, 'confirmed', event)}
+                    >
+                      {visitBusy === n.id ? 'Сохраняем…' : 'Да, оценю'}
+                    </button>
+                  </>
+                )}
                 {!n.is_read && (
                   <button
                     className="btn btn-sm btn-ghost"

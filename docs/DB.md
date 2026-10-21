@@ -135,10 +135,15 @@
 | appointment_date | TIMESTAMP WITH TIME ZONE | NOT NULL | Дата и время записи |
 | status | VARCHAR(20) | DEFAULT pending | pending, confirmed, completed, cancelled, no_show |
 | notes | TEXT | NULLABLE | Примечания |
+| created_by_role | VARCHAR(16) | NULLABLE | client / master / admin / public / system; бонусы только у client |
+| created_by_user_id | INTEGER | NULLABLE | Пользователь, создавший запись |
+| visit_confirmation_status | VARCHAR(16) | NULLABLE | pending / confirmed / disputed (ответ на напоминание) |
+| visit_prompt_sent_at | TIMESTAMP WITH TIME ZONE | NULLABLE | Когда отправлено напоминание через 48 ч |
+| visit_confirmation_at | TIMESTAMP WITH TIME ZONE | NULLABLE | Когда клиент ответил |
 | created_at | TIMESTAMP WITH TIME ZONE | | Дата создания |
 | updated_at | TIMESTAMP WITH TIME ZONE | | Дата обновления |
 
-**Индексы:** `ix_appointments_master_status`, `ix_appointments_master_date`
+**Индексы:** `ix_appointments_master_status`, `ix_appointments_master_date`, `ix_appointments_created_by_role`, `ix_appointments_visit_confirmation_status`
 
 ### 5. services
 
@@ -324,11 +329,14 @@
 | text | TEXT | NOT NULL | Текст уведомления |
 | audience | VARCHAR(20) | NULLABLE | Аудитория рассылки: all / masters / clients / my_clients / selected; у событийных — NULL |
 | link | VARCHAR(50) | NULLABLE | Диплинк-ключ (например `appointments`) — раздел разворачивает сам |
+| kind | VARCHAR(32) | NULLABLE | Тип события (`visit_feedback`, `billing_*`); NULL у старых строк |
+| appointment_id | INTEGER | NULLABLE, FK -> appointments.id ON DELETE SET NULL | Запись для действий из уведомления |
+| resolved_at | TIMESTAMP WITH TIME ZONE | NULLABLE | Когда действие по уведомлению выполнено |
 | is_read | BOOLEAN | NOT NULL, DEFAULT FALSE | Прочитано ли |
 | created_at | TIMESTAMP WITH TIME ZONE | | Дата создания |
 | read_at | TIMESTAMP WITH TIME ZONE | NULLABLE | Когда прочитано |
 
-**Индексы:** `ix_notifications_recipient_id`, `ix_notifications_recipient_created` (recipient_id, created_at), `ix_notifications_recipient_unread` (recipient_id, is_read)
+**Индексы:** `ix_notifications_recipient_id`, `ix_notifications_recipient_created` (recipient_id, created_at), `ix_notifications_recipient_unread` (recipient_id, is_read), `ix_notifications_kind`, `ix_notifications_appointment_id`
 
 ### 16. notification_broadcasts
 
@@ -432,6 +440,23 @@
 | created_at | TIMESTAMP WITH TIME ZONE | | |
 
 **Индексы:** `ix_email_codes_email`, `ix_email_codes_email_purpose`
+
+### 22. billing (1.84.0)
+
+**Назначение:** ручная оплата и ledger мастеров. Деньги — `NUMERIC(10,2)`, ссылка на источник хранится в `source_ref`, повторные начисления защищены статусами.
+
+| Таблица | Назначение |
+|---------|------------|
+| `master_billing_accounts` | Trial-даты, статус доступа (`trial/active/readonly/paused/suspended`), реферальный код, флаги качества. 1:1 к `master_profiles` |
+| `billing_invoices` | Счета лестницы: 1–2-й месяц — 250 ₽, с 3-го — 500 ₽; issue/due/block, частичная оплата, кредиты |
+| `billing_payments` | Подтверждённые администратором платежи (method, note, кто подтвердил, когда) |
+| `billing_credits` | Бонусы и ручные начисления с остатком и сроком 90 дней |
+| `billing_credit_applications` | Какая сумма каждого кредита ушла в какой счёт (один row на пару credit/invoice) |
+| `client_bonus_awards` | Одноразовый бонус первого месяца: кандидаты, 30%-флаг качества, статус и снапшот |
+| `master_referrals` | Приглашение A→B, прогресс B, статус и сумма 125 ₽ |
+| `referral_clicks` | Одноразовые токены публичных ссылок `/r/:code`, срок 60 дней |
+
+**Индексы:** `ix_billing_accounts_status`, `ix_billing_invoices_master_status` (master_id, status), `ix_billing_credits_master_remaining` (master_id, remaining), `ix_master_referrals_referrer_status` (referrer_master_id, status); уникальные `master_billing_accounts.master_id`, `master_billing_accounts.referral_code`, `billing_invoices (master_id, period_index)`, `client_bonus_awards.master_id`, `referral_clicks.token`, `master_referrals.referred_user_id` и `master_referrals.referred_master_id`.
 
 ---
 
@@ -547,8 +572,10 @@
 | 33 | 23a1b2c3d4e8 | 22a1b2c3d4e7 | DROP `otp_codes.code` — легаси-колонка с открытым текстом, ломавшая INSERT на проде | 2026-10-18 |
 | 34 | 24a1b2c3d4e9 | 23a1b2c3d4e8 | `user_contacts` (несколько телефонов/почт, флаги верификации; бэкфилл из `users.email/phone`, 1.79.0) | 2026-10-19 |
 | 35 | 25a1b2c3d4ea | 24a1b2c3d4e9 | `email_codes` (одноразовые коды на почту: сброс пароля и подтверждение, 1.79.0) | 2026-10-19 |
+| 36 | 26a1b2c3d4eb | 25a1b2c3d4ea | `master_profiles.prefer_master_panel` (старт сразу в кабинете мастера) | 2026-10-20 |
+| 37 | 27b1c2d3e4f5 | 26a1b2c3d4eb | Биллинг 1.84.0: счета, платежи, кредиты, клиентские бонусы, рефералы; провенанс записей; напоминания о визите; перевод существующих мастеров на 14-дневный trial (кроме superuser id=1) | 2026-10-21 |
 
-**Head:** `25a1b2c3d4ea`
+**Head:** `27b1c2d3e4f5`
 
 > Старая цепочка из 12 миграций (`9a9c2edb` → `b2c3d4e5f6a7`) удалена после squash —
 > история сохранена в git (`git log -- alembic/versions/`). Прод-БД со старым head

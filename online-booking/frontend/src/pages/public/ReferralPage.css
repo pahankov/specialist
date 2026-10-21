@@ -1,0 +1,117 @@
+/* Public referral landing (1.84.0) */
+.referral-landing {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 15% 15%, rgba(124, 58, 237, 0.16), transparent 45%),
+    radial-gradient(circle at 85% 85%, rgba(236, 72, 153, 0.14), transparent 45%), #f6f4fb;
+}
+
+.referral-card {
+  width: 100%;
+  max-width: 560px;
+  border-radius: 24px;
+  padding: 34px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(124, 58, 237, 0.12);
+  box-shadow: 0 24px 60px rgba(52, 34, 90, 0.16);
+  text-align: center;
+}
+
+.referral-logo {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #7c3aed;
+  margin-bottom: 20px;
+}
+
+.referral-emoji {
+  font-size: 46px;
+  margin-bottom: 8px;
+}
+
+.referral-card h1 {
+  margin: 0 0 10px;
+  font-size: 27px;
+  line-height: 1.2;
+  color: #241c35;
+}
+
+.referral-card p {
+  margin: 0 auto 20px;
+  max-width: 430px;
+  color: #625b72;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.referral-rules {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 22px 0;
+}
+
+.referral-rules > div {
+  padding: 12px 8px;
+  border-radius: 14px;
+  background: #f7f4ff;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.referral-rules strong {
+  color: #4c1d95;
+  font-size: 18px;
+}
+
+.referral-rules span {
+  color: #6b6480;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.referral-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 13px 20px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #7c3aed, #a855f7);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  text-decoration: none;
+  box-shadow: 0 10px 24px rgba(124, 58, 237, 0.3);
+}
+
+.referral-cta:hover {
+  filter: brightness(1.05);
+}
+
+.referral-hint {
+  margin: 14px 0 0 !important;
+  font-size: 12px !important;
+  color: #8a8399 !important;
+}
+
+@media (max-width: 560px) {
+  .referral-card {
+    padding: 24px 20px;
+    border-radius: 18px;
+  }
+
+  .referral-card h1 {
+    font-size: 22px;
+  }
+
+  .referral-rules {
+    grid-template-columns: 1fr;
+  }
+}

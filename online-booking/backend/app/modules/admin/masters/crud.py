@@ -200,6 +200,7 @@ async def update_master(
         raise HTTPException(status_code=404, detail="Мастер не найден")
 
     fields = data.model_dump(exclude_unset=True)
+    was_active = bool(master_profile.is_active) and master_profile.status == "active"
     # Unique phone/email must not collide with OTHER users. Prod seed rows
     # share phones, so check ONLY when the value actually changes: an
     # unchanged value cannot create a new violation, but blocking a
@@ -230,6 +231,21 @@ async def update_master(
             master_profile.telegram_username = value
         else:
             setattr(master_profile, field, value)
+
+    became_active = (
+        not was_active
+        and bool(master_profile.is_active)
+        and master_profile.status == "active"
+    )
+    billable = master_profile.user.role == UserRole.MASTER
+    if became_active and billable:
+        # Admin re-activation has the same billing rule as self-activation:
+        # start a fresh 14-day trial, but never after an invoice exists.
+        from app.services.billing import resume_master_billing
+        await resume_master_billing(db, master_profile.user, master_profile)
+    elif ("trial_ends_at" in fields or "tariff" in fields) and billable:
+        from app.services.billing import ensure_account
+        await ensure_account(db, master_profile)
 
     from sqlalchemy.exc import IntegrityError
     try:

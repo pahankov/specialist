@@ -32,12 +32,13 @@ class MasterProfile(Base):
     # Past confirmed bookings flip to "completed" on their own (background
     # loop). Manual complete/cancel still work — the switch only automates.
     auto_complete = Column(Boolean, default=False, nullable=True)
-    # Billing foundation (no charges yet): every master sits on a tariff.
-    # Default 'trial' with trial_ends_at assigned at creation (+180 days).
+    # Billing ladder: 14-day full trial, then 250 ₽ / 250 ₽ / 500 ₽ a month.
+    # The billing account is the source of truth; these two columns stay in
+    # sync for the panel/admin legacy fields.
     tariff = Column(String(20), default="trial", nullable=False)
     trial_ends_at = Column(
         DateTime(timezone=True), nullable=True,
-        default=lambda: datetime.now(timezone.utc) + timedelta(days=180),
+        default=lambda: datetime.now(timezone.utc) + timedelta(days=14),
     )
     # Daily work window (whole hours): schedule granules render for
     # [work_start_hour, work_end_hour). Defaults 08:00-22:00.
@@ -63,6 +64,10 @@ class MasterProfile(Base):
     working_hours = relationship("WorkingHour", back_populates="master_profile")
     blocked_slots = relationship("BlockedSlot", back_populates="master_profile")
     reviews = relationship("Review", back_populates="master_profile")
+    billing_account = relationship(
+        "MasterBillingAccount", back_populates="master", uselist=False,
+        cascade="all, delete-orphan", foreign_keys="MasterBillingAccount.master_id",
+    )
 
     def __repr__(self):
         return f"<MasterProfile(user_id={self.user_id})>"

@@ -7,7 +7,7 @@ from typing import List
 from pydantic import BaseModel
 
 from app.database import get_db
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.master_profile import MasterProfile
 from app.dependencies.auth import require_super_admin
 from app.logging_config import get_logger
@@ -56,10 +56,20 @@ async def bulk_toggle_active(
                 logger.warning("Bulk toggle: admin %s tried to toggle self (id=%s)", super_admin.email, mid)
                 results["errors"].append({"master_id": mid, "error": "Cannot toggle self"})
                 continue
+            if mp.user.role != UserRole.MASTER:
+                results["errors"].append({
+                    "master_id": mid,
+                    "error": "Черновик мастера активируется самим клиентом",
+                })
+                continue
 
             old_status = mp.status
-            mp.status = "inactive" if mp.status == "active" else "active"
+            mp.is_active = not mp.is_active
+            mp.status = "active" if mp.is_active else "inactive"
             new_status = mp.status
+            if mp.is_active:
+                from app.services.billing import resume_master_billing
+                await resume_master_billing(db, mp.user, mp)
             logger.info(
                 "Bulk toggle: master id=%s (%s) %s → %s",
                 mid, mp.user.name, old_status, new_status
@@ -144,7 +154,16 @@ async def bulk_unsuspend(
     for mid in master_ids:
         try:
             mp = await _get_master_or_404(db, mid)
+            if mp.user.role != UserRole.MASTER:
+                results["errors"].append({
+                    "master_id": mid,
+                    "error": "Пользователь не является мастером",
+                })
+                continue
             mp.status = "active"
+            mp.is_active = True
+            from app.services.billing import resume_master_billing
+            await resume_master_billing(db, mp.user, mp)
             logger.info("Bulk unsuspend: master id=%s (%s) activated", mid, mp.user.name)
             results["unsuspended"].append({
                 "master_id": mid,

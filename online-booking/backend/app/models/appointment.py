@@ -29,6 +29,15 @@ class Appointment(Base):
     appointment_date = Column(DateTime(timezone=True), nullable=False, index=True)
     status = Column(String(20), default="pending", index=True)
     notes = Column(Text)
+    # Who created the booking: client | master | admin | public | system.
+    # Only authenticated client rows can ever count toward a bonus.
+    created_by_role = Column(String(16), nullable=True, index=True)
+    created_by_user_id = Column(Integer, nullable=True)
+    # Delayed review prompt (bell, 48h after the visit).
+    # NULL = not asked, pending = awaiting answer, confirmed | disputed.
+    visit_confirmation_status = Column(String(16), nullable=True, index=True)
+    visit_prompt_sent_at = Column(DateTime(timezone=True), nullable=True)
+    visit_confirmation_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc))

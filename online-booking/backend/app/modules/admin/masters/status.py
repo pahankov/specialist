@@ -83,6 +83,9 @@ async def toggle_master_active(
     if mp.is_active:
         mp.status = "active"
         status_str = "включён"
+        if mp.user.role == UserRole.MASTER:
+            from app.services.billing import resume_master_billing
+            await resume_master_billing(db, mp.user, mp)
     else:
         mp.status = "inactive"
         status_str = "отключён"
@@ -92,7 +95,7 @@ async def toggle_master_active(
         f"Мастер {mp.user.name} {status_str}", level="warning",
     )
     await db.commit()
-    await db.refresh(mp)
+    mp = await _get_master_or_404(db, master_id)
     logger.info(
         "Result: admin %s %s master id=%s (%s): %s → %s",
         super_admin.email, status_str, master_id, mp.user.name, old_status, mp.status
@@ -120,7 +123,7 @@ async def suspend_master(
 
     mp.status = "suspended"
     await db.commit()
-    await db.refresh(mp)
+    mp = await _get_master_or_404(db, master_id)
     logger.info(
         "Result: admin %s suspended master id=%s (%s)",
         super_admin.email, master_id, mp.user.name
@@ -143,8 +146,12 @@ async def unsuspend_master(
     )
 
     mp.status = "active"
+    mp.is_active = True
+    if mp.user.role == UserRole.MASTER:
+        from app.services.billing import resume_master_billing
+        await resume_master_billing(db, mp.user, mp)
     await db.commit()
-    await db.refresh(mp)
+    mp = await _get_master_or_404(db, master_id)
     logger.info(
         "Result: admin %s unsuspended master id=%s (%s)",
         super_admin.email, master_id, mp.user.name
@@ -179,7 +186,7 @@ async def toggle_master_admin(
         role_str = "наделён правами суперпользователя"
 
     await db.commit()
-    await db.refresh(mp)
+    mp = await _get_master_or_404(db, master_id)
     logger.info(
         "Result: admin %s %s master id=%s (%s): %s → %s",
         super_admin.email, role_str, master_id, mp.user.name, old_role, mp.user.role.value
@@ -217,7 +224,7 @@ async def refresh_master_status(
 
     await update_master_status_from_working_hours(db, mp)
     await db.commit()
-    await db.refresh(mp)
+    mp = await _get_master_or_404(db, master_id)
 
     logger.info(
         "Result: refresh-status master id=%s (%s), new status=%s",

@@ -8,6 +8,7 @@ const SUPER_NAV = [
   // master nav, so it is never lost among the global sections.
   { path: `${SUPER_PREFIX}/profile`, label: '👤 Профиль' },
   { path: `${SUPER_PREFIX}/revenue`, label: '💰 Доход' },
+  { path: `${SUPER_PREFIX}/billing`, label: '💳 Биллинг' },
   { path: `${SUPER_PREFIX}/masters`, label: '👨‍💼 Мастера' },
   { path: `${SUPER_PREFIX}/appointments`, label: '📅 Все записи' },
   { path: `${SUPER_PREFIX}/clients`, label: '👥 Все клиенты' },

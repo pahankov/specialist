@@ -8,7 +8,7 @@ Shared dependencies used across all modules:
 - require_admin         — requires admin role
 - require_client        — requires valid client token
 """
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional
 import jwt
@@ -106,6 +106,7 @@ async def get_current_user(
 
 
 async def get_current_master(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: AsyncSession = Depends(get_db)
 ) -> User:
@@ -173,6 +174,33 @@ async def get_current_master(
             )
 
     if user.master_profile is not None:
+        # Billing gate: unpaid invoices freeze mutations, never reads.
+        # The background billing tick owns the status; this check is a
+        # cheap read so a stale token cannot write after the due date.
+        path = request.url.path
+        inbox_action = (
+            "/notifications" in path
+            and (
+                (request.method == "POST"
+                 and (path.endswith("/read") or path.endswith("/notifications/read-all")))
+                or (request.method == "DELETE" and path.endswith("/notifications"))
+            )
+        )
+        if (user.role == UserRole.MASTER
+                and request.method not in ("GET", "HEAD", "OPTIONS")
+                and not inbox_action
+                and not path.endswith("/logout")):
+            from app.models.billing import MasterBillingAccount
+            access = (await db.execute(
+                select(MasterBillingAccount.access_status).where(
+                    MasterBillingAccount.master_id == user.master_profile.id)
+            )).scalar_one_or_none()
+            if access in ("readonly", "paused", "suspended"):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=("Кабинет работает только для чтения: счёт не оплачен. "
+                            "Оплатите счёт в разделе «Тариф и оплата»."),
+                )
         logger.info("Master authenticated: id=%s, profile_id=%s", user.id, user.master_profile.id)
     else:
         logger.info("Admin authenticated (no master_profile): id=%s", user.id)

@@ -104,7 +104,9 @@ async def create_appointment(
         service_id=appointment.service_id,
         client_id=client.id,
         appointment_date=appointment.appointment_date,
-        status="confirmed"
+        status="confirmed",
+        created_by_role="master",
+        created_by_user_id=master.id,
     )
 
     db.add(new_appointment)
@@ -212,12 +214,17 @@ async def public_booking(request: Request, booking: PublicBookingCreate, db: Asy
     master_result = await db.execute(
         select(MasterProfile).join(MasterProfile.user).where(
             MasterProfile.id == booking.master_id,
-            MasterProfile.is_active == True
+            MasterProfile.is_active == True,
+            MasterProfile.status == "active",
+            User.role == UserRole.MASTER,
         )
     )
     master_profile = master_result.scalar_one_or_none()
     if not master_profile:
         logger.warning("Мастер не найден или неактивен: id=%s", booking.master_id)
+        raise HTTPException(status_code=404, detail="Master not found or inactive")
+    from app.services.billing import is_master_bookable
+    if not await is_master_bookable(db, master_profile.id):
         raise HTTPException(status_code=404, detail="Master not found or inactive")
 
     # Verify service exists and belongs to master
@@ -295,6 +302,7 @@ async def public_booking(request: Request, booking: PublicBookingCreate, db: Asy
                                     service.discount_fixed,
                                     service.discount_until) or None,
         notes=client_note or None,
+        created_by_role="public",
     )
 
     db.add(appointment)

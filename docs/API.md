@@ -294,6 +294,21 @@ callback-странице редирект-флоу, дальше — `/auth/con
 | `GET` | `/admin/audit-logs?master_id=X` | Логи действий (фильтр по мастеру) |
 | `POST` | `/admin/dashboard/cache/clear` | Сброс кэша дашборда |
 
+### Billing & referrals (1.84.0)
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| `GET` | `/api/v1/admin/billing/me` | Тариф, trial, баланс, счета, кредиты, бонус и рефералы текущего мастера |
+| `GET` | `/api/v1/admin/billing/overview?search=&status=` | Все мастера для супер-админа: доступ, долг, кредит, флаг качества |
+| `GET` | `/api/v1/admin/billing/masters/{id}` | Детальный биллинг мастера |
+| `POST` | `/api/v1/admin/billing/invoices/{id}/pay` | Подтвердить ручную оплату (`amount?`, `method`, `note`); пересчитывает доступ |
+| `POST` | `/api/v1/admin/billing/masters/{id}/credits` | Ручное начисление кредита (`amount`, `note`; 90 дней) |
+| `POST` | `/api/v1/admin/billing/masters/{id}/review` | Проверка качества: `action=clear` или `action=block` |
+| `POST` | `/api/v1/admin/billing/masters/{id}/tick` | Принудительно пересчитать счета/бонусы/доступ мастера |
+| `POST` | `/api/v1/referrals/click/{code}` | Зафиксировать клик по `/r/:code`, вернуть токен на 60 дней |
+| `POST` | `/api/v1/referrals/attribute` | Привязать токен к вошедшему пользователю (`click_token`) |
+| `GET` | `/api/v1/referrals/my` | Реферальный код, ссылка и прогресс текущего мастера |
+| `POST` | `/api/v1/client/appointments/{id}/visit-confirmation` | Ответ на напоминание: `status=confirmed` (к отзыву) или `disputed` (не был) |
+
 ### Health & Changelog
 | Метод | Endpoint | Описание |
 |-------|----------|----------|

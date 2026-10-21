@@ -13,3 +13,5 @@ export { default as LoginPage } from './LoginPage';
 export { default as MastersPage } from './MastersPage';
 export { default as MasterDetailPage } from './MasterDetailPage';
 export { default as RevenuePage } from './RevenuePage';
+export { default as BillingPage } from './BillingPage';
+export { default as SuperBillingPage } from './SuperBillingPage';

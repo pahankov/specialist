@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { Toaster } from 'sonner';
-import { HomePage, BookingPage, PrivacyPolicyPage, OfferPage } from './pages/public';
+import { Toaster, toast } from 'sonner';
+import { HomePage, BookingPage, PrivacyPolicyPage, OfferPage, ReferralPage } from './pages/public';
 import VkCallbackPage from './pages/public/VkCallbackPage';
 import YandexCallbackPage from './pages/public/YandexCallbackPage';
 import {
@@ -13,6 +13,8 @@ import {
   ServicesPage,
   ClientsPage,
   SchedulePage,
+  BillingPage,
+  SuperBillingPage,
 } from './pages/admin';
 import SuperAdminLayout from './pages/admin/SuperAdminLayout';
 import MastersPage from './pages/admin/MastersPage';
@@ -31,6 +33,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { getCookie, decodeJwtPayload, getUserRole } from './utils/cookies';
 import { allowMasterDraftEntry, isMasterDraftEntryAllowed } from './utils/masterDraftEntry';
 import { ADMIN_PREFIX, SUPER_PREFIX } from './utils/section';
+import { referralApi } from './api/client';
 import './App.css';
 
 function getIsAuthenticated() {
@@ -137,6 +140,7 @@ const masterNavItems = [
   { path: `${ADMIN_PREFIX}/services`, label: '💇 Мои услуги' },
   { path: `${ADMIN_PREFIX}/clients`, label: '👥 Клиенты' },
   { path: `${ADMIN_PREFIX}/schedule`, label: '🕐 Расписание' },
+  { path: `${ADMIN_PREFIX}/billing`, label: '💳 Тариф и оплата' },
   { path: `${ADMIN_PREFIX}/notifications`, label: '🔔 Уведомления' },
 ];
 
@@ -152,10 +156,43 @@ const masterDraftNavItems = [
   { path: `${DRAFT_MASTER_ROOT}/notifications`, label: '🔔 Уведомления', locked: true },
 ];
 
+const REFERRAL_CLICK_KEY = 'bs_referral_click';
+
 function App() {
   const location = useLocation();
   const isAdminRoute =
     location.pathname.startsWith(ADMIN_PREFIX) || location.pathname.startsWith(SUPER_PREFIX);
+
+  // A /r/<code> click stores a 60-day attribution token. The moment the
+  // visitor is authenticated (any role), bind them to the inviting master.
+  useEffect(() => {
+    if (!getIsAuthenticated()) return;
+    const raw = localStorage.getItem(REFERRAL_CLICK_KEY);
+    if (!raw) return;
+    localStorage.removeItem(REFERRAL_CLICK_KEY);
+    try {
+      const parsed = JSON.parse(raw) as { token?: string; at?: number };
+      if (!parsed.token) return;
+      if (parsed.at && Date.now() - parsed.at > 60 * 24 * 60 * 60 * 1000) return;
+      referralApi
+        .attribute(parsed.token)
+        .then(({ data }) => {
+          if (data.status === 'pending') {
+            toast.success('Приглашение мастера сохранено');
+          }
+        })
+        .catch((err: unknown) => {
+          // Keep the invitation for a retry when the server was unreachable
+          // or the access token had expired; invalid links stay consumed.
+          const status = (err as { response?: { status?: number } }).response?.status;
+          if (!status || status === 401 || status === 429 || status >= 500) {
+            localStorage.setItem(REFERRAL_CLICK_KEY, raw);
+          }
+        });
+    } catch {
+      /* malformed storage — ignore */
+    }
+  }, [location.pathname, location.search]);
 
   return (
     <ErrorBoundary>
@@ -166,6 +203,8 @@ function App() {
           <Route path="/booking" element={<BookingPage />} />
           <Route path="/privacy" element={<PrivacyPolicyPage />} />
           <Route path="/offer" element={<OfferPage />} />
+          <Route path="/r/:code" element={<ReferralPage />} />
+          <Route path="/ref/:code" element={<ReferralPage />} />
           {/* VK ID OAuth landing: VK redirects here with ?code&device_id&state,
               the code is exchanged server-side, then we land by role. */}
           <Route path="/auth/vk/callback" element={<VkCallbackPage />} />
@@ -227,6 +266,7 @@ function App() {
             <Route path="services" element={<ServicesPage />} />
             <Route path="clients" element={<ClientsPage />} />
             <Route path="schedule" element={<SchedulePage />} />
+            <Route path="billing" element={<BillingPage />} />
             <Route path="notifications" element={<NotificationsPage />} />
             <Route path="profile" element={<ProfilePage />} />
           </Route>
@@ -243,6 +283,7 @@ function App() {
             <Route index element={<Navigate to="/super/dashboard" replace />} />
             <Route path="dashboard" element={<DashboardPage />} />
             <Route path="revenue" element={<RevenuePage />} />
+            <Route path="billing" element={<SuperBillingPage />} />
             <Route path="masters" element={<MastersPage />} />
             <Route path="masters/:id" element={<MasterDetailPage />} />
             <Route path="appointments" element={<AppointmentsPage />} />

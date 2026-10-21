@@ -37,6 +37,16 @@ describe('resolveTarget', () => {
     expect(resolveTarget('/cabinet/notifications', 'book:23')).toBe('/cabinet/book?master_id=23');
   });
 
+  it('billing bells open the billing page', () => {
+    expect(resolveTarget('/admin/notifications', 'billing')).toBe('/admin/billing');
+    expect(resolveTarget('/super/notifications', 'billing')).toBe('/super/billing');
+    expect(resolveTarget('/cabinet/notifications', 'billing')).toBe('/admin/billing');
+  });
+
+  it('visit prompt opens the review form', () => {
+    expect(resolveTarget('/cabinet/notifications', 'review:42')).toBe('/cabinet?review=42');
+  });
+
   it('linkless bell opens the inbox page', () => {
     expect(resolveTarget('/admin/notifications', null)).toBe('/admin/notifications');
   });

@@ -25,10 +25,17 @@ class Notification(Base):
     audience = Column(String(20), nullable=True)
     # Deep-link key resolved per section on the client
     # ("appointments" → panel list / cabinet home).
-    link = Column(String(50), nullable=True)  # all|masters|clients|my_clients|selected
+    link = Column(String(50), nullable=True)  # all|masters|clients|my_clients|selected|review:<id>
+    # Machine-readable action (visit_feedback renders inline buttons in the bell).
+    kind = Column(String(32), nullable=True, index=True)
+    appointment_id = Column(
+        Integer, ForeignKey("appointments.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
     is_read = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     read_at = Column(DateTime(timezone=True), nullable=True)
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
 
     sender = relationship("User", foreign_keys=[sender_id])
     recipient = relationship("User", foreign_keys=[recipient_id])

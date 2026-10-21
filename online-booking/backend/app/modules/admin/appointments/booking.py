@@ -77,7 +77,9 @@ async def create_appointment(
         city_id=master.city_id)
     new_appointment = Appointment(
         master_id=data.master_id, service_id=data.service_id, client_id=profile.id,
-        appointment_date=data.appointment_date, status="pending", notes=data.notes
+        appointment_date=data.appointment_date, status="pending", notes=data.notes,
+        created_by_role=("admin" if master.role == UserRole.ADMIN else "master"),
+        created_by_user_id=master.id,
     )
     db.add(new_appointment)
     await db.flush()
@@ -147,7 +149,9 @@ async def book_appointment(
         bundle_id=item["bundle_id"], bundle_name=item["bundle_name"],
         duration_minutes=item["duration_minutes"], price=item["price"],
         discount_label=item.get("discount_label") or None,
-        appointment_date=data.appointment_date, status=data.status, notes=notes
+        appointment_date=data.appointment_date, status=data.status, notes=notes,
+        created_by_role=("admin" if master.role == UserRole.ADMIN else "master"),
+        created_by_user_id=master.id,
     )
     db.add(new_appointment)
     from app.services.client_visibility import unhide_client

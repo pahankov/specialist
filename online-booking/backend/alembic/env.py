@@ -27,6 +27,16 @@ from app.models.city import City  # noqa: F401
 from app.models.refresh_token import RefreshToken  # noqa: F401
 from app.models.otp_code import OtpCode  # noqa: F401
 from app.models.review import Review  # noqa: F401
+from app.models.billing import (  # noqa: F401
+    BillingCredit,
+    BillingCreditApplication,
+    BillingInvoice,
+    BillingPayment,
+    ClientBonusAward,
+    MasterBillingAccount,
+    MasterReferral,
+    ReferralClick,
+)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

@@ -17,3 +17,13 @@ from app.models.notification import Notification
 from app.models.notification_broadcast import NotificationBroadcast
 from app.models.service_bundle import ServiceBundle
 from app.models.master_hidden_client import MasterHiddenClient, DELETED_CLIENT_NAME
+from app.models.billing import (
+    BillingCredit,
+    BillingCreditApplication,
+    BillingInvoice,
+    BillingPayment,
+    ClientBonusAward,
+    MasterBillingAccount,
+    MasterReferral,
+    ReferralClick,
+)

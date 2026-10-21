@@ -1,12 +1,14 @@
 """Tests for admin/masters CRUD endpoints.
 
 Covers:
-- GET /api/v1/admin/masters — list + search + pagination
-- GET /api/v1/admin/masters/{id} — get by ID
-- POST /api/v1/admin/masters/ — create master
-- PATCH /api/v1/admin/masters/{id} — partial update
-- DELETE /api/v1/admin/masters/{id} — delete master
+- GET /api/v1/admin/masters - list + search + pagination
+- GET /api/v1/admin/masters/{id} - get by ID
+- POST /api/v1/admin/masters/ - create master
+- PATCH /api/v1/admin/masters/{id} - partial update
+- DELETE /api/v1/admin/masters/{id} - delete master
 """
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 
@@ -329,3 +331,44 @@ class TestMastersNullableFields:
         )
         assert resp.status_code == 200, resp.text
         assert resp.json()["email"] == ""
+
+
+class TestAdminReactivationBilling:
+    """Admin re-activation without invoices starts a fresh billing trial."""
+
+    async def test_toggle_active_starts_fresh_trial(
+            self, client, session, super_admin_headers, created_master_id):
+        from sqlalchemy import select
+        from app.models.billing import BillingInvoice, MasterBillingAccount
+        from app.models.master_profile import MasterProfile
+
+        mp = (await session.execute(
+            select(MasterProfile).where(MasterProfile.id == created_master_id)
+        )).scalar_one()
+        mp.is_active = False
+        mp.status = "inactive"
+        mp.trial_ends_at = datetime(2020, 1, 1, tzinfo=timezone.utc)
+        await session.commit()
+
+        resp = await client.post(
+            f"/api/v1/admin/masters/{created_master_id}/toggle-active",
+            headers=super_admin_headers,
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["is_active"] is True
+        assert resp.json()["status"] == "active"
+
+        account = (await session.execute(
+            select(MasterBillingAccount).where(
+                MasterBillingAccount.master_id == created_master_id)
+        )).scalar_one()
+        trial_end = account.trial_ends_at
+        if trial_end.tzinfo is None:
+            trial_end = trial_end.replace(tzinfo=timezone.utc)
+        assert trial_end > datetime.now(timezone.utc) + timedelta(days=13)
+        assert account.access_status == "trial"
+        invoice = (await session.execute(
+            select(BillingInvoice.id).where(
+                BillingInvoice.master_id == created_master_id).limit(1)
+        )).scalar_one_or_none()
+        assert invoice is None

@@ -46,7 +46,7 @@ class TestStatsWithData:
 
 class TestTariffs:
     async def test_new_master_gets_trial(self, client, super_admin_headers):
-        """Created master sits on trial with ~180-day term."""
+        """Created master sits on the 14-day trial ladder."""
         resp = await client.post("/api/v1/admin/masters", json={
             "name": "Tariff Test", "email": "tariff@example.com",
             "password": "SecurePass123!", "phone": "+79990005555",
@@ -56,7 +56,7 @@ class TestTariffs:
         assert body["tariff"] == "trial"
         assert body["trial_ends_at"] is not None
         ends = body["trial_ends_at"][:10]
-        expect = (date.today() + timedelta(days=180)).isoformat()
+        expect = (date.today() + timedelta(days=14)).isoformat()
         assert ends == expect
 
     async def test_migration_backfills_existing(self, session):

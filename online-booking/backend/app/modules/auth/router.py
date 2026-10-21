@@ -722,6 +722,9 @@ async def activate_master(
     mp.is_active = True
     mp.status = "active"
     user.role = UserRole.MASTER
+    from app.services.billing import link_referral_to_master, start_master_trial
+    await start_master_trial(db, mp)
+    await link_referral_to_master(db, user, mp)
     await log_action(db, user.id, "activate", "auth", user.id,
                      "Кабинет мастера активирован", level="info")
     await send_master_activated_bell(db, user.id)

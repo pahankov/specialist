@@ -1,5 +1,5 @@
 """Client cabinet endpoints — own profile, own appointments, own cancel."""
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -465,6 +465,9 @@ async def get_booking_schedule(
     )).scalar_one_or_none()
     if mp_user is None or mp_user.is_active is False or mp.status != "active":
         raise HTTPException(status_code=404, detail="Мастер недоступен")
+    from app.services.billing import is_master_bookable
+    if not await is_master_bookable(db, mp.id):
+        raise HTTPException(status_code=404, detail="Мастер недоступен")
 
     from app.services.client_visibility import is_client_blocked
     _me_profile = await get_or_create_profile(db, user)
@@ -539,6 +542,9 @@ async def book_my_appointment(
     )).scalar_one_or_none()
     if mp_user is None or mp_user.is_active is False or mp.status != "active":
         raise HTTPException(status_code=404, detail="Мастер недоступен")
+    from app.services.billing import is_master_bookable
+    if not await is_master_bookable(db, mp.id):
+        raise HTTPException(status_code=404, detail="Мастер недоступен")
     if mp.user_id == user.id:
         raise HTTPException(status_code=400,
                             detail="Нельзя записаться к самому себе")
@@ -579,6 +585,8 @@ async def book_my_appointment(
         appointment_date=appt_dt,
         status="confirmed" if mp.auto_confirm else "pending",
         notes=(data.notes or "").strip() or None,
+        created_by_role="client",
+        created_by_user_id=user.id,
     )
     db.add(appointment)
     await db.flush()
@@ -768,6 +776,29 @@ class ClientReviewCreate(BaseModel):
     comment: Optional[str] = Field(default=None, max_length=1000)
 
 
+class VisitConfirmationRequest(BaseModel):
+    status: str = Field(pattern="^(confirmed|disputed)$")
+
+
+@router.post("/appointments/{appointment_id}/visit-confirmation")
+async def confirm_my_visit(
+    appointment_id: int,
+    data: VisitConfirmationRequest,
+    user: User = Depends(require_client),
+    db: AsyncSession = Depends(get_db),
+):
+    """Inline bell answer: «Да, оценю» or «Не был»."""
+    from app.services.billing import confirm_visit
+    try:
+        result = await confirm_visit(db, user, appointment_id, data.status)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Запись не найдена")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    await db.commit()
+    return result
+
+
 @router.get("/reviews/mine")
 async def my_reviews(
     user: User = Depends(require_client),
@@ -832,6 +863,20 @@ async def create_own_review(
         is_published=True,
     )
     db.add(review)
+    from sqlalchemy import update as sa_update
+    from app.models.notification import Notification
+    appt.visit_confirmation_status = "confirmed"
+    appt.visit_confirmation_at = datetime.now(timezone.utc)
+    await db.execute(
+        sa_update(Notification).where(
+            Notification.recipient_id == user.id,
+            Notification.appointment_id == appt.id,
+            Notification.kind == "visit_feedback",
+        ).values(
+            is_read=True, read_at=datetime.now(timezone.utc),
+            resolved_at=datetime.now(timezone.utc),
+        )
+    )
     await log_action(db, user.id, "create", "review", None,
                      f"Оценка {data.rating} мастеру {appt.master_id}", level="info")
     # Master gets a bell (jumps to profile reviews) — feedback is two-way.

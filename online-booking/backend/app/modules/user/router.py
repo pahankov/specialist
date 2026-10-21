@@ -37,14 +37,24 @@ async def get_masters(
     """Get all active masters (public endpoint)."""
     from app.models.city import City
     from app.models.review import Review
+    from app.models.billing import MasterBillingAccount
+    from sqlalchemy import or_
 
     query = (
         select(MasterProfile)
         .join(MasterProfile.user)
+        .outerjoin(MasterBillingAccount,
+                   MasterBillingAccount.master_id == MasterProfile.id)
         .options(joinedload(MasterProfile.user))
         .where(
             User.role == UserRole.MASTER,
-            cast(MasterProfile.status, String) == 'active'
+            MasterProfile.is_active.is_(True),
+            cast(MasterProfile.status, String) == 'active',
+            or_(
+                MasterBillingAccount.id.is_(None),
+                MasterBillingAccount.access_status.notin_(
+                    ("readonly", "paused", "suspended")),
+            ),
         )
     )
     if city_id is not None:
@@ -91,6 +101,12 @@ async def get_master(master_id: int, db: AsyncSession = Depends(get_db)):
     )
     mp = result.scalar_one_or_none()
     if not mp:
+        raise HTTPException(status_code=404, detail="Master not found")
+    # Same visibility contract as the public list: only active masters.
+    if mp.is_active is False or mp.status != "active":
+        raise HTTPException(status_code=404, detail="Master not found")
+    from app.services.billing import is_master_bookable
+    if not await is_master_bookable(db, mp.id):
         raise HTTPException(status_code=404, detail="Master not found")
     return _master_profile_to_dict(mp)
 

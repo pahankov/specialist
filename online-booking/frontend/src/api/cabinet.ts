@@ -184,6 +184,9 @@ export const cabinetApi = {
         text: string;
         audience?: string | null;
         link?: string | null;
+        kind?: string | null;
+        appointment_id?: number | null;
+        resolved_at?: string | null;
         sender_name?: string | null;
         is_read: boolean;
         created_at?: string | null;
@@ -191,6 +194,14 @@ export const cabinetApi = {
       total: number;
       unread: number;
     }>('/api/v1/client/notifications/inbox', { params });
+  },
+  confirmVisit(appointmentId: number, status: 'confirmed' | 'disputed') {
+    return apiClient.post<{
+      ok: boolean;
+      appointment_id: number;
+      status: string;
+      review_url?: string | null;
+    }>(`/api/v1/client/appointments/${appointmentId}/visit-confirmation`, { status });
   },
   notificationsUnread() {
     return apiClient.get<{ unread: number }>('/api/v1/client/notifications/unread-count');

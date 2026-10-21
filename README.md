@@ -133,7 +133,7 @@ beauty-specialist/              # корень репозитория
     │   │   └── modules/          # self-contained пакеты: auth, city, user, booking, service, schedule,
     │   │                         # review, client, admin/*, dadata, maxauth, vkauth, yandexauth
     │   ├── alembic/              # миграции PostgreSQL
-    │   ├── tests/                # pytest (595)
+    │   ├── tests/                # pytest (745)
     │   └── requirements.txt
     └── frontend/
         ├── src/
@@ -306,8 +306,8 @@ utils/
 - ESLint + Prettier для форматирования кода
 
 ### ✅ Тесты
-- **Backend:** 595 pytest-тестов (auth, masters, services, appointments, clients, reviews, admin CRUD, bundles, coupons, notifications, visibility/модерация, dual-role, VK/Yandex/MAX auth (в т.ч. виджет Яндекса suggest), MAX webhook guard, rate limiting, refresh tokens, password security, no-show, dadata proxy, superuser, log level)
-- **Frontend:** 192 Vitest-теста (helpers, hooks, Modal/ConfirmDialog, auth refresh, соц-входы VK/Yandex/MAX (виджет Яндекса), dadata fallback, CabinetPage, CabinetBookPage, BookingWizard, DataTable, NotificationBell, ...)
+- **Backend:** 745 pytest-тестов (auth, masters, services, appointments, clients, reviews, admin CRUD, bundles, coupons, notifications, billing/ledger/рефералы, visibility/модерация, dual-role, VK/Yandex/MAX auth (в т.ч. виджет Яндекса suggest), MAX webhook guard, rate limiting, refresh tokens, password security, no-show, dadata proxy, superuser, log level)
+- **Frontend:** 239 Vitest-тестов (helpers, hooks, Modal/ConfirmDialog, auth refresh, соц-входы VK/Yandex/MAX (виджет Яндекса), dadata fallback, CabinetPage, CabinetBookPage, BookingWizard, DataTable, NotificationBell, billing/referral pages, ...)
 - 100% покрытие всех эндпоинтов
 - Файловый SQLite (по файлу на тест) для изоляции тестов
 - pytest-asyncio для асинхронных тестов
@@ -430,13 +430,13 @@ OtpCode (id, phone, code_hash, expires_at, is_used, created_at)
 # Backend
 cd online-booking\backend
 $env:PYTHONPATH='.'
-pytest tests/ -v                          # Все тесты (595)
+pytest tests/ -v                          # Все тесты (745)
 pytest tests/test_reviews.py -v           # Только reviews
 pytest tests/ -v --cov=app                # С покрытием
 
 # Frontend
 cd online-booking\frontend
-npx vitest run                            # Все тесты (192)
+npx vitest run                            # Все тесты (239)
 npx vitest run src/tests/helpers.test.ts  # Только helpers
 npx vitest                              # Watch mode
 ```
@@ -450,6 +450,18 @@ npx vitest                              # Watch mode
 
 
 ## 📚 История версий
+
+### [1.84.0] - 2026-10-21
+
+- **Монетизация мастеров запущена.** Первые 14 дней — полный пробный доступ. На 15-й день выставляется счёт 250 ₽ (оплата до 21-го дня), на 45-й — ещё 250 ₽, с 75-го — 500 ₽ в месяц. Комиссии с записей нет. Оплата подтверждается только администратором, все начисления и списания идут через ledger.
+- **Блокировка без удаления данных.** После срока оплаты кабинет переходит в режим чтения, через 30 дней просрочки — в приостановку; публичная ссылка мастера и новые записи отключаются. Подтверждённая оплата возвращает доступ в тот же день.
+- **Бонус за клиентов.** 25 ₽ за подходящего клиента, максимум 10 клиентов / 250 ₽ за пробный месяц. Считаются только записи из клиентского кабинета от клиентов с привязанной соцсетью, от 500 ₽, созданные в дни 0–14 и не отменённые к 21-му дню; не более 2 записей от клиента, 3 в день и один мастер на клиента. Более 30% неподтверждённых визитов помечают мастера и блокируют будущие бонусы, но не отменяют бонус первого месяца.
+- **Рефералы.** 125 ₽ за коллегу, максимум 2 / 250 ₽. Приглашённый должен быть новым мастером, с другой соцсетью, сделать 7 подходящих клиентских записей за первые 14 дней; все проверяются на 21-й день. Ссылка живёт 60 дней, бонус — 90 дней; цепочки A→B→C разрешены, у каждого мастера свой лимит.
+- **Кредиты и приоритет.** В счёт долга сначала идут клиентские бонусы, затем реферальные, потом ручные начисления; сумма не больше счёта. Неиспользованный остаток хранится 90 дней, а бонусы по уже оплаченному счёту остаются кредитом.
+- **Оценка визита из колокольчика.** Через 48 часов после визита клиент получает уведомление с кнопками «Не был» (спорный визит) и «Да, оценю» (подтверждение и переход к отзыву). Действия продублированы на странице уведомлений.
+- **Интерфейсы.** У мастера — «Тариф и оплата» с балансом, счетами, бонусами, кредитами и реферальной ссылкой; у супер-админа — обзор биллинга и вкладка мастера с подтверждением оплат, ручными кредитами и проверкой качества. Публичные страницы `/r/:code` и `/ref/:code` запоминают приглашение и привязывают его после входа.
+- **БД:** миграция `27b1c2d3e4f5` создаёт таблицы счетов, платежей, кредитов, бонусов и рефералов, добавляет поля провенанса записей и уведомлений. Существующие мастера переведены на 14-дневный пробный период; superuser `id=1` не затрагивался. Проверено на PostgreSQL: upgrade, downgrade и повторный upgrade.
+- **Тесты:** pytest **745**, vitest **239**, `tsc`/`vite build`, eslint (0 ошибок) и prettier — без ошибок. `APP_VERSION` — 1.84.0; `package-lock.json` намеренно не синхронизирован.
 
 ### [1.83.4] - 2026-10-20
 

@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { adminApi, cabinetApi } from '../../api/client';
 import './NotificationBell.css';
 
@@ -8,6 +9,9 @@ interface BellItem {
   id: number;
   text: string;
   link?: string | null;
+  kind?: string | null;
+  appointment_id?: number | null;
+  resolved_at?: string | null;
   sender_name?: string | null;
   is_read: boolean;
   created_at?: string | null;
@@ -48,6 +52,12 @@ export function resolveTarget(bellLink: string, link: string | null | undefined)
     if (inCabinet) return '/cabinet/profile';
     return base ? `${base}/profile` : bellLink;
   }
+  if (link === 'billing') {
+    // Billing bells are master-bound; a dual-role master reading them in the
+    // client cabinet still belongs on the master billing page.
+    if (inCabinet) return '/admin/billing';
+    return base ? `${base}/billing` : bellLink;
+  }
   if (link.startsWith('book')) {
     const master = link.split(':')[1];
     return `/cabinet/book${master ? `?master_id=${master}` : ''}`;
@@ -55,6 +65,10 @@ export function resolveTarget(bellLink: string, link: string | null | undefined)
   if (link.startsWith('coupons')) {
     const id = link.split(':')[1];
     return `/cabinet/coupons${id ? `?highlight=${id}` : ''}`;
+  }
+  if (link.startsWith('review:')) {
+    const id = link.split(':')[1];
+    return `/cabinet${id ? `?review=${id}` : ''}`;
   }
   return bellLink;
 }
@@ -70,6 +84,7 @@ function NotificationBell({ unread, bellLink, scope, onRead }: NotificationBellP
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [visitBusy, setVisitBusy] = useState<number | null>(null);
   // Portal-anchored popover. The sidebar is a transformed, overflow:hidden
   // drawer on phones — even position:fixed children are clipped by it, which
   // cut the dropdown off at the 280px sidebar edge. Rendering into <body>
@@ -103,7 +118,6 @@ function NotificationBell({ unread, bellLink, scope, onRead }: NotificationBellP
     } finally {
       setLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scope]);
 
   useEffect(() => {
@@ -180,6 +194,33 @@ function NotificationBell({ unread, bellLink, scope, onRead }: NotificationBellP
     onRead?.();
   };
 
+  const handleVisitAnswer = async (
+    item: BellItem,
+    status: 'confirmed' | 'disputed',
+    event: MouseEvent,
+  ) => {
+    event.stopPropagation();
+    if (!item.appointment_id || visitBusy !== null) return;
+    setVisitBusy(item.id);
+    try {
+      const { data } = await cabinetApi.confirmVisit(item.appointment_id, status);
+      setItems((prev) => prev.filter((n) => n.id !== item.id));
+      onRead?.();
+      setOpen(false);
+      if (status === 'confirmed') {
+        navigate(data.review_url || `/cabinet?review=${item.appointment_id}`);
+      } else {
+        toast.success('Спасибо, запись отмечена как спорная');
+      }
+    } catch (err) {
+      // Keep the prompt available — the client can retry.
+      console.warn('[Bell] visit answer failed', item.id, err);
+      toast.error('Не удалось сохранить ответ. Попробуйте ещё раз.');
+    } finally {
+      setVisitBusy(null);
+    }
+  };
+
   return (
     <div className="bell-wrap">
       <button
@@ -233,11 +274,18 @@ function NotificationBell({ unread, bellLink, scope, onRead }: NotificationBellP
                   <div className="bell-empty">🔕 Пока тихо</div>
                 ) : (
                   items.map((n) => (
-                    <button
+                    <div
                       key={n.id}
-                      type="button"
+                      role={n.link ? 'button' : undefined}
+                      tabIndex={n.link ? 0 : undefined}
                       className={`bell-item${n.is_read ? '' : ' unread'}${n.link ? ' linked' : ''}`}
                       onClick={() => handleItemClick(n)}
+                      onKeyDown={(event) => {
+                        if (n.link && (event.key === 'Enter' || event.key === ' ')) {
+                          event.preventDefault();
+                          handleItemClick(n);
+                        }
+                      }}
                       title={n.link ? 'Открыть' : undefined}
                     >
                       <span className="bell-item-dot" aria-hidden="true" />
@@ -247,8 +295,28 @@ function NotificationBell({ unread, bellLink, scope, onRead }: NotificationBellP
                           {n.sender_name ? `${n.sender_name} · ` : ''}
                           {n.created_at ? new Date(n.created_at).toLocaleString('ru-RU') : ''}
                         </span>
+                        {scope === 'cabinet' && n.kind === 'visit_feedback' && n.appointment_id && (
+                          <span className="bell-item-actions">
+                            <button
+                              type="button"
+                              className="bell-action"
+                              disabled={visitBusy !== null}
+                              onClick={(event) => handleVisitAnswer(n, 'disputed', event)}
+                            >
+                              Не был
+                            </button>
+                            <button
+                              type="button"
+                              className="bell-action bell-action-primary"
+                              disabled={visitBusy !== null}
+                              onClick={(event) => handleVisitAnswer(n, 'confirmed', event)}
+                            >
+                              {visitBusy === n.id ? 'Сохраняем…' : 'Да, оценю'}
+                            </button>
+                          </span>
+                        )}
                       </span>
-                    </button>
+                    </div>
                   ))
                 )}
               </div>

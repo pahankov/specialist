@@ -1,9 +1,14 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { superAdminApi } from '../../api/client';
+import {
+  billingApi,
+  superAdminApi,
+  type BillingInvoice,
+  type BillingSummary,
+} from '../../api/client';
 import type { AuditLogEntry } from '../../api/types';
-import { Skeleton, EmptyState, Modal } from '../../components/common';
+import { ConfirmDialog, Skeleton, EmptyState, Modal } from '../../components/common';
 import { getApiErrorMessage } from '../../utils/apiError';
 import { getCookie } from '../../utils/cookies';
 import { startImpersonation } from '../../utils/impersonation';
@@ -11,7 +16,19 @@ import { useSectionPrefix, ADMIN_PREFIX } from '../../utils/section';
 import './MasterDetailPage.css';
 import { statusLabels } from '../../constants/statusLabels';
 
-type TabType = 'overview' | 'reviews' | 'audit' | 'sessions';
+type TabType = 'overview' | 'reviews' | 'audit' | 'sessions' | 'billing';
+
+function money(value: number | undefined | null): string {
+  return `${Number(value ?? 0).toLocaleString('ru-RU', {
+    minimumFractionDigits: Number.isInteger(Number(value ?? 0)) ? 0 : 2,
+    maximumFractionDigits: 2,
+  })} ₽`;
+}
+
+function shortDate(value?: string | null): string {
+  if (!value) return '—';
+  return new Date(value).toLocaleDateString('ru-RU');
+}
 
 interface MasterSession {
   id: number;
@@ -70,12 +87,21 @@ function MasterDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const section = useSectionPrefix();
+  const [searchParams] = useSearchParams();
+  const initialTab = searchParams.get('tab');
 
   const [master, setMaster] = useState<MasterFull | null>(null);
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [auditLoading, setAuditLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<TabType>('overview');
+  const [activeTab, setActiveTab] = useState<TabType>(
+    initialTab === 'billing' ||
+      initialTab === 'reviews' ||
+      initialTab === 'audit' ||
+      initialTab === 'sessions'
+      ? initialTab
+      : 'overview',
+  );
   const [sessions, setSessions] = useState<MasterSession[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -83,6 +109,10 @@ function MasterDetailPage() {
   const [actionBusy, setActionBusy] = useState(false);
   const [tariffDraft, setTariffDraft] = useState('');
   const [trialDraft, setTrialDraft] = useState('');
+  const [billing, setBilling] = useState<BillingSummary | null>(null);
+  const [billingLoading, setBillingLoading] = useState(false);
+  const [creditAmount, setCreditAmount] = useState('');
+  const [invoiceToPay, setInvoiceToPay] = useState<BillingInvoice | null>(null);
   // Placeholder for bulk selection (used in MastersPage, kept for future use)
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_selectedMasters, _setSelectedMasters] = useState<Set<number>>(new Set());
@@ -123,6 +153,77 @@ function MasterDetailPage() {
   useEffect(() => {
     if (activeTab === 'sessions') loadSessions();
   }, [activeTab, id]);
+  useEffect(() => {
+    if (activeTab === 'billing' && id) loadBilling();
+  }, [activeTab, id]);
+
+  const loadBilling = async () => {
+    if (!id) return;
+    setBillingLoading(true);
+    try {
+      const { data } = await billingApi.adminGet(parseInt(id));
+      setBilling(data);
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Не удалось загрузить биллинг'));
+    } finally {
+      setBillingLoading(false);
+    }
+  };
+
+  const handlePayInvoice = async () => {
+    if (!invoiceToPay || actionBusy) return;
+    setActionBusy(true);
+    try {
+      const { data } = await billingApi.payInvoice(invoiceToPay.id);
+      setBilling(data.billing);
+      setInvoiceToPay(null);
+      toast.success('Платёж подтверждён, доступ обновлён');
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Не удалось подтвердить платёж'));
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const handleAddCredit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!master || actionBusy) return;
+    const amount = Number(creditAmount.replace(',', '.'));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error('Введите сумму кредита');
+      return;
+    }
+    setActionBusy(true);
+    try {
+      const { data } = await billingApi.addCredit(master.id, {
+        amount,
+        note: 'Ручное начисление администратором',
+      });
+      setBilling(data.billing);
+      setCreditAmount('');
+      toast.success('Кредит начислен');
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Не удалось начислить кредит'));
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const handleReviewAction = async (action: 'clear' | 'block') => {
+    if (!master || actionBusy) return;
+    setActionBusy(true);
+    try {
+      const { data } = await billingApi.reviewAction(master.id, action);
+      setBilling(data.billing);
+      toast.success(
+        action === 'clear' ? 'Проверка снята, бонусы разблокированы' : 'Бонусы заблокированы',
+      );
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Не удалось изменить статус проверки'));
+    } finally {
+      setActionBusy(false);
+    }
+  };
 
   const loadSessions = async () => {
     if (!id) return;
@@ -316,6 +417,12 @@ function MasterDetailPage() {
           onClick={() => setActiveTab('sessions')}
         >
           🔐 Сессии
+        </button>
+        <button
+          className={`tab-btn ${activeTab === 'billing' ? 'active' : ''}`}
+          onClick={() => setActiveTab('billing')}
+        >
+          💳 Биллинг
         </button>
       </div>
 
@@ -602,7 +709,280 @@ function MasterDetailPage() {
             )}
           </div>
         )}
+        {activeTab === 'billing' && (
+          <div className="master-billing-tab">
+            {billingLoading ? (
+              <Skeleton rows={4} height="64px" />
+            ) : !billing ? (
+              <EmptyState icon="💳" title="Биллинг недоступен" />
+            ) : (
+              <>
+                <div className="master-billing-top">
+                  <div className="master-billing-stat">
+                    <span>Доступ</span>
+                    <strong className={`billing-admin-status status-${billing.access_status}`}>
+                      {billing.access_status_label}
+                    </strong>
+                  </div>
+                  <div className="master-billing-stat">
+                    <span>К оплате</span>
+                    <strong className={billing.balance.due > 0 ? 'text-danger' : ''}>
+                      {money(billing.balance.due)}
+                    </strong>
+                  </div>
+                  <div className="master-billing-stat">
+                    <span>Кредиты</span>
+                    <strong className="text-success">{money(billing.balance.credit)}</strong>
+                  </div>
+                  <div className="master-billing-stat">
+                    <span>Пробный период</span>
+                    <strong>
+                      {shortDate(billing.trial_started_at)} — {shortDate(billing.trial_ends_at)}
+                    </strong>
+                  </div>
+                  <div className="master-billing-stat">
+                    <span>Следующий счёт</span>
+                    <strong>
+                      {shortDate(billing.next_payment_at)} · {money(billing.next_payment_amount)}
+                    </strong>
+                  </div>
+                </div>
+
+                <div className="master-billing-actions">
+                  <button className="btn btn-sm btn-secondary" onClick={loadBilling}>
+                    ↻ Обновить
+                  </button>
+                  <button
+                    className="btn btn-sm btn-secondary"
+                    disabled={actionBusy}
+                    onClick={async () => {
+                      setActionBusy(true);
+                      try {
+                        const { data } = await billingApi.tick(master.id);
+                        setBilling(data.billing);
+                        toast.success('Биллинг пересчитан');
+                      } catch (err: unknown) {
+                        toast.error(getApiErrorMessage(err, 'Не удалось пересчитать'));
+                      } finally {
+                        setActionBusy(false);
+                      }
+                    }}
+                  >
+                    ⚙ Пересчитать
+                  </button>
+                  {billing.review_flag ? (
+                    <button
+                      className="btn btn-sm btn-success"
+                      disabled={actionBusy}
+                      onClick={() => handleReviewAction('clear')}
+                    >
+                      ✓ Снять проверку качества
+                    </button>
+                  ) : (
+                    <button
+                      className="btn btn-sm btn-warn"
+                      disabled={actionBusy}
+                      onClick={() => handleReviewAction('block')}
+                    >
+                      ⚠ Заблокировать бонусы
+                    </button>
+                  )}
+                </div>
+
+                {billing.review_flag && (
+                  <div className="master-billing-alert">
+                    Мастер на проверке качества: более 30% визитов не подтверждены. Бонус за текущий
+                    месяц сохранён, будущие бонусы заблокированы.
+                  </div>
+                )}
+
+                <section className="master-billing-section">
+                  <h3>🧾 Счета</h3>
+                  {billing.invoices.length === 0 ? (
+                    <EmptyState icon="🧾" title="Счетов пока нет" />
+                  ) : (
+                    <div className="master-billing-table-wrap">
+                      <table className="master-billing-table">
+                        <thead>
+                          <tr>
+                            <th>Месяц</th>
+                            <th>Сумма</th>
+                            <th>Бонусы</th>
+                            <th>Оплачено</th>
+                            <th>К оплате</th>
+                            <th>Срок</th>
+                            <th>Статус</th>
+                            <th />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {billing.invoices.map((invoice) => (
+                            <tr key={invoice.id}>
+                              <td>{invoice.period_index}</td>
+                              <td>{money(invoice.amount)}</td>
+                              <td>{money(invoice.credits_applied)}</td>
+                              <td>{money(invoice.paid_amount)}</td>
+                              <td>
+                                <strong>{money(invoice.due_amount)}</strong>
+                              </td>
+                              <td>{shortDate(invoice.due_at)}</td>
+                              <td>
+                                <span
+                                  className={`billing-admin-pill ${
+                                    invoice.status === 'paid' ? 'ok' : 'warn'
+                                  }`}
+                                >
+                                  {invoice.status_label}
+                                </span>
+                              </td>
+                              <td>
+                                {invoice.status !== 'paid' && invoice.due_amount > 0 && (
+                                  <button
+                                    className="btn btn-sm btn-success"
+                                    onClick={() => setInvoiceToPay(invoice)}
+                                  >
+                                    Отметить оплату
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  <p className="master-billing-hint">
+                    Оплата подтверждается вручную. После отметки счёт закрывается, доступ
+                    восстанавливается в тот же день.
+                  </p>
+                </section>
+
+                <div className="master-billing-columns">
+                  <section className="master-billing-section">
+                    <h3>🎁 Бонус за клиентов</h3>
+                    <div className="master-billing-kv">
+                      <span>Подходящих клиентов</span>
+                      <strong>
+                        {billing.client_bonus.eligible_count} / {billing.client_bonus.max_count}
+                      </strong>
+                    </div>
+                    <div className="master-billing-kv">
+                      <span>Сумма</span>
+                      <strong>{money(billing.client_bonus.amount)}</strong>
+                    </div>
+                    <div className="master-billing-kv">
+                      <span>Статус</span>
+                      <strong>{billing.client_bonus.status}</strong>
+                    </div>
+                    <div className="master-billing-kv">
+                      <span>Проверка качества</span>
+                      <strong>
+                        {billing.client_bonus.unconfirmed_count} неподтв. из{' '}
+                        {billing.client_bonus.prompted_count}
+                      </strong>
+                    </div>
+                    <p className="master-billing-hint">
+                      Оценка на 21-й день. Максимум 2 записи с клиента, 3 записи в день и 10
+                      клиентов. Только записи, созданные клиентом из кабинета.
+                    </p>
+                  </section>
+
+                  <section className="master-billing-section">
+                    <h3>🤝 Рефералы</h3>
+                    <div className="master-billing-kv">
+                      <span>Код</span>
+                      <code>{billing.referral_code}</code>
+                    </div>
+                    <div className="master-billing-kv">
+                      <span>Зачтено</span>
+                      <strong>
+                        {billing.referral.qualified_count} / {billing.referral.max_count}
+                      </strong>
+                    </div>
+                    <div className="master-billing-kv">
+                      <span>Бонусы</span>
+                      <strong>
+                        {money(billing.referral.bonus_total)} / {money(billing.referral.max_amount)}
+                      </strong>
+                    </div>
+                    {billing.referrals.length === 0 ? (
+                      <p className="master-billing-hint">Приглашений пока нет.</p>
+                    ) : (
+                      <div className="master-billing-referrals">
+                        {billing.referrals.map((referral) => (
+                          <div key={referral.id} className="master-billing-referral">
+                            <div>
+                              <strong>{referral.referred_name}</strong>
+                              <span>
+                                {referral.qualified_count}/{referral.required_count} записей ·{' '}
+                                {referral.status_label}
+                              </span>
+                            </div>
+                            <span>{money(referral.amount)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                </div>
+
+                <section className="master-billing-section">
+                  <h3>💎 Кредиты</h3>
+                  <form className="master-billing-credit-form" onSubmit={handleAddCredit}>
+                    <input
+                      className="form-input"
+                      inputMode="decimal"
+                      value={creditAmount}
+                      onChange={(event) => setCreditAmount(event.target.value)}
+                      placeholder="Сумма, ₽"
+                      aria-label="Сумма кредита"
+                    />
+                    <button className="btn btn-primary" type="submit" disabled={actionBusy}>
+                      Начислить кредит
+                    </button>
+                  </form>
+                  {billing.credits.length === 0 ? (
+                    <p className="master-billing-hint">Кредитов нет.</p>
+                  ) : (
+                    <div className="master-billing-credits">
+                      {billing.credits.map((credit) => (
+                        <div key={credit.id} className="master-billing-credit">
+                          <div>
+                            <strong>{credit.source_label}</strong>
+                            <span>
+                              {credit.note || 'Начисление'} · до {shortDate(credit.expires_at)}
+                            </span>
+                          </div>
+                          <div>
+                            <strong>{money(credit.remaining)}</strong>
+                            <span>из {money(credit.amount)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+              </>
+            )}
+          </div>
+        )}
       </div>
+
+      <ConfirmDialog
+        open={invoiceToPay !== null}
+        onClose={() => setInvoiceToPay(null)}
+        title="Подтвердить оплату"
+        message={
+          invoiceToPay
+            ? `Отметить счёт за ${invoiceToPay.period_index}-й месяц на ${money(
+                invoiceToPay.due_amount,
+              )} оплаченным?`
+            : undefined
+        }
+        confirmLabel={actionBusy ? 'Сохраняем…' : 'Подтвердить оплату'}
+        confirmDisabled={actionBusy}
+        onConfirm={handlePayInvoice}
+      />
 
       <Modal
         open={showPasswordModal}

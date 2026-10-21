@@ -38,6 +38,9 @@ async def notify_user(
     sender_id: Optional[int] = None,
     audience: str = "system",
     link: Optional[str] = None,
+    *,
+    kind: Optional[str] = None,
+    appointment_id: Optional[int] = None,
 ) -> Notification:
     """Write one inbox row (flush only — caller commits)."""
     note = Notification(
@@ -46,6 +49,8 @@ async def notify_user(
         text=text.strip(),
         audience=audience,
         link=link,
+        kind=kind,
+        appointment_id=appointment_id,
         created_at=datetime.now(timezone.utc),
     )
     db.add(note)

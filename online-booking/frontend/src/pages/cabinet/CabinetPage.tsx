@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cabinetApi, type ClientMe, type ClientStats } from '../../api/client';
 import type { Appointment } from '../../api/types';
@@ -24,6 +24,7 @@ function formatDate(iso: string): string {
 function CabinetPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const historyRef = useRef<HTMLDivElement>(null);
   const [me, setMe] = useState<ClientMe | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -134,6 +135,49 @@ function CabinetPage() {
       return () => clearInterval(t);
     }
   }, []);
+
+  // Inline bell action «Да, оценю» arrives as /cabinet?review=<appointment_id>.
+  // Open that appointment's star form and clear the query so a refresh does
+  // not reopen it after the review is sent.
+  useEffect(() => {
+    if (loading) return;
+    const raw = searchParams.get('review');
+    if (!raw) return;
+    const appointmentId = Number(raw);
+    if (!Number.isInteger(appointmentId) || appointmentId <= 0) return;
+    const target = appointments.find((a) => a.id === appointmentId);
+    const targetStatus = target?.status || 'completed';
+    setShowCompleted(true);
+    setShowCancelled(true);
+    setHistFilter(targetStatus);
+    const sorted = [...appointments]
+      .filter((a) => a.status === targetStatus)
+      .sort(
+        (a, b) => new Date(a.appointment_date).getTime() - new Date(b.appointment_date).getTime(),
+      );
+    const targetIndex = sorted.findIndex((a) => a.id === appointmentId);
+    setCabPage(targetIndex >= 0 ? Math.floor(targetIndex / CABINET_PAGE) : 0);
+    setReviewFor(appointmentId);
+    setStars(0);
+    setReviewText('');
+    const next = new URLSearchParams(searchParams);
+    next.delete('review');
+    const clearTimer = setTimeout(() => {
+      setSearchParams(next, { replace: true });
+    }, 800);
+    let tries = 0;
+    const timer = setInterval(() => {
+      tries += 1;
+      if (historyRef.current || tries > 20) {
+        clearInterval(timer);
+        historyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 150);
+    return () => {
+      clearInterval(timer);
+      clearTimeout(clearTimer);
+    };
+  }, [loading, location.search]);
 
   const handleCancel = async (id: number) => {
     try {
