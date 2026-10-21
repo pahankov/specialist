@@ -1,6 +1,6 @@
 """Tests for admin working hours and blocked slots endpoints."""
 import pytest
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta
 
 
 class TestAdminGetWorkingHours:
@@ -196,3 +196,185 @@ class TestAdminBlockedSlots:
         # Verify deleted
         get_resp = await client.get("/api/v1/admin/blocked-slots", headers=auth_headers)
         assert not any(s["id"] == slot_id for s in get_resp.json())
+
+
+class TestAdminApplySchedule:
+    """Bulk work/rest cycle application."""
+
+    @staticmethod
+    def _payload(start: date, end: date, *, work: int, off: int, anchor: date):
+        return {
+            "range_start": start.isoformat(),
+            "range_end": end.isoformat(),
+            "cycle_work_days": work,
+            "cycle_off_days": off,
+            "cycle_anchor": anchor.isoformat(),
+            "start_time": "09:00",
+            "end_time": "18:00",
+            "replace_off_days": True,
+        }
+
+    async def test_apply_2_2_creates_updates_and_removes_days(
+        self, client, auth_headers
+    ):
+        start = date.today() + timedelta(days=1)
+        end = start + timedelta(days=6)
+
+        # Existing work day gets the new hours; existing rest day is removed.
+        await client.post("/api/v1/admin/working-hours", json={
+            "schedule_date": start.isoformat(),
+            "start_time": "10:00", "end_time": "12:00",
+        }, headers=auth_headers)
+        await client.post("/api/v1/admin/working-hours", json={
+            "schedule_date": (start + timedelta(days=2)).isoformat(),
+            "start_time": "10:00", "end_time": "12:00",
+        }, headers=auth_headers)
+        # A narrow window must expand, never shrink, so 08:00–09:00 stays
+        # available for edge-granule reactivation.
+        narrow = await client.patch("/api/v1/admin/work-window", json={
+            "start_hour": 10, "end_hour": 12,
+        }, headers=auth_headers)
+        assert narrow.status_code == 200, narrow.text
+
+        resp = await client.post(
+            "/api/v1/admin/working-hours/apply",
+            json=self._payload(start, end, work=2, off=2, anchor=start),
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["effective_start"] == start.isoformat()
+        assert data["work_days"] == 4
+        assert data["off_days"] == 3
+        assert data["created"] == 3
+        assert data["updated"] == 1
+        assert data["removed"] == 1
+        assert data["skipped_booked"] == 0
+        assert data["window_start_hour"] == 9
+        assert data["window_end_hour"] == 18
+
+        rows = (await client.get(
+            "/api/v1/admin/working-hours", headers=auth_headers
+        )).json()
+        by_date = {row["schedule_date"]: row for row in rows}
+        work_dates = {
+            start, start + timedelta(days=1),
+            start + timedelta(days=4), start + timedelta(days=5),
+        }
+        for day in work_dates:
+            row = by_date[day.isoformat()]
+            assert row["start_time"].startswith("09:00")
+            assert row["end_time"].startswith("18:00")
+        for offset in (2, 3, 6):
+            assert (start + timedelta(days=offset)).isoformat() not in by_date
+
+    async def test_zero_start_window_is_not_reset(self, client, auth_headers):
+        """A saved 00:00 window start must survive apply (0 is not \"missing\")."""
+        day = date.today() + timedelta(days=1)
+        before = await client.patch("/api/v1/admin/work-window", json={
+            "start_hour": 0, "end_hour": 12,
+        }, headers=auth_headers)
+        assert before.status_code == 200, before.text
+
+        resp = await client.post(
+            "/api/v1/admin/working-hours/apply",
+            json=self._payload(day, day, work=1, off=0, anchor=day),
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["window_start_hour"] == 0
+        assert resp.json()["window_end_hour"] == 18
+
+    async def test_past_days_are_not_touched(self, client, auth_headers):
+        today = date.today()
+        yesterday = today - timedelta(days=1)
+        tomorrow = today + timedelta(days=1)
+        await client.post("/api/v1/admin/working-hours", json={
+            "schedule_date": yesterday.isoformat(),
+            "start_time": "07:00", "end_time": "09:00",
+        }, headers=auth_headers)
+
+        resp = await client.post(
+            "/api/v1/admin/working-hours/apply",
+            json=self._payload(yesterday, tomorrow, work=1, off=0, anchor=today),
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["effective_start"] == today.isoformat()
+        assert data["work_days"] == 2
+
+        rows = (await client.get(
+            "/api/v1/admin/working-hours", headers=auth_headers
+        )).json()
+        by_date = {row["schedule_date"]: row for row in rows}
+        old = by_date[yesterday.isoformat()]
+        assert old["start_time"].startswith("07:00")
+        assert old["end_time"].startswith("09:00")
+
+    async def test_day_with_live_booking_is_preserved(
+        self, client, session, auth_headers
+    ):
+        from sqlalchemy import select
+
+        from app.models.appointment import Appointment
+        from app.models.client_profile import ClientProfile
+        from app.models.master_profile import MasterProfile
+        from app.models.service import Service
+        from app.models.user import User, UserRole
+
+        start = date.today() + timedelta(days=1)
+        end = start + timedelta(days=6)
+        protected_day = start + timedelta(days=2)  # rest day in a 2/2 cycle
+
+        await client.post("/api/v1/admin/working-hours", json={
+            "schedule_date": protected_day.isoformat(),
+            "start_time": "09:00", "end_time": "18:00",
+        }, headers=auth_headers)
+        for offset in (3, 6):
+            await client.post("/api/v1/admin/working-hours", json={
+                "schedule_date": (start + timedelta(days=offset)).isoformat(),
+                "start_time": "09:00", "end_time": "18:00",
+            }, headers=auth_headers)
+
+        profile = (await session.execute(select(MasterProfile))).scalars().first()
+        service = Service(
+            master_id=profile.id, name="Apply test", duration_minutes=60, price=1000
+        )
+        client_user = User(
+            name="Apply Client", email="apply_client@example.com",
+            role=UserRole.CLIENT,
+        )
+        session.add_all([service, client_user])
+        await session.flush()
+        client_profile = ClientProfile(user_id=client_user.id)
+        session.add(client_profile)
+        await session.flush()
+        session.add(Appointment(
+            master_id=profile.id,
+            service_id=service.id,
+            client_id=client_profile.id,
+            appointment_date=datetime.combine(protected_day, time(10, 0)),
+            status="pending",
+            created_by_role="master",
+        ))
+        await session.commit()
+
+        resp = await client.post(
+            "/api/v1/admin/working-hours/apply",
+            json=self._payload(start, end, work=2, off=2, anchor=start),
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["skipped_booked"] == 1
+        assert data["skipped_dates"] == [protected_day.isoformat()]
+        assert data["removed"] == 2  # the other two rest days
+
+        rows = (await client.get(
+            "/api/v1/admin/working-hours", headers=auth_headers
+        )).json()
+        by_date = {row["schedule_date"]: row for row in rows}
+        kept = by_date[protected_day.isoformat()]
+        assert kept["start_time"].startswith("09:00")
+        assert kept["end_time"].startswith("18:00")

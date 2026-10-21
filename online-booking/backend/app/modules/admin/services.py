@@ -42,7 +42,7 @@ async def create_admin_service(
     db.add(new_service)
     await db.flush()
     await db.refresh(new_service)
-    await log_action(db, mp_id, "create", "service", new_service.id, data.name, level="info")
+    await log_action(db, master.id, "create", "service", new_service.id, data.name, level="info")
     await db.commit()
     return new_service
 
@@ -173,7 +173,7 @@ async def update_admin_service(
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(service, field, value)
         changes.append(field)
-    await log_action(db, mp_id, "update", "service", service_id, f"Обновлено: {', '.join(changes)}" if changes else "Обновление", level="info")
+    await log_action(db, master.id, "update", "service", service_id, f"Обновлено: {', '.join(changes)}" if changes else "Обновление", level="info")
     await db.commit()
     await db.refresh(service)
     return service
@@ -188,7 +188,7 @@ async def delete_admin_service(
     """Soft-delete a service."""
     mp_id = await get_master_profile_id(db, master)
     service = await get_owned_or_404(db, Service, service_id, mp_id)
-    await log_action(db, mp_id, "delete", "service", service_id, service.name, level="warning")
+    await log_action(db, master.id, "delete", "service", service_id, service.name, level="warning")
     service.is_active = False
     await db.commit()
     return None

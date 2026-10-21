@@ -1,5 +1,5 @@
 import type { Appointment, Client, DaySchedule, BookingFormState } from '../../api/types';
-import { formatDate } from './helpers';
+import { formatDate, hourToTime } from './helpers';
 import { adminApi } from '../../api/client';
 
 export async function toggleDayWork(
@@ -47,8 +47,8 @@ export async function toggleDayWork(
     }
   }
 
-  const pad = (h: number) => `${String(h).padStart(2, '0')}:00`;
-  // Sync with backend (scoped to the selected master for superadmins)
+  // Sync with backend (scoped to the selected master for superadmins).
+  // hourToTime keeps 24:00 representable as SQL TIME 23:59.
   try {
     if (isActive) {
       const resp = await adminApi.getWorkingHours(masterParam);
@@ -60,15 +60,15 @@ export async function toggleDayWork(
       if (existing) {
         await adminApi.updateWorkingHour(existing.id, {
           schedule_date: dateStr,
-          start_time: pad(dayStart),
-          end_time: pad(dayEnd),
+          start_time: hourToTime(dayStart),
+          end_time: hourToTime(dayEnd),
         });
       } else {
         await adminApi.createWorkingHour({
           master_id: masterParam,
           schedule_date: dateStr,
-          start_time: pad(dayStart),
-          end_time: pad(dayEnd),
+          start_time: hourToTime(dayStart),
+          end_time: hourToTime(dayEnd),
         });
       }
     }

@@ -149,3 +149,77 @@ class TestAdminDeleteService:
         """Returns 404 for non-existent service."""
         resp = await client.delete("/api/v1/admin/services/99999", headers=auth_headers)
         assert resp.status_code == 404
+
+
+class TestAdminServiceAuditUserId:
+    """Regression: audit_logs.master_id FK points to users.id.
+
+    Production has master User.id=302 and MasterProfile.id=91. Passing the
+    profile id to log_action made every service create/update/delete a 500.
+    """
+
+    async def test_service_audit_uses_user_id_not_profile_id(
+        self, client, session, test_master_data, test_service_data
+    ):
+        from sqlalchemy import select
+
+        from app.models.audit_log import AuditLog
+        from app.models.master_profile import MasterProfile
+        from app.models.user import User, UserRole
+        from app.modules.auth.token import create_access_token
+
+        # Consume user id 1 so the registered master's user id differs from
+        # their master_profile id (the production-shaped mismatch).
+        session.add(User(
+            name="Seed User",
+            email="seed_audit@example.com",
+            role=UserRole.CLIENT,
+        ))
+        await session.commit()
+
+        reg = await client.post("/api/v1/auth/register", json=test_master_data)
+        assert reg.status_code == 201, reg.text
+        user = (await session.execute(
+            select(User).where(User.email == test_master_data["email"])
+        )).scalar_one()
+        profile = (await session.execute(
+            select(MasterProfile).where(MasterProfile.user_id == user.id)
+        )).scalar_one()
+        assert profile.id != user.id
+
+        token = create_access_token({
+            "sub": str(user.id),
+            "role": user.role.value,
+            "name": user.name,
+            "last_name": user.last_name,
+            "is_admin": False,
+        })
+        headers = {"Authorization": f"Bearer {token}"}
+
+        created = await client.post(
+            "/api/v1/admin/services", json=test_service_data, headers=headers
+        )
+        assert created.status_code == 201, created.text
+        service_id = created.json()["id"]
+        assert created.json()["master_id"] == profile.id
+
+        updated = await client.patch(
+            f"/api/v1/admin/services/{service_id}",
+            json={"name": "Audit FK check"},
+            headers=headers,
+        )
+        assert updated.status_code == 200, updated.text
+
+        deleted = await client.delete(
+            f"/api/v1/admin/services/{service_id}", headers=headers
+        )
+        assert deleted.status_code == 204, deleted.text
+
+        logs = (await session.execute(
+            select(AuditLog).where(
+                AuditLog.entity_type == "service",
+                AuditLog.entity_id == service_id,
+            )
+        )).scalars().all()
+        assert len(logs) == 3
+        assert {log.master_id for log in logs} == {user.id}

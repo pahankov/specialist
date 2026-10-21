@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { Appointment } from '../../api/types';
 import {
   getAppointmentsForSlot,
@@ -24,6 +25,10 @@ interface TimeSlotsProps {
    * of the stored day range (the range is derived from active granules). */
   windowStart?: number;
   windowEnd?: number;
+  /** Stored range of the selected working day (for the ± hour steppers). */
+  dayStart?: number;
+  dayEnd?: number;
+  onChangeDayHours?: (dateStr: string, start: number, end: number) => Promise<void> | void;
 }
 
 export function TimeSlots({
@@ -36,15 +41,32 @@ export function TimeSlots({
   onConfirmAppointment,
   windowStart = 8,
   windowEnd = 22,
+  dayStart,
+  dayEnd,
+  onChangeDayHours,
 }: TimeSlotsProps) {
+  const [adjusting, setAdjusting] = useState(false);
   if (!selectedDate) return null;
 
   const dateStr = formatDate(selectedDate);
-  // Granules come from the work window, not the stored range: activating one
-  // hour must never hide the others.
+  // Granules come from the work window, not the stored range: deactivating an
+  // edge granule must not hide it, otherwise it cannot be turned back on.
   const daySchedule = { start: windowStart, end: windowEnd };
   const isDayPast = isPast(selectedDate);
   const allActive = checkAllActive(dateStr, daySchedule, activeHours);
+  const dayRange =
+    dayStart != null && dayEnd != null && dayEnd > dayStart
+      ? { start: dayStart, end: dayEnd }
+      : null;
+  const applyDayHours = async (start: number, end: number) => {
+    if (!onChangeDayHours) return;
+    setAdjusting(true);
+    try {
+      await onChangeDayHours(dateStr, start, end);
+    } finally {
+      setAdjusting(false);
+    }
+  };
 
   return (
     <div className="schedule-time-slots">
@@ -69,6 +91,59 @@ export function TimeSlots({
           />
           <span>Выбрать все часы</span>
         </label>
+
+        {dayRange && !isDayPast && onChangeDayHours && (
+          <div className="time-slots-day-hours">
+            <span className="time-slots-day-hours-label">Рабочий день</span>
+            <div className="day-hours-group">
+              <button
+                type="button"
+                className="day-hours-btn"
+                title="Начать на час раньше"
+                aria-label="Начать рабочий день на час раньше"
+                disabled={adjusting || dayRange.start <= 0}
+                onClick={() => applyDayHours(dayRange.start - 1, dayRange.end)}
+              >
+                −
+              </button>
+              <span className="day-hours-value">{formatHour(dayRange.start)}</span>
+              <button
+                type="button"
+                className="day-hours-btn"
+                title="Начать на час позже"
+                aria-label="Начать рабочий день на час позже"
+                disabled={adjusting || dayRange.start + 1 >= dayRange.end}
+                onClick={() => applyDayHours(dayRange.start + 1, dayRange.end)}
+              >
+                +
+              </button>
+            </div>
+            <span className="day-hours-dash">—</span>
+            <div className="day-hours-group">
+              <button
+                type="button"
+                className="day-hours-btn"
+                title="Закончить на час раньше"
+                aria-label="Закончить рабочий день на час раньше"
+                disabled={adjusting || dayRange.end - 1 <= dayRange.start}
+                onClick={() => applyDayHours(dayRange.start, dayRange.end - 1)}
+              >
+                −
+              </button>
+              <span className="day-hours-value">{formatHour(dayRange.end)}</span>
+              <button
+                type="button"
+                className="day-hours-btn"
+                title="Закончить на час позже"
+                aria-label="Закончить рабочий день на час позже"
+                disabled={adjusting || dayRange.end >= 24}
+                onClick={() => applyDayHours(dayRange.start, dayRange.end + 1)}
+              >
+                +
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="time-slots-list">

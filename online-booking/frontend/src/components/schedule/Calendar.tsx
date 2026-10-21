@@ -24,6 +24,10 @@ interface CalendarProps {
   interactive?: boolean;
   /** Master history: past days are selectable (read-only day view). */
   selectablePast?: boolean;
+  /** Template preview: inactive days that will become working. */
+  previewWorkDates?: Set<string>;
+  /** Template preview: active days that will become rest days. */
+  previewOffDates?: Set<string>;
 }
 
 const LONG_PRESS_MS = 500;
@@ -39,6 +43,8 @@ export function Calendar({
   onToggleDay,
   interactive = true,
   selectablePast = false,
+  previewWorkDates,
+  previewOffDates,
 }: CalendarProps) {
   const monthDays = getMonthDays(currentMonth);
   const monthName = currentMonth.toLocaleString('ru-RU', { month: 'long', year: 'numeric' });
@@ -157,6 +163,18 @@ export function Calendar({
             apptCount = liveIds.size;
           }
           const holdsOnly = holdIds.size > 0 && liveIds.size === 0;
+          // Template preview is about actual changes only:
+          // - inactive -> working (dashed green dot),
+          // - active without live bookings -> rest day (dashed gray dot).
+          const previewWork =
+            day.isCurrentMonth && !past && !active && !!previewWorkDates?.has(dateStr);
+          const previewOff =
+            day.isCurrentMonth &&
+            !past &&
+            active &&
+            liveIds.size === 0 &&
+            holdIds.size === 0 &&
+            !!previewOffDates?.has(dateStr);
           // Pending-only days glow amber (awaiting confirmation);
           // confirmed presence keeps the green booking tint.
           const dayLabel =
@@ -172,7 +190,14 @@ export function Calendar({
             <div
               key={i}
               data-date={day.date.toISOString()}
-              className={`calendar-day ${day.isCurrentMonth ? '' : 'other-month'} ${active ? 'active' : 'inactive'} ${today ? 'today' : ''} ${selected ? 'selected' : ''} ${past ? 'past' : ''} ${liveIds.size > 0 && !past ? 'has-bookings' : ''} ${holdsOnly && !past ? 'has-holds' : ''}`}
+              className={`calendar-day ${day.isCurrentMonth ? '' : 'other-month'} ${active ? 'active' : 'inactive'} ${today ? 'today' : ''} ${selected ? 'selected' : ''} ${past ? 'past' : ''} ${liveIds.size > 0 && !past ? 'has-bookings' : ''} ${holdsOnly && !past ? 'has-holds' : ''} ${previewWork ? 'preview-work' : ''} ${previewOff ? 'preview-off' : ''}`}
+              title={
+                previewWork
+                  ? 'По графику будет рабочим после применения'
+                  : previewOff
+                    ? 'По графику станет выходным после применения'
+                    : undefined
+              }
               onClick={() => handleDayClick(day.date, day.isCurrentMonth, past)}
               onDoubleClick={() => handleDayDoubleClick(day.date, day.isCurrentMonth, past)}
               onPointerDown={(e) => handlePointerDown(e, day.date)}

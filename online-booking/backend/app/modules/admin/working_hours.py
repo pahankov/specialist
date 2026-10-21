@@ -1,12 +1,13 @@
 """Admin working hours CRUD endpoints."""
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List, Optional
-from datetime import time
+from datetime import date, datetime, time, timedelta
 
 from app.database import get_db
+from app.models.appointment import Appointment
 from app.models.working_hour import WorkingHour
 from app.models.user import User, UserRole
 from app.models.master_profile import MasterProfile
@@ -97,6 +98,195 @@ async def create_working_hour(
     await db.commit()
     
     return hour
+
+
+class ScheduleApplyRequest(BaseModel):
+    """Bulk-apply a repeating work/rest cycle to a date range.
+
+    The cycle starts at ``cycle_anchor`` (day 0 is a work day):
+    ``work_days`` work days followed by ``off_days`` rest days. This covers
+    5/2, 2/2, 1/3, 7/0 and arbitrary N/M patterns.
+    """
+
+    master_id: Optional[int] = None  # MasterProfile.id, superadmin only
+    range_start: date
+    range_end: date
+    cycle_work_days: int = Field(ge=1, le=31)
+    cycle_off_days: int = Field(ge=0, le=31)
+    cycle_anchor: date
+    start_time: time
+    end_time: time
+    replace_off_days: bool = True
+
+
+class ScheduleApplyResponse(BaseModel):
+    master_id: int
+    range_start: date
+    range_end: date
+    effective_start: Optional[date] = None
+    work_days: int
+    off_days: int
+    created: int
+    updated: int
+    removed: int
+    skipped_booked: int
+    skipped_dates: List[str]
+    window_start_hour: int
+    window_end_hour: int
+
+
+@router.post("/working-hours/apply", response_model=ScheduleApplyResponse)
+async def apply_schedule_cycle(
+    data: ScheduleApplyRequest,
+    master: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db),
+):
+    """Apply a work/rest cycle with the same hours to a whole month/range.
+
+    Safety rules:
+    - Past days are never touched (the effective range starts today).
+    - A day holding a live appointment is left as-is; shrinking or removing
+      its working hours would strand the booking.
+    - The whole operation is one transaction; the audit log gets one entry.
+
+    The displayed work window is expanded (never shrunk) so newly added
+    earlier/later hours stay visible as granules in the schedule.
+    """
+    if data.range_start > data.range_end:
+        raise HTTPException(status_code=400, detail="Начало периода позже конца")
+    if (data.range_end - data.range_start).days > 366:
+        raise HTTPException(status_code=400, detail="Период не может быть длиннее года")
+    if data.start_time >= data.end_time:
+        raise HTTPException(status_code=400, detail="Начало рабочего дня должно быть раньше конца")
+
+    profile = await _resolve_window_profile(db, master, data.master_id)
+    today = date.today()
+    effective_start = max(data.range_start, today)
+    effective_end = data.range_end
+
+    if effective_start > effective_end:
+        return ScheduleApplyResponse(
+            master_id=profile.id,
+            range_start=data.range_start,
+            range_end=data.range_end,
+            effective_start=None,
+            work_days=0,
+            off_days=0,
+            created=0,
+            updated=0,
+            removed=0,
+            skipped_booked=0,
+            skipped_dates=[],
+            window_start_hour=profile.work_start_hour if profile.work_start_hour is not None else 8,
+            window_end_hour=profile.work_end_hour if profile.work_end_hour is not None else 22,
+        )
+
+    cycle_len = data.cycle_work_days + data.cycle_off_days
+    rows = (await db.execute(
+        select(WorkingHour).where(
+            WorkingHour.master_id == profile.id,
+            WorkingHour.schedule_date >= effective_start,
+            WorkingHour.schedule_date <= effective_end,
+        )
+    )).scalars().all()
+    rows_by_date = {row.schedule_date: row for row in rows}
+
+    # Live bookings are derived from the same date range. Cancelled history
+    # does not protect a day: it is not a resource conflict.
+    busy_datetimes = (await db.execute(
+        select(Appointment.appointment_date).where(
+            Appointment.master_id == profile.id,
+            Appointment.appointment_date >= datetime.combine(effective_start, time.min),
+            Appointment.appointment_date < datetime.combine(effective_end + timedelta(days=1), time.min),
+            Appointment.status != "cancelled",
+        )
+    )).scalars().all()
+    busy_days = {dt.date() for dt in busy_datetimes if dt is not None}
+
+    created = updated = removed = skipped_booked = 0
+    work_days = off_days = 0
+    skipped_dates: List[str] = []
+
+    day = effective_start
+    while day <= effective_end:
+        phase = (day - data.cycle_anchor).days % cycle_len
+        is_work = phase < data.cycle_work_days
+        row = rows_by_date.get(day)
+
+        if is_work:
+            work_days += 1
+            needs_change = (
+                row is None
+                or row.start_time != data.start_time
+                or row.end_time != data.end_time
+                or not row.is_active
+            )
+            if needs_change and day in busy_days:
+                skipped_booked += 1
+                skipped_dates.append(day.isoformat())
+            elif row is None:
+                row = WorkingHour(
+                    master_id=profile.id,
+                    schedule_date=day,
+                    start_time=data.start_time,
+                    end_time=data.end_time,
+                    is_active=True,
+                )
+                db.add(row)
+                rows_by_date[day] = row
+                created += 1
+            elif needs_change:
+                row.start_time = data.start_time
+                row.end_time = data.end_time
+                row.is_active = True
+                updated += 1
+        else:
+            off_days += 1
+            if data.replace_off_days and row is not None:
+                if day in busy_days:
+                    skipped_booked += 1
+                    skipped_dates.append(day.isoformat())
+                else:
+                    await db.delete(row)
+                    del rows_by_date[day]
+                    removed += 1
+        day += timedelta(days=1)
+
+    # Keep granules for earlier/later starts visible. Never shrink the window
+    # here: a master may still have bookings outside the new template.
+    start_hour = data.start_time.hour
+    end_hour = data.end_time.hour + (1 if (data.end_time.minute or data.end_time.second) else 0)
+    current_start = profile.work_start_hour if profile.work_start_hour is not None else 8
+    current_end = profile.work_end_hour if profile.work_end_hour is not None else 22
+    profile.work_start_hour = min(current_start, start_hour)
+    profile.work_end_hour = max(current_end, end_hour)
+
+    await log_action(
+        db, master.id, "apply", "working_hour", profile.id,
+        f"{effective_start}..{effective_end}: цикл {data.cycle_work_days}/{data.cycle_off_days}, "
+        f"{data.start_time.strftime('%H:%M')}-{data.end_time.strftime('%H:%M')}; "
+        f"создано {created}, обновлено {updated}, удалено {removed}",
+        level="info",
+    )
+    await db.flush()
+    await update_master_status_from_working_hours(db, profile)
+    await db.commit()
+
+    return ScheduleApplyResponse(
+        master_id=profile.id,
+        range_start=data.range_start,
+        range_end=data.range_end,
+        effective_start=effective_start,
+        work_days=work_days,
+        off_days=off_days,
+        created=created,
+        updated=updated,
+        removed=removed,
+        skipped_booked=skipped_booked,
+        skipped_dates=skipped_dates,
+        window_start_hour=profile.work_start_hour,
+        window_end_hour=profile.work_end_hour,
+    )
 
 
 @router.patch("/working-hours/{hour_id}", response_model=WorkingHourResponse)

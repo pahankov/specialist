@@ -236,6 +236,7 @@ callback-странице редирект-флоу, дальше — `/auth/con
 | `POST` | `/admin/clients/bulk-city` | Назначить город всем по фильтру (`city_id` + `search`/`master_id`) |
 | `GET` | `/admin/working-hours` | Расписание |
 | `POST` | `/admin/working-hours` | Добавить рабочий день |
+| `POST` | `/admin/working-hours/apply` | Применить цикл работы/отдыха N/M к диапазону одной операцией: прошлые дни и дни с активными записями пропускаются, рабочее окно только расширяется (`replace_off_days` управляет удалением дней вне цикла) |
 | `PATCH` | `/admin/working-hours/{id}` | Обновить рабочий день |
 | `POST` | `/admin/working-hours/{id}/toggle-active` | Включить/выключить рабочий день (пересчитывает статус мастера) |
 | `DELETE` | `/admin/working-hours/{id}` | Удалить рабочий день |

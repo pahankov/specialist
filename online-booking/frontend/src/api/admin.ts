@@ -9,6 +9,34 @@ import type {
 } from './types';
 import type { Bundle } from './cabinet';
 
+export interface ScheduleApplyPayload {
+  master_id?: number;
+  range_start: string;
+  range_end: string;
+  cycle_work_days: number;
+  cycle_off_days: number;
+  cycle_anchor: string;
+  start_time: string;
+  end_time: string;
+  replace_off_days: boolean;
+}
+
+export interface ScheduleApplyResult {
+  master_id: number;
+  range_start: string;
+  range_end: string;
+  effective_start: string | null;
+  work_days: number;
+  off_days: number;
+  created: number;
+  updated: number;
+  removed: number;
+  skipped_booked: number;
+  skipped_dates: string[];
+  window_start_hour: number;
+  window_end_hour: number;
+}
+
 export const adminApi = {
   // Own panel profile (id/name/city — form defaults)
   getProfile() {
@@ -357,6 +385,9 @@ export const adminApi = {
   },
   deleteWorkingHour(id: number) {
     return apiClient.delete(`/api/v1/admin/working-hours/${id}`);
+  },
+  applySchedule(data: ScheduleApplyPayload) {
+    return apiClient.post<ScheduleApplyResult>('/api/v1/admin/working-hours/apply', data);
   },
   getWorkWindow(master_id?: number) {
     return apiClient.get<{ master_id: number; start_hour: number; end_hour: number }>(

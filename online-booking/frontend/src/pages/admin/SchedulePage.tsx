@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { adminApi } from '../../api/client';
 import type {
@@ -8,11 +8,19 @@ import type {
   DaySchedule,
   MonthlyStats,
   BookingFormState,
+  WorkingHour,
 } from '../../api/types';
 import type { Bundle } from '../../api/cabinet';
 import { Calendar } from '../../components/schedule/Calendar';
 import { TimeSlots } from '../../components/schedule/TimeSlots';
 import { BookingModal } from '../../components/schedule/BookingModal';
+import { SchedulePatternPanel } from '../../components/schedule/SchedulePatternPanel';
+import {
+  buildPatternPreview,
+  createDefaultPattern,
+  mondayOnOrBefore,
+  type SchedulePattern,
+} from '../../components/schedule/pattern';
 import {
   ConfirmDialog,
   MasterSelect,
@@ -23,8 +31,11 @@ import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError';
 import { getCookie, decodeJwtPayload } from '../../utils/cookies';
 import { MonthlyStatsComponent } from '../../components/schedule/MonthlyStats';
 import {
+  appointmentSpanHours,
   getBlockingLive,
+  hourToTime,
   monthRangeISO,
+  parseHourRange,
   formatDate,
   monthISO,
 } from '../../components/schedule/helpers';
@@ -35,6 +46,37 @@ import {
   closeBookingForm,
   handleBookAppointment,
 } from '../../components/schedule/hooks';
+
+/** Build calendar state from stored rows, keeping 24:00 (23:59 in DB). */
+function buildScheduleState(rows: WorkingHour[]): {
+  schedule: Record<string, DaySchedule>;
+  activeHours: Record<string, boolean>;
+} {
+  const schedule: Record<string, DaySchedule> = {};
+  const activeHours: Record<string, boolean> = {};
+  for (const wh of rows) {
+    const range = parseHourRange(wh.start_time, wh.end_time);
+    schedule[wh.schedule_date] = range;
+    for (let h = range.start; h < range.end; h++) {
+      activeHours[`${wh.schedule_date}-${h}`] = true;
+    }
+  }
+  return { schedule, activeHours };
+}
+
+/** Display window must at least cover every saved day (legacy rows may sit
+ * outside the stored window after an old shrink). */
+function scheduleBounds(schedule: Record<string, DaySchedule>): {
+  start: number;
+  end: number;
+} {
+  const days = Object.values(schedule);
+  if (days.length === 0) return { start: 8, end: 22 };
+  return {
+    start: Math.min(...days.map((day) => day.start)),
+    end: Math.max(...days.map((day) => day.end)),
+  };
+}
 
 function labelOf(a: Appointment): string {
   const who = a.client_name || 'клиент';
@@ -111,21 +153,31 @@ function SchedulePage() {
     'schedule.master',
     '',
   );
-  // Daily work window (whole hours): drives how many granules render
-  // AND the default hours for newly added working days.
+  // Daily work window (whole hours): drives how many granules render.
+  // It only ever grows when a day/template starts earlier or ends later, so
+  // deactivated edge granules stay visible and can be re-enabled.
   // Master sees own window; superadmin sees the selected master's.
   const [windowStart, setWindowStart] = useState(8);
   const [windowEnd, setWindowEnd] = useState(22);
-  const [windowDraft, setWindowDraft] = useState({ start: '8', end: '22' });
-  const [windowSaving, setWindowSaving] = useState(false);
-  // Explicit opt-in per save (NOT persisted): bulk-applying silently on the
-  // next save just because it was checked once is exactly the reported bug.
-  const [applyToAllDays, setApplyToAllDays] = useState(false);
+  // The base repeating template. It is a builder, not saved schedule data;
+  // server rows are written only by the explicit "Применить" action.
+  const [pattern, setPattern] = usePersistentState<SchedulePattern>(
+    'schedule.pattern',
+    createDefaultPattern(),
+  );
+  const [applyingPattern, setApplyingPattern] = useState(false);
   // Regular masters see only their own schedule; superadmin must pick one
   // (they have no profile of their own — empty view means "not chosen",
   // not "everyone is off").
   const [isSuperAdmin] = useState(
     () => decodeJwtPayload(getCookie('access_token') ?? '')?.is_admin === true,
+  );
+
+  // Preview is scoped to the viewed month and clipped to today, matching the
+  // backend's "past days are never touched" rule.
+  const patternPreview = useMemo(
+    () => buildPatternPreview(new Date(`${currentMonthISO}-01T00:00:00`), pattern),
+    [currentMonthISO, pattern],
   );
 
   useEffect(() => {
@@ -152,28 +204,14 @@ function SchedulePage() {
         ]);
         if (cancelled) return;
 
-        const newSchedule: Record<string, DaySchedule> = {};
-        const newActiveHours: Record<string, boolean> = {};
-        for (const wh of scheduleResp.data) {
-          const sh = wh.start_time.split(':').map(Number);
-          const eh = wh.end_time.split(':').map(Number);
-          newSchedule[wh.schedule_date] = { start: sh[0], end: eh[0] };
-          for (let h = sh[0]; h < eh[0]; h++) {
-            newActiveHours[`${wh.schedule_date}-${h}`] = true;
-          }
-        }
-        setSchedule(newSchedule);
-        setActiveHours(newActiveHours);
+        const built = buildScheduleState(scheduleResp.data);
+        setSchedule(built.schedule);
+        setActiveHours(built.activeHours);
         setAppointments(apptsResp.data || []);
         setMonthlyStats(statsResp.data || null);
-        if (windowResp) {
-          setWindowStart(windowResp.start_hour);
-          setWindowEnd(windowResp.end_hour);
-          setWindowDraft({
-            start: String(windowResp.start_hour),
-            end: String(windowResp.end_hour),
-          });
-        }
+        const bounds = scheduleBounds(built.schedule);
+        setWindowStart(Math.min(windowResp?.start_hour ?? 8, bounds.start));
+        setWindowEnd(Math.max(windowResp?.end_hour ?? 22, bounds.end));
       } catch (err: any) {
         console.error('[SchedulePage] Init error:', err);
         if (!cancelled) {
@@ -194,24 +232,6 @@ function SchedulePage() {
     // NOTE: currentMonth is a fresh Date every render — depend on the stable
     // ISO string, otherwise the fetch loops forever and trips rate limits.
   }, [currentMonthISO, selectedMasterId]);
-
-  // Draft follows the selected working day (its hours load into the
-  // editor); switching months resets to the saved global default, so edits
-  // never leak from one month into another.
-  useEffect(() => {
-    setWindowDraft({ start: String(windowStart), end: String(windowEnd) });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentMonthISO]);
-
-  useEffect(() => {
-    if (!selectedDate) return;
-    const key = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
-    const day = schedule[key];
-    // Working day → its hours; inactive day → last saved (global default).
-    if (day) setWindowDraft({ start: String(day.start), end: String(day.end) });
-    else setWindowDraft({ start: String(windowStart), end: String(windowEnd) });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDate]);
 
   useEffect(() => {
     if (!bookingForm.open) return;
@@ -274,11 +294,6 @@ function SchedulePage() {
       if (result) {
         setSchedule(result.newSchedule);
         setActiveHours(result.newActiveHours);
-        // Day went off: the editor falls back to the saved global window.
-        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-        if (!result.newSchedule[key]) {
-          setWindowDraft({ start: String(windowStart), end: String(windowEnd) });
-        }
       }
     },
     [schedule, activeHours, appointments, selectedMasterId, isSuperAdmin, windowStart, windowEnd],
@@ -296,30 +311,28 @@ function SchedulePage() {
         return;
       }
       const masterParam = selectedMasterId !== '' ? selectedMasterId : undefined;
-      const pad = (h: number) => `${String(h).padStart(2, '0')}:00`;
 
       if (turningOn) {
         setActiveHours((prev) => ({ ...prev, [key]: true }));
         try {
           const resp = await adminApi.getWorkingHours(masterParam);
-          const existing = resp.data.find((h: any) => h.schedule_date === dateStr);
+          const existing = resp.data.find((h: WorkingHour) => h.schedule_date === dateStr);
           if (existing) {
-            const curStart = Number(String(existing.start_time).split(':')[0]);
-            const curEnd = Number(String(existing.end_time).split(':')[0]);
-            const start = Math.min(curStart, hour);
-            const end = Math.max(curEnd, hour + 1);
+            const current = parseHourRange(existing.start_time, existing.end_time);
+            const start = Math.min(current.start, hour);
+            const end = Math.max(current.end, hour + 1);
             await adminApi.updateWorkingHour(existing.id, {
               schedule_date: dateStr,
-              start_time: pad(start),
-              end_time: pad(end),
+              start_time: hourToTime(start),
+              end_time: hourToTime(end),
             });
             setSchedule((prev) => ({ ...prev, [dateStr]: { start, end } }));
           } else {
             await adminApi.createWorkingHour({
               master_id: masterParam,
               schedule_date: dateStr,
-              start_time: pad(hour),
-              end_time: pad(hour + 1),
+              start_time: hourToTime(hour),
+              end_time: hourToTime(hour + 1),
             });
             setSchedule((prev) => ({ ...prev, [dateStr]: { start: hour, end: hour + 1 } }));
           }
@@ -347,7 +360,7 @@ function SchedulePage() {
       setActiveHours((prev) => ({ ...prev, [key]: false }));
       try {
         const resp = await adminApi.getWorkingHours(masterParam);
-        const existing = resp.data.find((h: any) => h.schedule_date === dateStr);
+        const existing = resp.data.find((h: WorkingHour) => h.schedule_date === dateStr);
         if (!existing) {
           if (remaining.length === 0) {
             setSchedule((prev) => {
@@ -372,8 +385,8 @@ function SchedulePage() {
           const end = Math.max(...remaining) + 1;
           await adminApi.updateWorkingHour(existing.id, {
             schedule_date: dateStr,
-            start_time: pad(start),
-            end_time: pad(end),
+            start_time: hourToTime(start),
+            end_time: hourToTime(end),
           });
           setSchedule((prev) => ({ ...prev, [dateStr]: { start, end } }));
         }
@@ -477,116 +490,176 @@ function SchedulePage() {
     [refreshMonthAppointments],
   );
 
-  // Bulk-apply the saved window to every working day of the viewed month.
-  // Days holding live bookings are skipped (shrinking hours under a booking
-  // would strand it) and reported.
-  const applyWindowToMonth = useCallback(
-    async (start: number, end: number): Promise<{ updated: number; skipped: number }> => {
-      const pad = (h: number) => `${String(h).padStart(2, '0')}:00`;
-      const masterParam = selectedMasterId !== '' ? selectedMasterId : undefined;
-      let rows: { id: number; schedule_date: string }[] = [];
-      try {
-        rows = (await adminApi.getWorkingHours(masterParam)).data.filter((h: any) =>
-          String(h.schedule_date).startsWith(currentMonthISO),
-        );
-      } catch {
-        return { updated: 0, skipped: 0 };
-      }
-      let updated = 0;
-      let skipped = 0;
-      const liveByDay = new Set(
-        appointments
-          .filter((a) => a.status !== 'cancelled')
-          .map((a) => String(a.appointment_date).slice(0, 10)),
-      );
-      for (const row of rows) {
-        if (liveByDay.has(row.schedule_date)) {
-          skipped += 1;
-          continue;
-        }
-        try {
-          await adminApi.updateWorkingHour(row.id, {
-            schedule_date: row.schedule_date,
-            start_time: pad(start),
-            end_time: pad(end),
-          });
-          updated += 1;
-        } catch {
-          skipped += 1;
-        }
-      }
-      if (updated > 0) {
-        setSchedule((prev) => {
-          const next = { ...prev };
-          for (const row of rows) {
-            if (!liveByDay.has(row.schedule_date) && next[row.schedule_date]) {
-              next[row.schedule_date] = { start, end };
-            }
-          }
-          return next;
-        });
-        setActiveHours((prev) => {
-          const next = { ...prev };
-          for (const row of rows) {
-            if (liveByDay.has(row.schedule_date)) continue;
-            for (const k of Object.keys(next)) {
-              if (k.startsWith(`${row.schedule_date}-`)) delete next[k];
-            }
-            for (let h = start; h < end; h++) next[`${row.schedule_date}-${h}`] = true;
-          }
-          return next;
-        });
-      }
-      return { updated, skipped };
+  const handlePatternChange = useCallback(
+    (patch: Partial<SchedulePattern>) => {
+      setPattern((prev) => ({ ...prev, ...patch }));
     },
-    [appointments, currentMonthISO, selectedMasterId],
+    [setPattern],
   );
 
-  // Single-day apply: without the month checkbox the window lands only on
-  // the selected working day (days with live bookings are skipped).
-  const applyWindowToDay = useCallback(
-    async (date: Date, start: number, end: number): Promise<string> => {
-      const pad = (h: number) => `${String(h).padStart(2, '0')}:00`;
-      const masterParam = selectedMasterId !== '' ? selectedMasterId : undefined;
-      const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-      let rows: { id: number; schedule_date: string }[] = [];
-      try {
-        rows = (await adminApi.getWorkingHours(masterParam)).data.filter(
-          (h: any) => String(h.schedule_date) === dateStr,
-        );
-      } catch {
-        return ' День не обновлён (нет связи)';
+  // Presets are a starting point only; choosing one also puts the phase on
+  // today (or on the first day of a future month), so the preview is
+  // immediately meaningful. 5/2 additionally snaps to Monday.
+  const handlePatternPreset = useCallback(
+    (workDays: number, offDays: number) => {
+      const monthStart = new Date(`${currentMonthISO}-01T00:00:00`);
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const base = monthStart > today ? monthStart : today;
+      const anchor = workDays === 5 && offDays === 2 ? mondayOnOrBefore(base) : base;
+      setPattern((prev) => ({
+        ...prev,
+        workDays,
+        offDays,
+        anchor: formatDate(anchor),
+      }));
+    },
+    [currentMonthISO, setPattern],
+  );
+
+  // One atomic request instead of a per-day loop: the backend decides which
+  // days are past or protected by live bookings and reports the counts.
+  const handleApplyPattern = useCallback(async () => {
+    if (isSuperAdmin && selectedMasterId === '') {
+      setError('Выберите мастера, чтобы применять график');
+      return;
+    }
+    if (!patternPreview.canApply) return;
+
+    const base = new Date(`${currentMonthISO}-01T00:00:00`);
+    const { from, to } = monthRangeISO(base);
+    const masterParam = selectedMasterId !== '' ? selectedMasterId : undefined;
+    setError('');
+    setApplyingPattern(true);
+    try {
+      const { data } = await adminApi.applySchedule({
+        ...(masterParam ? { master_id: masterParam } : {}),
+        range_start: from,
+        range_end: to,
+        cycle_work_days: pattern.workDays,
+        cycle_off_days: pattern.offDays,
+        cycle_anchor: pattern.anchor,
+        start_time: hourToTime(pattern.startHour),
+        end_time: hourToTime(pattern.endHour),
+        replace_off_days: pattern.replaceOffDays,
+      });
+
+      const scheduleResp = await adminApi.getWorkingHours(masterParam);
+      const built = buildScheduleState(scheduleResp.data);
+      const bounds = scheduleBounds(built.schedule);
+      setWindowStart(Math.min(data.window_start_hour, bounds.start));
+      setWindowEnd(Math.max(data.window_end_hour, bounds.end));
+      setSchedule(built.schedule);
+      setActiveHours(built.activeHours);
+      await refreshMonthAppointments();
+
+      const skipped =
+        data.skipped_booked > 0 ? ` Дней с записями сохранено: ${data.skipped_booked}.` : '';
+      toast.success(
+        `График применён: ${data.work_days} раб. / ${data.off_days} вых. ` +
+          `Создано ${data.created}, обновлено ${data.updated}, удалено ${data.removed}.${skipped}`,
+      );
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, 'Не удалось применить график'));
+    } finally {
+      setApplyingPattern(false);
+    }
+  }, [
+    currentMonthISO,
+    isSuperAdmin,
+    pattern,
+    patternPreview,
+    refreshMonthAppointments,
+    selectedMasterId,
+  ]);
+
+  // ± on a selected working day. Expanding the range may grow the global
+  // window; shrinking below a live booking is refused (the backend performs
+  // the same protection for bulk apply).
+  const handleChangeDayHours = useCallback(
+    async (dateStr: string, start: number, end: number) => {
+      if (isSuperAdmin && selectedMasterId === '') {
+        setError('Выберите мастера, чтобы менять расписание');
+        return;
       }
-      if (rows.length === 0) {
-        return ' День нерабочий — время сохранилось только как диапазон по умолчанию';
+      if (
+        !Number.isInteger(start) ||
+        !Number.isInteger(end) ||
+        start < 0 ||
+        end > 24 ||
+        start >= end
+      ) {
+        setError('Начало рабочего дня должно быть раньше конца');
+        return;
       }
-      const live = appointments.some(
+
+      const [y, m, d] = dateStr.split('-').map(Number);
+      const dayDate = new Date(y, m - 1, d);
+      const live = appointments.filter(
         (a) => a.status !== 'cancelled' && String(a.appointment_date).slice(0, 10) === dateStr,
       );
-      if (live) {
-        return ' В дне есть брони — часы не тронуты';
-      }
-      try {
-        await adminApi.updateWorkingHour(rows[0].id, {
-          schedule_date: dateStr,
-          start_time: pad(start),
-          end_time: pad(end),
-        });
-      } catch {
-        return ' День не обновлён (ошибка)';
-      }
-      setSchedule((prev) => ({ ...prev, [dateStr]: { start, end } }));
-      setActiveHours((prev) => {
-        const next = { ...prev };
-        for (const k of Object.keys(next)) {
-          if (k.startsWith(`${dateStr}-`)) delete next[k];
+      if (live.length > 0) {
+        const starts = live.map((a) => new Date(a.appointment_date).getHours());
+        const ends = live.map(
+          (a) => new Date(a.appointment_date).getHours() + appointmentSpanHours(a),
+        );
+        const earliest = Math.min(...starts);
+        const latest = Math.max(...ends);
+        if (start > earliest || end < latest) {
+          setError(
+            `Нельзя сократить день — в нём есть записи (${dayDate.toLocaleDateString('ru-RU')}). ` +
+              'Сначала перенесите или отмените их.',
+          );
+          return;
         }
-        for (let h = start; h < end; h++) next[`${dateStr}-${h}`] = true;
-        return next;
-      });
-      return ` День ${date.toLocaleDateString('ru-RU')}: ${start}:00–${end}:00`;
+      }
+
+      const masterParam = selectedMasterId !== '' ? selectedMasterId : undefined;
+      setError('');
+      try {
+        const nextWindowStart = Math.min(windowStart, start);
+        const nextWindowEnd = Math.max(windowEnd, end);
+        if (nextWindowStart !== windowStart || nextWindowEnd !== windowEnd) {
+          const { data } = await adminApi.updateWorkWindow({
+            ...(masterParam ? { master_id: masterParam } : {}),
+            start_hour: nextWindowStart,
+            end_hour: nextWindowEnd,
+          });
+          setWindowStart(data.start_hour);
+          setWindowEnd(data.end_hour);
+        }
+
+        const resp = await adminApi.getWorkingHours(masterParam);
+        const existing = resp.data.find((h: WorkingHour) => h.schedule_date === dateStr);
+        if (existing) {
+          await adminApi.updateWorkingHour(existing.id, {
+            schedule_date: dateStr,
+            start_time: hourToTime(start),
+            end_time: hourToTime(end),
+          });
+        } else {
+          await adminApi.createWorkingHour({
+            master_id: masterParam,
+            schedule_date: dateStr,
+            start_time: hourToTime(start),
+            end_time: hourToTime(end),
+          });
+        }
+
+        setSchedule((prev) => ({ ...prev, [dateStr]: { start, end } }));
+        setActiveHours((prev) => {
+          const next = { ...prev };
+          for (const k of Object.keys(next)) {
+            if (k.startsWith(`${dateStr}-`)) delete next[k];
+          }
+          for (let h = start; h < end; h++) next[`${dateStr}-${h}`] = true;
+          return next;
+        });
+      } catch (err: unknown) {
+        setError(getApiErrorMessage(err, 'Не удалось изменить часы дня'));
+      }
     },
-    [appointments, selectedMasterId],
+    [appointments, isSuperAdmin, selectedMasterId, windowEnd, windowStart],
   );
 
   if (loading)
@@ -646,164 +719,15 @@ function SchedulePage() {
       {/* No calendar without a master: nothing to display yet */}
       {!(isSuperAdmin && selectedMasterId === '') && (
         <>
-          {/* Daily work window: how many hourly granules working days offer */}
-          <div className="card" style={{ marginBottom: 16, padding: 12 }}>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 10,
-                flexWrap: 'wrap',
-              }}
-            >
-              <span style={{ fontSize: 14, fontWeight: 600 }}>🕐 Рабочее время:</span>
-              <span style={{ fontSize: 12, color: '#888' }}>
-                {(() => {
-                  if (!selectedDate) return `(по умолчанию ${windowStart}:00–${windowEnd}:00)`;
-                  const key = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
-                  const day = schedule[key];
-                  return day
-                    ? `день ${selectedDate.toLocaleDateString('ru-RU')}: ${day.start}:00–${day.end}:00`
-                    : `(день нерабочий, по умолчанию ${windowStart}:00–${windowEnd}:00)`;
-                })()}
-              </span>
-              <span style={{ fontSize: 13, color: '#666' }}>с</span>
-              <input
-                type="number"
-                min={0}
-                max={23}
-                value={windowDraft.start}
-                onChange={(e) => setWindowDraft((d) => ({ ...d, start: e.target.value }))}
-                style={{
-                  width: 64,
-                  padding: 6,
-                  border: '2px solid #e0e0e0',
-                  borderRadius: 8,
-                  fontSize: 14,
-                }}
-                aria-label="Начало рабочего времени"
-              />
-              <span style={{ fontSize: 13, color: '#666' }}>до</span>
-              <input
-                type="number"
-                min={1}
-                max={24}
-                value={windowDraft.end}
-                onChange={(e) => setWindowDraft((d) => ({ ...d, end: e.target.value }))}
-                style={{
-                  width: 64,
-                  padding: 6,
-                  border: '2px solid #e0e0e0',
-                  borderRadius: 8,
-                  fontSize: 14,
-                }}
-                aria-label="Конец рабочего времени"
-              />
-              <button
-                className="btn btn-sm btn-primary"
-                disabled={windowSaving}
-                onClick={async () => {
-                  const start = Number(windowDraft.start);
-                  const end = Number(windowDraft.end);
-                  if (
-                    !Number.isInteger(start) ||
-                    !Number.isInteger(end) ||
-                    start < 0 ||
-                    end > 24 ||
-                    start >= end
-                  ) {
-                    setError('Укажите часы 0–24, начало раньше конца');
-                    return;
-                  }
-                  setWindowSaving(true);
-                  const payload = {
-                    ...(selectedMasterId !== '' ? { master_id: selectedMasterId } : {}),
-                    start_hour: start,
-                    end_hour: end,
-                  };
-                  const saveOnce = () => adminApi.updateWorkWindow(payload);
-                  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-                  try {
-                    let data: { start_hour: number; end_hour: number };
-                    try {
-                      ({ data } = await saveOnce());
-                    } catch (firstErr: unknown) {
-                      const status = getApiErrorStatus(firstErr);
-                      if (status === undefined) {
-                        // Transport-level blip (no response): one immediate retry.
-                        ({ data } = await saveOnce());
-                      } else if (status === 429) {
-                        // Rate-limited: wait out the window, then one retry.
-                        await sleep(1500);
-                        ({ data } = await saveOnce());
-                      } else {
-                        throw firstErr;
-                      }
-                    }
-                    setWindowStart(data.start_hour);
-                    setWindowEnd(data.end_hour);
-                    setWindowDraft({ start: String(data.start_hour), end: String(data.end_hour) });
-
-                    let suffix = '';
-                    if (applyToAllDays) {
-                      const applied = await applyWindowToMonth(data.start_hour, data.end_hour);
-                      suffix =
-                        applied.updated > 0
-                          ? ` Обновлено дней: ${applied.updated}` +
-                            (applied.skipped > 0
-                              ? ` (с бронями пропущено: ${applied.skipped})`
-                              : '')
-                          : applied.skipped > 0
-                            ? ` Все дни с бронями — часы не тронуты (${applied.skipped})`
-                            : ' Рабочих дней в месяце пока нет';
-                    } else if (selectedDate) {
-                      // No checkbox: the window lands on the selected day only.
-                      const applied = await applyWindowToDay(
-                        selectedDate,
-                        data.start_hour,
-                        data.end_hour,
-                      );
-                      suffix = applied;
-                    }
-                    toast.success(
-                      `Рабочее время сохранено: ${data.start_hour}:00–${data.end_hour}:00.${suffix}`,
-                    );
-                  } catch (err: unknown) {
-                    const status = getApiErrorStatus(err);
-                    setError(
-                      status !== undefined
-                        ? getApiErrorMessage(err, 'Не удалось сохранить рабочее время')
-                        : 'Нет связи с сервером — проверьте соединение и нажмите «Сохранить» ещё раз',
-                    );
-                  } finally {
-                    setWindowSaving(false);
-                  }
-                }}
-              >
-                Сохранить
-              </button>
-              <label
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  cursor: 'pointer',
-                  fontSize: 13,
-                  color: '#555',
-                }}
-                title="Без галочки время встанет только на выбранный день (и запомнится диапазоном). С галочкой — всем рабочим дням текущего месяца (дни с записями пропускаются)"
-              >
-                <input
-                  type="checkbox"
-                  checked={applyToAllDays}
-                  onChange={() => setApplyToAllDays((v) => !v)}
-                  style={{ width: 16, height: 16, accentColor: '#e94560' }}
-                />
-                Применить ко всем дням месяца
-              </label>
-            </div>
-          </div>
+          <SchedulePatternPanel
+            monthLabel={`${currentMonth.toLocaleString('ru-RU', { month: 'long' })} ${currentMonth.getFullYear()}`}
+            value={pattern}
+            preview={patternPreview}
+            applying={applyingPattern}
+            onChange={handlePatternChange}
+            onPreset={handlePatternPreset}
+            onApply={handleApplyPattern}
+          />
           {/* Legend */}
           <div
             style={{
@@ -845,6 +769,26 @@ function SchedulePage() {
                 <span>{item.label}</span>
               </div>
             ))}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                fontSize: 13,
+                color: '#333',
+              }}
+            >
+              <span
+                style={{
+                  width: 16,
+                  height: 16,
+                  borderRadius: 4,
+                  border: '2px dashed #4caf50',
+                  display: 'inline-block',
+                }}
+              />
+              <span>Пунктир — после применения</span>
+            </div>
           </div>
 
           <Calendar
@@ -857,6 +801,8 @@ function SchedulePage() {
             onSelectDate={handleSelectDate}
             onToggleDay={handleToggleDay}
             selectablePast
+            previewWorkDates={patternPreview.workDates}
+            previewOffDates={pattern.replaceOffDays ? patternPreview.offDates : undefined}
           />
 
           {monthError && (
@@ -881,10 +827,11 @@ function SchedulePage() {
               onOpenBooking={handleOpenBooking}
               onCancelAppointment={handleCancelSlotAppointment}
               onConfirmAppointment={handleConfirmSlotAppointment}
-              windowStart={
-                (selectedDate && schedule[formatDate(selectedDate)]?.start) ?? windowStart
-              }
-              windowEnd={(selectedDate && schedule[formatDate(selectedDate)]?.end) ?? windowEnd}
+              windowStart={windowStart}
+              windowEnd={windowEnd}
+              dayStart={schedule[formatDate(selectedDate)]?.start}
+              dayEnd={schedule[formatDate(selectedDate)]?.end}
+              onChangeDayHours={handleChangeDayHours}
             />
           )}
 

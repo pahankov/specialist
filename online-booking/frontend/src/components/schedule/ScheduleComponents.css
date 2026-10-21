@@ -59,6 +59,7 @@
 }
 
 .calendar-day {
+  position: relative;
   padding: 12px 8px;
   border-radius: 10px;
   text-align: center;
@@ -67,6 +68,33 @@
   min-height: 80px;
   transition: all 0.2s ease;
   user-select: none;
+}
+
+/* Template preview before "Применить": dotted outline + tiny corner dot,
+ * visible without changing the current day colour/badge. */
+.calendar-day.preview-work:not(.active) {
+  border: 2px dashed #7ac47f;
+  background: #f4fbf5;
+}
+
+.calendar-day.preview-off.active {
+  border: 2px dashed #a3a3a3;
+}
+
+.calendar-day.preview-work::after,
+.calendar-day.preview-off::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4caf50;
+}
+
+.calendar-day.preview-off::after {
+  background: #9e9e9e;
 }
 
 .calendar-day.other-month {
@@ -191,7 +219,9 @@
 .time-slots-header {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 16px;
   margin-bottom: 8px;
 }
 
@@ -203,6 +233,67 @@
   font-weight: 600;
   color: #333;
   cursor: pointer;
+}
+
+/* Per-day ± controls: extend the working day earlier or later without
+ * typing values. The global window stays wide enough to keep edge granules
+ * visible (see SchedulePage's expanded window). */
+.time-slots-day-hours {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: #666;
+}
+
+.time-slots-day-hours-label {
+  font-weight: 600;
+}
+
+.day-hours-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  background: #fafafa;
+}
+
+.day-hours-btn {
+  width: 27px;
+  height: 27px;
+  border: none;
+  border-radius: 6px;
+  background: #fff;
+  color: #4b53a8;
+  font-size: 18px;
+  line-height: 1;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px #e3e3e3;
+}
+
+.day-hours-btn:hover:not(:disabled) {
+  background: #eef0ff;
+}
+
+.day-hours-btn:disabled {
+  color: #c5c5c5;
+  cursor: not-allowed;
+}
+
+.day-hours-value {
+  min-width: 45px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: #333;
+}
+
+.day-hours-dash {
+  color: #999;
 }
 
 .time-slots-checkbox input {

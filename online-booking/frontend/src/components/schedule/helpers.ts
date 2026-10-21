@@ -21,6 +21,21 @@ export function formatHour(h: number): string {
   return String(h).padStart(2, '0') + ':00';
 }
 
+/** Backend stores SQL TIME (max 23:59), so 24:00 is sent as 23:59. */
+export function hourToTime(hour: number): string {
+  return hour >= 24 ? '23:59' : formatHour(hour);
+}
+
+/** Parse a stored working-day range, rounding the end up to a full granule. */
+export function parseHourRange(startTime: string, endTime: string): DaySchedule {
+  const [startHour] = startTime.split(':').map(Number);
+  const [endHour, endMinute = 0, endSecond = 0] = endTime.split(':').map(Number);
+  return {
+    start: startHour,
+    end: endHour + (endMinute > 0 || endSecond > 0 ? 1 : 0),
+  };
+}
+
 export function getMonthDays(date: Date): { date: Date; isCurrentMonth: boolean }[] {
   const year = date.getFullYear();
   const month = date.getMonth();

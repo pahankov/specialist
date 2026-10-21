@@ -20,6 +20,8 @@ import {
   pluralBookings,
   pluralHolds,
   monthRangeISO,
+  hourToTime,
+  parseHourRange,
 } from '../components/schedule/helpers';
 import type { Appointment, DaySchedule } from '../api/types';
 
@@ -64,6 +66,25 @@ describe('helpers', () => {
       const date = new Date(2026, 0, 15);
       const result = formatDate(date);
       expect(result).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    });
+  });
+
+  describe('hourToTime', () => {
+    it('formats hours and clamps 24:00 to SQL-safe 23:59', () => {
+      expect(hourToTime(0)).toBe('00:00');
+      expect(hourToTime(9)).toBe('09:00');
+      expect(hourToTime(23)).toBe('23:00');
+      expect(hourToTime(24)).toBe('23:59');
+    });
+  });
+
+  describe('parseHourRange', () => {
+    it('rounds the end up to a full granule', () => {
+      expect(parseHourRange('09:00', '18:00')).toEqual({ start: 9, end: 18 });
+      expect(parseHourRange('09:00:00', '18:00:00')).toEqual({ start: 9, end: 18 });
+      expect(parseHourRange('09:00', '23:59')).toEqual({ start: 9, end: 24 });
+      expect(parseHourRange('09:00', '18:15')).toEqual({ start: 9, end: 19 });
+      expect(parseHourRange('09:30', '18:00')).toEqual({ start: 9, end: 18 });
     });
   });
 

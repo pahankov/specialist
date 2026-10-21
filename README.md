@@ -133,7 +133,7 @@ beauty-specialist/              # корень репозитория
     │   │   └── modules/          # self-contained пакеты: auth, city, user, booking, service, schedule,
     │   │                         # review, client, admin/*, dadata, maxauth, vkauth, yandexauth
     │   ├── alembic/              # миграции PostgreSQL
-    │   ├── tests/                # pytest (746)
+    │   ├── tests/                # pytest (751)
     │   └── requirements.txt
     └── frontend/
         ├── src/
@@ -306,8 +306,8 @@ utils/
 - ESLint + Prettier для форматирования кода
 
 ### ✅ Тесты
-- **Backend:** 746 pytest-тестов (auth, masters, services, appointments, clients, reviews, admin CRUD, bundles, coupons, notifications, billing/ledger/рефералы, visibility/модерация, dual-role, VK/Yandex/MAX auth (в т.ч. виджет Яндекса suggest), MAX webhook guard, rate limiting, refresh tokens, password security, no-show, dadata proxy, superuser, log level)
-- **Frontend:** 239 Vitest-тестов (helpers, hooks, Modal/ConfirmDialog, auth refresh, соц-входы VK/Yandex/MAX (виджет Яндекса), dadata fallback, CabinetPage, CabinetBookPage, BookingWizard, DataTable, NotificationBell, billing/referral pages, ...)
+- **Backend:** 751 pytest-тестов (auth, masters, services, appointments, clients, reviews, admin CRUD, bundles, coupons, notifications, billing/ledger/рефералы, visibility/модерация, dual-role, VK/Yandex/MAX auth (в т.ч. виджет Яндекса suggest), MAX webhook guard, rate limiting, refresh tokens, password security, no-show, dadata proxy, superuser, log level)
+- **Frontend:** 256 Vitest-тестов (helpers, hooks, Modal/ConfirmDialog, auth refresh, соц-входы VK/Yandex/MAX (виджет Яндекса), dadata fallback, CabinetPage, CabinetBookPage, BookingWizard, DataTable, NotificationBell, billing/referral pages, ...)
 - 100% покрытие всех эндпоинтов
 - Файловый SQLite (по файлу на тест) для изоляции тестов
 - pytest-asyncio для асинхронных тестов
@@ -430,13 +430,13 @@ OtpCode (id, phone, code_hash, expires_at, is_used, created_at)
 # Backend
 cd online-booking\backend
 $env:PYTHONPATH='.'
-pytest tests/ -v                          # Все тесты (746)
+pytest tests/ -v                          # Все тесты (751)
 pytest tests/test_reviews.py -v           # Только reviews
 pytest tests/ -v --cov=app                # С покрытием
 
 # Frontend
 cd online-booking\frontend
-npx vitest run                            # Все тесты (239)
+npx vitest run                            # Все тесты (256)
 npx vitest run src/tests/helpers.test.ts  # Только helpers
 npx vitest                              # Watch mode
 ```
@@ -450,6 +450,14 @@ npx vitest                              # Watch mode
 
 
 ## 📚 История версий
+
+### [1.85.0] - 2026-10-21
+
+- **Создание услуги больше не падает с 500.** Аудит писал `master_profiles.id` в `audit_logs.master_id`, где внешний ключ ссылается на `users.id`; в production это 91 против 302. Теперь create/update/delete услуги передают `user.id`; добавлен регрессионный тест с намеренно несовпадающими id.
+- **Расписание: сначала цикл, потом часы, потом «Применить».** Пресеты 5/2, 2/2, 3/3, 1/3, 4/2, 6/1, 7/0 и счётчики N/M, якорь цикла и рабочие часы со стрелками «−»/«+». Шаблон применяется к просматриваемому месяцу одной атомарной операцией.
+- **Безопасное применение.** Прошедшие дни и дни с активными записями не изменяются; дни вне нового графика можно оставить чекбоксом. Рабочее окно только расширяется, поэтому гранулы на краях остаются видимыми после выключения. В выбранном дне доступны «−»/«+» к началу и концу; сократить день под запись нельзя.
+- **Предпросмотр в календаре.** Пунктир и точка показывают, какие дни станут рабочими или выходными до нажатия «Применить».
+- **Тесты:** pytest **751**, vitest **256**, `tsc`/`vite build`, eslint (0 ошибок) и prettier — без ошибок. `APP_VERSION` — 1.85.0; `package-lock.json` намеренно не синхронизирован.
 
 ### [1.84.2] - 2026-10-21
 
