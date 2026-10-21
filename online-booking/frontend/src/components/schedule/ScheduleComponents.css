@@ -777,3 +777,17 @@
     font-size: 11px;
   }
 }
+
+/* Half-filled dot on a working day marks the half-hour granule mode. */
+.calendar-day.slot30::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: conic-gradient(#4caf50 0deg 180deg, #e0e0e0 180deg 360deg);
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  box-sizing: border-box;
+}

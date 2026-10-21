@@ -389,6 +389,21 @@ export const adminApi = {
   applySchedule(data: ScheduleApplyPayload) {
     return apiClient.post<ScheduleApplyResult>('/api/v1/admin/working-hours/apply', data);
   },
+  resetMonth(data: {
+    master_id?: number;
+    range_start: string;
+    range_end: string;
+  }) {
+    return apiClient.delete<{
+      master_id: number;
+      range_start: string;
+      range_end: string;
+      effective_start: string | null;
+      removed: number;
+      skipped_booked: number;
+      skipped_dates: string[];
+    }>('/api/v1/admin/working-hours/range', { data });
+  },
   getWorkWindow(master_id?: number) {
     return apiClient.get<{ master_id: number; start_hour: number; end_hour: number }>(
       '/api/v1/admin/work-window',

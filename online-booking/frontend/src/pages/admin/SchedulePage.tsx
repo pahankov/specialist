@@ -31,12 +31,13 @@ import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError';
 import { getCookie, decodeJwtPayload } from '../../utils/cookies';
 import { MonthlyStatsComponent } from '../../components/schedule/MonthlyStats';
 import {
-  appointmentSpanHours,
+  appointmentSpanSlots,
   getBlockingLive,
-  hourToTime,
+  hourToSlot,
   monthRangeISO,
-  parseHourRange,
+  parseHourRangeToSlots,
   formatDate,
+  formatSlotTime,
   monthISO,
 } from '../../components/schedule/helpers';
 import { usePersistentState } from '../../utils/persistentState';
@@ -47,18 +48,22 @@ import {
   handleBookAppointment,
 } from '../../components/schedule/hooks';
 
-/** Build calendar state from stored rows, keeping 24:00 (23:59 in DB). */
-function buildScheduleState(rows: WorkingHour[]): {
+/** Build calendar state from stored rows. Day ranges are stored as slot
+ * indices (1 slot = slotMinutes minutes; slot == hour when slotMinutes=60). */
+function buildScheduleState(
+  rows: WorkingHour[],
+  slotMinutes: 30 | 60 = 60,
+): {
   schedule: Record<string, DaySchedule>;
   activeHours: Record<string, boolean>;
 } {
   const schedule: Record<string, DaySchedule> = {};
   const activeHours: Record<string, boolean> = {};
   for (const wh of rows) {
-    const range = parseHourRange(wh.start_time, wh.end_time);
-    schedule[wh.schedule_date] = range;
-    for (let h = range.start; h < range.end; h++) {
-      activeHours[`${wh.schedule_date}-${h}`] = true;
+    const range = parseHourRangeToSlots(wh.start_time, wh.end_time, slotMinutes);
+    schedule[wh.schedule_date] = { start: range.startSlot, end: range.endSlot };
+    for (let s = range.startSlot; s < range.endSlot; s++) {
+      activeHours[`${wh.schedule_date}-${s}`] = true;
     }
   }
   return { schedule, activeHours };
@@ -145,6 +150,11 @@ function SchedulePage() {
   // Master sees own window; superadmin sees the selected master's.
   const [windowStart, setWindowStart] = useState(8);
   const [windowEnd, setWindowEnd] = useState(22);
+  // Granule size: 60 = whole hours (default), 30 = half-hour slots.
+  const [slotMinutes, setSlotMinutes] = usePersistentState<30 | 60>(
+    'schedule.slotMinutes',
+    60,
+  );
   // The base repeating template. It is a builder, not saved schedule data;
   // server rows are written only by the explicit "Применить" action.
   const [pattern, setPattern] = usePersistentState<SchedulePattern>(
@@ -152,6 +162,8 @@ function SchedulePage() {
     createDefaultPattern(),
   );
   const [applyingPattern, setApplyingPattern] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [resettingMonth, setResettingMonth] = useState(false);
   // Regular masters see only their own schedule; superadmin must pick one
   // (they have no profile of their own — empty view means "not chosen",
   // not "everyone is off").
@@ -190,7 +202,7 @@ function SchedulePage() {
         ]);
         if (cancelled) return;
 
-        const built = buildScheduleState(scheduleResp.data);
+        const built = buildScheduleState(scheduleResp.data, slotMinutes);
         setSchedule(built.schedule);
         setActiveHours(built.activeHours);
         setAppointments(apptsResp.data || []);
@@ -275,23 +287,24 @@ function SchedulePage() {
         appointments,
         setError,
         selectedMasterId,
-        windowStart,
-        windowEnd,
+        hourToSlot(windowStart, slotMinutes),
+        hourToSlot(windowEnd, slotMinutes),
+        slotMinutes,
       );
       if (result) {
         setSchedule(result.newSchedule);
         setActiveHours(result.newActiveHours);
       }
     },
-    [schedule, activeHours, appointments, selectedMasterId, isSuperAdmin, windowStart, windowEnd],
+    [schedule, activeHours, appointments, selectedMasterId, isSuperAdmin, windowStart, windowEnd, slotMinutes],
   );
 
-  // Toggling an hour persists to the server AND drives the day state:
-  // turning any hour ON activates the whole day (it turns green),
-  // turning the last hour OFF deactivates the day.
+  // Toggling a slot persists to the server AND drives the day state:
+  // turning any slot ON activates the whole day (it turns green),
+  // turning the last slot OFF deactivates the day.
   const handleToggleHour = useCallback(
-    async (dateStr: string, hour: number) => {
-      const key = `${dateStr}-${hour}`;
+    async (dateStr: string, slot: number) => {
+      const key = `${dateStr}-${slot}`;
       const turningOn = !activeHours[key];
       if (isSuperAdmin && selectedMasterId === '') {
         setError('Выберите мастера, чтобы менять расписание');
@@ -305,40 +318,45 @@ function SchedulePage() {
           const resp = await adminApi.getWorkingHours(masterParam);
           const existing = resp.data.find((h: WorkingHour) => h.schedule_date === dateStr);
           if (existing) {
-            const current = parseHourRange(existing.start_time, existing.end_time);
-            const start = Math.min(current.start, hour);
-            const end = Math.max(current.end, hour + 1);
+            const current = parseHourRangeToSlots(existing.start_time, existing.end_time, slotMinutes);
+            const start = Math.min(current.startSlot, slot);
+            const end = Math.max(current.endSlot, slot + 1);
             await adminApi.updateWorkingHour(existing.id, {
               schedule_date: dateStr,
-              start_time: hourToTime(start),
-              end_time: hourToTime(end),
+              start_time: formatSlotTime(start, slotMinutes),
+              end_time: formatSlotTime(end, slotMinutes),
             });
             setSchedule((prev) => ({ ...prev, [dateStr]: { start, end } }));
           } else {
             await adminApi.createWorkingHour({
               master_id: masterParam,
               schedule_date: dateStr,
-              start_time: hourToTime(hour),
-              end_time: hourToTime(hour + 1),
+              start_time: formatSlotTime(slot, slotMinutes),
+              end_time: formatSlotTime(slot + 1, slotMinutes),
             });
-            setSchedule((prev) => ({ ...prev, [dateStr]: { start: hour, end: hour + 1 } }));
+            setSchedule((prev) => ({ ...prev, [dateStr]: { start: slot, end: slot + 1 } }));
           }
         } catch (err: unknown) {
           setActiveHours((prev) => ({ ...prev, [key]: false }));
-          setError(getApiErrorMessage(err, 'Не удалось включить час'));
+          setError(getApiErrorMessage(err, 'Не удалось включить гранулу'));
         }
         return;
       }
 
       // Turning OFF
-      // A granule with a live booking cannot be unchecked: cancel the
+      // A slot with a live booking cannot be unchecked: cancel the
       // booking first (mirrors the day toggle, which refuses days with rows).
-      // Span continuations count too: a 90-мин service blocks two granules.
+      // Span continuations count too: a 90-мин service blocks multiple slots.
       const [y, m, d] = dateStr.split('-').map(Number);
-      const liveHere = getBlockingLive(appointments, new Date(y, m - 1, d), hour);
+      const liveHere = getBlockingLive(
+        appointments,
+        new Date(y, m - 1, d),
+        slot,
+        slotMinutes,
+      );
       if (liveHere.length > 0) {
         const who = liveHere.map((a) => a.client_name || 'клиент').join(', ');
-        setError(`Нельзя снять час — в нём бронь (${who}). Сначала отмените запись.`);
+        setError(`Нельзя снять гранулу — в ней бронь (${who}). Сначала отмените запись.`);
         return;
       }
       const remaining = Object.keys(activeHours)
@@ -372,17 +390,17 @@ function SchedulePage() {
           const end = Math.max(...remaining) + 1;
           await adminApi.updateWorkingHour(existing.id, {
             schedule_date: dateStr,
-            start_time: hourToTime(start),
-            end_time: hourToTime(end),
+            start_time: formatSlotTime(start, slotMinutes),
+            end_time: formatSlotTime(end, slotMinutes),
           });
           setSchedule((prev) => ({ ...prev, [dateStr]: { start, end } }));
         }
       } catch (err: unknown) {
         setActiveHours((prev) => ({ ...prev, [key]: true }));
-        setError(getApiErrorMessage(err, 'Не удалось выключить час'));
+        setError(getApiErrorMessage(err, 'Не удалось выключить гранулу'));
       }
     },
-    [activeHours, appointments, selectedMasterId, isSuperAdmin],
+    [activeHours, appointments, selectedMasterId, isSuperAdmin, slotMinutes],
   );
 
   const handleOpenBooking = useCallback((date: Date, hour: number) => {
@@ -424,6 +442,7 @@ function SchedulePage() {
       adminApi,
       handleCloseBooking,
       selectedMasterId,
+      slotMinutes,
     );
     if (success) {
       await refreshMonthAppointments();
@@ -526,13 +545,16 @@ function SchedulePage() {
         cycle_work_days: pattern.workDays,
         cycle_off_days: pattern.offDays,
         cycle_anchor: pattern.anchor,
-        start_time: hourToTime(pattern.startHour),
-        end_time: hourToTime(pattern.endHour),
+        start_time: formatSlotTime(
+          hourToSlot(pattern.startHour, slotMinutes),
+          slotMinutes,
+        ),
+        end_time: formatSlotTime(hourToSlot(pattern.endHour, slotMinutes), slotMinutes),
         replace_off_days: true,
       });
 
       const scheduleResp = await adminApi.getWorkingHours(masterParam);
-      const built = buildScheduleState(scheduleResp.data);
+      const built = buildScheduleState(scheduleResp.data, slotMinutes);
       setWindowStart(data.window_start_hour);
       setWindowEnd(data.window_end_hour);
       setSchedule(built.schedule);
@@ -559,21 +581,59 @@ function SchedulePage() {
     selectedMasterId,
   ]);
 
+  // Wipe every working hour in the viewed month except days holding live
+  // appointments. Requires explicit confirmation.
+  const handleResetMonth = useCallback(async () => {
+    if (isSuperAdmin && selectedMasterId === '') {
+      setError('Выберите мастера, чтобы сбрасывать расписание');
+      return;
+    }
+    if (!confirmReset) {
+      setConfirmReset(true);
+      return;
+    }
+    const base = new Date(`${currentMonthISO}-01T00:00:00`);
+    const { from, to } = monthRangeISO(base);
+    const masterParam = selectedMasterId !== '' ? selectedMasterId : undefined;
+    setConfirmReset(false);
+    setResettingMonth(true);
+    setError('');
+    try {
+      const { data } = await adminApi.resetMonth({
+        ...(masterParam ? { master_id: masterParam } : {}),
+        range_start: from,
+        range_end: to,
+      });
+      const scheduleResp = await adminApi.getWorkingHours(masterParam);
+      const built = buildScheduleState(scheduleResp.data, slotMinutes);
+      setSchedule(built.schedule);
+      setActiveHours(built.activeHours);
+      const skipped =
+        data.skipped_booked > 0 ? ` Дней с записями сохранено: ${data.skipped_booked}.` : '';
+      toast.success(`График месяца сброшен: удалено ${data.removed} дн.${skipped}`);
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, 'Не удалось сбросить график месяца'));
+    } finally {
+      setResettingMonth(false);
+    }
+  }, [currentMonthISO, confirmReset, isSuperAdmin, selectedMasterId]);
+
   // ± on a selected working day. Expanding the range may grow the global
   // window; shrinking below a live booking is refused (the backend performs
-  // the same protection for bulk apply).
+  // the same protection for bulk apply). `start`/`end` are slot indices.
   const handleChangeDayHours = useCallback(
-    async (dateStr: string, start: number, end: number) => {
+    async (dateStr: string, startSlot: number, endSlot: number) => {
       if (isSuperAdmin && selectedMasterId === '') {
         setError('Выберите мастера, чтобы менять расписание');
         return;
       }
+      const maxSlot = Math.ceil((24 * 60) / slotMinutes);
       if (
-        !Number.isInteger(start) ||
-        !Number.isInteger(end) ||
-        start < 0 ||
-        end > 24 ||
-        start >= end
+        !Number.isInteger(startSlot) ||
+        !Number.isInteger(endSlot) ||
+        startSlot < 0 ||
+        endSlot > maxSlot ||
+        startSlot >= endSlot
       ) {
         setError('Начало рабочего дня должно быть раньше конца');
         return;
@@ -585,13 +645,18 @@ function SchedulePage() {
         (a) => a.status !== 'cancelled' && String(a.appointment_date).slice(0, 10) === dateStr,
       );
       if (live.length > 0) {
-        const starts = live.map((a) => new Date(a.appointment_date).getHours());
-        const ends = live.map(
-          (a) => new Date(a.appointment_date).getHours() + appointmentSpanHours(a),
+        const starts = live.map((a) =>
+          hourToSlot(new Date(a.appointment_date).getHours(), slotMinutes),
         );
+        const ends = live.map((a) => {
+          const h = new Date(a.appointment_date).getHours();
+          const min = new Date(a.appointment_date).getMinutes();
+          const startSlotAppt = hourToSlot(h, slotMinutes) + Math.round(min / slotMinutes);
+          return startSlotAppt + appointmentSpanSlots(a, slotMinutes);
+        });
         const earliest = Math.min(...starts);
         const latest = Math.max(...ends);
-        if (start > earliest || end < latest) {
+        if (startSlot > earliest || endSlot < latest) {
           setError(
             `Нельзя сократить день — в нём есть записи (${dayDate.toLocaleDateString('ru-RU')}). ` +
               'Сначала перенесите или отмените их.',
@@ -603,8 +668,16 @@ function SchedulePage() {
       const masterParam = selectedMasterId !== '' ? selectedMasterId : undefined;
       setError('');
       try {
-        const nextWindowStart = Math.min(windowStart, start);
-        const nextWindowEnd = Math.max(windowEnd, end);
+        // Work window is stored as whole hours on the backend; round the
+        // applied slot range out to full hours so new granules stay visible.
+        const nextWindowStart = Math.min(
+          windowStart,
+          Math.floor((startSlot * slotMinutes) / 60),
+        );
+        const nextWindowEnd = Math.max(
+          windowEnd,
+          Math.ceil((endSlot * slotMinutes) / 60),
+        );
         if (nextWindowStart !== windowStart || nextWindowEnd !== windowEnd) {
           const { data } = await adminApi.updateWorkWindow({
             ...(masterParam ? { master_id: masterParam } : {}),
@@ -620,32 +693,32 @@ function SchedulePage() {
         if (existing) {
           await adminApi.updateWorkingHour(existing.id, {
             schedule_date: dateStr,
-            start_time: hourToTime(start),
-            end_time: hourToTime(end),
+            start_time: formatSlotTime(startSlot, slotMinutes),
+            end_time: formatSlotTime(endSlot, slotMinutes),
           });
         } else {
           await adminApi.createWorkingHour({
             master_id: masterParam,
             schedule_date: dateStr,
-            start_time: hourToTime(start),
-            end_time: hourToTime(end),
+            start_time: formatSlotTime(startSlot, slotMinutes),
+            end_time: formatSlotTime(endSlot, slotMinutes),
           });
         }
 
-        setSchedule((prev) => ({ ...prev, [dateStr]: { start, end } }));
+        setSchedule((prev) => ({ ...prev, [dateStr]: { start: startSlot, end: endSlot } }));
         setActiveHours((prev) => {
           const next = { ...prev };
           for (const k of Object.keys(next)) {
             if (k.startsWith(`${dateStr}-`)) delete next[k];
           }
-          for (let h = start; h < end; h++) next[`${dateStr}-${h}`] = true;
+          for (let s = startSlot; s < endSlot; s++) next[`${dateStr}-${s}`] = true;
           return next;
         });
       } catch (err: unknown) {
-        setError(getApiErrorMessage(err, 'Не удалось изменить часы дня'));
+        setError(getApiErrorMessage(err, 'Не удалось изменить гранулы дня'));
       }
     },
-    [appointments, isSuperAdmin, selectedMasterId, windowEnd, windowStart],
+    [appointments, isSuperAdmin, selectedMasterId, windowEnd, windowStart, slotMinutes],
   );
 
   if (loading)
@@ -714,6 +787,66 @@ function SchedulePage() {
             onPreset={handlePatternPreset}
             onApply={handleApplyPattern}
           />
+          {/* Granule size switch + month reset */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              flexWrap: 'wrap',
+              marginBottom: 16,
+              padding: 14,
+              background: '#f9f9f9',
+              borderRadius: 10,
+              justifyContent: 'center',
+            }}
+          >
+            <span style={{ fontSize: 13, color: '#666', fontWeight: 600 }}>
+              Размер гранулы:
+            </span>
+            <button
+              type="button"
+              className={`btn ${slotMinutes === 60 ? 'btn-primary' : 'btn-ghost'}`}
+              onClick={() => setSlotMinutes(60)}
+              disabled={resettingMonth}
+            >
+              Час
+            </button>
+            <button
+              type="button"
+              className={`btn ${slotMinutes === 30 ? 'btn-primary' : 'btn-ghost'}`}
+              onClick={() => setSlotMinutes(30)}
+              disabled={resettingMonth}
+            >
+              Полчаса
+            </button>
+            <span style={{ fontSize: 11, color: '#999' }}>
+              {slotMinutes === 30
+                ? 'Запись на каждые 30 мин'
+                : 'Запись на каждый час'}
+            </span>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={handleResetMonth}
+              disabled={resettingMonth || confirmReset === false && false}
+              style={{ marginLeft: 'auto', padding: '6px 14px', fontSize: 13 }}
+            >
+              {resettingMonth ? 'Сбрасываем…' : 'Сбросить месяц'}
+            </button>
+            {confirmReset && (
+              <span
+                style={{
+                  fontSize: 12,
+                  color: '#c62828',
+                  marginLeft: 8,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                ⚠️ Удалит все незанятые дни месяца. Нажмите ещё раз для подтверждения.
+              </span>
+            )}
+          </div>
           {/* Legend */}
           <div
             style={{
@@ -787,6 +920,7 @@ function SchedulePage() {
             onSelectDate={handleSelectDate}
             onToggleDay={handleToggleDay}
             selectablePast
+            slotMinutes={slotMinutes}
             previewWorkDates={patternPreview.workDates}
             previewOffDates={patternPreview.offDates}
           />
@@ -813,11 +947,12 @@ function SchedulePage() {
               onOpenBooking={handleOpenBooking}
               onCancelAppointment={handleCancelSlotAppointment}
               onConfirmAppointment={handleConfirmSlotAppointment}
-              windowStart={windowStart}
-              windowEnd={windowEnd}
-              dayStart={schedule[formatDate(selectedDate)]?.start}
-              dayEnd={schedule[formatDate(selectedDate)]?.end}
-              onChangeDayHours={handleChangeDayHours}
+              slotMinutes={slotMinutes}
+              windowStartSlot={hourToSlot(windowStart, slotMinutes)}
+              windowEndSlot={hourToSlot(windowEnd, slotMinutes)}
+              dayStartSlot={schedule[formatDate(selectedDate)]?.start}
+              dayEndSlot={schedule[formatDate(selectedDate)]?.end}
+              onChangeDaySlots={handleChangeDayHours}
             />
           )}
 

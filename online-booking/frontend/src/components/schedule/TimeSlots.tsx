@@ -4,12 +4,12 @@ import {
   getAppointmentsForSlot,
   getCoveringLive,
   getSlotStatus,
-  appointmentSpanHours,
-  formatHour,
+  appointmentSpanSlots,
+  formatSlotTime,
   isSlotPast,
+  isPast,
   STATUS_CONFIG,
   formatDate,
-  isPast,
 } from './helpers';
 import './ScheduleComponents.css';
 
@@ -17,19 +17,26 @@ interface TimeSlotsProps {
   selectedDate: Date | null;
   appointments: Appointment[];
   activeHours: Record<string, boolean>;
-  onToggleHour: (dateStr: string, hour: number) => void;
-  onOpenBooking: (date: Date, hour: number) => void;
+  onToggleHour: (dateStr: string, slot: number) => void;
+  onOpenBooking: (date: Date, slot: number) => void;
   onCancelAppointment: (id: number) => Promise<void>;
   onConfirmAppointment?: (id: number) => Promise<void>;
-  /** Applied work window: granules render for [windowStart, windowEnd). */
-  windowStart?: number;
-  windowEnd?: number;
-  /** Stored range of the selected working day. It can be wider than the
-   * applied window for preserved booked/past days, so it is unioned in. */
-  dayStart?: number;
-  dayEnd?: number;
-  onChangeDayHours?: (dateStr: string, start: number, end: number) => Promise<void> | void;
+  /** Slot size in minutes (30 or 60). */
+  slotMinutes: 30 | 60;
+  /** Applied work window: granules render for [windowStartSlot, windowEndSlot). */
+  windowStartSlot?: number;
+  windowEndSlot?: number;
+  /** Stored range of the selected working day (in slots). */
+  dayStartSlot?: number;
+  dayEndSlot?: number;
+  onChangeDaySlots?: (
+    dateStr: string,
+    startSlot: number,
+    endSlot: number,
+  ) => Promise<void> | void;
 }
+
+const SLOTS_PER_DAY = (slotMinutes: number) => Math.ceil((24 * 60) / slotMinutes);
 
 export function TimeSlots({
   selectedDate,
@@ -39,34 +46,38 @@ export function TimeSlots({
   onOpenBooking,
   onCancelAppointment,
   onConfirmAppointment,
-  windowStart = 8,
-  windowEnd = 22,
-  dayStart,
-  dayEnd,
-  onChangeDayHours,
+  slotMinutes = 60,
+  windowStartSlot,
+  windowEndSlot,
+  dayStartSlot,
+  dayEndSlot,
+  onChangeDaySlots,
 }: TimeSlotsProps) {
   const [adjusting, setAdjusting] = useState(false);
   if (!selectedDate) return null;
 
   const dateStr = formatDate(selectedDate);
+  const maxSlot = SLOTS_PER_DAY(slotMinutes);
   // The applied window defines the default granule count, but a preserved day
   // may still hold bookings outside it. Union the selected day's range so
   // those granules (and their live bookings) never disappear.
   const daySchedule = {
-    start: Math.min(windowStart, dayStart ?? windowStart),
-    end: Math.max(windowEnd, dayEnd ?? windowEnd),
+    start: Math.min(windowStartSlot ?? 0, dayStartSlot ?? 0),
+    end: Math.max(windowEndSlot ?? maxSlot, dayEndSlot ?? maxSlot),
   };
+  // The day's own persisted range (when set) drives the ± stepper controls.
+  const dayRange =
+    dayStartSlot != null && dayEndSlot != null && dayEndSlot > dayStartSlot
+      ? { start: dayStartSlot, end: dayEndSlot }
+      : null;
   const isDayPast = isPast(selectedDate);
   const allActive = checkAllActive(dateStr, daySchedule, activeHours);
-  const dayRange =
-    dayStart != null && dayEnd != null && dayEnd > dayStart
-      ? { start: dayStart, end: dayEnd }
-      : null;
-  const applyDayHours = async (start: number, end: number) => {
-    if (!onChangeDayHours) return;
+
+  const applyDaySlots = async (start: number, end: number) => {
+    if (!onChangeDaySlots) return;
     setAdjusting(true);
     try {
-      await onChangeDayHours(dateStr, start, end);
+      await onChangeDaySlots(dateStr, start, end);
     } finally {
       setAdjusting(false);
     }
@@ -90,34 +101,42 @@ export function TimeSlots({
             type="checkbox"
             checked={allActive}
             onChange={(e) =>
-              toggleAllHours(dateStr, daySchedule, e.target.checked, activeHours, onToggleHour)
+              toggleAllSlots(
+                dateStr,
+                daySchedule,
+                e.target.checked,
+                activeHours,
+                onToggleHour,
+              )
             }
           />
-          <span>Выбрать все часы</span>
+          <span>Выбрать все гранулы</span>
         </label>
 
-        {dayRange && !isDayPast && onChangeDayHours && (
+        {dayRange && !isDayPast && onChangeDaySlots && (
           <div className="time-slots-day-hours">
             <span className="time-slots-day-hours-label">Гранулы дня</span>
             <div className="day-hours-group">
               <button
                 type="button"
                 className="day-hours-btn"
-                title="Добавить час раньше"
+                title="Добавить гранулу раньше"
                 aria-label="Добавить гранулу раньше"
                 disabled={adjusting || dayRange.start <= 0}
-                onClick={() => applyDayHours(dayRange.start - 1, dayRange.end)}
+                onClick={() => applyDaySlots(dayRange.start - 1, dayRange.end)}
               >
                 −
               </button>
-              <span className="day-hours-value">{formatHour(dayRange.start)}</span>
+              <span className="day-hours-value">
+                {formatSlotTime(dayRange.start, slotMinutes)}
+              </span>
               <button
                 type="button"
                 className="day-hours-btn"
-                title="Убрать первый час"
+                title="Убрать первую гранулу"
                 aria-label="Убрать первую гранулу"
                 disabled={adjusting || dayRange.start + 1 >= dayRange.end}
-                onClick={() => applyDayHours(dayRange.start + 1, dayRange.end)}
+                onClick={() => applyDaySlots(dayRange.start + 1, dayRange.end)}
               >
                 +
               </button>
@@ -127,36 +146,42 @@ export function TimeSlots({
               <button
                 type="button"
                 className="day-hours-btn"
-                title="Убрать последний час"
+                title="Убрать последнюю гранулу"
                 aria-label="Убрать последнюю гранулу"
                 disabled={adjusting || dayRange.end - 1 <= dayRange.start}
-                onClick={() => applyDayHours(dayRange.start, dayRange.end - 1)}
+                onClick={() => applyDaySlots(dayRange.start, dayRange.end - 1)}
               >
                 −
               </button>
-              <span className="day-hours-value">{formatHour(dayRange.end)}</span>
+              <span className="day-hours-value">
+                {formatSlotTime(dayRange.end, slotMinutes)}
+              </span>
               <button
                 type="button"
                 className="day-hours-btn"
-                title="Добавить час позже"
+                title="Добавить гранулу позже"
                 aria-label="Добавить гранулу позже"
-                disabled={adjusting || dayRange.end >= 24}
-                onClick={() => applyDayHours(dayRange.start, dayRange.end + 1)}
+                disabled={adjusting || dayRange.end >= maxSlot}
+                onClick={() => applyDaySlots(dayRange.start, dayRange.end + 1)}
               >
                 +
               </button>
             </div>
+            <span className="day-hours-slot-size">
+              {slotMinutes === 30 ? '· полчаса' : '· час'}
+            </span>
           </div>
         )}
       </div>
 
       <div className="time-slots-list">
-        {generateHourSlots(
+        {generateSlots(
           selectedDate,
           daySchedule,
           appointments,
           activeHours,
           isDayPast,
+          slotMinutes,
           onToggleHour,
           onOpenBooking,
           onCancelAppointment,
@@ -172,74 +197,72 @@ function checkAllActive(
   hours: { start: number; end: number },
   activeHours: Record<string, boolean>,
 ): boolean {
-  for (let h = hours.start; h < hours.end; h++) {
-    if (!activeHours[`${dateStr}-${h}`]) return false;
+  for (let s = hours.start; s < hours.end; s++) {
+    if (!activeHours[`${dateStr}-${s}`]) return false;
   }
   return hours.end > hours.start;
 }
 
-function toggleAllHours(
+function toggleAllSlots(
   dateStr: string,
   hours: { start: number; end: number },
   checked: boolean,
   activeHours: Record<string, boolean>,
-  onToggle: (dateStr: string, hour: number) => void,
+  onToggle: (dateStr: string, slot: number) => void,
 ) {
-  for (let h = hours.start; h < hours.end; h++) {
-    if (checked !== !!activeHours[`${dateStr}-${h}`]) {
-      onToggle(dateStr, h);
+  for (let s = hours.start; s < hours.end; s++) {
+    if (checked !== !!activeHours[`${dateStr}-${s}`]) {
+      onToggle(dateStr, s);
     }
   }
 }
 
-function generateHourSlots(
+function generateSlots(
   date: Date,
   hours: { start: number; end: number },
   appointments: Appointment[],
   activeHours: Record<string, boolean>,
   _dayPast: boolean,
-  onToggle: (dateStr: string, hour: number) => void,
-  onOpenBooking: (date: Date, hour: number) => void,
+  slotMinutes: number,
+  onToggle: (dateStr: string, slot: number) => void,
+  onOpenBooking: (date: Date, slot: number) => void,
   onCancelAppointment: (id: number) => Promise<void>,
   onConfirmAppointment?: (id: number) => Promise<void>,
 ): React.ReactNode[] {
   const slots: React.ReactNode[] = [];
   const dateStr = formatDate(date);
+  const maxSlot = SLOTS_PER_DAY(slotMinutes);
 
-  for (let h = hours.start; h < hours.end; h++) {
-    const slotsForHour = getAppointmentsForSlot(appointments, date, h);
-    // One granule = one live booking. Cancelled history stays visible
-    // below, but the granule color and buttons follow live bookings only:
-    // after a cancel the granule is green and bookable again.
+  for (let s = hours.start; s < Math.min(hours.end, maxSlot); s++) {
+    const slotsForHour = getAppointmentsForSlot(appointments, date, s, slotMinutes);
     const live = slotsForHour.filter((s) => s.status !== 'cancelled');
-    // Span continuation: a long service (e.g. 90 мин) occupies the next
-    // granules too — they render busy and cannot be booked separately.
-    const coveredBy = live.length === 0 ? getCoveringLive(appointments, date, h) : null;
+    const coveredBy = live.length === 0 ? getCoveringLive(appointments, date, s, slotMinutes) : null;
     const busy = coveredBy ?? null;
     const status = live.length > 0 ? getSlotStatus(live) : (busy?.status ?? 'free');
-    const past = isSlotPast(date, h);
-    const hourActive = !!activeHours[`${dateStr}-${h}`];
+    const past = isSlotPast(date, s, slotMinutes);
+    const slotActive = !!activeHours[`${dateStr}-${s}`];
     const latestLive = live.length > 0 ? live.reduce((a, b) => (a.id > b.id ? a : b)) : null;
     const spanNote =
-      latestLive !== null && appointmentSpanHours(latestLive) > 1
-        ? ` · ${appointmentSpanHours(latestLive)} гр.`
+      latestLive !== null && appointmentSpanSlots(latestLive, slotMinutes) > 1
+        ? ` · ${appointmentSpanSlots(latestLive, slotMinutes)} гр.`
         : '';
 
     slots.push(
       <div
-        key={h}
-        className={`time-slot ${past ? 'slot-past' : hourActive ? 'slot-active' : 'slot-inactive'} ${status !== 'free' ? `slot-${status}` : ''}${coveredBy ? ' slot-covered' : ''}`}
+        key={s}
+        data-testid="time-slot"
+        className={`time-slot ${past ? 'slot-past' : slotActive ? 'slot-active' : 'slot-inactive'} ${status !== 'free' ? `slot-${status}` : ''}${coveredBy ? ' slot-covered' : ''}`}
       >
         <label className="time-slot-checkbox">
           <input
             type="checkbox"
-            checked={hourActive}
-            onChange={() => onToggle(dateStr, h)}
+            checked={slotActive}
+            onChange={() => onToggle(dateStr, s)}
             disabled={past}
           />
         </label>
 
-        <span className="time-slot-time">{formatHour(h)}</span>
+        <span className="time-slot-time">{formatSlotTime(s, slotMinutes)}</span>
 
         {slotsForHour.length > 0 ? (
           <div className="time-slot-appointments">
@@ -252,8 +275,8 @@ function generateHourSlots(
                 <span className="appt-client">{a.client_name || 'Клиент'}</span>
                 <span className="appt-service">
                   {a.service_name}
-                  {a.status !== 'cancelled' && appointmentSpanHours(a) > 1
-                    ? ` · ${appointmentSpanHours(a)} гр.`
+                  {a.status !== 'cancelled' && appointmentSpanSlots(a, slotMinutes) > 1
+                    ? ` · ${appointmentSpanSlots(a, slotMinutes)} гр.`
                     : ''}
                 </span>
                 <span className={`appt-status status-${a.status}`}>
@@ -280,14 +303,14 @@ function generateHourSlots(
           </div>
         ) : (
           <span className="time-slot-status">
-            {past ? 'Прошёл' : hourActive ? 'Свободно' : 'Неактивен'}
+            {past ? 'Прошёл' : slotActive ? 'Свободно' : 'Неактивен'}
           </span>
         )}
 
-        {!past && hourActive && latestLive === null && coveredBy === null && (
+        {!past && slotActive && latestLive === null && coveredBy === null && (
           <button
             className="btn btn-sm btn-book"
-            onClick={() => onOpenBooking(date, h)}
+            onClick={() => onOpenBooking(date, s)}
             title="Записать клиента"
           >
             + Записать

@@ -135,6 +135,25 @@ class ScheduleApplyResponse(BaseModel):
     window_end_hour: int
 
 
+class ScheduleResetRequest(BaseModel):
+    """Clear every working hour in a date range, except days holding live
+    appointments (those are protected and skipped)."""
+
+    master_id: Optional[int] = None  # MasterProfile.id, superadmin only
+    range_start: date
+    range_end: date
+
+
+class ScheduleResetResponse(BaseModel):
+    master_id: int
+    range_start: date
+    range_end: date
+    effective_start: Optional[date] = None
+    removed: int
+    skipped_booked: int
+    skipped_dates: List[str]
+
+
 @router.post("/working-hours/apply", response_model=ScheduleApplyResponse)
 async def apply_schedule_cycle(
     data: ScheduleApplyRequest,
@@ -286,6 +305,84 @@ async def apply_schedule_cycle(
         skipped_dates=skipped_dates,
         window_start_hour=profile.work_start_hour,
         window_end_hour=profile.work_end_hour,
+    )
+
+
+@router.delete("/working-hours/range", response_model=ScheduleResetResponse)
+async def reset_working_hours_range(
+    data: ScheduleResetRequest,
+    master: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete every working hour in ``[range_start, range_end]`` except days
+    holding live (non-cancelled) appointments — those are skipped.
+
+    Use this to wipe a month's schedule before re-applying a template.
+    """
+    if data.range_start > data.range_end:
+        raise HTTPException(status_code=400, detail="Начало периода позже конца")
+    if (data.range_end - data.range_start).days > 366:
+        raise HTTPException(status_code=400, detail="Период не может быть длиннее года")
+
+    profile = await _resolve_window_profile(db, master, data.master_id)
+    today = date.today()
+    effective_start = max(data.range_start, today)
+    effective_end = data.range_end
+
+    if effective_start > effective_end:
+        return ScheduleResetResponse(
+            master_id=profile.id,
+            range_start=data.range_start,
+            range_end=data.range_end,
+            effective_start=None,
+            removed=0,
+            skipped_booked=0,
+            skipped_dates=[],
+        )
+
+    rows = (await db.execute(
+        select(WorkingHour).where(
+            WorkingHour.master_id == profile.id,
+            WorkingHour.schedule_date >= effective_start,
+            WorkingHour.schedule_date <= effective_end,
+        )
+    )).scalars().all()
+
+    busy_datetimes = (await db.execute(
+        select(Appointment.appointment_date).where(
+            Appointment.master_id == profile.id,
+            Appointment.appointment_date >= datetime.combine(effective_start, time.min),
+            Appointment.appointment_date < datetime.combine(effective_end + timedelta(days=1), time.min),
+            Appointment.status != "cancelled",
+        )
+    )).scalars().all()
+    busy_days = {dt.date() for dt in busy_datetimes if dt is not None}
+
+    removed = skipped_booked = 0
+    skipped_dates: List[str] = []
+    for row in rows:
+        if row.schedule_date in busy_days:
+            skipped_booked += 1
+            skipped_dates.append(row.schedule_date.isoformat())
+        else:
+            await db.delete(row)
+            removed += 1
+
+    await log_action(
+        db, master.id, "reset", "working_hour", profile.id,
+        f"{effective_start}..{effective_end}: удалено {removed}, пропущено (записи) {skipped_booked}",
+        level="warning",
+    )
+    await db.commit()
+
+    return ScheduleResetResponse(
+        master_id=profile.id,
+        range_start=data.range_start,
+        range_end=data.range_end,
+        effective_start=effective_start,
+        removed=removed,
+        skipped_booked=skipped_booked,
+        skipped_dates=skipped_dates,
     )
 
 

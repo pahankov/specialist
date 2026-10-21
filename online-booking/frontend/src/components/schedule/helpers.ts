@@ -21,12 +21,26 @@ export function formatHour(h: number): string {
   return String(h).padStart(2, '0') + ':00';
 }
 
+/** Format a granule slot (index where 1 slot = slotMinutes minutes) as "HH:MM". */
+export function formatSlotTime(slot: number, slotMinutes: number): string {
+  const totalMinutes = slot * slotMinutes;
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
 /** Backend stores SQL TIME (max 23:59), so 24:00 is sent as 23:59. */
 export function hourToTime(hour: number): string {
   return hour >= 24 ? '23:59' : formatHour(hour);
 }
 
-/** Parse a stored working-day range, rounding the end up to a full granule. */
+/** Convert whole-hour time to a slot index (slotMinutes=60 → slot == hour). */
+export function hourToSlot(hour: number, slotMinutes: number): number {
+  return Math.round((hour * 60) / slotMinutes);
+}
+
+/** Parse a stored working-day range, rounding the end up to a full granule,
+ * expressed in whole hours (backwards compatible). */
 export function parseHourRange(startTime: string, endTime: string): DaySchedule {
   const [startHour] = startTime.split(':').map(Number);
   const [endHour, endMinute = 0, endSecond = 0] = endTime.split(':').map(Number);
@@ -34,6 +48,27 @@ export function parseHourRange(startTime: string, endTime: string): DaySchedule 
     start: startHour,
     end: endHour + (endMinute > 0 || endSecond > 0 ? 1 : 0),
   };
+}
+
+/** Parse a stored working-day range into slot indices. */
+export function parseHourRangeToSlots(
+  startTime: string,
+  endTime: string,
+  slotMinutes: number,
+): { startSlot: number; endSlot: number } {
+  const [startHour, startMinute = 0] = startTime.split(':').map(Number);
+  const [endHour, endMinute = 0, endSecond = 0] = endTime.split(':').map(Number);
+  const startMinutes = startHour * 60 + startMinute;
+  const endMinutes = endHour * 60 + endMinute + (endSecond > 0 ? 1 : 0);
+  return {
+    startSlot: Math.round(startMinutes / slotMinutes),
+    endSlot: Math.round(endMinutes / slotMinutes),
+  };
+}
+
+/** Total minutes of day for a slot index. */
+export function slotToMinutes(slot: number, slotMinutes: number): number {
+  return slot * slotMinutes;
 }
 
 export function getMonthDays(date: Date): { date: Date; isCurrentMonth: boolean }[] {
@@ -64,10 +99,12 @@ export function getHoursForDay(
 export function getAppointmentsForSlot(
   appointments: Appointment[],
   date: Date,
-  hour: number,
+  slot: number,
+  slotMinutes: number = 60,
 ): Appointment[] {
   // Compare via Date parts: backend strings may be naive or carry +03:00/Z,
   // string-splitting breaks across those shapes.
+  const startMinute = slot * slotMinutes;
   return appointments.filter((a) => {
     const d = new Date(a.appointment_date);
     if (Number.isNaN(d.getTime())) return false;
@@ -75,7 +112,7 @@ export function getAppointmentsForSlot(
       d.getFullYear() === date.getFullYear() &&
       d.getMonth() === date.getMonth() &&
       d.getDate() === date.getDate() &&
-      d.getHours() === hour
+      d.getHours() * 60 + d.getMinutes() === startMinute
     );
   });
 }
@@ -89,15 +126,23 @@ export function getSlotStatus(slots: Appointment[]): string {
   return 'pending';
 }
 
-/** How many hourly granules a booking occupies (90 мин → 2, 30 мин → 1). */
-export function appointmentSpanHours(a: Pick<Appointment, 'service_duration'>): number {
+/** How many granules a booking occupies (slotMinutes=30: 90 мин → 3, 30 мин → 1). */
+export function appointmentSpanSlots(
+  a: Pick<Appointment, 'service_duration'>,
+  slotMinutes: number = 60,
+): number {
   const dur = Number(a.service_duration);
   if (!Number.isFinite(dur) || dur <= 0) return 1;
-  return Math.max(1, Math.ceil(dur / 60));
+  return Math.max(1, Math.ceil(dur / slotMinutes));
 }
 
-/** Whole-hour start of a booking on the given day (null when unparsable). */
-function startHourOnDay(a: Appointment, date: Date): number | null {
+/** Backwards-compatible alias: granules are whole hours by default. */
+export function appointmentSpanHours(a: Pick<Appointment, 'service_duration'>): number {
+  return appointmentSpanSlots(a, 60);
+}
+
+/** Start slot of a booking on the given day (null when unparsable). */
+function startSlotOnDay(a: Appointment, date: Date, slotMinutes: number): number | null {
   const d = new Date(a.appointment_date);
   if (Number.isNaN(d.getTime())) return null;
   if (
@@ -106,31 +151,38 @@ function startHourOnDay(a: Appointment, date: Date): number | null {
     d.getDate() !== date.getDate()
   )
     return null;
-  return d.getHours();
+  return Math.round((d.getHours() * 60 + d.getMinutes()) / slotMinutes);
 }
 
-/** Live booking that covers `hour` via an earlier start (span continuation).
+/** Live booking that covers `slot` via an earlier start (span continuation).
  * Same-day part only (capped at 24:00); cancelled bookings never block. */
 export function getCoveringLive(
   appointments: Appointment[],
   date: Date,
-  hour: number,
+  slot: number,
+  slotMinutes: number = 60,
 ): Appointment | null {
+  const lastSlot = Math.ceil((24 * 60) / slotMinutes);
   for (const a of appointments) {
     if (a.status === 'cancelled') continue;
-    const start = startHourOnDay(a, date);
-    if (start === null || start >= hour) continue;
-    if (hour < Math.min(24, start + appointmentSpanHours(a))) return a;
+    const start = startSlotOnDay(a, date, slotMinutes);
+    if (start === null || start >= slot) continue;
+    if (slot < Math.min(lastSlot, start + appointmentSpanSlots(a, slotMinutes))) return a;
   }
   return null;
 }
 
-/** All live bookings blocking `hour`: starters + span continuations. */
-export function getBlockingLive(appointments: Appointment[], date: Date, hour: number) {
-  const starters = getAppointmentsForSlot(appointments, date, hour).filter(
+/** All live bookings blocking `slot`: starters + span continuations. */
+export function getBlockingLive(
+  appointments: Appointment[],
+  date: Date,
+  slot: number,
+  slotMinutes: number = 60,
+) {
+  const starters = getAppointmentsForSlot(appointments, date, slot, slotMinutes).filter(
     (s) => s.status !== 'cancelled',
   );
-  const covering = getCoveringLive(appointments, date, hour);
+  const covering = getCoveringLive(appointments, date, slot, slotMinutes);
   const out = [...starters];
   if (covering && !out.some((s) => s.id === covering.id)) out.push(covering);
   return out;
@@ -152,9 +204,10 @@ export function isToday(date: Date): boolean {
   );
 }
 
-export function isSlotPast(date: Date, hour: number): boolean {
+export function isSlotPast(date: Date, slot: number, slotMinutes: number = 60): boolean {
   const slotDate = new Date(date);
-  slotDate.setHours(hour, 0, 0, 0);
+  const totalMinutes = slot * slotMinutes;
+  slotDate.setHours(Math.floor(totalMinutes / 60), totalMinutes % 60, 0, 0);
   return slotDate < new Date();
 }
 

@@ -1,5 +1,8 @@
 import type { Appointment, Client, DaySchedule, BookingFormState } from '../../api/types';
-import { formatDate, hourToTime } from './helpers';
+import {
+  formatDate,
+  formatSlotTime,
+} from './helpers';
 import { adminApi } from '../../api/client';
 
 export async function toggleDayWork(
@@ -9,8 +12,9 @@ export async function toggleDayWork(
   appointments: Appointment[],
   setError: (msg: string) => void,
   masterId?: number | '',
-  dayStart = 8,
-  dayEnd = 22,
+  startSlot = 0,
+  endSlot = 0,
+  slotMinutes: 30 | 60 = 60,
 ): Promise<{
   newSchedule: Record<string, DaySchedule>;
   newActiveHours: Record<string, boolean>;
@@ -41,14 +45,14 @@ export async function toggleDayWork(
       if (k.startsWith(`${dateStr}-`)) delete newActiveHours[k];
     }
   } else {
-    newSchedule[dateStr] = { start: dayStart, end: dayEnd };
-    for (let h = dayStart; h < dayEnd; h++) {
-      newActiveHours[`${dateStr}-${h}`] = true;
+    newSchedule[dateStr] = { start: startSlot, end: endSlot };
+    for (let s = startSlot; s < endSlot; s++) {
+      newActiveHours[`${dateStr}-${s}`] = true;
     }
   }
 
   // Sync with backend (scoped to the selected master for superadmins).
-  // hourToTime keeps 24:00 representable as SQL TIME 23:59.
+  // formatSlotTime renders "HH:MM" (e.g. "09:30") which SQL TIME accepts.
   try {
     if (isActive) {
       const resp = await adminApi.getWorkingHours(masterParam);
@@ -60,15 +64,15 @@ export async function toggleDayWork(
       if (existing) {
         await adminApi.updateWorkingHour(existing.id, {
           schedule_date: dateStr,
-          start_time: hourToTime(dayStart),
-          end_time: hourToTime(dayEnd),
+          start_time: formatSlotTime(startSlot, slotMinutes),
+          end_time: formatSlotTime(endSlot, slotMinutes),
         });
       } else {
         await adminApi.createWorkingHour({
           master_id: masterParam,
           schedule_date: dateStr,
-          start_time: hourToTime(dayStart),
-          end_time: hourToTime(dayEnd),
+          start_time: formatSlotTime(startSlot, slotMinutes),
+          end_time: formatSlotTime(endSlot, slotMinutes),
         });
       }
     }
@@ -81,22 +85,22 @@ export async function toggleDayWork(
 
 export function toggleHour(
   dateStr: string,
-  hour: number,
+  slot: number,
   setActiveHours: (fn: (prev: Record<string, boolean>) => Record<string, boolean>) => void,
 ) {
-  setActiveHours((prev) => ({ ...prev, [`${dateStr}-${hour}`]: !prev[`${dateStr}-${hour}`] }));
+  setActiveHours((prev) => ({ ...prev, [`${dateStr}-${slot}`]: !prev[`${dateStr}-${slot}`] }));
 }
 
 export function openBookingForm(
   date: Date,
-  hour: number,
+  slot: number,
   setBookingForm: (fn: (prev: BookingFormState) => BookingFormState) => void,
 ) {
   setBookingForm((prev) => ({
     ...prev,
     open: true,
     date,
-    hour,
+    hour: slot,
     clientId: null,
     serviceId: null,
     bundleId: null,
@@ -129,6 +133,7 @@ export async function handleBookAppointment(
   api: typeof adminApi,
   onClose: () => void,
   masterId?: number | '',
+  slotMinutes: 30 | 60 = 60,
 ): Promise<boolean> {
   if (
     !bookingForm.date ||
@@ -144,8 +149,8 @@ export async function handleBookAppointment(
     const y = bookingForm.date.getFullYear();
     const m = String(bookingForm.date.getMonth() + 1).padStart(2, '0');
     const d = String(bookingForm.date.getDate()).padStart(2, '0');
-    const hourStr = String(bookingForm.hour).padStart(2, '0');
-    const appointmentDate = `${y}-${m}-${d}T${hourStr}:00:00`;
+    const hhmm = formatSlotTime(bookingForm.hour, slotMinutes);
+    const appointmentDate = `${y}-${m}-${d}T${hhmm}:00`;
     await api.bookAppointment({
       master_id: masterId !== '' && masterId != null ? masterId : undefined,
       client_id: bookingForm.clientId,

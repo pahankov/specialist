@@ -28,6 +28,8 @@ interface CalendarProps {
   previewWorkDates?: Set<string>;
   /** Template preview: active days that will become rest days. */
   previewOffDates?: Set<string>;
+  /** Granule size in minutes — shown as a half-filled dot on working days. */
+  slotMinutes?: 30 | 60;
 }
 
 const LONG_PRESS_MS = 500;
@@ -43,6 +45,7 @@ export function Calendar({
   onToggleDay,
   interactive = true,
   selectablePast = false,
+  slotMinutes = 60,
   previewWorkDates,
   previewOffDates,
 }: CalendarProps) {
@@ -150,7 +153,7 @@ export function Calendar({
           const holdIds = new Set<number>();
           if (active && day.isCurrentMonth && hours) {
             for (let h = hours.start; h < hours.end; h++) {
-              const slots = getAppointmentsForSlot(appointments, day.date, h);
+              const slots = getAppointmentsForSlot(appointments, day.date, h, slotMinutes);
               for (const s of slots) {
                 if (s.status === 'cancelled') continue;
                 if (s.status === 'pending') holdIds.add(s.id);
@@ -190,7 +193,7 @@ export function Calendar({
             <div
               key={i}
               data-date={day.date.toISOString()}
-              className={`calendar-day ${day.isCurrentMonth ? '' : 'other-month'} ${active ? 'active' : 'inactive'} ${today ? 'today' : ''} ${selected ? 'selected' : ''} ${past ? 'past' : ''} ${liveIds.size > 0 && !past ? 'has-bookings' : ''} ${holdsOnly && !past ? 'has-holds' : ''} ${previewWork ? 'preview-work' : ''} ${previewOff ? 'preview-off' : ''}`}
+              className={`calendar-day ${day.isCurrentMonth ? '' : 'other-month'} ${active ? 'active' : 'inactive'} ${today ? 'today' : ''} ${selected ? 'selected' : ''} ${past ? 'past' : ''} ${liveIds.size > 0 && !past ? 'has-bookings' : ''} ${holdsOnly && !past ? 'has-holds' : ''} ${previewWork ? 'preview-work' : ''} ${previewOff ? 'preview-off' : ''} ${slotMinutes === 30 && active ? 'slot30' : ''}`}
               title={
                 previewWork
                   ? 'По графику будет рабочим после применения'
