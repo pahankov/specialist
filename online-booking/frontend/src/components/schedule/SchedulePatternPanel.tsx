@@ -172,40 +172,38 @@ export function SchedulePatternPanel({
                 onChange={(event) => onChange({ anchor: event.target.value })}
               />
             </div>
-          </div>
-
-          {/* Granule size toggle, right next to the cycle controls. */}
-          <div className="pattern-slot-toggle">
-            <span className="pattern-slot-toggle-label">Гранулы:</span>
-            <div
-              className="pattern-slot-toggle-group"
-              role="group"
-              aria-label="Размер гранулы расписания"
-            >
-              <button
-                type="button"
-                className={`pattern-slot-btn ${slotMinutes === 60 ? 'active' : ''}`}
-                onClick={() => onSlotMinutesChange(60)}
-                aria-pressed={slotMinutes === 60}
+            <div className="pattern-field pattern-field-unified pattern-slot-field">
+              <span className="pattern-field-label">Режим</span>
+              <div
+                className="pattern-slot-toggle-group"
+                role="group"
+                aria-label="Режим расписания"
               >
-                Час
-              </button>
-              <button
-                type="button"
-                className={`pattern-slot-btn ${slotMinutes === 30 ? 'active' : ''}`}
-                onClick={() => onSlotMinutesChange(30)}
-                aria-pressed={slotMinutes === 30}
-              >
-                Полчаса
-              </button>
-              <button
-                type="button"
-                className={`pattern-slot-btn ${slotMinutes === 15 ? 'active' : ''}`}
-                onClick={() => onSlotMinutesChange(15)}
-                aria-pressed={slotMinutes === 15}
-              >
-                Четверть
-              </button>
+                <button
+                  type="button"
+                  className={`pattern-slot-btn ${slotMinutes === 60 ? 'active' : ''}`}
+                  onClick={() => onSlotMinutesChange(60)}
+                  aria-pressed={slotMinutes === 60}
+                >
+                  Час
+                </button>
+                <button
+                  type="button"
+                  className={`pattern-slot-btn ${slotMinutes === 30 ? 'active' : ''}`}
+                  onClick={() => onSlotMinutesChange(30)}
+                  aria-pressed={slotMinutes === 30}
+                >
+                  Полчаса
+                </button>
+                <button
+                  type="button"
+                  className={`pattern-slot-btn ${slotMinutes === 15 ? 'active' : ''}`}
+                  onClick={() => onSlotMinutesChange(15)}
+                  aria-pressed={slotMinutes === 15}
+                >
+                  Четверть
+                </button>
+              </div>
             </div>
           </div>
 

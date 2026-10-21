@@ -112,29 +112,60 @@
   row-gap: 10px;
 }
 
-/* Granule size toggle, placed right next to the cycle controls. */
-.pattern-slot-toggle {
+/* Mode toggle field inside the unified cycle row. */
+.pattern-slot-field {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 10px;
-  padding: 10px 12px;
-  border: 1px solid #e0e0e0;
-  border-radius: 9px;
-  background: #fafafa;
+  flex-direction: column;
+  gap: 3px;
+  justify-content: flex-end;
+  flex: 0 0 auto;
+  width: 170px;
 }
 
-.pattern-slot-toggle-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: #666;
+.pattern-slot-field .pattern-field-label {
+  text-align: right;
 }
 
 .pattern-slot-toggle-group {
   display: inline-flex;
+  width: 100%;
   border: 1px solid #c9c9c9;
   border-radius: 7px;
   background: #fff;
+}
+
+.pattern-slot-btn {
+  flex: 1;
+  height: 30px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: #444;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pattern-slot-btn:first-child {
+  border-top-left-radius: 6px;
+  border-bottom-left-radius: 6px;
+  border-right: 1px solid #e0e0e0;
+}
+
+.pattern-slot-btn:last-child {
+  border-top-right-radius: 6px;
+  border-bottom-right-radius: 6px;
+  border-left: 1px solid #e0e0e0;
+}
+
+.pattern-slot-btn:hover:not(.active) {
+  background: #eef0ff;
+}
+
+.pattern-slot-btn.active {
+  background: #667eea;
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
 }
 
 .pattern-slot-btn {
