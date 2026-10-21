@@ -58,12 +58,15 @@ export function TimeSlots({
 
   const dateStr = formatDate(selectedDate);
   const maxSlot = SLOTS_PER_DAY(slotMinutes);
-  // The applied window defines the default granule count, but a preserved day
-  // may still hold bookings outside it. Union the selected day's range so
-  // those granules (and their live bookings) never disappear.
+  // Default window in slots. Days without a stored range stay inside this
+  // window; a preserved day's range is unioned in so its bookings never
+  // disappear. Never render past the applied end hour (e.g. not to midnight
+  // just because the slot count is higher in half/quarter-hour mode).
+  const defaultStart = windowStartSlot ?? 0;
+  const defaultEnd = windowEndSlot ?? maxSlot;
   const daySchedule = {
-    start: Math.min(windowStartSlot ?? 0, dayStartSlot ?? 0),
-    end: Math.max(windowEndSlot ?? maxSlot, dayEndSlot ?? maxSlot),
+    start: Math.min(defaultStart, dayStartSlot ?? defaultStart),
+    end: Math.max(defaultEnd, dayEndSlot ?? defaultEnd),
   };
   // The day's own persisted range (when set) drives the ± stepper controls.
   const dayRange =

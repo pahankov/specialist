@@ -193,7 +193,7 @@ export function Calendar({
             <div
               key={i}
               data-date={day.date.toISOString()}
-              className={`calendar-day ${day.isCurrentMonth ? '' : 'other-month'} ${active ? 'active' : 'inactive'} ${today ? 'today' : ''} ${selected ? 'selected' : ''} ${past ? 'past' : ''} ${liveIds.size > 0 && !past ? 'has-bookings' : ''} ${holdsOnly && !past ? 'has-holds' : ''} ${previewWork ? 'preview-work' : ''} ${previewOff ? 'preview-off' : ''} ${slotMinutes === 30 && active ? 'slot30' : ''}`}
+              className={`calendar-day ${day.isCurrentMonth ? '' : 'other-month'} ${active ? 'active' : 'inactive'} ${today ? 'today' : ''} ${selected ? 'selected' : ''} ${past ? 'past' : ''} ${liveIds.size > 0 && !past ? 'has-bookings' : ''} ${holdsOnly && !past ? 'has-holds' : ''} ${previewWork ? 'preview-work' : ''} ${previewOff ? 'preview-off' : ''} ${(slotMinutes === 30 || slotMinutes === 15) && active ? 'slot30' : ''}`}
               title={
                 previewWork
                   ? 'По графику будет рабочим после применения'

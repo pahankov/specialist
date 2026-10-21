@@ -119,7 +119,7 @@
   gap: 3px;
   justify-content: flex-end;
   flex: 0 0 auto;
-  width: 170px;
+  min-width: 150px;
 }
 
 .pattern-slot-field .pattern-field-label {
@@ -209,6 +209,15 @@
   gap: 12px;
   flex-wrap: wrap;
   align-items: flex-start;
+}
+
+/* Presets row: presets and mode toggle share one line next to each other. */
+.pattern-controls-unified > .pattern-presets {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.pattern-controls-unified > .pattern-slot-field {
+  flex: 0 0 auto;
 }
 
 .pattern-field-unified {

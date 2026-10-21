@@ -137,40 +137,21 @@ export function SchedulePatternPanel({
           </div>
 
           <div className="pattern-row pattern-controls-unified">
-            <div className="pattern-field pattern-field-unified">
-              <Stepper
-                label="Работать"
-                value={value.workDays}
-                min={1}
-                max={31}
-                suffix=" дн."
-                decreaseLabel="Уменьшить число рабочих дней"
-                increaseLabel="Увеличить число рабочих дней"
-                onChange={(workDays) => onChange({ workDays })}
-                className="pattern-stepper-full"
-              />
-            </div>
-            <div className="pattern-field pattern-field-unified">
-              <Stepper
-                label="Отдыхать"
-                value={value.offDays}
-                min={0}
-                max={31}
-                suffix=" дн."
-                decreaseLabel="Уменьшить число выходных дней"
-                increaseLabel="Увеличить число выходных дней"
-                onChange={(offDays) => onChange({ offDays })}
-                className="pattern-stepper-full"
-              />
-            </div>
-            <div className="pattern-field pattern-field-unified">
-              <span className="pattern-field-label">Первый рабочий день цикла</span>
-              <input
-                className="pattern-date-input pattern-date-full"
-                type="date"
-                value={value.anchor}
-                onChange={(event) => onChange({ anchor: event.target.value })}
-              />
+            <div className="pattern-presets" role="group" aria-label="Готовые графики">
+              {PATTERN_PRESETS.map((preset) => {
+                const active = value.workDays === preset.workDays && value.offDays === preset.offDays;
+                return (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    className={`pattern-preset ${active ? 'active' : ''}`}
+                    onClick={() => onPreset(preset.workDays, preset.offDays)}
+                    title={preset.hint}
+                  >
+                    {preset.label}
+                  </button>
+                );
+              })}
             </div>
             <div className="pattern-field pattern-field-unified pattern-slot-field">
               <span className="pattern-field-label">Режим</span>
@@ -185,7 +166,7 @@ export function SchedulePatternPanel({
                   onClick={() => onSlotMinutesChange(60)}
                   aria-pressed={slotMinutes === 60}
                 >
-                  Час
+                  1ч
                 </button>
                 <button
                   type="button"
@@ -193,7 +174,7 @@ export function SchedulePatternPanel({
                   onClick={() => onSlotMinutesChange(30)}
                   aria-pressed={slotMinutes === 30}
                 >
-                  Полчаса
+                  30 мин
                 </button>
                 <button
                   type="button"
@@ -201,10 +182,44 @@ export function SchedulePatternPanel({
                   onClick={() => onSlotMinutesChange(15)}
                   aria-pressed={slotMinutes === 15}
                 >
-                  Четверть
+                  15 мин
                 </button>
               </div>
             </div>
+          </div>
+
+          <div className="pattern-row pattern-row-wrap pattern-controls">
+            <Stepper
+              label="Работать"
+              value={value.workDays}
+              min={1}
+              max={31}
+              suffix=" дн."
+              decreaseLabel="Уменьшить число рабочих дней"
+              increaseLabel="Увеличить число рабочих дней"
+              onChange={(workDays) => onChange({ workDays })}
+              className="pattern-stepper-full"
+            />
+            <Stepper
+              label="Отдыхать"
+              value={value.offDays}
+              min={0}
+              max={31}
+              suffix=" дн."
+              decreaseLabel="Уменьшить число выходных дней"
+              increaseLabel="Увеличить число выходных дней"
+              onChange={(offDays) => onChange({ offDays })}
+              className="pattern-stepper-full"
+            />
+            <label className="pattern-field pattern-field-unified pattern-anchor">
+              <span className="pattern-field-label">Первый рабочий день цикла</span>
+              <input
+                className="pattern-date-input pattern-date-full"
+                type="date"
+                value={value.anchor}
+                onChange={(event) => onChange({ anchor: event.target.value })}
+              />
+            </label>
           </div>
 
           <p className="schedule-pattern-hint">

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { adminApi } from '../../api/client';
 import type {
@@ -155,6 +155,39 @@ function SchedulePage() {
     'schedule.slotMinutes',
     60,
   );
+  // Remember the previous granule size so that stored day ranges (slot
+  // indices) can be remapped to the new grid when the user switches modes.
+  const prevSlotMinutesRef = useRef(slotMinutes);
+
+  // Remap stored day ranges and active slot keys to the new slot grid when
+  // the granule size changes, so an 8–22 hour day stays 8–22 in 30- and
+  // 15-minute mode instead of rendering the wrong slice of slots.
+  useEffect(() => {
+    if (prevSlotMinutesRef.current === slotMinutes || Object.keys(schedule).length === 0) {
+      prevSlotMinutesRef.current = slotMinutes;
+      return;
+    }
+    const prev = prevSlotMinutesRef.current;
+    const next = slotMinutes;
+    const nextSchedule: Record<string, DaySchedule> = {};
+    const nextActiveHours: Record<string, boolean> = {};
+    for (const [dateStr, range] of Object.entries(schedule)) {
+      const startMin = range.start * prev;
+      const endMin = range.end * prev;
+      const newStart = Math.max(0, Math.round(startMin / next));
+      const newEnd = Math.min(Math.ceil((24 * 60) / next), Math.round(endMin / next));
+      if (newEnd > newStart) {
+        nextSchedule[dateStr] = { start: newStart, end: newEnd };
+        for (let s = newStart; s < newEnd; s++) {
+          nextActiveHours[`${dateStr}-${s}`] = true;
+        }
+      }
+    }
+    prevSlotMinutesRef.current = slotMinutes;
+    setSchedule(nextSchedule);
+    setActiveHours(nextActiveHours);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slotMinutes]);
   // The base repeating template. It is a builder, not saved schedule data;
   // server rows are written only by the explicit "Применить" action.
   const [pattern, setPattern] = usePersistentState<SchedulePattern>(
