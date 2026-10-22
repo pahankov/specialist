@@ -206,6 +206,156 @@ function toggleAllSlots(
   }
 }
 
+interface GranuleProps {
+  date: Date;
+  dateStr: string;
+  slot: number;
+  slotMinutes: 60 | 30 | 15;
+  appointments: Appointment[];
+  activeHours: Record<string, boolean>;
+  onToggle: (dateStr: string, slot: number) => void;
+  onOpenBooking: (date: Date, slot: number) => void;
+  onCancelAppointment: (id: number) => Promise<void>;
+  onConfirmAppointment?: (id: number) => Promise<void>;
+}
+
+/** One bookable granule. Hour mode renders it as a top-level row; half- and
+ * quarter-hour modes render the same row nested inside its hour card. */
+function Granule({
+  date,
+  dateStr,
+  slot,
+  slotMinutes,
+  appointments,
+  activeHours,
+  onToggle,
+  onOpenBooking,
+  onCancelAppointment,
+  onConfirmAppointment,
+  nested,
+}: GranuleProps & { nested: boolean }) {
+  const slotAppointments = getAppointmentsForSlot(appointments, date, slot, slotMinutes);
+  const live = slotAppointments.filter((a) => a.status !== 'cancelled');
+  const coveredBy =
+    live.length === 0 ? getCoveringLive(appointments, date, slot, slotMinutes) : null;
+  const busy = coveredBy ?? null;
+  const status = live.length > 0 ? getSlotStatus(live) : (busy?.status ?? 'free');
+  const past = isSlotPast(date, slot, slotMinutes);
+  const slotActive = !!activeHours[`${dateStr}-${slot}`];
+  const latestLive = live.length > 0 ? live.reduce((a, b) => (a.id > b.id ? a : b)) : null;
+  const span = latestLive ? appointmentSpanSlots(latestLive, slotMinutes) : 1;
+  const spanNote = latestLive !== null && span > 1 ? ` · ${span} гр.` : '';
+
+  return (
+    <div
+      data-testid="time-slot"
+      className={`${nested ? 'time-subslot' : 'time-slot'} ${past ? 'slot-past' : slotActive ? 'slot-active' : 'slot-inactive'} ${status !== 'free' ? `slot-${status}` : ''}${coveredBy ? ' slot-covered' : ''}`}
+    >
+      <label className="time-slot-checkbox">
+        <input
+          type="checkbox"
+          checked={slotActive}
+          onChange={() => onToggle(dateStr, slot)}
+          disabled={past}
+        />
+      </label>
+
+      <span className={nested ? 'time-subslot-time' : 'time-slot-time'}>
+        {formatSlotTime(slot, slotMinutes)}
+      </span>
+
+      {slotAppointments.length > 0 ? (
+        <div className="time-slot-appointments">
+          {slotAppointments.map((a) => (
+            <div
+              key={a.id}
+              className="time-slot-appt"
+              title={a.notes ? `💬 ${a.notes}` : undefined}
+            >
+              <span className="appt-client">{a.client_name || 'Клиент'}</span>
+              <span className="appt-service">
+                {a.service_name}
+                {a.status !== 'cancelled' && appointmentSpanSlots(a, slotMinutes) > 1
+                  ? ` · ${appointmentSpanSlots(a, slotMinutes)} гр.`
+                  : ''}
+              </span>
+              <span className={`appt-status status-${a.status}`}>
+                {STATUS_CONFIG[a.status]?.label || a.status}
+              </span>
+              {a.discount_label ? (
+                <span className="appt-discount" title={`Скидка: ${a.discount_label}`}>
+                  🏷 {a.discount_label}
+                </span>
+              ) : null}
+              {a.notes ? <span className="appt-notes">💬 {a.notes}</span> : null}
+            </div>
+          ))}
+        </div>
+      ) : busy ? (
+        <div className="time-slot-appointments">
+          <div className="time-slot-appt">
+            <span className="appt-client">{busy.client_name || 'Клиент'}</span>
+            <span className="appt-service">{busy.service_name} · продолжение</span>
+            <span className={`appt-status status-${busy.status}`}>
+              {STATUS_CONFIG[busy.status]?.label || busy.status}
+            </span>
+          </div>
+        </div>
+      ) : (
+        <span className="time-slot-status">
+          {past ? 'Прошёл' : slotActive ? 'Свободно' : 'Неактивен'}
+        </span>
+      )}
+
+      {!past && slotActive && latestLive === null && coveredBy === null && (
+        <button
+          className="btn btn-sm btn-book"
+          onClick={() => onOpenBooking(date, slot)}
+          title="Записать клиента"
+        >
+          + Записать
+        </button>
+      )}
+      {!past && latestLive !== null && (
+        <span className="slot-actions">
+          {latestLive.status === 'pending' && onConfirmAppointment && (
+            <button
+              className="btn btn-sm btn-confirm"
+              title={`Подтвердить запись: ${latestLive.client_name || 'клиент'}${spanNote}`}
+              onClick={async (e) => {
+                const btn = e.currentTarget;
+                btn.disabled = true;
+                try {
+                  await onConfirmAppointment(latestLive.id);
+                } finally {
+                  btn.disabled = false;
+                }
+              }}
+            >
+              ✓ Подтвердить
+            </button>
+          )}
+          <button
+            className="btn btn-sm btn-cancel"
+            title={`Отменить запись: ${latestLive.client_name || 'клиент'}${spanNote}`}
+            onClick={async (e) => {
+              const btn = e.currentTarget;
+              btn.disabled = true;
+              try {
+                await onCancelAppointment(latestLive.id);
+              } finally {
+                btn.disabled = false;
+              }
+            }}
+          >
+            ✕ Отменить
+          </button>
+        </span>
+      )}
+    </div>
+  );
+}
+
 function generateSlots(
   date: Date,
   hours: { start: number; end: number },
@@ -218,132 +368,66 @@ function generateSlots(
   onCancelAppointment: (id: number) => Promise<void>,
   onConfirmAppointment?: (id: number) => Promise<void>,
 ): React.ReactNode[] {
-  const slots: React.ReactNode[] = [];
   const dateStr = formatDate(date);
   const maxSlot = SLOTS_PER_DAY(slotMinutes);
+  const end = Math.min(hours.end, maxSlot);
+  const granuleProps = {
+    date,
+    dateStr,
+    slotMinutes,
+    appointments,
+    activeHours,
+    onToggle,
+    onOpenBooking,
+    onCancelAppointment,
+    onConfirmAppointment,
+  };
 
-  for (let s = hours.start; s < Math.min(hours.end, maxSlot); s++) {
-    const slotsForHour = getAppointmentsForSlot(appointments, date, s, slotMinutes);
-    const live = slotsForHour.filter((s) => s.status !== 'cancelled');
-    const coveredBy =
-      live.length === 0 ? getCoveringLive(appointments, date, s, slotMinutes) : null;
-    const busy = coveredBy ?? null;
-    const status = live.length > 0 ? getSlotStatus(live) : (busy?.status ?? 'free');
-    const past = isSlotPast(date, s, slotMinutes);
-    const slotActive = !!activeHours[`${dateStr}-${s}`];
-    const latestLive = live.length > 0 ? live.reduce((a, b) => (a.id > b.id ? a : b)) : null;
-    const spanNote =
-      latestLive !== null && appointmentSpanSlots(latestLive, slotMinutes) > 1
-        ? ` · ${appointmentSpanSlots(latestLive, slotMinutes)} гр.`
-        : '';
+  // Hour mode: one row per granule, exactly as before.
+  if (slotMinutes === 60) {
+    const rows: React.ReactNode[] = [];
+    for (let s = hours.start; s < end; s++) {
+      rows.push(<Granule key={s} {...granuleProps} slot={s} nested={false} />);
+    }
+    return rows;
+  }
 
-    slots.push(
+  // Half/quarter-hour mode: keep the hourly card, split its hour into
+  // subgranules inside. The number of top-level cards therefore stays equal
+  // to the number of hours while each hour becomes finer-grained.
+  const perHour = 60 / slotMinutes;
+  const firstHour = Math.floor(hours.start / perHour);
+  const lastHour = Math.ceil(end / perHour);
+  const groups: React.ReactNode[] = [];
+
+  for (let hour = firstHour; hour < lastHour; hour++) {
+    const groupStart = Math.max(hours.start, hour * perHour);
+    const groupEnd = Math.min(end, (hour + 1) * perHour);
+    if (groupEnd <= groupStart) continue;
+
+    const subslots: React.ReactNode[] = [];
+    let hasActive = false;
+    for (let s = groupStart; s < groupEnd; s++) {
+      if (activeHours[`${dateStr}-${s}`]) hasActive = true;
+      subslots.push(<Granule key={s} {...granuleProps} slot={s} nested />);
+    }
+
+    groups.push(
       <div
-        key={s}
-        data-testid="time-slot"
-        className={`time-slot ${past ? 'slot-past' : slotActive ? 'slot-active' : 'slot-inactive'} ${status !== 'free' ? `slot-${status}` : ''}${coveredBy ? ' slot-covered' : ''}`}
+        key={`hour-${hour}`}
+        className={`time-hour-group${hasActive ? ' has-active' : ''}`}
+        data-testid="time-hour-group"
       >
-        <label className="time-slot-checkbox">
-          <input
-            type="checkbox"
-            checked={slotActive}
-            onChange={() => onToggle(dateStr, s)}
-            disabled={past}
-          />
-        </label>
-
-        <span className="time-slot-time">{formatSlotTime(s, slotMinutes)}</span>
-
-        {slotsForHour.length > 0 ? (
-          <div className="time-slot-appointments">
-            {slotsForHour.map((a) => (
-              <div
-                key={a.id}
-                className="time-slot-appt"
-                title={a.notes ? `💬 ${a.notes}` : undefined}
-              >
-                <span className="appt-client">{a.client_name || 'Клиент'}</span>
-                <span className="appt-service">
-                  {a.service_name}
-                  {a.status !== 'cancelled' && appointmentSpanSlots(a, slotMinutes) > 1
-                    ? ` · ${appointmentSpanSlots(a, slotMinutes)} гр.`
-                    : ''}
-                </span>
-                <span className={`appt-status status-${a.status}`}>
-                  {STATUS_CONFIG[a.status]?.label || a.status}
-                </span>
-                {a.discount_label ? (
-                  <span className="appt-discount" title={`Скидка: ${a.discount_label}`}>
-                    🏷 {a.discount_label}
-                  </span>
-                ) : null}
-                {a.notes ? <span className="appt-notes">💬 {a.notes}</span> : null}
-              </div>
-            ))}
-          </div>
-        ) : busy ? (
-          <div className="time-slot-appointments">
-            <div className="time-slot-appt">
-              <span className="appt-client">{busy.client_name || 'Клиент'}</span>
-              <span className="appt-service">{busy.service_name} · продолжение</span>
-              <span className={`appt-status status-${busy.status}`}>
-                {STATUS_CONFIG[busy.status]?.label || busy.status}
-              </span>
-            </div>
-          </div>
-        ) : (
-          <span className="time-slot-status">
-            {past ? 'Прошёл' : slotActive ? 'Свободно' : 'Неактивен'}
+        <div className="time-hour-head">
+          <span className="time-hour-title">{formatSlotTime(groupStart, slotMinutes)}</span>
+          <span className="time-hour-end">— {formatSlotTime(groupEnd, slotMinutes)}</span>
+          <span className="time-hour-count">
+            {subslots.length} × {slotMinutes} мин
           </span>
-        )}
-
-        {!past && slotActive && latestLive === null && coveredBy === null && (
-          <button
-            className="btn btn-sm btn-book"
-            onClick={() => onOpenBooking(date, s)}
-            title="Записать клиента"
-          >
-            + Записать
-          </button>
-        )}
-        {!past && latestLive !== null && (
-          <span className="slot-actions">
-            {latestLive.status === 'pending' && onConfirmAppointment && (
-              <button
-                className="btn btn-sm btn-confirm"
-                title={`Подтвердить запись: ${latestLive.client_name || 'клиент'}${spanNote}`}
-                onClick={async (e) => {
-                  const btn = e.currentTarget;
-                  btn.disabled = true;
-                  try {
-                    await onConfirmAppointment(latestLive.id);
-                  } finally {
-                    btn.disabled = false;
-                  }
-                }}
-              >
-                ✓ Подтвердить
-              </button>
-            )}
-            <button
-              className="btn btn-sm btn-cancel"
-              title={`Отменить запись: ${latestLive.client_name || 'клиент'}${spanNote}`}
-              onClick={async (e) => {
-                const btn = e.currentTarget;
-                btn.disabled = true;
-                try {
-                  await onCancelAppointment(latestLive.id);
-                } finally {
-                  btn.disabled = false;
-                }
-              }}
-            >
-              ✕ Отменить
-            </button>
-          </span>
-        )}
+        </div>
+        <div className="time-hour-body">{subslots}</div>
       </div>,
     );
   }
-  return slots;
+  return groups;
 }

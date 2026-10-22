@@ -362,6 +362,136 @@
   opacity: 0.85;
 }
 
+/* Half/quarter-hour mode: one card per hour, with the hour split into
+ * subgranules inside. The number of top-level cards stays equal to the
+ * number of hours instead of growing with the granule count. */
+.time-hour-group {
+  border: 1px solid #e2e6ea;
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.time-hour-group.has-active {
+  border-color: #a5d6a7;
+  box-shadow: 0 1px 3px rgba(76, 175, 80, 0.08);
+}
+
+.time-hour-head {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 8px 14px;
+  background: #f6f8fa;
+  border-bottom: 1px solid #e9edf1;
+}
+
+.time-hour-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #2f3542;
+}
+
+.time-hour-end {
+  font-size: 13px;
+  color: #8a90a0;
+}
+
+.time-hour-count {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+  color: #8a90a0;
+  white-space: nowrap;
+}
+
+.time-hour-body {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 6px;
+}
+
+.time-subslot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 10px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.time-subslot.slot-active {
+  border-color: #c8e6c9;
+  background: #f2fbf3;
+}
+
+.time-subslot.slot-inactive {
+  background: #f6f7f8;
+}
+
+.time-subslot.slot-past {
+  opacity: 0.55;
+}
+
+.time-subslot.slot-pending {
+  border-color: #f3cd72;
+  background: #fff9e8;
+}
+
+.time-subslot.slot-confirmed {
+  border-color: #a9c9ea;
+  background: #f0f7ff;
+}
+
+.time-subslot.slot-completed {
+  border-color: #a5d6a7;
+  background: #f1faf2;
+}
+
+.time-subslot.slot-cancelled {
+  border-style: dashed;
+  border-color: #d1d5db;
+  background: #fafafa;
+}
+
+.time-subslot.slot-covered {
+  border-style: dashed;
+  opacity: 0.85;
+}
+
+.time-subslot-time {
+  min-width: 54px;
+  flex-shrink: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #333;
+}
+
+.time-subslot .time-slot-status {
+  font-size: 12px;
+}
+
+.time-subslot .time-slot-appointments {
+  min-width: 0;
+  font-size: 13px;
+}
+
+.time-subslot .time-slot-appt {
+  gap: 4px 10px;
+}
+
+.time-subslot .time-slot-appt .appt-status {
+  padding: 2px 8px;
+  font-size: 11px;
+}
+
 .time-slot-checkbox input {
   width: 18px;
   height: 18px;
@@ -775,6 +905,28 @@
   .calendar-day-header {
     padding: 6px 0;
     font-size: 11px;
+  }
+
+  .time-hour-body {
+    grid-template-columns: 1fr;
+  }
+
+  .time-hour-head {
+    padding: 7px 10px;
+  }
+
+  .time-hour-count {
+    font-size: 10px;
+  }
+
+  .time-subslot {
+    gap: 8px;
+    padding: 7px 6px;
+  }
+
+  .time-subslot-time {
+    min-width: 48px;
+    font-size: 13px;
   }
 }
 

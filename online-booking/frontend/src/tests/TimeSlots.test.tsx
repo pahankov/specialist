@@ -69,31 +69,49 @@ describe('TimeSlots', () => {
     expect(container.querySelectorAll('.time-slot-time')[11]?.textContent).toBe('19:00');
   });
 
-  it('splits one hourly granule into four quarter-hour rows', () => {
+  it('keeps one card per hour and nests four quarter-hour subgranules inside', () => {
+    const activeHours = Object.fromEntries(
+      Array.from({ length: 16 }, (_, i) => [`2030-01-15-${48 + i}`, true]),
+    );
     const { container } = renderTimeSlots({
-      activeHours: {
-        '2030-01-15-36': true,
-        '2030-01-15-37': true,
-        '2030-01-15-38': true,
-        '2030-01-15-39': true,
-      },
+      activeHours,
       slotMinutes: 15,
-      windowStartSlot: 36,
-      windowEndSlot: 40,
-      dayStartSlot: 36,
-      dayEndSlot: 40,
+      windowStartSlot: 48,
+      windowEndSlot: 64,
+      dayStartSlot: 48,
+      dayEndSlot: 64,
     });
 
-    const slots = container.querySelectorAll('.time-slot');
-    expect(slots).toHaveLength(4);
-    expect([...container.querySelectorAll('.time-slot-time')].map((el) => el.textContent)).toEqual([
-      '09:00',
-      '09:15',
-      '09:30',
-      '09:45',
-    ]);
+    // 12:00–16:00 is four hourly cards, not sixteen top-level granules.
+    const groups = container.querySelectorAll('.time-hour-group');
+    expect(groups).toHaveLength(4);
+    expect(container.querySelectorAll('.time-subslot')).toHaveLength(16);
+    expect([...container.querySelectorAll('.time-hour-title')].map((el) => el.textContent)).toEqual(
+      ['12:00', '13:00', '14:00', '15:00'],
+    );
+    expect(container.querySelectorAll('.time-hour-count')[0]?.textContent).toContain('4 × 15 мин');
+    expect(
+      [...container.querySelectorAll('.time-subslot-time')].slice(0, 5).map((el) => el.textContent),
+    ).toEqual(['12:00', '12:15', '12:30', '12:45', '13:00']);
     expect(container.querySelector('.day-hours-slot-size')?.textContent).toContain('15 мин');
-    expect(container.querySelector('.day-hours-value')?.textContent).toBe('09:00');
+    expect(container.querySelector('.day-hours-value')?.textContent).toBe('12:00');
+  });
+
+  it('keeps one card per hour with two half-hour subgranules in 30-minute mode', () => {
+    const { container } = renderTimeSlots({
+      activeHours: { '2030-01-15-20': true, '2030-01-15-21': true },
+      slotMinutes: 30,
+      windowStartSlot: 20,
+      windowEndSlot: 22,
+      dayStartSlot: 20,
+      dayEndSlot: 22,
+    });
+
+    expect(container.querySelectorAll('.time-hour-group')).toHaveLength(1);
+    expect(container.querySelectorAll('.time-subslot')).toHaveLength(2);
+    expect(
+      [...container.querySelectorAll('.time-subslot-time')].map((el) => el.textContent),
+    ).toEqual(['10:00', '10:30']);
   });
 
   it('adds and removes edge granules through the stepper controls', async () => {
