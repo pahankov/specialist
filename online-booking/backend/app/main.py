@@ -27,6 +27,7 @@ from app.modules.maxauth import router as max_router, webhook_router as max_webh
 from app.modules.vkauth import router as vk_router
 from app.modules.yandexauth import router as yandex_router
 from app.modules.referral import router as referral_router
+from app.modules.support import router as support_router
 
 # Инициализация логирования (LOG_LEVEL из env, иначе INFO в проде / DEBUG локально)
 setup_logging(settings.log_level)
@@ -214,6 +215,7 @@ app.include_router(schedule_router, prefix="/api/v1/working-hours", tags=["worki
 app.include_router(review_router, prefix="/api/v1/reviews", tags=["reviews"])
 app.include_router(client_router, prefix="/api/v1/client", tags=["client"])
 app.include_router(referral_router, prefix="/api/v1/referrals", tags=["referrals"])
+app.include_router(support_router, prefix="/api/v1/support", tags=["support"])
 app.include_router(admin_router)  # admin endpoints (User model, modules/admin/)
 app.include_router(dadata_router, prefix="/api/dadata")  # DAData address autocomplete proxy
 app.include_router(max_webhook_router, prefix="/api/max", tags=["max-webhook"])

@@ -250,7 +250,9 @@ async def admin_unread_count(
     db: AsyncSession = Depends(get_db),
 ):
     """Lightweight bell badge poll (same scope as the panel inbox)."""
-    scope = await _sender_role_filter(frozenset({UserRole.MASTER}))
+    exclude = (frozenset() if user.role == UserRole.ADMIN
+               else frozenset({UserRole.MASTER}))
+    scope = await _sender_role_filter(exclude)
     q = select(func.count(Notification.id)).where(
         Notification.recipient_id == user.id,
         Notification.is_read == False,  # noqa: E712

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { adminApi, authApi, cabinetApi, reviewsApi } from '../../api/client';
-import { Breadcrumb, KeyboardShortcutsHint, NotificationBell } from '../../components/common';
+import { Breadcrumb, KeyboardShortcutsHint, NotificationBell, SupportModal } from '../../components/common';
 import { getCookie, decodeJwtPayload, getUserRole, clearAuthCookies } from '../../utils/cookies';
 import { allowMasterDraftEntry } from '../../utils/masterDraftEntry';
 import { getImpersonation, stopImpersonation } from '../../utils/impersonation';
@@ -73,6 +73,7 @@ function BaseLayout({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [impersonatedName, setImpersonatedName] = useState<string | null>(null);
   const [unread, setUnread] = useState(0);
+  const [supportOpen, setSupportOpen] = useState(false);
 
   const bellLink = draftMode
     ? '/cabinet/notifications'
@@ -462,6 +463,18 @@ function BaseLayout({
               {!sidebarCollapsed && <span className="nav-label">Стать мастером</span>}
             </button>
           )}
+          {(role === 'CLIENT' || role === 'MASTER') &&
+            !location.pathname.startsWith(SUPER_PREFIX) && (
+              <button
+                className="btn btn-ghost"
+                onClick={() => setSupportOpen(true)}
+                title="Написать в поддержку"
+                aria-haspopup="dialog"
+              >
+                <span className="nav-icon">💬</span>
+                {!sidebarCollapsed && <span className="nav-label">Связаться с поддержкой</span>}
+              </button>
+            )}
           <button className="btn btn-ghost btn-logout" onClick={handleLogout} title="Выйти">
             <span className="nav-icon">⏻</span>
             {!sidebarCollapsed && <span className="nav-label">Выйти</span>}
@@ -491,6 +504,8 @@ function BaseLayout({
           <Outlet />
         </div>
       </main>
+
+      <SupportModal open={supportOpen} onClose={() => setSupportOpen(false)} />
 
       <KeyboardShortcutsHint />
     </div>

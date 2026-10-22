@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import ClientLayout from '../pages/cabinet/ClientLayout';
 
@@ -38,6 +38,10 @@ describe('ClientLayout', () => {
     expect(profileLink?.getAttribute('href')).toBe('/cabinet/profile');
     expect(screen.queryByText('Мои услуги')).not.toBeInTheDocument();
     expect(screen.getByText('Клиент')).toBeInTheDocument();
+
+    const support = screen.getByRole('button', { name: /Связаться с поддержкой/ });
+    fireEvent.click(support);
+    expect(screen.getByText(/Опишите вопрос или проблему/)).toBeInTheDocument();
   });
 
   it('keeps the master status when an activated master uses the client cabinet', () => {

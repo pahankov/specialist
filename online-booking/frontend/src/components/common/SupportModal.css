@@ -1,0 +1,33 @@
+.support-modal-intro {
+  margin: 0 0 16px;
+  color: #666;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.support-modal-textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.support-modal-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+  color: #8a8a95;
+  font-size: 12px;
+}
+
+.support-modal-meta .is-short {
+  color: #d9534f;
+}
+
+.support-modal-error {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fdecec;
+  color: #b42318;
+  font-size: 13px;
+}
