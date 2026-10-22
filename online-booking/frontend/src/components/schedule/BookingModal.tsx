@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react';
 import type { Client, Service } from '../../api/types';
 import type { Bundle } from '../../api/cabinet';
-import { getFilteredClients, getFilteredServices, formatPrice, formatHour } from './helpers';
+import {
+  getFilteredClients,
+  getFilteredServices,
+  formatPrice,
+  formatMinutes,
+  formatSlotTime,
+} from './helpers';
 import Modal from '../common/Modal';
 import './ScheduleComponents.css';
 
@@ -25,6 +31,8 @@ interface BookingModalProps {
   onBook: () => void;
   /** MasterProfile.id to scope the services list (superadmin booking for a master) */
   servicesMasterId?: number | '';
+  /** Grid used by the clicked slot (may differ from the month default). */
+  slotMinutes?: 60 | 30 | 15;
 }
 
 export function BookingModal({
@@ -45,6 +53,7 @@ export function BookingModal({
   onUpdate,
   onBook,
   servicesMasterId,
+  slotMinutes = 60,
 }: BookingModalProps) {
   const [clientSearch, setClientSearch] = useState('');
   const [serviceSearch, setServiceSearch] = useState('');
@@ -95,7 +104,7 @@ export function BookingModal({
     <Modal open={open} onClose={onClose} title="📅 Записать клиента" wide>
       <p className="booking-modal-date">
         {date?.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })} в{' '}
-        {formatHour(hour!)}
+        {formatSlotTime(hour!, slotMinutes)}
       </p>
 
       <div className="form-group">
@@ -264,24 +273,20 @@ export function BookingModal({
           <div className="field-hint">
             {(() => {
               const dur = selectedBundle.duration_total || 60;
-              const endH = hour + Math.floor(dur / 60);
-              const endM = dur % 60;
-              const end = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
-              return `Займёт гранулы ${formatHour(hour)}–${end}`;
+              const start = formatSlotTime(hour, slotMinutes);
+              const end = formatMinutes(hour * slotMinutes + dur);
+              return `Займёт гранулы ${start}–${end}`;
             })()}
           </div>
         )}
         {selectedService && hour !== null && (
           <div className="field-hint">
             {(() => {
-              const span = Math.max(
-                1,
-                Math.ceil((Number(selectedService.duration_minutes) || 60) / 60),
-              );
-              const endH = hour + Math.floor((Number(selectedService.duration_minutes) || 60) / 60);
-              const endM = (Number(selectedService.duration_minutes) || 60) % 60;
-              const end = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
-              return `Займёт гранулы ${formatHour(hour)}–${end}${span > 1 ? ` (${span} шт.) — соседние тоже станут заняты` : ''}`;
+              const dur = Number(selectedService.duration_minutes) || 60;
+              const span = Math.max(1, Math.ceil(dur / slotMinutes));
+              const start = formatSlotTime(hour, slotMinutes);
+              const end = formatMinutes(hour * slotMinutes + dur);
+              return `Займёт гранулы ${start}–${end}${span > 1 ? ` (${span} шт.) — соседние тоже станут заняты` : ''}`;
             })()}
           </div>
         )}

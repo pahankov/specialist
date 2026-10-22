@@ -90,6 +90,7 @@ describe('TimeSlots', () => {
       windowEndSlot: 64,
       dayStartSlot: 48,
       dayEndSlot: 64,
+      onSlotMinutesChange: vi.fn(),
     });
 
     // 12:00–16:00 is four hourly cards, not sixteen top-level granules.
@@ -100,7 +101,11 @@ describe('TimeSlots', () => {
     expect(
       [...container.querySelectorAll('.time-subslot-time')].slice(0, 5).map((el) => el.textContent),
     ).toEqual(['12:00', '12:15', '12:30', '12:45', '13:00']);
-    expect(container.querySelector('.day-hours-slot-size')?.textContent).toContain('15 мин');
+    expect(container.querySelector('.day-hours-slot-size')).toBeNull();
+    expect(screen.getByRole('button', { name: '15 мин' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
     expect(container.querySelector('.day-hours-value')?.textContent).toBe('12:00');
   });
 
@@ -119,6 +124,25 @@ describe('TimeSlots', () => {
     expect(
       [...container.querySelectorAll('.time-subslot-time')].map((el) => el.textContent),
     ).toEqual(['10:00', '10:30']);
+  });
+
+  it('switches only the selected day mode from the day toolbar', () => {
+    const onSlotMinutesChange = vi.fn();
+    renderTimeSlots({
+      activeHours: { '2030-01-15-10': true, '2030-01-15-11': true },
+      windowStartSlot: 8,
+      windowEndSlot: 22,
+      dayStartSlot: 10,
+      dayEndSlot: 12,
+      onSlotMinutesChange,
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '15 мин' }));
+    expect(onSlotMinutesChange).toHaveBeenCalledWith(15);
+    expect(screen.getByRole('button', { name: '1 ч' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
   });
 
   it('adds and removes edge granules through the stepper controls', async () => {

@@ -31,6 +31,8 @@ interface CalendarProps {
   /** Granule size in minutes — shown as a pie dot on working days:
    * half-filled for 30 min, quarter-filled for 15 min. */
   slotMinutes?: 60 | 30 | 15;
+  /** Per-day overrides (dates where the admin chose a different mode). */
+  slotMinutesByDate?: Record<string, 60 | 30 | 15>;
 }
 
 const LONG_PRESS_MS = 500;
@@ -47,6 +49,7 @@ export function Calendar({
   interactive = true,
   selectablePast = false,
   slotMinutes = 60,
+  slotMinutesByDate,
   previewWorkDates,
   previewOffDates,
 }: CalendarProps) {
@@ -140,6 +143,9 @@ export function Calendar({
 
         {monthDays.map((day, i) => {
           const dateStr = formatDate(day.date);
+          const override = slotMinutesByDate?.[dateStr];
+          const daySlotMinutes =
+            override === 60 || override === 30 || override === 15 ? override : slotMinutes;
           const active = !!schedule[dateStr];
           const today = isToday(day.date);
           const past = isPast(day.date);
@@ -154,7 +160,7 @@ export function Calendar({
           const holdIds = new Set<number>();
           if (active && day.isCurrentMonth && hours) {
             for (let h = hours.start; h < hours.end; h++) {
-              const slots = getAppointmentsForSlot(appointments, day.date, h, slotMinutes);
+              const slots = getAppointmentsForSlot(appointments, day.date, h, daySlotMinutes);
               for (const s of slots) {
                 if (s.status === 'cancelled') continue;
                 if (s.status === 'pending') holdIds.add(s.id);
@@ -194,7 +200,7 @@ export function Calendar({
             <div
               key={i}
               data-date={day.date.toISOString()}
-              className={`calendar-day ${day.isCurrentMonth ? '' : 'other-month'} ${active ? 'active' : 'inactive'} ${today ? 'today' : ''} ${selected ? 'selected' : ''} ${past ? 'past' : ''} ${liveIds.size > 0 && !past ? 'has-bookings' : ''} ${holdsOnly && !past ? 'has-holds' : ''} ${previewWork ? 'preview-work' : ''} ${previewOff ? 'preview-off' : ''}${active && slotMinutes === 30 ? ' slot30' : ''}${active && slotMinutes === 15 ? ' slot15' : ''}`}
+              className={`calendar-day ${day.isCurrentMonth ? '' : 'other-month'} ${active ? 'active' : 'inactive'} ${today ? 'today' : ''} ${selected ? 'selected' : ''} ${past ? 'past' : ''} ${liveIds.size > 0 && !past ? 'has-bookings' : ''} ${holdsOnly && !past ? 'has-holds' : ''} ${previewWork ? 'preview-work' : ''} ${previewOff ? 'preview-off' : ''}${active && daySlotMinutes === 30 ? ' slot30' : ''}${active && daySlotMinutes === 15 ? ' slot15' : ''}`}
               title={
                 previewWork
                   ? 'По графику будет рабочим после применения'

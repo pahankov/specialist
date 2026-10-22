@@ -1,9 +1,8 @@
 import type { PatternPreview, SchedulePattern } from './pattern';
 import { PATTERN_PRESETS } from './pattern';
 import { formatHour } from './helpers';
+import { GranuleModeToggle, type GranuleSize } from './GranuleModeToggle';
 import './SchedulePatternPanel.css';
-
-type GranuleSize = 60 | 30 | 15;
 
 interface SchedulePatternPanelProps {
   monthLabel: string;
@@ -139,35 +138,11 @@ export function SchedulePatternPanel({
             </div>
             <div className="pattern-field pattern-slot-field">
               <span className="pattern-field-label">Режим</span>
-              <div className="pattern-slot-toggle-group" role="group" aria-label="Режим расписания">
-                <button
-                  type="button"
-                  className={`pattern-slot-btn ${slotMinutes === 60 ? 'active' : ''}`}
-                  onClick={() => onSlotMinutesChange(60)}
-                  aria-pressed={slotMinutes === 60}
-                  title="Целые часы: 14:00, 15:00, 16:00"
-                >
-                  1 ч
-                </button>
-                <button
-                  type="button"
-                  className={`pattern-slot-btn ${slotMinutes === 30 ? 'active' : ''}`}
-                  onClick={() => onSlotMinutesChange(30)}
-                  aria-pressed={slotMinutes === 30}
-                  title="Каждый час делится на две гранулы: 14:00 и 14:30"
-                >
-                  30 мин
-                </button>
-                <button
-                  type="button"
-                  className={`pattern-slot-btn ${slotMinutes === 15 ? 'active' : ''}`}
-                  onClick={() => onSlotMinutesChange(15)}
-                  aria-pressed={slotMinutes === 15}
-                  title="Каждый час делится на четыре гранулы: 14:00, 14:15, 14:30, 14:45"
-                >
-                  15 мин
-                </button>
-              </div>
+              <GranuleModeToggle
+                value={slotMinutes}
+                onChange={onSlotMinutesChange}
+                ariaLabel="Режим расписания"
+              />
             </div>
           </div>
 

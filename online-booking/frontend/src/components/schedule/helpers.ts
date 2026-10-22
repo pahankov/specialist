@@ -21,12 +21,16 @@ export function formatHour(h: number): string {
   return String(h).padStart(2, '0') + ':00';
 }
 
-/** Format a granule slot (index where 1 slot = slotMinutes minutes) as "HH:MM". */
-export function formatSlotTime(slot: number, slotMinutes: number): string {
-  const totalMinutes = slot * slotMinutes;
+/** Format an absolute minute offset as "HH:MM" (24:00 stays 24:00). */
+export function formatMinutes(totalMinutes: number): string {
   const h = Math.floor(totalMinutes / 60);
   const m = totalMinutes % 60;
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+/** Format a granule slot (index where 1 slot = slotMinutes minutes) as "HH:MM". */
+export function formatSlotTime(slot: number, slotMinutes: number): string {
+  return formatMinutes(slot * slotMinutes);
 }
 
 /** Backend stores SQL TIME (max 23:59), so 24:00 is sent as 23:59. */
@@ -128,6 +132,27 @@ export function rescaleSchedule(
     if (rescaled.end > rescaled.start) next[date] = rescaled;
   }
   return next;
+}
+
+/** Rescale only one day's enabled granules, leaving every other day intact. */
+export function rescaleDayActiveHours(
+  activeHours: Record<string, boolean>,
+  dateStr: string,
+  fromMinutes: 60 | 30 | 15,
+  toMinutes: 60 | 30 | 15,
+): Record<string, boolean> {
+  if (fromMinutes === toMinutes) return activeHours;
+  const prefix = `${dateStr}-`;
+  const dayActive: Record<string, boolean> = {};
+  for (const [key, active] of Object.entries(activeHours)) {
+    if (active && key.startsWith(prefix)) dayActive[key] = true;
+  }
+  const rescaled = rescaleActiveHours(dayActive, fromMinutes, toMinutes);
+  const next = { ...activeHours };
+  for (const key of Object.keys(next)) {
+    if (key.startsWith(prefix)) delete next[key];
+  }
+  return { ...next, ...rescaled };
 }
 
 export function getMonthDays(date: Date): { date: Date; isCurrentMonth: boolean }[] {

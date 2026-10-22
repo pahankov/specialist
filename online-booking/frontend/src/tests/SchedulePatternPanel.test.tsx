@@ -40,7 +40,7 @@ describe('SchedulePatternPanel', () => {
 
     const cycleRow = container.querySelector('.pattern-controls-unified');
     expect(cycleRow?.querySelector('.pattern-presets')).not.toBeNull();
-    expect(cycleRow?.querySelector('.pattern-slot-toggle-group')).not.toBeNull();
+    expect(cycleRow?.querySelector('.granule-mode-toggle')).not.toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: '15 мин' }));
     expect(onSlotMinutesChange).toHaveBeenCalledWith(15);

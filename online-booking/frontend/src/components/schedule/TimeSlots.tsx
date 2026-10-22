@@ -11,6 +11,7 @@ import {
   STATUS_CONFIG,
   formatDate,
 } from './helpers';
+import { GranuleModeToggle } from './GranuleModeToggle';
 import './ScheduleComponents.css';
 
 interface TimeSlotsProps {
@@ -30,6 +31,8 @@ interface TimeSlotsProps {
   dayStartSlot?: number;
   dayEndSlot?: number;
   onChangeDaySlots?: (dateStr: string, startSlot: number, endSlot: number) => Promise<void> | void;
+  /** Change the granule size for this day only (not the whole month). */
+  onSlotMinutesChange?: (size: 60 | 30 | 15) => void;
 }
 
 const SLOTS_PER_DAY = (slotMinutes: number) => Math.ceil((24 * 60) / slotMinutes);
@@ -48,6 +51,7 @@ export function TimeSlots({
   dayStartSlot,
   dayEndSlot,
   onChangeDaySlots,
+  onSlotMinutesChange,
 }: TimeSlotsProps) {
   const [adjusting, setAdjusting] = useState(false);
   if (!selectedDate) return null;
@@ -161,9 +165,17 @@ export function TimeSlots({
                 +
               </button>
             </div>
-            <span className="day-hours-slot-size">
-              {slotMinutes === 15 ? '· 15 мин' : slotMinutes === 30 ? '· 30 мин' : '· 1 час'}
-            </span>
+            {onSlotMinutesChange && (
+              <div className="time-slots-day-mode">
+                <span className="time-slots-day-mode-label">Режим дня</span>
+                <GranuleModeToggle
+                  value={slotMinutes}
+                  onChange={onSlotMinutesChange}
+                  ariaLabel="Режим гранул на этот день"
+                  compact
+                />
+              </div>
+            )}
           </div>
         )}
       </div>

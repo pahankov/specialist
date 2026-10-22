@@ -24,6 +24,7 @@ import {
   parseHourRange,
   rescaleSlotRange,
   rescaleActiveHours,
+  rescaleDayActiveHours,
   rescaleSchedule,
 } from '../components/schedule/helpers';
 import type { Appointment, DaySchedule } from '../api/types';
@@ -135,6 +136,30 @@ describe('helpers', () => {
       expect(next).toEqual({
         '2030-01-15': { start: 18, end: 36 },
         '2030-01-16': { start: 20, end: 24 },
+      });
+    });
+
+    it('rescales only the selected day and leaves other days intact', () => {
+      const active = {
+        '2030-01-15-9': true,
+        '2030-01-16-10': true,
+        '2030-01-16-11': true,
+      };
+      const next = rescaleDayActiveHours(active, '2030-01-15', 60, 15);
+      expect(next).toEqual({
+        '2030-01-16-10': true,
+        '2030-01-16-11': true,
+        '2030-01-15-36': true,
+        '2030-01-15-37': true,
+        '2030-01-15-38': true,
+        '2030-01-15-39': true,
+      });
+
+      const merged = rescaleDayActiveHours(next, '2030-01-15', 15, 60);
+      expect(merged).toEqual({
+        '2030-01-16-10': true,
+        '2030-01-16-11': true,
+        '2030-01-15-9': true,
       });
     });
   });

@@ -296,6 +296,37 @@
   color: #999;
 }
 
+/* Per-day granule switch: visually separated from the ± range steppers. */
+.time-slots-day-mode {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 8px;
+  border-left: 1px solid #e6e8f0;
+}
+
+.time-slots-day-mode-label {
+  font-weight: 600;
+  color: #666;
+}
+
+@media (max-width: 640px) {
+  .time-slots-day-mode {
+    flex: 1 1 100%;
+    padding: 6px 0 0;
+    border-left: none;
+    border-top: 1px solid #e6e8f0;
+  }
+
+  .time-slots-day-mode .granule-mode-toggle {
+    flex: 1;
+  }
+
+  .time-slots-day-mode .granule-mode-btn {
+    flex: 1;
+  }
+}
+
 .time-slots-checkbox input {
   width: 18px;
   height: 18px;

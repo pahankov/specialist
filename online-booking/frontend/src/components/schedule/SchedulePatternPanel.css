@@ -121,50 +121,6 @@
   flex: 0 0 auto;
 }
 
-/* Segmented control: a soft track with a raised active segment. Total
- * height (3 + 30 + 3 + borders) matches the 38px preset buttons above. */
-.pattern-slot-toggle-group {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  box-sizing: border-box;
-  padding: 3px;
-  border: 1px solid #e2e5f0;
-  border-radius: 10px;
-  background: #f4f6fb;
-  box-shadow: inset 0 1px 2px rgba(24, 32, 72, 0.05);
-}
-
-.pattern-slot-btn {
-  min-width: 52px;
-  height: 30px;
-  padding: 0 10px;
-  border: none;
-  border-radius: 7px;
-  background: transparent;
-  color: #666e86;
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1;
-  white-space: nowrap;
-  cursor: pointer;
-  transition:
-    background 0.15s ease,
-    color 0.15s ease,
-    box-shadow 0.15s ease;
-}
-
-.pattern-slot-btn:hover:not(.active) {
-  background: #e7eaf7;
-  color: #4450b8;
-}
-
-.pattern-slot-btn.active {
-  background: linear-gradient(135deg, #667eea 0%, #5563d8 100%);
-  color: #fff;
-  box-shadow: 0 2px 6px rgba(102, 126, 234, 0.35);
-}
-
 /* Month reset button next to "Применить". */
 .schedule-pattern-actions {
   display: flex;
@@ -425,11 +381,11 @@
     flex: 1 1 100%;
   }
 
-  .pattern-slot-toggle-group {
+  .pattern-slot-field .granule-mode-toggle {
     width: 100%;
   }
 
-  .pattern-slot-btn {
+  .pattern-slot-field .granule-mode-btn {
     flex: 1;
   }
 
