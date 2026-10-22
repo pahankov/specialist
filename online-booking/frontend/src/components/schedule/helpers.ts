@@ -71,6 +71,65 @@ export function slotToMinutes(slot: number, slotMinutes: number): number {
   return slot * slotMinutes;
 }
 
+/**
+ * Re-index a day range for a different granule size. Splitting an hour into
+ * halves/quarters is exact; when granules get coarser the range is rounded
+ * outward so no working minutes are dropped.
+ */
+export function rescaleSlotRange(
+  range: DaySchedule,
+  fromMinutes: 60 | 30 | 15,
+  toMinutes: 60 | 30 | 15,
+): DaySchedule {
+  if (fromMinutes === toMinutes) return { ...range };
+  return {
+    start: Math.floor((range.start * fromMinutes) / toMinutes),
+    end: Math.ceil((range.end * fromMinutes) / toMinutes),
+  };
+}
+
+/**
+ * Rescale every enabled granule when the mode changes. One old granule maps
+ * onto all new granules it covers: an active hour becomes two half-hour or
+ * four quarter-hour granules, while disabled granules stay disabled. No new
+ * working time appears outside the previous range.
+ */
+export function rescaleActiveHours(
+  activeHours: Record<string, boolean>,
+  fromMinutes: 60 | 30 | 15,
+  toMinutes: 60 | 30 | 15,
+): Record<string, boolean> {
+  if (fromMinutes === toMinutes) return activeHours;
+  const next: Record<string, boolean> = {};
+  for (const [key, active] of Object.entries(activeHours)) {
+    if (!active) continue;
+    const dash = key.lastIndexOf('-');
+    if (dash < 0) continue;
+    const date = key.slice(0, dash);
+    const slot = Number(key.slice(dash + 1));
+    if (!Number.isInteger(slot)) continue;
+    const start = Math.floor((slot * fromMinutes) / toMinutes);
+    const end = Math.max(start + 1, Math.ceil(((slot + 1) * fromMinutes) / toMinutes));
+    for (let s = start; s < end; s += 1) next[`${date}-${s}`] = true;
+  }
+  return next;
+}
+
+/** Rescale a whole month of day ranges for a new granule size. */
+export function rescaleSchedule(
+  schedule: Record<string, DaySchedule>,
+  fromMinutes: 60 | 30 | 15,
+  toMinutes: 60 | 30 | 15,
+): Record<string, DaySchedule> {
+  if (fromMinutes === toMinutes) return schedule;
+  const next: Record<string, DaySchedule> = {};
+  for (const [date, range] of Object.entries(schedule)) {
+    const rescaled = rescaleSlotRange(range, fromMinutes, toMinutes);
+    if (rescaled.end > rescaled.start) next[date] = rescaled;
+  }
+  return next;
+}
+
 export function getMonthDays(date: Date): { date: Date; isCurrentMonth: boolean }[] {
   const year = date.getFullYear();
   const month = date.getMonth();

@@ -778,8 +778,11 @@
   }
 }
 
-/* Half-filled dot on a working day marks the half-hour granule mode. */
-.calendar-day.slot30::after {
+/* Non-hour mode: a tiny pie in the top-right corner shows which share of an
+ * hour a granule takes — half for 30 min, a quarter for 15 min. It uses
+ * ::before, so the preview dot (::after) paints on top on planned days. */
+.calendar-day.slot30::before,
+.calendar-day.slot15::before {
   content: '';
   position: absolute;
   top: 6px;
@@ -787,7 +790,14 @@
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: conic-gradient(#4caf50 0deg 180deg, #e0e0e0 180deg 360deg);
   border: 1px solid rgba(0, 0, 0, 0.2);
   box-sizing: border-box;
+}
+
+.calendar-day.slot30::before {
+  background: conic-gradient(#4caf50 0deg 180deg, #e0e0e0 180deg 360deg);
+}
+
+.calendar-day.slot15::before {
+  background: conic-gradient(#4caf50 0deg 90deg, #e0e0e0 90deg 360deg);
 }

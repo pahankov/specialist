@@ -69,6 +69,33 @@ describe('TimeSlots', () => {
     expect(container.querySelectorAll('.time-slot-time')[11]?.textContent).toBe('19:00');
   });
 
+  it('splits one hourly granule into four quarter-hour rows', () => {
+    const { container } = renderTimeSlots({
+      activeHours: {
+        '2030-01-15-36': true,
+        '2030-01-15-37': true,
+        '2030-01-15-38': true,
+        '2030-01-15-39': true,
+      },
+      slotMinutes: 15,
+      windowStartSlot: 36,
+      windowEndSlot: 40,
+      dayStartSlot: 36,
+      dayEndSlot: 40,
+    });
+
+    const slots = container.querySelectorAll('.time-slot');
+    expect(slots).toHaveLength(4);
+    expect([...container.querySelectorAll('.time-slot-time')].map((el) => el.textContent)).toEqual([
+      '09:00',
+      '09:15',
+      '09:30',
+      '09:45',
+    ]);
+    expect(container.querySelector('.day-hours-slot-size')?.textContent).toContain('15 мин');
+    expect(container.querySelector('.day-hours-value')?.textContent).toBe('09:00');
+  });
+
   it('adds and removes edge granules through the stepper controls', async () => {
     const onChangeDaySlots = vi.fn();
     renderTimeSlots({
@@ -81,9 +108,7 @@ describe('TimeSlots', () => {
     });
 
     await act(async () => {
-      fireEvent.click(
-        screen.getByRole('button', { name: 'Добавить гранулу раньше' }),
-      );
+      fireEvent.click(screen.getByRole('button', { name: 'Добавить гранулу раньше' }));
     });
     expect(onChangeDaySlots).toHaveBeenLastCalledWith('2030-01-15', 9, 12);
 

@@ -22,6 +22,9 @@ import {
   monthRangeISO,
   hourToTime,
   parseHourRange,
+  rescaleSlotRange,
+  rescaleActiveHours,
+  rescaleSchedule,
 } from '../components/schedule/helpers';
 import type { Appointment, DaySchedule } from '../api/types';
 
@@ -85,6 +88,54 @@ describe('helpers', () => {
       expect(parseHourRange('09:00', '23:59')).toEqual({ start: 9, end: 24 });
       expect(parseHourRange('09:00', '18:15')).toEqual({ start: 9, end: 19 });
       expect(parseHourRange('09:30', '18:00')).toEqual({ start: 9, end: 18 });
+    });
+  });
+
+  describe('granule rescaling', () => {
+    it('splits an hourly range into half-hour and quarter-hour rows', () => {
+      expect(rescaleSlotRange({ start: 9, end: 18 }, 60, 30)).toEqual({ start: 18, end: 36 });
+      expect(rescaleSlotRange({ start: 9, end: 18 }, 60, 15)).toEqual({ start: 36, end: 72 });
+      expect(rescaleSlotRange({ start: 18, end: 36 }, 30, 15)).toEqual({ start: 36, end: 72 });
+    });
+
+    it('keeps the split range when going back to coarser granules', () => {
+      expect(rescaleSlotRange({ start: 36, end: 72 }, 15, 60)).toEqual({ start: 9, end: 18 });
+      expect(rescaleSlotRange({ start: 38, end: 71 }, 15, 30)).toEqual({ start: 19, end: 36 });
+    });
+
+    it('turns one active hour into two/four active granules', () => {
+      const half = rescaleActiveHours({ '2030-01-15-9': true }, 60, 30);
+      expect(half).toEqual({ '2030-01-15-18': true, '2030-01-15-19': true });
+
+      const quarter = rescaleActiveHours({ '2030-01-15-9': true }, 60, 15);
+      expect(quarter).toEqual({
+        '2030-01-15-36': true,
+        '2030-01-15-37': true,
+        '2030-01-15-38': true,
+        '2030-01-15-39': true,
+      });
+    });
+
+    it('does not invent active granules next to a disabled hour', () => {
+      const active = { '2030-01-15-9': true, '2030-01-15-11': false };
+      expect(rescaleActiveHours(active, 60, 15)).toEqual({
+        '2030-01-15-36': true,
+        '2030-01-15-37': true,
+        '2030-01-15-38': true,
+        '2030-01-15-39': true,
+      });
+    });
+
+    it('rescales the whole month range', () => {
+      const next = rescaleSchedule(
+        { '2030-01-15': { start: 9, end: 18 }, '2030-01-16': { start: 10, end: 12 } },
+        60,
+        30,
+      );
+      expect(next).toEqual({
+        '2030-01-15': { start: 18, end: 36 },
+        '2030-01-16': { start: 20, end: 24 },
+      });
     });
   });
 

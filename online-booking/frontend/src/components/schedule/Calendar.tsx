@@ -28,7 +28,8 @@ interface CalendarProps {
   previewWorkDates?: Set<string>;
   /** Template preview: active days that will become rest days. */
   previewOffDates?: Set<string>;
-  /** Granule size in minutes — shown as a half-filled dot on working days. */
+  /** Granule size in minutes — shown as a pie dot on working days:
+   * half-filled for 30 min, quarter-filled for 15 min. */
   slotMinutes?: 60 | 30 | 15;
 }
 
@@ -193,7 +194,7 @@ export function Calendar({
             <div
               key={i}
               data-date={day.date.toISOString()}
-              className={`calendar-day ${day.isCurrentMonth ? '' : 'other-month'} ${active ? 'active' : 'inactive'} ${today ? 'today' : ''} ${selected ? 'selected' : ''} ${past ? 'past' : ''} ${liveIds.size > 0 && !past ? 'has-bookings' : ''} ${holdsOnly && !past ? 'has-holds' : ''} ${previewWork ? 'preview-work' : ''} ${previewOff ? 'preview-off' : ''} ${(slotMinutes === 30 || slotMinutes === 15) && active ? 'slot30' : ''}`}
+              className={`calendar-day ${day.isCurrentMonth ? '' : 'other-month'} ${active ? 'active' : 'inactive'} ${today ? 'today' : ''} ${selected ? 'selected' : ''} ${past ? 'past' : ''} ${liveIds.size > 0 && !past ? 'has-bookings' : ''} ${holdsOnly && !past ? 'has-holds' : ''} ${previewWork ? 'preview-work' : ''} ${previewOff ? 'preview-off' : ''}${active && slotMinutes === 30 ? ' slot30' : ''}${active && slotMinutes === 15 ? ' slot15' : ''}`}
               title={
                 previewWork
                   ? 'По графику будет рабочим после применения'

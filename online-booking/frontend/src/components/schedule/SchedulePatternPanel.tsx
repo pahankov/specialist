@@ -119,27 +119,11 @@ export function SchedulePatternPanel({
         <div className="schedule-pattern-step">1</div>
         <div className="schedule-pattern-body">
           <h3 id="pattern-cycle-title">Цикл работы и отдыха</h3>
-          <div className="pattern-presets" role="group" aria-label="Готовые графики">
-            {PATTERN_PRESETS.map((preset) => {
-              const active = value.workDays === preset.workDays && value.offDays === preset.offDays;
-              return (
-                <button
-                  key={preset.label}
-                  type="button"
-                  className={`pattern-preset ${active ? 'active' : ''}`}
-                  onClick={() => onPreset(preset.workDays, preset.offDays)}
-                  title={preset.hint}
-                >
-                  {preset.label}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="pattern-row pattern-controls-unified">
+          <div className="pattern-controls-unified">
             <div className="pattern-presets" role="group" aria-label="Готовые графики">
               {PATTERN_PRESETS.map((preset) => {
-                const active = value.workDays === preset.workDays && value.offDays === preset.offDays;
+                const active =
+                  value.workDays === preset.workDays && value.offDays === preset.offDays;
                 return (
                   <button
                     key={preset.label}
@@ -153,26 +137,24 @@ export function SchedulePatternPanel({
                 );
               })}
             </div>
-            <div className="pattern-field pattern-field-unified pattern-slot-field">
+            <div className="pattern-field pattern-slot-field">
               <span className="pattern-field-label">Режим</span>
-              <div
-                className="pattern-slot-toggle-group"
-                role="group"
-                aria-label="Режим расписания"
-              >
+              <div className="pattern-slot-toggle-group" role="group" aria-label="Режим расписания">
                 <button
                   type="button"
                   className={`pattern-slot-btn ${slotMinutes === 60 ? 'active' : ''}`}
                   onClick={() => onSlotMinutesChange(60)}
                   aria-pressed={slotMinutes === 60}
+                  title="Целые часы: 14:00, 15:00, 16:00"
                 >
-                  1ч
+                  1 ч
                 </button>
                 <button
                   type="button"
                   className={`pattern-slot-btn ${slotMinutes === 30 ? 'active' : ''}`}
                   onClick={() => onSlotMinutesChange(30)}
                   aria-pressed={slotMinutes === 30}
+                  title="Каждый час делится на две гранулы: 14:00 и 14:30"
                 >
                   30 мин
                 </button>
@@ -181,6 +163,7 @@ export function SchedulePatternPanel({
                   className={`pattern-slot-btn ${slotMinutes === 15 ? 'active' : ''}`}
                   onClick={() => onSlotMinutesChange(15)}
                   aria-pressed={slotMinutes === 15}
+                  title="Каждый час делится на четыре гранулы: 14:00, 14:15, 14:30, 14:45"
                 >
                   15 мин
                 </button>

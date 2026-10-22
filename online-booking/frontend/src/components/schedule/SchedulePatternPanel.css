@@ -112,82 +112,57 @@
   row-gap: 10px;
 }
 
-/* Mode toggle field inside the unified cycle row. */
+/* Mode toggle sits immediately to the right of the cycle presets. The label
+ * stays above it, matching every other field in the panel. */
 .pattern-slot-field {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  justify-content: flex-end;
   flex: 0 0 auto;
-  min-width: 150px;
 }
 
-.pattern-slot-field .pattern-field-label {
-  text-align: right;
-}
-
+/* Segmented control: a soft track with a raised active segment. Total
+ * height (3 + 30 + 3 + borders) matches the 38px preset buttons above. */
 .pattern-slot-toggle-group {
   display: inline-flex;
-  width: 100%;
-  border: 1px solid #c9c9c9;
+  align-items: center;
+  gap: 3px;
+  box-sizing: border-box;
+  padding: 3px;
+  border: 1px solid #e2e5f0;
+  border-radius: 10px;
+  background: #f4f6fb;
+  box-shadow: inset 0 1px 2px rgba(24, 32, 72, 0.05);
+}
+
+.pattern-slot-btn {
+  min-width: 52px;
+  height: 30px;
+  padding: 0 10px;
+  border: none;
   border-radius: 7px;
-  background: #fff;
-}
-
-.pattern-slot-btn {
-  flex: 1;
-  height: 30px;
-  border: none;
-  border-radius: 0;
   background: transparent;
-  color: #444;
-  font-size: 13px;
+  color: #666e86;
+  font-size: 12px;
   font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
-}
-
-.pattern-slot-btn:first-child {
-  border-top-left-radius: 6px;
-  border-bottom-left-radius: 6px;
-  border-right: 1px solid #e0e0e0;
-}
-
-.pattern-slot-btn:last-child {
-  border-top-right-radius: 6px;
-  border-bottom-right-radius: 6px;
-  border-left: 1px solid #e0e0e0;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .pattern-slot-btn:hover:not(.active) {
-  background: #eef0ff;
+  background: #e7eaf7;
+  color: #4450b8;
 }
 
 .pattern-slot-btn.active {
-  background: #667eea;
+  background: linear-gradient(135deg, #667eea 0%, #5563d8 100%);
   color: #fff;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
-}
-
-.pattern-slot-btn {
-  height: 30px;
-  padding: 0 12px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: #444;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.pattern-slot-btn:hover:not(.active) {
-  background: #eef0ff;
-}
-
-.pattern-slot-btn.active {
-  background: #667eea;
-  color: #fff;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 2px 6px rgba(102, 126, 234, 0.35);
 }
 
 /* Month reset button next to "Применить". */
@@ -203,19 +178,20 @@
   padding: 10px 16px;
 }
 
-/* Unified cycle controls row: three equal-width fields, labels above controls. */
+/* Cycle row: presets on the left, mode toggle right beside them. */
 .pattern-controls-unified {
   display: flex;
-  gap: 12px;
+  gap: 10px 14px;
   flex-wrap: wrap;
-  align-items: flex-start;
+  align-items: flex-end;
 }
 
-/* Presets row: presets and mode toggle share one line next to each other. */
 .pattern-controls-unified > .pattern-presets {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
+  margin-bottom: 0;
 }
+
 .pattern-controls-unified > .pattern-slot-field {
   flex: 0 0 auto;
 }
@@ -440,6 +416,21 @@
 
   .pattern-field-unified {
     flex: 1 1 100%;
+  }
+
+  /* On phones the toggle drops below the presets and stretches full width,
+   * so the three modes stay easy to tap. */
+  .pattern-controls-unified > .pattern-presets,
+  .pattern-controls-unified > .pattern-slot-field {
+    flex: 1 1 100%;
+  }
+
+  .pattern-slot-toggle-group {
+    width: 100%;
+  }
+
+  .pattern-slot-btn {
+    flex: 1;
   }
 
   .pattern-date-full {

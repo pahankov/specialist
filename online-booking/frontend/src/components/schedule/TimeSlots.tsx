@@ -29,11 +29,7 @@ interface TimeSlotsProps {
   /** Stored range of the selected working day (in slots). */
   dayStartSlot?: number;
   dayEndSlot?: number;
-  onChangeDaySlots?: (
-    dateStr: string,
-    startSlot: number,
-    endSlot: number,
-  ) => Promise<void> | void;
+  onChangeDaySlots?: (dateStr: string, startSlot: number, endSlot: number) => Promise<void> | void;
 }
 
 const SLOTS_PER_DAY = (slotMinutes: number) => Math.ceil((24 * 60) / slotMinutes);
@@ -104,13 +100,7 @@ export function TimeSlots({
             type="checkbox"
             checked={allActive}
             onChange={(e) =>
-              toggleAllSlots(
-                dateStr,
-                daySchedule,
-                e.target.checked,
-                activeHours,
-                onToggleHour,
-              )
+              toggleAllSlots(dateStr, daySchedule, e.target.checked, activeHours, onToggleHour)
             }
           />
           <span>Выбрать все гранулы</span>
@@ -130,9 +120,7 @@ export function TimeSlots({
               >
                 −
               </button>
-              <span className="day-hours-value">
-                {formatSlotTime(dayRange.start, slotMinutes)}
-              </span>
+              <span className="day-hours-value">{formatSlotTime(dayRange.start, slotMinutes)}</span>
               <button
                 type="button"
                 className="day-hours-btn"
@@ -156,9 +144,7 @@ export function TimeSlots({
               >
                 −
               </button>
-              <span className="day-hours-value">
-                {formatSlotTime(dayRange.end, slotMinutes)}
-              </span>
+              <span className="day-hours-value">{formatSlotTime(dayRange.end, slotMinutes)}</span>
               <button
                 type="button"
                 className="day-hours-btn"
@@ -171,7 +157,7 @@ export function TimeSlots({
               </button>
             </div>
             <span className="day-hours-slot-size">
-              {slotMinutes === 30 ? '· полчаса' : '· час'}
+              {slotMinutes === 15 ? '· 15 мин' : slotMinutes === 30 ? '· 30 мин' : '· 1 час'}
             </span>
           </div>
         )}
@@ -239,7 +225,8 @@ function generateSlots(
   for (let s = hours.start; s < Math.min(hours.end, maxSlot); s++) {
     const slotsForHour = getAppointmentsForSlot(appointments, date, s, slotMinutes);
     const live = slotsForHour.filter((s) => s.status !== 'cancelled');
-    const coveredBy = live.length === 0 ? getCoveringLive(appointments, date, s, slotMinutes) : null;
+    const coveredBy =
+      live.length === 0 ? getCoveringLive(appointments, date, s, slotMinutes) : null;
     const busy = coveredBy ?? null;
     const status = live.length > 0 ? getSlotStatus(live) : (busy?.status ?? 'free');
     const past = isSlotPast(date, s, slotMinutes);

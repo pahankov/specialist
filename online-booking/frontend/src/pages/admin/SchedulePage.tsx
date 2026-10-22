@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { adminApi } from '../../api/client';
 import type {
@@ -36,6 +36,8 @@ import {
   hourToSlot,
   monthRangeISO,
   parseHourRangeToSlots,
+  rescaleActiveHours,
+  rescaleSchedule,
   formatDate,
   formatSlotTime,
   monthISO,
@@ -158,35 +160,21 @@ function SchedulePage() {
   // Remember the previous granule size so that stored day ranges (slot
   // indices) can be remapped to the new grid when the user switches modes.
   const prevSlotMinutesRef = useRef(slotMinutes);
+  // Async loaders must build the grid with the latest mode, even when they
+  // were started before the user touched the toggle.
+  const slotMinutesRef = useRef(slotMinutes);
+  slotMinutesRef.current = slotMinutes;
 
-  // Remap stored day ranges and active slot keys to the new slot grid when
-  // the granule size changes, so an 8–22 hour day stays 8–22 in 30- and
-  // 15-minute mode instead of rendering the wrong slice of slots.
-  useEffect(() => {
-    if (prevSlotMinutesRef.current === slotMinutes || Object.keys(schedule).length === 0) {
-      prevSlotMinutesRef.current = slotMinutes;
-      return;
-    }
+  // Split/merge existing granules when the mode changes: one hour becomes
+  // two half-hour or four quarter-hour rows in the same time range. The
+  // layout effect runs before paint, so the old grid is never shown with the
+  // new labels. Disabled granules are preserved, not re-created.
+  useLayoutEffect(() => {
     const prev = prevSlotMinutesRef.current;
-    const next = slotMinutes;
-    const nextSchedule: Record<string, DaySchedule> = {};
-    const nextActiveHours: Record<string, boolean> = {};
-    for (const [dateStr, range] of Object.entries(schedule)) {
-      const startMin = range.start * prev;
-      const endMin = range.end * prev;
-      const newStart = Math.max(0, Math.round(startMin / next));
-      const newEnd = Math.min(Math.ceil((24 * 60) / next), Math.round(endMin / next));
-      if (newEnd > newStart) {
-        nextSchedule[dateStr] = { start: newStart, end: newEnd };
-        for (let s = newStart; s < newEnd; s++) {
-          nextActiveHours[`${dateStr}-${s}`] = true;
-        }
-      }
-    }
+    if (prev === slotMinutes) return;
     prevSlotMinutesRef.current = slotMinutes;
-    setSchedule(nextSchedule);
-    setActiveHours(nextActiveHours);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setSchedule((current) => rescaleSchedule(current, prev, slotMinutes));
+    setActiveHours((current) => rescaleActiveHours(current, prev, slotMinutes));
   }, [slotMinutes]);
   // The base repeating template. It is a builder, not saved schedule data;
   // server rows are written only by the explicit "Применить" action.
@@ -233,7 +221,7 @@ function SchedulePage() {
         ]);
         if (cancelled) return;
 
-        const built = buildScheduleState(scheduleResp.data, slotMinutes);
+        const built = buildScheduleState(scheduleResp.data, slotMinutesRef.current);
         setSchedule(built.schedule);
         setActiveHours(built.activeHours);
         setAppointments(apptsResp.data || []);
@@ -327,7 +315,16 @@ function SchedulePage() {
         setActiveHours(result.newActiveHours);
       }
     },
-    [schedule, activeHours, appointments, selectedMasterId, isSuperAdmin, windowStart, windowEnd, slotMinutes],
+    [
+      schedule,
+      activeHours,
+      appointments,
+      selectedMasterId,
+      isSuperAdmin,
+      windowStart,
+      windowEnd,
+      slotMinutes,
+    ],
   );
 
   // Toggling a slot persists to the server AND drives the day state:
@@ -349,7 +346,11 @@ function SchedulePage() {
           const resp = await adminApi.getWorkingHours(masterParam);
           const existing = resp.data.find((h: WorkingHour) => h.schedule_date === dateStr);
           if (existing) {
-            const current = parseHourRangeToSlots(existing.start_time, existing.end_time, slotMinutes);
+            const current = parseHourRangeToSlots(
+              existing.start_time,
+              existing.end_time,
+              slotMinutes,
+            );
             const start = Math.min(current.startSlot, slot);
             const end = Math.max(current.endSlot, slot + 1);
             await adminApi.updateWorkingHour(existing.id, {
@@ -379,12 +380,7 @@ function SchedulePage() {
       // booking first (mirrors the day toggle, which refuses days with rows).
       // Span continuations count too: a 90-мин service blocks multiple slots.
       const [y, m, d] = dateStr.split('-').map(Number);
-      const liveHere = getBlockingLive(
-        appointments,
-        new Date(y, m - 1, d),
-        slot,
-        slotMinutes,
-      );
+      const liveHere = getBlockingLive(appointments, new Date(y, m - 1, d), slot, slotMinutes);
       if (liveHere.length > 0) {
         const who = liveHere.map((a) => a.client_name || 'клиент').join(', ');
         setError(`Нельзя снять гранулу — в ней бронь (${who}). Сначала отмените запись.`);
@@ -576,16 +572,13 @@ function SchedulePage() {
         cycle_work_days: pattern.workDays,
         cycle_off_days: pattern.offDays,
         cycle_anchor: pattern.anchor,
-        start_time: formatSlotTime(
-          hourToSlot(pattern.startHour, slotMinutes),
-          slotMinutes,
-        ),
+        start_time: formatSlotTime(hourToSlot(pattern.startHour, slotMinutes), slotMinutes),
         end_time: formatSlotTime(hourToSlot(pattern.endHour, slotMinutes), slotMinutes),
         replace_off_days: true,
       });
 
       const scheduleResp = await adminApi.getWorkingHours(masterParam);
-      const built = buildScheduleState(scheduleResp.data, slotMinutes);
+      const built = buildScheduleState(scheduleResp.data, slotMinutesRef.current);
       setWindowStart(data.window_start_hour);
       setWindowEnd(data.window_end_hour);
       setSchedule(built.schedule);
@@ -631,7 +624,7 @@ function SchedulePage() {
         range_end: to,
       });
       const scheduleResp = await adminApi.getWorkingHours(masterParam);
-      const built = buildScheduleState(scheduleResp.data, slotMinutes);
+      const built = buildScheduleState(scheduleResp.data, slotMinutesRef.current);
       setSchedule(built.schedule);
       setActiveHours(built.activeHours);
       const skipped =
@@ -696,14 +689,8 @@ function SchedulePage() {
       try {
         // Work window is stored as whole hours on the backend; round the
         // applied slot range out to full hours so new granules stay visible.
-        const nextWindowStart = Math.min(
-          windowStart,
-          Math.floor((startSlot * slotMinutes) / 60),
-        );
-        const nextWindowEnd = Math.max(
-          windowEnd,
-          Math.ceil((endSlot * slotMinutes) / 60),
-        );
+        const nextWindowStart = Math.min(windowStart, Math.floor((startSlot * slotMinutes) / 60));
+        const nextWindowEnd = Math.max(windowEnd, Math.ceil((endSlot * slotMinutes) / 60));
         if (nextWindowStart !== windowStart || nextWindowEnd !== windowEnd) {
           const { data } = await adminApi.updateWorkWindow({
             ...(masterParam ? { master_id: masterParam } : {}),
