@@ -441,17 +441,17 @@
 
 **Индексы:** `ix_email_codes_email`, `ix_email_codes_email_purpose`
 
-### 22. billing (1.84.0)
+### 22. billing (1.88.0)
 
 **Назначение:** ручная оплата и ledger мастеров. Деньги — `NUMERIC(10,2)`, ссылка на источник хранится в `source_ref`, повторные начисления защищены статусами.
 
 | Таблица | Назначение |
 |---------|------------|
 | `master_billing_accounts` | Trial-даты, статус доступа (`trial/active/readonly/paused/suspended`), реферальный код, флаги качества, `prepaid_until` (конец оплаченного предоплатой периода). 1:1 к `master_profiles` |
-| `billing_invoices` | Счета лестницы: 1–2-й месяц — 250 ₽, с 3-го — 500 ₽; issue/due/block, частичная оплата, кредиты. Отрицательные `period_index` — необязательная предоплата 1/12 мес. |
+| `billing_invoices` | Счета лестницы: 1–2-й месяц — 250 ₽, с 3-го — 500 ₽; issue/due/block, частичная оплата, баланс. Отрицательные `period_index` — необязательная предоплата 1/6/12 мес. |
 | `billing_payments` | Подтверждённые администратором платежи (method, note, кто подтвердил, когда) |
-| `billing_credits` | Бонусы и ручные начисления с остатком и сроком 90 дней |
-| `billing_credit_applications` | Какая сумма каждого кредита ушла в какой счёт (один row на пару credit/invoice) |
+| `billing_credits` | Бонусы, предоплата и ручные начисления с остатком и сроком 90 дней; `prepay_months` хранит срок предоплаты для тарифа |
+| `billing_credit_applications` | Какая сумма каждого начисления ушла в какой счёт (один row на пару credit/invoice) |
 | `client_bonus_awards` | Одноразовый бонус первого месяца: кандидаты, 30%-флаг качества, статус и снапшот |
 | `master_referrals` | Приглашение A→B, прогресс B, статус и сумма 125 ₽ |
 | `referral_clicks` | Одноразовые токены публичных ссылок `/r/:code`, срок 60 дней |
@@ -574,9 +574,10 @@
 | 35 | 25a1b2c3d4ea | 24a1b2c3d4e9 | `email_codes` (одноразовые коды на почту: сброс пароля и подтверждение, 1.79.0) | 2026-10-19 |
 | 36 | 26a1b2c3d4eb | 25a1b2c3d4ea | `master_profiles.prefer_master_panel` (старт сразу в кабинете мастера) | 2026-10-20 |
 | 37 | 27b1c2d3e4f5 | 26a1b2c3d4eb | Биллинг 1.84.0: счета, платежи, кредиты, клиентские бонусы, рефералы; провенанс записей; напоминания о визите; перевод существующих мастеров на 14-дневный trial (кроме superuser id=1) | 2026-10-21 |
-| 38 | 28d3e4f5a6b7 | 27b1c2d3e4f5 | Предоплата 1.87.0: `billing_invoices.kind/months/base_amount`, `master_billing_accounts.prepaid_until`; годовая предоплата −20%, долгоживущий кредит | 2026-10-22 |
+| 38 | 28d3e4f5a6b7 | 27b1c2d3e4f5 | Предоплата 1.87.0: `billing_invoices.kind/months/base_amount`, `master_billing_accounts.prepaid_until`; годовая предоплата −20%, долгоживущий баланс | 2026-10-22 |
+| 39 | 39e4f5a6b7c8 | 28d3e4f5a6b7 | Предоплата 1.88.0: `billing_credits.prepay_months` (тариф «Профи»/«Бизнес»), `users.master_terms_accepted_at/version` (принятие условий мастеров при активации) | 2026-10-22 |
 
-**Head:** `28d3e4f5a6b7`
+**Head:** `39e4f5a6b7c8`
 
 > Старая цепочка из 12 миграций (`9a9c2edb` → `b2c3d4e5f6a7`) удалена после squash —
 > история сохранена в git (`git log -- alembic/versions/`). Прод-БД со старым head

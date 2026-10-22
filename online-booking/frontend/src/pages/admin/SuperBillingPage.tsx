@@ -61,7 +61,7 @@ function SuperBillingPage() {
         <div>
           <h1>💳 Биллинг мастеров</h1>
           <p className="super-billing-subtitle">
-            Пробные периоды, счета, кредиты, бонусы и блокировки. Оплата подтверждается вручную.
+            Пробные периоды, счета, баланс, бонусы и блокировки. Оплата подтверждается вручную.
           </p>
         </div>
         <button className="btn btn-secondary" onClick={load} disabled={loading}>
@@ -76,7 +76,7 @@ function SuperBillingPage() {
             <strong>{money(data.summary.due)}</strong>
           </div>
           <div className="card super-billing-summary-card credit">
-            <span>Кредиты</span>
+            <span>Баланс</span>
             <strong>{money(data.summary.credit)}</strong>
           </div>
           <div className="card super-billing-summary-card warn">
@@ -142,7 +142,7 @@ function SuperBillingPage() {
                   <th>Доступ</th>
                   <th>Пробный до</th>
                   <th>К оплате</th>
-                  <th>Кредит</th>
+                  <th>Баланс</th>
                   <th>Реферал</th>
                   <th />
                 </tr>

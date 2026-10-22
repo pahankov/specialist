@@ -523,6 +523,9 @@ class MasterDraftRequest(BaseModel):
     auto_confirm: Optional[bool] = None
     auto_complete: Optional[bool] = None
     prefer_master_cabinet: Optional[bool] = None
+    # Explicit acceptance of the separate paid-master annex. Required at
+    # activation; draft saves may omit it.
+    accept_master_terms: Optional[bool] = None
 
     @field_validator("avatar_url")
     @classmethod
@@ -701,6 +704,11 @@ async def activate_master(
     if user.role != UserRole.CLIENT:
         raise HTTPException(status_code=400,
                             detail="Кабинет мастера уже активирован")
+    if not data.accept_master_terms:
+        raise HTTPException(
+            status_code=400,
+            detail="Подтвердите принятие условий для мастеров",
+        )
 
     mp = await _get_draft(db, user)
     mp = await _apply_draft(db, user, mp, data)
@@ -722,6 +730,8 @@ async def activate_master(
     mp.is_active = True
     mp.status = "active"
     user.role = UserRole.MASTER
+    user.master_terms_accepted_at = datetime.now(dt_timezone.utc)
+    user.master_terms_version = service.MASTER_TERMS_VERSION
     from app.services.billing import link_referral_to_master, start_master_trial
     await start_master_trial(db, mp)
     await link_referral_to_master(db, user, mp)

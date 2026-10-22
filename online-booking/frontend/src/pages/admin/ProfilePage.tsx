@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { adminApi, assetUrl, authApi } from '../../api/client';
 import apiClient from '../../api/http';
@@ -84,6 +84,7 @@ function ProfilePage({ mode = 'master' }: ProfilePageProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activating, setActivating] = useState(false);
+  const [acceptMasterTerms, setAcceptMasterTerms] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmDeleteStep2, setConfirmDeleteStep2] = useState(false);
@@ -410,6 +411,10 @@ function ProfilePage({ mode = 'master' }: ProfilePageProps) {
 
   const handleActivate = async () => {
     if (!isDraft || activating) return;
+    if (!acceptMasterTerms) {
+      toast.error('Подтвердите принятие условий для мастеров');
+      return;
+    }
     if (resolvingCity) {
       toast.error('Определяем город по адресу — подождите пару секунд');
       return;
@@ -425,6 +430,7 @@ function ProfilePage({ mode = 'master' }: ProfilePageProps) {
         ...basePayload(list),
         avatar_url: preset ? null : avatar,
         avatar_preset: preset,
+        accept_master_terms: true,
       });
       toast.success('Кабинет мастера активирован');
       // Hard navigation: the activation response already set the MASTER
@@ -604,10 +610,28 @@ function ProfilePage({ mode = 'master' }: ProfilePageProps) {
               </li>
             ))}
           </ul>
+          <label className="profile-terms-check">
+            <input
+              type="checkbox"
+              checked={acceptMasterTerms}
+              onChange={(event) => setAcceptMasterTerms(event.target.checked)}
+            />
+            <span>
+              Я принимаю{' '}
+              <Link to="/offer#master-terms" target="_blank" rel="noreferrer">
+                условия для мастеров
+              </Link>{' '}
+              и{' '}
+              <Link to="/offer" target="_blank" rel="noreferrer">
+                публичную оферту
+              </Link>
+              . Версия документа и дата принятия сохраняются.
+            </span>
+          </label>
           <button
             type="button"
             className="btn btn-primary"
-            disabled={!canActivate || activating || resolvingCity}
+            disabled={!canActivate || !acceptMasterTerms || activating || resolvingCity}
             onClick={handleActivate}
           >
             {activating
@@ -619,6 +643,11 @@ function ProfilePage({ mode = 'master' }: ProfilePageProps) {
           {!canActivate && (
             <p className="profile-card-hint" style={{ marginBottom: 0 }}>
               Кнопка станет активной, когда все пункты будут отмечены.
+            </p>
+          )}
+          {canActivate && !acceptMasterTerms && (
+            <p className="profile-card-hint" style={{ marginBottom: 0 }}>
+              Отметьте принятие условий для мастеров, чтобы активировать кабинет.
             </p>
           )}
         </div>

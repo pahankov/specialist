@@ -346,6 +346,7 @@
   gap: 16px;
   padding: 12px 16px;
   border-radius: 8px;
+  min-width: 0;
   transition: all 0.2s ease;
 }
 
@@ -400,6 +401,7 @@
   border: 1px solid #e2e6ea;
   border-radius: 10px;
   background: #fff;
+  min-width: 0;
   overflow: hidden;
   transition:
     border-color 0.2s ease,
@@ -417,6 +419,7 @@
   grid-auto-columns: minmax(0, 1fr);
   gap: 6px;
   padding: 6px;
+  min-width: 0;
 }
 
 /* On narrower screens four subgranules in one row become cramped — fall
@@ -431,10 +434,12 @@
 .time-subslot {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   padding: 7px 8px;
   border: 1px solid transparent;
   border-radius: 7px;
+  min-width: 0;
   transition:
     background 0.15s ease,
     border-color 0.15s ease;
@@ -446,6 +451,8 @@
   padding: 3px 8px;
   font-size: 11px;
   line-height: 1.2;
+  max-width: 100%;
+  margin-left: auto;
   flex-shrink: 0;
 }
 
@@ -532,6 +539,7 @@
 
 .time-slot-appointments {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -608,7 +616,9 @@
 
 .time-slot-status {
   flex: 1;
+  min-width: 0;
   font-size: 13px;
+  overflow-wrap: anywhere;
 }
 
 .btn-book {
@@ -933,14 +943,39 @@
     grid-template-columns: 1fr;
   }
 
+  .time-slot {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .time-slot-time {
+    min-width: 48px;
+    font-size: 15px;
+  }
+
+  .time-slot .btn-book,
+  .time-slot .slot-actions {
+    margin-left: auto;
+  }
+
+  .slot-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
   .time-subslot {
     gap: 8px;
     padding: 7px 6px;
   }
 
   .time-subslot-time {
-    min-width: 48px;
+    min-width: 44px;
     font-size: 13px;
+  }
+
+  .time-subslot .btn.btn-book {
+    margin-left: auto;
   }
 }
 

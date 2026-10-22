@@ -24,6 +24,13 @@ interface MasterSelectProps {
 
 let cachedMasters: MasterOption[] | null = null;
 
+const TARIFF_LABELS: Record<string, string> = {
+  trial: 'Триал',
+  basic: 'Базовый',
+  pro: 'Профи',
+  business: 'Бизнес',
+};
+
 /** Master picker with live name filtering (replaces 4 copy-pasted selects). */
 export default function MasterSelect({
   value,
@@ -158,7 +165,9 @@ export default function MasterSelect({
                 <span className={`master-select-dot${m.is_active === false ? ' off' : ''}`} />
                 <span className="master-select-name">{m.name}</span>
                 {m.tariff && m.tariff !== 'trial' && (
-                  <span className="master-select-tariff">{m.tariff}</span>
+                  <span className="master-select-tariff">
+                    {TARIFF_LABELS[m.tariff] ?? m.tariff}
+                  </span>
                 )}
               </div>
             ))

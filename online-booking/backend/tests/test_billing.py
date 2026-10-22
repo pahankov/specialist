@@ -509,7 +509,7 @@ class TestReferrals:
 
 
 class TestPrepayment:
-    async def test_annual_prepay_quote_is_20_percent_off_next_12_months(
+    async def test_annual_prepay_quote_discounts_only_full_price_months(
             self, session):
         from app.services.billing import create_prepayment
 
@@ -517,17 +517,37 @@ class TestPrepayment:
             session, "Prepay", "prepay@example.com")
         invoice, quote = await create_prepayment(session, mp.id, 12, now=NOW)
         assert quote["base_amount"] == 5500
-        assert quote["amount"] == 4400
+        assert quote["discount_base_amount"] == 5000
+        assert quote["discount_amount"] == 1000
+        assert quote["amount"] == 4500
         assert quote["discount_percent"] == 20
+        assert quote["tariff"] == "business"
         assert invoice.kind == "prepay_year"
         assert invoice.period_index == -1
         assert invoice.months == 12
-        assert float(invoice.amount) == 4400
+        assert float(invoice.amount) == 4500
         assert float(invoice.base_amount) == 5500
         assert invoice.period_start.date() == (NOW + timedelta(days=15)).date()
         assert invoice.period_end.date() == (NOW + timedelta(days=375)).date()
 
-    async def test_paid_annual_prepay_creates_credit_that_pays_future_invoices(
+    async def test_half_year_prepay_gets_10_percent_off_full_months(
+            self, session):
+        from app.services.billing import create_prepayment
+
+        _user, mp, _account = await _mk_master(
+            session, "PrepayHalf", "prepay-half@example.com")
+        invoice, quote = await create_prepayment(session, mp.id, 6, now=NOW)
+        assert quote["base_amount"] == 2500
+        assert quote["discount_base_amount"] == 2000
+        assert quote["discount_amount"] == 200
+        assert quote["amount"] == 2300
+        assert quote["discount_percent"] == 10
+        assert quote["tariff"] == "pro"
+        assert invoice.kind == "prepay_half_year"
+        assert invoice.months == 6
+        assert float(invoice.amount) == 2300
+
+    async def test_paid_annual_prepay_creates_balance_and_business_tariff(
             self, session):
         from decimal import Decimal
         from app.services.billing import (
@@ -539,7 +559,7 @@ class TestPrepayment:
             session, "PrepayPay", "prepay-pay@example.com")
         invoice, _quote = await create_prepayment(session, mp.id, 12, now=NOW)
         await record_payment(
-            session, invoice, amount=Decimal("4400"), method="manual",
+            session, invoice, amount=Decimal("4500"), method="manual",
             now=NOW + timedelta(days=1))
         await session.flush()
 
@@ -556,6 +576,9 @@ class TestPrepayment:
         )).scalar_one()
         assert float(credit.amount) == 5500
         assert float(credit.remaining) == 5500
+        assert credit.prepay_months == 12
+        await session.refresh(mp)
+        assert mp.tariff == "business"
 
         await process_master(session, mp.id, now=NOW + timedelta(days=16))
         first = (await session.execute(
@@ -575,6 +598,60 @@ class TestPrepayment:
         assert data["balance"]["due"] == 0
         assert data["balance"]["credit"] == 5250
         assert data["prepay"]["available"] is False
+        assert data["tariff"] == "business"
+        assert data["tariff_label"] == "Бизнес"
+        assert data["prepay"]["half_year"]["amount"] == 2500
+
+    async def test_prepay_after_preferential_months_has_no_extra_discount(
+            self, session):
+        from app.services.billing import process_master, serialize_billing
+
+        _user, mp, _account = await _mk_master(
+            session, "PrepayLater", "prepay-later@example.com")
+        later = NOW + timedelta(days=76)
+        await process_master(session, mp.id, now=later)
+        data = await serialize_billing(session, mp.id, now=later)
+
+        half = data["prepay"]["half_year"]
+        assert half["base_amount"] == 3000
+        assert half["discount_base_amount"] == 3000
+        assert half["discount_amount"] == 300
+        assert half["amount"] == 2700
+
+        year = data["prepay"]["year"]
+        assert year["base_amount"] == 6000
+        assert year["discount_base_amount"] == 6000
+        assert year["discount_amount"] == 1200
+        assert year["amount"] == 4800
+
+    async def test_paid_half_year_prepay_assigns_pro_tariff(self, session):
+        from decimal import Decimal
+        from app.services.billing import (
+            create_prepayment, process_master, record_payment,
+        )
+
+        _user, mp, _account = await _mk_master(
+            session, "PrepayHalfPay", "prepay-half-pay@example.com")
+        invoice, _quote = await create_prepayment(session, mp.id, 6, now=NOW)
+        await record_payment(
+            session, invoice, amount=Decimal("2300"), method="manual",
+            now=NOW + timedelta(days=1))
+        await process_master(session, mp.id, now=NOW + timedelta(days=1))
+        await session.refresh(mp)
+        assert mp.tariff == "pro"
+        credit = (await session.execute(
+            select(BillingCredit).where(
+                BillingCredit.master_id == mp.id,
+                BillingCredit.source == "prepayment",
+            )
+        )).scalar_one()
+        assert credit.prepay_months == 6
+
+        # When the prepaid balance is used up, the plan returns to Basic.
+        credit.remaining = Decimal("0")
+        await process_master(session, mp.id, now=NOW + timedelta(days=16))
+        await session.refresh(mp)
+        assert mp.tariff == "basic"
 
     async def test_monthly_prepay_and_current_invoice_block(self, session):
         from decimal import Decimal
@@ -637,7 +714,7 @@ class TestPrepayment:
         assert response.status_code == 200, response.text
         payload = response.json()
         assert payload["invoice_id"] > 0
-        assert payload["prepay"]["amount"] == 4400
+        assert payload["prepay"]["amount"] == 4500
         assert payload["billing"]["prepay"]["available"] is False
 
         duplicate = await client.post(
@@ -654,6 +731,19 @@ class TestPrepayment:
         assert cancelled.json()["billing"]["prepay"]["available"] is True
         assert cancelled.json()["billing"]["invoices"][0]["status"] == "void"
 
+        half = await client.post(
+            "/api/v1/admin/billing/prepay",
+            headers=headers, json={"months": 6},
+        )
+        assert half.status_code == 200, half.text
+        assert half.json()["prepay"]["amount"] == 2300
+        assert half.json()["prepay"]["tariff"] == "pro"
+        assert half.json()["billing"]["prepay"]["half_year"]["amount"] == 2300
+
+        half_cancel = await client.post(
+            "/api/v1/admin/billing/prepay/cancel", headers=headers,
+        )
+        assert half_cancel.status_code == 200, half_cancel.text
         second = await client.post(
             "/api/v1/admin/billing/prepay",
             headers=headers, json={"months": 1},

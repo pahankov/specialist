@@ -12,7 +12,7 @@ export interface BillingInvoice {
   due_amount: number;
   status: 'open' | 'paid' | 'void' | string;
   status_label: string;
-  kind?: 'monthly' | 'prepay_month' | 'prepay_year' | string;
+  kind?: 'monthly' | 'prepay_month' | 'prepay_half_year' | 'prepay_year' | string;
   months?: number;
   is_prepay?: boolean;
   issue_at: string;
@@ -26,10 +26,11 @@ export interface BillingInvoice {
 
 export interface BillingCredit {
   id: number;
-  source: 'client_bonus' | 'referral_bonus' | 'manual' | string;
+  source: 'client_bonus' | 'referral_bonus' | 'prepayment' | 'manual' | string;
   source_label: string;
   amount: number;
   remaining: number;
+  prepay_months?: number | null;
   expires_at?: string | null;
   note?: string | null;
   created_at?: string | null;
@@ -66,8 +67,11 @@ export interface ReferralRow {
 export interface BillingPrepayQuote {
   months: number;
   base_amount: number;
+  discount_base_amount: number;
+  discount_amount: number;
   amount: number;
   discount_percent: number;
+  tariff: string;
   starts_at?: string | null;
   ends_at?: string | null;
   period_index: number;
@@ -80,6 +84,8 @@ export interface BillingPrepayQuote {
 export interface BillingSummary {
   master_id: number;
   master_name: string;
+  tariff: string;
+  tariff_label: string;
   access_status: BillingStatus;
   access_status_label: string;
   is_blocked: boolean;
@@ -100,6 +106,7 @@ export interface BillingSummary {
     reason?: string | null;
     open_invoice_id?: number | null;
     month: BillingPrepayQuote;
+    half_year: BillingPrepayQuote;
     year: BillingPrepayQuote;
   };
   invoices: BillingInvoice[];
@@ -147,7 +154,7 @@ export const billingApi = {
   my() {
     return apiClient.get<BillingSummary>('/api/v1/admin/billing/me');
   },
-  prepay(months: 1 | 12) {
+  prepay(months: 1 | 6 | 12) {
     return apiClient.post<{
       ok: boolean;
       invoice_id: number;

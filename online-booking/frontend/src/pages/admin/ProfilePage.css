@@ -230,6 +230,36 @@ span.cert-thumb {
   color: #fff;
 }
 
+.profile-terms-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  background: #f8fbff;
+  color: #374151;
+  font-size: 13px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.profile-terms-check input {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  margin-top: 1px;
+  accent-color: #667eea;
+  cursor: pointer;
+}
+
+.profile-terms-check a {
+  color: #2563eb;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
 @media (max-width: 640px) {
   .profile-activation-head {
     /* A side badge squeezed the explanation into a narrow column. Stack it

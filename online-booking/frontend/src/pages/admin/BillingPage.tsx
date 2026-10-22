@@ -33,7 +33,7 @@ function BillingPage() {
   const [data, setData] = useState<BillingSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [prepaying, setPrepaying] = useState<1 | 12 | null>(null);
+  const [prepaying, setPrepaying] = useState<1 | 6 | 12 | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
 
@@ -64,13 +64,17 @@ function BillingPage() {
     load();
   }, [load]);
 
-  const requestPrepay = async (months: 1 | 12) => {
+  const requestPrepay = async (months: 1 | 6 | 12) => {
     setPrepaying(months);
     try {
       const response = await billingApi.prepay(months);
       applyBilling(response.data.billing);
       toast.success(
-        months === 12 ? 'Счёт на годовую предоплату создан' : 'Счёт на предоплату создан',
+        months === 12
+          ? 'Счёт на годовую предоплату создан'
+          : months === 6
+            ? 'Счёт на предоплату за полгода создан'
+            : 'Счёт на предоплату создан',
       );
       document.getElementById('invoices')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (err) {
@@ -142,8 +146,8 @@ function BillingPage() {
         <div>
           <h1>💳 Тариф и оплата</h1>
           <p className="billing-subtitle">
-            14 дней бесплатно, затем 250 ₽ × 2 месяца и 500 ₽/мес. Годовая предоплата — −20%.
-            Комиссия с записей — 0%.
+            14 дней бесплатно, затем 250 ₽ × 2 месяца и 500 ₽/мес. Полгода — −10%, год — −20% на
+            месяцы по 500 ₽. Комиссия с записей — 0%.
           </p>
         </div>
         <div className="billing-header-actions">
@@ -186,6 +190,9 @@ function BillingPage() {
           <div className={`billing-status billing-status-${statusTone(data.access_status)}`}>
             {data.access_status_label}
           </div>
+          <p className="billing-muted">
+            Тариф: <strong>{data.tariff_label}</strong>
+          </p>
           {data.access_status === 'trial' && (
             <p className="billing-muted">
               Пробный период до {date(data.trial_ends_at)} · осталось {data.trial_days_left} дн.
@@ -211,8 +218,16 @@ function BillingPage() {
             <strong>{money(data.balance.due)}</strong>
           </div>
           <div className="billing-balance-row billing-balance-credit">
-            <span>Кредиты и бонусы</span>
+            <span>Баланс и бонусы</span>
             <strong>{money(data.balance.credit)}</strong>
+          </div>
+          <div className="billing-balance-row billing-balance-total">
+            <span>Итого</span>
+            <strong className={data.balance.net < 0 ? 'negative' : undefined}>
+              {data.balance.net < 0
+                ? `−${money(Math.abs(data.balance.net))}`
+                : money(data.balance.net)}
+            </strong>
           </div>
         </div>
 
@@ -258,7 +273,7 @@ function BillingPage() {
             {bonus.status === 'pending'
               ? `Итог подведём ${date(bonus.evaluation_at)}. Записей-кандидатов: ${bonus.total_candidates}.`
               : bonus.status === 'credited'
-                ? `Бонус зачтён в счёт оплаты или сохранён как кредит на 90 дней.`
+                ? `Бонус зачтён в счёт оплаты или сохранён как бонус на 90 дней.`
                 : 'Бонус не начислен.'}
           </p>
           {bonus.review_flag && (
@@ -341,8 +356,10 @@ function BillingPage() {
             <div>
               <h3>Оплатить заранее</h3>
               <p className="billing-muted">
-                Предоплата зачисляется на баланс и автоматически закрывает следующие счета. Цена
-                года — минус 20% от суммы следующих 12 месячных счетов.
+                Предоплата зачисляется на баланс и автоматически закрывает следующие счета. В счёте
+                видно, сколько вы платите; на баланс зачисляется стоимость покрываемых счетов,
+                поэтому скидка уже учтена. Скидка 10% за полгода и 20% за год применяется только к
+                месяцам по 500 ₽ — льготные 250 ₽ не скидываются повторно.
               </p>
             </div>
             <Link to="/master-rules" className="billing-link">
@@ -358,7 +375,29 @@ function BillingPage() {
             >
               <span className="billing-prepay-kicker">1 месяц</span>
               <strong>{money(data.prepay.month.amount)}</strong>
-              <span className="billing-prepay-hint">До {date(data.prepay.month.ends_at)}</span>
+              <span className="billing-prepay-hint">
+                Тариф Базовый · до {date(data.prepay.month.ends_at)}
+              </span>
+            </button>
+            <button
+              type="button"
+              className="billing-prepay-option billing-prepay-option-half"
+              onClick={() => requestPrepay(6)}
+              disabled={!data.prepay.available || prepaying !== null}
+            >
+              <span className="billing-prepay-kicker">
+                6 месяцев <span className="billing-prepay-discount">−10%</span>
+              </span>
+              <span className="billing-prepay-price">
+                <s>{money(data.prepay.half_year.base_amount)}</s>
+                <strong>{money(data.prepay.half_year.amount)}</strong>
+              </span>
+              <span className="billing-prepay-hint">
+                Тариф Профи · до {date(data.prepay.half_year.ends_at)}
+              </span>
+              <span className="billing-prepay-hint">
+                Скидка {money(data.prepay.half_year.discount_amount)} только на полные месяцы
+              </span>
             </button>
             <button
               type="button"
@@ -374,8 +413,10 @@ function BillingPage() {
                 <strong>{money(data.prepay.year.amount)}</strong>
               </span>
               <span className="billing-prepay-hint">
-                Выгода {money(data.prepay.year.base_amount - data.prepay.year.amount)} · до{' '}
-                {date(data.prepay.year.ends_at)}
+                Тариф Бизнес · до {date(data.prepay.year.ends_at)}
+              </span>
+              <span className="billing-prepay-hint">
+                Скидка {money(data.prepay.year.discount_amount)} только на полные месяцы
               </span>
             </button>
           </div>
@@ -463,12 +504,13 @@ function BillingPage() {
       </section>
 
       <section className="card billing-section">
-        <h2>💎 Кредиты и бонусы</h2>
+        <h2>💎 Баланс и бонусы</h2>
         <p className="billing-muted">
-          Кредиты сначала закрывают старые счета, остаток переносится на 90 дней.
+          Баланс сначала закрывает старые счета, остаток переносится на 90 дней. Бонусы и предоплата
+          — это сумма на вашем балансе, а не заём.
         </p>
         {data.credits.length === 0 ? (
-          <EmptyState icon="💎" title="Кредитов пока нет" />
+          <EmptyState icon="💎" title="Начислений пока нет" />
         ) : (
           <div className="billing-credit-list">
             {data.credits.map((credit) => (
@@ -491,7 +533,7 @@ function BillingPage() {
 
       <p className="billing-muted billing-footnote">
         Тариф: 14 дней бесплатно · 15-й день — 250 ₽ · 45-й день — 250 ₽ · с 75-го дня — 500 ₽/мес.
-        Годовая предоплата — минус 20%. Комиссия с записей — 0%.{' '}
+        Полгода — −10%, год — −20% на месяцы по 500 ₽. Комиссия с записей — 0%.{' '}
         <Link to="/master-rules" className="billing-link">
           Правила тарифов, бонусов и рефералов
         </Link>

@@ -135,6 +135,20 @@
   color: #1a7f45;
 }
 
+.billing-balance-total {
+  margin-top: 4px;
+  border-top: 1px solid #e5e7eb;
+  font-weight: 600;
+}
+
+.billing-balance-total strong {
+  color: #1a7f45;
+}
+
+.billing-balance-total strong.negative {
+  color: #b42318;
+}
+
 .billing-prepaid-label {
   color: #1a7f45;
   font-weight: 700;
@@ -162,9 +176,15 @@
 
 .billing-prepay-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   margin-top: 14px;
+}
+
+@media (max-width: 960px) {
+  .billing-prepay-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .billing-prepay-option {
@@ -200,6 +220,11 @@
 .billing-prepay-option-year {
   border-color: #b9d2f6;
   background: linear-gradient(135deg, #ffffff 0%, #f2f7ff 100%);
+}
+
+.billing-prepay-option-half {
+  border-color: #c7ead6;
+  background: linear-gradient(135deg, #ffffff 0%, #f3fcf6 100%);
 }
 
 .billing-prepay-kicker {

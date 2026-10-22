@@ -19,6 +19,7 @@ from app.services.audit import log_action
 from app.services.billing import (
     ACCESS_LABELS,
     BillingValidationError,
+    PREPAY_KIND_HALF_YEAR,
     PREPAY_KIND_MONTH,
     PREPAY_KIND_YEAR,
     add_manual_credit,
@@ -113,7 +114,7 @@ async def prepay(
     master: User = Depends(require_master),
     db: AsyncSession = Depends(get_db),
 ):
-    """Create an optional 1- or 12-month prepayment invoice for the master."""
+    """Create an optional 1-, 6- or 12-month prepayment invoice for the master."""
     if master.role != UserRole.MASTER or master.master_profile is None:
         raise HTTPException(status_code=400, detail="Доступно только мастеру")
     try:
@@ -155,7 +156,8 @@ async def cancel_prepayment(
         .where(
             BillingInvoice.master_id == master.master_profile.id,
             BillingInvoice.status == "open",
-            BillingInvoice.kind.in_((PREPAY_KIND_MONTH, PREPAY_KIND_YEAR)),
+            BillingInvoice.kind.in_((PREPAY_KIND_MONTH, PREPAY_KIND_HALF_YEAR,
+                                      PREPAY_KIND_YEAR)),
         )
         .order_by(BillingInvoice.id.desc())
     )).scalars().first()

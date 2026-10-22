@@ -75,7 +75,7 @@ class BillingInvoice(Base):
     base_amount = Column(Numeric(10, 2), nullable=True)
     credits_applied = Column(Numeric(10, 2), nullable=False, default=0)
     paid_amount = Column(Numeric(10, 2), nullable=False, default=0)
-    # monthly | prepay_month | prepay_year
+    # monthly | prepay_month | prepay_half_year | prepay_year
     kind = Column(String(24), nullable=False, default="monthly",
                   server_default="monthly", index=True)
     months = Column(Integer, nullable=False, default=1, server_default="1")
@@ -117,11 +117,14 @@ class BillingCredit(Base):
         Integer, ForeignKey("master_profiles.id", ondelete="CASCADE"),
         nullable=False, index=True,
     )
-    # client_bonus | referral_bonus | manual
+    # client_bonus | referral_bonus | prepayment | manual
     source = Column(String(30), nullable=False, index=True)
     source_ref = Column(String(80), nullable=True)
     amount = Column(Numeric(10, 2), nullable=False)
     remaining = Column(Numeric(10, 2), nullable=False)
+    # Length of the prepayment that created this balance (1/6/12 months).
+    # NULL for bonuses, manual adjustments and pre-1.88 annual credits.
+    prepay_months = Column(Integer, nullable=True)
     expires_at = Column(DateTime(timezone=True), nullable=True, index=True)
     expired_at = Column(DateTime(timezone=True), nullable=True)
     note = Column(Text, nullable=True)

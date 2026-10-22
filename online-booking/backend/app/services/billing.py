@@ -5,9 +5,11 @@ Money rules (manual payments, no card gateway yet):
 - client bonus 25 ₽ per eligible client (max 10 / 250 ₽);
 - referral bonus 125 ₽ per qualified colleague (max 2 / 250 ₽);
 - credits are applied oldest-invoice-first and live for 90 days;
-- a master can prepay 1 month or 12 months (annual −20%). Prepayment creates
-  an optional invoice outside the monthly ladder; when an admin confirms it,
-  a long-lived credit is added and future monthly invoices consume it;
+- a master can prepay 1, 6 or 12 months (half-year −10%, annual −20%). The
+  discount applies only to full-price 500 ₽ months, never to the preferential
+  250 ₽ months. Prepayment creates an optional invoice outside the monthly
+  ladder; when an admin confirms it, a long-lived balance is added and future
+  monthly invoices consume it;
 - unpaid monthly invoices put the cabinet into read-only after the due date
   and pause it after 30 days; a recorded payment restores access immediately.
 """
@@ -56,9 +58,13 @@ REFERRAL_MAX = 2
 REFERRAL_CLICK_DAYS = 60
 REFERRAL_QUALIFY_BOOKINGS = 7
 CREDIT_TTL_DAYS = 90
+MONTH_PRICE_DISCOUNTED = Decimal("250")
+MONTH_PRICE_FULL = Decimal("500")
+PREPAY_HALF_YEAR_MONTHS = 6
 PREPAY_MONTHS = 12
-PREPAY_DISCOUNT_PERCENT = 20
+PREPAY_DISCOUNTS = {PREPAY_HALF_YEAR_MONTHS: 10, PREPAY_MONTHS: 20}
 PREPAY_KIND_MONTH = "prepay_month"
+PREPAY_KIND_HALF_YEAR = "prepay_half_year"
 PREPAY_KIND_YEAR = "prepay_year"
 BLOCK_AFTER_DAYS = 0
 PAUSE_AFTER_DAYS = 30
@@ -78,6 +84,17 @@ ACCESS_LABELS = {
     ACCESS_READONLY: "Только чтение",
     ACCESS_PAUSED: "Приостановлен",
     ACCESS_SUSPENDED: "Заблокирован администратором",
+}
+
+TARIFF_TRIAL = "trial"
+TARIFF_BASIC = "basic"
+TARIFF_PRO = "pro"
+TARIFF_BUSINESS = "business"
+TARIFF_LABELS = {
+    TARIFF_TRIAL: "Триал",
+    TARIFF_BASIC: "Базовый",
+    TARIFF_PRO: "Профи",
+    TARIFF_BUSINESS: "Бизнес",
 }
 
 INVOICE_LABELS = {
@@ -263,7 +280,7 @@ async def start_master_trial(
     account.bonus_blocked_until = None
     account.last_processed_at = None
     master.trial_ends_at = account.trial_ends_at
-    master.tariff = "trial"
+    master.tariff = TARIFF_TRIAL
     await db.flush()
     return account
 
@@ -652,7 +669,7 @@ async def evaluate_client_bonus(
             db, master.user_id,
             f"Бонус за клиентов: {calc['eligible_count']} × 25 ₽ = "
             f"{_fmt_money(calc['amount'])}.\n"
-            "Сумма зачтена в счёт оплаты или сохранена как кредит на 90 дней.",
+            "Сумма зачтена в счёт оплаты или сохранена на балансе на 90 дней.",
             audience="system", kind="billing_bonus", link="billing",
         )
     if flagged:
@@ -772,7 +789,7 @@ async def evaluate_referrals_for_master(
             db, referrer.user_id,
             f"Реферальный бонус: {_fmt_money(REFERRAL_BONUS)} за коллегу "
             f"{referred_user.name or ''}. Сумма зачтена в счёт оплаты "
-            "или сохранена как кредит на 90 дней.",
+            "или сохранена на балансе на 90 дней.",
             audience="system", kind="billing_bonus", link="billing",
         )
         await apply_credits(db, referrer.id, now=now)
@@ -791,12 +808,37 @@ def _invoice_terms(
     # on day 21 (the same checkpoint used for client bonuses).
     issue_at = trial_end + timedelta(days=1 + 30 * (period_index - 1))
     due_at = issue_at + timedelta(days=6)
-    amount = Decimal("250") if period_index <= 2 else Decimal("500")
+    amount = (MONTH_PRICE_DISCOUNTED if period_index <= 2
+              else MONTH_PRICE_FULL)
     return issue_at, due_at, due_at, amount
 
 
 class BillingValidationError(ValueError):
     """A user-facing billing rule was violated (router turns it into 400)."""
+
+
+def prepayment_tariff(months: int) -> str:
+    """Plan assigned while a prepayment of this length is active."""
+    if months >= PREPAY_MONTHS:
+        return TARIFF_BUSINESS
+    if months >= PREPAY_HALF_YEAR_MONTHS:
+        return TARIFF_PRO
+    return TARIFF_BASIC
+
+
+def _credit_prepay_months(credit: BillingCredit) -> int:
+    """Prepayment length for old and new credits.
+
+    The column was added together with half-year prepayments. Older annual
+    credits have no value; their amount is safely above the half-year range.
+    """
+    if credit.prepay_months:
+        return int(credit.prepay_months)
+    if _money(credit.amount) >= Decimal("3000"):
+        return PREPAY_MONTHS
+    if _money(credit.amount) >= Decimal("1500"):
+        return PREPAY_HALF_YEAR_MONTHS
+    return 1
 
 
 def _prepayment_quote(
@@ -806,15 +848,17 @@ def _prepayment_quote(
     months: int,
     now: datetime,
 ) -> dict:
-    """Quote a monthly/annual prepayment without changing the ledger.
+    """Quote a 1/6/12-month prepayment without changing the ledger.
 
-    The price is the sum of the next N monthly invoices. Only the annual
-    option gets the 20% discount. A prepayment is optional: it does not
-    affect access and does not replace the normal monthly ladder until the
-    admin confirms the payment and the credit is created.
+    The price is the sum of the next N monthly invoices. The discount (10%
+    for six months, 20% for a year) applies only to full-price 500 ₽ months;
+    the preferential 250 ₽ months are never discounted twice. A prepayment
+    is optional: it does not affect access and does not replace the normal
+    monthly ladder until the admin confirms the payment and the balance is
+    credited.
     """
-    if months not in (1, PREPAY_MONTHS):
-        raise BillingValidationError("Можно оплатить 1 или 12 месяцев")
+    if months not in (1, PREPAY_HALF_YEAR_MONTHS, PREPAY_MONTHS):
+        raise BillingValidationError("Можно оплатить 1, 6 или 12 месяцев")
 
     next_index = _next_period_index(invoices)
     amounts = [
@@ -822,10 +866,15 @@ def _prepayment_quote(
         for index in range(next_index, next_index + months)
     ]
     base_amount = _money(sum(amounts, Decimal("0")))
-    discount = PREPAY_DISCOUNT_PERCENT if months == PREPAY_MONTHS else 0
-    amount = _money(
-        base_amount * (Decimal("100") - Decimal(discount)) / Decimal("100")
+    discount = PREPAY_DISCOUNTS.get(months, 0)
+    discount_base = _money(sum(
+        (value for value in amounts if value == MONTH_PRICE_FULL),
+        Decimal("0"),
+    ))
+    discount_amount = _money(
+        discount_base * Decimal(discount) / Decimal("100")
     )
+    amount = _money(base_amount - discount_amount)
     starts_at = _invoice_terms(account, next_index)[0]
     ends_at = _invoice_terms(
         account, next_index + months - 1)[0] + timedelta(days=30)
@@ -859,8 +908,11 @@ def _prepayment_quote(
     return {
         "months": months,
         "base_amount": float(base_amount),
+        "discount_base_amount": float(discount_base),
+        "discount_amount": float(discount_amount),
         "amount": float(amount),
         "discount_percent": discount,
+        "tariff": prepayment_tariff(months),
         "starts_at": _iso(starts_at),
         "ends_at": _iso(ends_at),
         "period_index": next_index,
@@ -901,18 +953,23 @@ async def create_prepayment(
     last_issue = _invoice_terms(account, next_index + months - 1)[0]
     ends_at = last_issue + timedelta(days=30)
     due_at = max(now, starts_at) + timedelta(days=6)
-    kind = PREPAY_KIND_YEAR if months == PREPAY_MONTHS else PREPAY_KIND_MONTH
+    kind = (
+        PREPAY_KIND_YEAR if months == PREPAY_MONTHS
+        else PREPAY_KIND_HALF_YEAR if months == PREPAY_HALF_YEAR_MONTHS
+        else PREPAY_KIND_MONTH
+    )
     negative_index = min(
         (invoice.period_index for invoice in invoices
          if invoice.period_index < 0),
         default=0,
     ) - 1
+    discount = quote["discount_percent"]
     note = (
         f"Предоплата {months} мес. Базовая стоимость "
         f"{_fmt_money(quote['base_amount'])}"
-        + (f", скидка {PREPAY_DISCOUNT_PERCENT}%, "
+        + (f", скидка {discount}% на месяцы по 500 ₽, "
            f"к оплате {_fmt_money(quote['amount'])}."
-           if months == PREPAY_MONTHS else ".")
+           if discount else ".")
     )
     invoice = BillingInvoice(
         master_id=master_id,
@@ -938,9 +995,8 @@ async def create_prepayment(
 
     body = (
         f"Счёт на предоплату {months} мес.: {_fmt_money(quote['amount'])}"
-        + (f" (скидка {PREPAY_DISCOUNT_PERCENT}% от "
-           f"{_fmt_money(quote['base_amount'])})"
-           if months == PREPAY_MONTHS else "")
+        + (f" (скидка {discount}% на месяцы по 500 ₽, базовая стоимость "
+           f"{_fmt_money(quote['base_amount'])})" if discount else "")
         + ".\nОплата подтверждается администратором вручную — после "
         "подтверждения сумма будет зачислена на баланс и автоматически "
         "закроет следующие счета."
@@ -1162,7 +1218,25 @@ async def process_master(
         status = ACCESS_SUSPENDED
     account.access_status = status
     account.last_processed_at = now
-    master.tariff = "trial" if status == ACCESS_TRIAL else "basic"
+    active_prepay = (await db.execute(
+        select(BillingCredit).where(
+            BillingCredit.master_id == master.id,
+            BillingCredit.source == "prepayment",
+            BillingCredit.remaining > 0,
+            or_(BillingCredit.expires_at.is_(None),
+                BillingCredit.expires_at > now),
+        )
+    )).scalars().all()
+    prepay_months = max(
+        (_credit_prepay_months(credit) for credit in active_prepay),
+        default=0,
+    )
+    if prepay_months:
+        master.tariff = prepayment_tariff(prepay_months)
+    elif status == ACCESS_TRIAL:
+        master.tariff = TARIFF_TRIAL
+    else:
+        master.tariff = TARIFF_BASIC
     master.trial_ends_at = account.trial_ends_at
 
     if notify:
@@ -1247,6 +1321,7 @@ async def _grant_prepayment_credit(
         source_ref=f"prepay:{invoice.id}",
         amount=amount,
         remaining=amount,
+        prepay_months=months,
         # The prepayment credit must live through the entire covered period
         # plus the regular 90-day grace window.
         expires_at=period_end + timedelta(days=CREDIT_TTL_DAYS),
@@ -1454,7 +1529,7 @@ async def serialize_billing(
         next_amount = Decimal("0")
     elif now < trial_end:
         next_at = trial_end + timedelta(days=1)
-        next_amount = Decimal("250")
+        next_amount = MONTH_PRICE_DISCOUNTED
     else:
         next_index = _next_period_index(monthly_invoices)
         next_at, _, _, next_amount = _invoice_terms(account, next_index)
@@ -1465,13 +1540,22 @@ async def serialize_billing(
 
     month_quote = _prepayment_quote(
         account, invoices, credits, 1, now)
+    half_year_quote = _prepayment_quote(
+        account, invoices, credits, PREPAY_HALF_YEAR_MONTHS, now)
     year_quote = _prepayment_quote(
         account, invoices, credits, PREPAY_MONTHS, now)
-    prepay_reason = month_quote["reason"] or year_quote["reason"]
+    prepay_reason = (
+        month_quote["reason"]
+        or half_year_quote["reason"]
+        or year_quote["reason"]
+    )
 
     return {
         "master_id": master.id,
         "master_name": master.user.name if master.user else "Мастер",
+        "tariff": master.tariff or TARIFF_BASIC,
+        "tariff_label": TARIFF_LABELS.get(
+            master.tariff or TARIFF_BASIC, master.tariff or TARIFF_BASIC),
         "access_status": account.access_status,
         "access_status_label": ACCESS_LABELS.get(
             account.access_status, account.access_status),
@@ -1498,6 +1582,7 @@ async def serialize_billing(
             "reason": prepay_reason,
             "open_invoice_id": month_quote["open_invoice_id"],
             "month": month_quote,
+            "half_year": half_year_quote,
             "year": year_quote,
         },
         "invoices": [{
@@ -1530,6 +1615,7 @@ async def serialize_billing(
             "source_label": CREDIT_LABELS.get(c.source, c.source),
             "amount": float(_money(c.amount)),
             "remaining": float(_money(c.remaining)),
+            "prepay_months": c.prepay_months,
             "expires_at": _iso(c.expires_at),
             "note": c.note,
             "created_at": _iso(c.created_at),

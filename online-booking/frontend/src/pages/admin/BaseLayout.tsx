@@ -53,6 +53,13 @@ function formatBalance(value: number): string {
   })} ₽`;
 }
 
+const TARIFF_LABELS: Record<string, string> = {
+  trial: 'Триал',
+  basic: 'Базовый',
+  pro: 'Профи',
+  business: 'Бизнес',
+};
+
 function getLayoutUser(fallbackName: string): LayoutUser | null {
   const token = getCookie('access_token');
   if (!token) return null;
@@ -254,6 +261,7 @@ function BaseLayout({
       net: summary.balance.net,
       prepaidUntil: summary.prepaid_until ?? null,
     });
+    setMasterMeta((prev) => (prev && summary.tariff ? { ...prev, tariff: summary.tariff } : prev));
   }, []);
 
   useEffect(() => {
@@ -406,12 +414,12 @@ function BaseLayout({
               <span
                 className="tariff-badge"
                 title={
-                  masterMeta.trialEnds
-                    ? `Тариф «${masterMeta.tariff}» до ${new Date(masterMeta.trialEnds).toLocaleDateString('ru-RU')}`
-                    : `Тариф «${masterMeta.tariff}»`
+                  masterMeta.tariff === 'trial' && masterMeta.trialEnds
+                    ? `Пробный период до ${new Date(masterMeta.trialEnds).toLocaleDateString('ru-RU')}`
+                    : `Тариф «${TARIFF_LABELS[masterMeta.tariff] ?? masterMeta.tariff}»`
                 }
               >
-                💎 {masterMeta.tariff}
+                💎 {TARIFF_LABELS[masterMeta.tariff] ?? masterMeta.tariff}
               </span>
               {masterMeta.rating !== null && (
                 <Link
@@ -437,8 +445,8 @@ function BaseLayout({
               }`}
               title={
                 masterBalance.prepaidUntil
-                  ? `Предоплачено до ${new Date(masterBalance.prepaidUntil).toLocaleDateString('ru-RU')}. К оплате: ${formatBalance(masterBalance.due)} · Кредиты: ${formatBalance(masterBalance.credit)}`
-                  : `К оплате: ${formatBalance(masterBalance.due)} · Кредиты и бонусы: ${formatBalance(masterBalance.credit)}`
+                  ? `Предоплачено до ${new Date(masterBalance.prepaidUntil).toLocaleDateString('ru-RU')}. К оплате: ${formatBalance(masterBalance.due)} · Баланс и бонусы: ${formatBalance(masterBalance.credit)}`
+                  : `К оплате: ${formatBalance(masterBalance.due)} · Баланс и бонусы: ${formatBalance(masterBalance.credit)}`
               }
             >
               <span className="sidebar-balance-label">Баланс</span>

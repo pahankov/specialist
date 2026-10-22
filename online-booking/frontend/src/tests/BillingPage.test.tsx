@@ -19,12 +19,22 @@ const mockedMy = vi.mocked(billingApi.my);
 const mockedPrepay = vi.mocked(billingApi.prepay);
 const mockedCancel = vi.mocked(billingApi.cancelPrepay);
 
-function quote(months: number, amount: number, baseAmount: number, discount: number) {
+function quote(
+  months: number,
+  amount: number,
+  baseAmount: number,
+  discount: number,
+  discountBase = baseAmount,
+  tariff = 'basic',
+) {
   return {
     months,
     base_amount: baseAmount,
+    discount_base_amount: discountBase,
+    discount_amount: baseAmount - amount,
     amount,
     discount_percent: discount,
+    tariff,
     starts_at: '2026-11-06T12:00:00+00:00',
     ends_at: '2026-12-06T12:00:00+00:00',
     period_index: 1,
@@ -38,6 +48,8 @@ function summary(overrides: Partial<BillingSummary> = {}): BillingSummary {
   return {
     master_id: 1,
     master_name: 'Анна',
+    tariff: 'trial',
+    tariff_label: 'Триал',
     access_status: 'trial',
     access_status_label: 'Пробный период',
     is_blocked: false,
@@ -58,7 +70,8 @@ function summary(overrides: Partial<BillingSummary> = {}): BillingSummary {
       reason: null,
       open_invoice_id: null,
       month: quote(1, 250, 250, 0),
-      year: quote(12, 4400, 5500, 20),
+      half_year: quote(6, 2300, 2500, 10, 2000, 'pro'),
+      year: quote(12, 4500, 5500, 20, 5000, 'business'),
     },
     invoices: [],
     credits: [],
@@ -105,11 +118,11 @@ describe('BillingPage prepayment', () => {
         {
           id: 7,
           period_index: -1,
-          amount: 4400,
+          amount: 4500,
           base_amount: 5500,
           credits_applied: 0,
           paid_amount: 0,
-          due_amount: 4400,
+          due_amount: 4500,
           status: 'open',
           status_label: 'К оплате',
           kind: 'prepay_year',
@@ -126,7 +139,8 @@ describe('BillingPage prepayment', () => {
         reason: 'Счёт на предоплату уже выставлен',
         open_invoice_id: 7,
         month: quote(1, 250, 250, 0),
-        year: quote(12, 4400, 5500, 20),
+        half_year: quote(6, 2300, 2500, 10, 2000, 'pro'),
+        year: quote(12, 4500, 5500, 20, 5000, 'business'),
       },
     });
     mockedMy.mockResolvedValue({ data: initial } as never);
@@ -142,8 +156,12 @@ describe('BillingPage prepayment', () => {
 
     const yearButton = await screen.findByRole('button', { name: /12 месяцев/i });
     expect(yearButton).toHaveTextContent(/5.500/);
-    expect(yearButton).toHaveTextContent(/4.400/);
+    expect(yearButton).toHaveTextContent(/4.500/);
     expect(yearButton).toHaveTextContent(/20%/);
+    const halfButton = screen.getByRole('button', { name: /6 месяцев/i });
+    expect(halfButton).toHaveTextContent(/2.500/);
+    expect(halfButton).toHaveTextContent(/2.300/);
+    expect(halfButton).toHaveTextContent(/10%/);
 
     fireEvent.click(yearButton);
 
@@ -181,6 +199,55 @@ describe('BillingPage prepayment', () => {
     expect(await screen.findByText('Счетов пока нет')).toBeInTheDocument();
   });
 
+  it('creates a half-year invoice and shows the Pro tariff', async () => {
+    const initial = summary();
+    const updated = summary({
+      invoices: [
+        {
+          id: 8,
+          period_index: -1,
+          amount: 2300,
+          base_amount: 2500,
+          credits_applied: 0,
+          paid_amount: 0,
+          due_amount: 2300,
+          status: 'open',
+          status_label: 'К оплате',
+          kind: 'prepay_half_year',
+          months: 6,
+          is_prepay: true,
+          issue_at: '2026-10-22T12:00:00+00:00',
+          due_at: '2026-11-12T12:00:00+00:00',
+          period_start: '2026-11-06T12:00:00+00:00',
+          period_end: '2027-05-06T12:00:00+00:00',
+        },
+      ],
+      prepay: {
+        available: false,
+        reason: 'Счёт на предоплату уже выставлен',
+        open_invoice_id: 8,
+        month: quote(1, 250, 250, 0),
+        half_year: quote(6, 2300, 2500, 10, 2000, 'pro'),
+        year: quote(12, 4500, 5500, 20, 5000, 'business'),
+      },
+    });
+    mockedMy.mockResolvedValue({ data: initial } as never);
+    mockedPrepay.mockResolvedValue({
+      data: { ok: true, invoice_id: 8, prepay: updated.prepay.half_year, billing: updated },
+    } as never);
+
+    render(
+      <MemoryRouter>
+        <BillingPage />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /6 месяцев/i }));
+    await waitFor(() => expect(mockedPrepay).toHaveBeenCalledWith(6));
+    expect(await screen.findByText('Предоплата · 6 мес.')).toBeInTheDocument();
+    expect(screen.getByText(/Счёт на предоплату уже выставлен/)).toBeInTheDocument();
+  });
+
   it('disables prepayment while a monthly invoice is unpaid', async () => {
     mockedMy.mockResolvedValue({
       data: summary({
@@ -189,7 +256,8 @@ describe('BillingPage prepayment', () => {
           reason: 'Сначала оплатите текущий счёт',
           open_invoice_id: null,
           month: quote(1, 250, 250, 0),
-          year: quote(12, 4400, 5500, 20),
+          half_year: quote(6, 2300, 2500, 10, 2000, 'pro'),
+          year: quote(12, 4500, 5500, 20, 5000, 'business'),
         },
       }),
     } as never);
@@ -202,6 +270,7 @@ describe('BillingPage prepayment', () => {
 
     expect(await screen.findByText('Сначала оплатите текущий счёт')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /1 месяц/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /6 месяцев/i })).toBeDisabled();
     expect(screen.getByRole('button', { name: /12 месяцев/i })).toBeDisabled();
   });
 });

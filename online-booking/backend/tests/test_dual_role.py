@@ -82,6 +82,7 @@ class TestBecomeMaster:
             "name": "Тест",
             "last_name": "Клиент",
             "cabinet_address": "ул. Тестовая, 1",
+            "accept_master_terms": True,
         }
         data.update(over)
         return data
@@ -121,6 +122,38 @@ class TestBecomeMaster:
     async def _bind_vk(self, session, user, uid):
         user.vk_user_id = uid
         await session.commit()
+
+    async def test_activation_requires_master_terms_and_stamps_version(
+        self, client, session,
+    ):
+        from app.models.user import UserRole
+        from app.modules.auth.service import MASTER_TERMS_VERSION
+
+        token, email_id, user = await self._register_client(
+            client, session, "+79991115570", "master-terms@example.com")
+        await self._verify_email(session, email_id)
+
+        rejected = await client.post(
+            "/api/v1/auth/become-master/activate",
+            headers=_auth(token),
+            json=self._payload(accept_master_terms=False),
+        )
+        assert rejected.status_code == 400, rejected.text
+        assert "условий для мастеров" in rejected.json()["detail"]
+        await session.refresh(user)
+        assert user.role == UserRole.CLIENT
+        assert user.master_terms_accepted_at is None
+
+        accepted = await client.post(
+            "/api/v1/auth/become-master/activate",
+            headers=_auth(token),
+            json=self._payload(accept_master_terms=True),
+        )
+        assert accepted.status_code == 200, accepted.text
+        await session.refresh(user)
+        assert user.role == UserRole.MASTER
+        assert user.master_terms_accepted_at is not None
+        assert user.master_terms_version == MASTER_TERMS_VERSION
 
     async def test_incomplete_draft_saves_without_activation(self, client, session):
         from sqlalchemy import select

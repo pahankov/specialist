@@ -190,7 +190,7 @@ function MasterDetailPage() {
     if (!master || actionBusy) return;
     const amount = Number(creditAmount.replace(',', '.'));
     if (!Number.isFinite(amount) || amount <= 0) {
-      toast.error('Введите сумму кредита');
+      toast.error('Введите сумму пополнения');
       return;
     }
     setActionBusy(true);
@@ -201,9 +201,9 @@ function MasterDetailPage() {
       });
       setBilling(data.billing);
       setCreditAmount('');
-      toast.success('Кредит начислен');
+      toast.success('Баланс пополнен');
     } catch (err: unknown) {
-      toast.error(getApiErrorMessage(err, 'Не удалось начислить кредит'));
+      toast.error(getApiErrorMessage(err, 'Не удалось пополнить баланс'));
     } finally {
       setActionBusy(false);
     }
@@ -731,7 +731,7 @@ function MasterDetailPage() {
                     </strong>
                   </div>
                   <div className="master-billing-stat">
-                    <span>Кредиты</span>
+                    <span>Баланс</span>
                     <strong className="text-success">{money(billing.balance.credit)}</strong>
                   </div>
                   <div className="master-billing-stat">
@@ -807,7 +807,7 @@ function MasterDetailPage() {
                           <tr>
                             <th>Период</th>
                             <th>Сумма</th>
-                            <th>Бонусы</th>
+                            <th>Зачтено</th>
                             <th>Оплачено</th>
                             <th>К оплате</th>
                             <th>Срок</th>
@@ -827,7 +827,7 @@ function MasterDetailPage() {
                                 {money(invoice.amount)}
                                 {invoice.is_prepay && invoice.base_amount ? (
                                   <span className="master-billing-subnote">
-                                    кредит {money(invoice.base_amount)}
+                                    зачислено {money(invoice.base_amount)}
                                   </span>
                                 ) : null}
                               </td>
@@ -943,7 +943,7 @@ function MasterDetailPage() {
                 </div>
 
                 <section className="master-billing-section">
-                  <h3>💎 Кредиты</h3>
+                  <h3>💎 Баланс и бонусы</h3>
                   <form className="master-billing-credit-form" onSubmit={handleAddCredit}>
                     <input
                       className="form-input"
@@ -951,14 +951,14 @@ function MasterDetailPage() {
                       value={creditAmount}
                       onChange={(event) => setCreditAmount(event.target.value)}
                       placeholder="Сумма, ₽"
-                      aria-label="Сумма кредита"
+                      aria-label="Сумма пополнения"
                     />
                     <button className="btn btn-primary" type="submit" disabled={actionBusy}>
-                      Начислить кредит
+                      Начислить на баланс
                     </button>
                   </form>
                   {billing.credits.length === 0 ? (
-                    <p className="master-billing-hint">Кредитов нет.</p>
+                    <p className="master-billing-hint">Начислений нет.</p>
                   ) : (
                     <div className="master-billing-credits">
                       {billing.credits.map((credit) => (
@@ -993,9 +993,9 @@ function MasterDetailPage() {
             ? invoiceToPay.is_prepay
               ? `Отметить счёт на предоплату (${invoiceToPay.months ?? 1} мес.) на ${money(
                   invoiceToPay.due_amount,
-                )} оплаченным? Будет начислен кредит ${money(
+                )} оплаченным? Будет зачислено ${money(
                   invoiceToPay.base_amount ?? invoiceToPay.amount,
-                )} на будущие счета.`
+                )} на баланс для будущих счетов.`
               : `Отметить счёт за ${invoiceToPay.period_index}-й месяц на ${money(
                   invoiceToPay.due_amount,
                 )} оплаченным?`

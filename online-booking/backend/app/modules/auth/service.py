@@ -487,6 +487,8 @@ async def phone_status(phone: str, db: AsyncSession) -> dict:
 # Bump together with the frontend /privacy and /offer pages.
 POLICY_VERSION = "2026-10-12"
 OFFER_VERSION = "2026-10-22"
+# Separate annex for paid masters: accepted explicitly at activation.
+MASTER_TERMS_VERSION = "2026-10-22"
 
 async def register_unified(
     phone: str,

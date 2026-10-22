@@ -96,6 +96,8 @@ export interface MasterDraftData {
   auto_complete?: boolean;
   /** Land straight in the master panel after activation (default true). */
   prefer_master_cabinet?: boolean;
+  /** Explicit acceptance of the separate paid-master terms (required). */
+  accept_master_terms?: boolean;
 }
 
 /** Same shape as GET /admin/profile; the reused form needs no adapter. */

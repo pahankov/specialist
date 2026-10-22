@@ -77,6 +77,11 @@ class User(Base):
     consent_at = Column(DateTime(timezone=True), nullable=True)
     consent_policy_version = Column(String(20), nullable=True)
     consent_offer_version = Column(String(20), nullable=True)
+    # Separate master-terms acceptance (offer annex): stamped when a client
+    # activates the master cabinet. The general registration consent is not
+    # enough for the paid master terms.
+    master_terms_accepted_at = Column(DateTime(timezone=True), nullable=True)
+    master_terms_version = Column(String(20), nullable=True)
     # Self-service soft delete: account deactivated + PII anonymized, rows kept
     # for the 3-year retention promised in /privacy, then purged. NULL = active.
     deleted_at = Column(DateTime(timezone=True), nullable=True)
