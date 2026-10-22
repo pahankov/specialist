@@ -418,13 +418,6 @@ function generateSlots(
         className={`time-hour-group${hasActive ? ' has-active' : ''}`}
         data-testid="time-hour-group"
       >
-        <div className="time-hour-head">
-          <span className="time-hour-title">{formatSlotTime(groupStart, slotMinutes)}</span>
-          <span className="time-hour-end">— {formatSlotTime(groupEnd, slotMinutes)}</span>
-          <span className="time-hour-count">
-            {subslots.length} × {slotMinutes} мин
-          </span>
-        </div>
         <div className="time-hour-body">{subslots}</div>
       </div>,
     );

@@ -380,34 +380,6 @@
   box-shadow: 0 1px 3px rgba(76, 175, 80, 0.08);
 }
 
-.time-hour-head {
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
-  padding: 8px 14px;
-  background: #f6f8fa;
-  border-bottom: 1px solid #e9edf1;
-}
-
-.time-hour-title {
-  font-size: 15px;
-  font-weight: 700;
-  color: #2f3542;
-}
-
-.time-hour-end {
-  font-size: 13px;
-  color: #8a90a0;
-}
-
-.time-hour-count {
-  margin-left: auto;
-  font-size: 11px;
-  font-weight: 600;
-  color: #8a90a0;
-  white-space: nowrap;
-}
-
 .time-hour-body {
   display: grid;
   grid-auto-flow: column;
@@ -428,13 +400,20 @@
 .time-subslot {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 7px 10px;
+  gap: 10px;
+  padding: 7px 8px;
   border: 1px solid transparent;
   border-radius: 7px;
   transition:
     background 0.15s ease,
     border-color 0.15s ease;
+}
+
+/* Compact booking action so four subgranules fit comfortably in one row. */
+.time-subslot .btn-book {
+  padding: 3px 8px;
+  font-size: 11px;
+  flex-shrink: 0;
 }
 
 .time-subslot.slot-active {
@@ -919,14 +898,6 @@
 
   .time-hour-body {
     grid-template-columns: 1fr;
-  }
-
-  .time-hour-head {
-    padding: 7px 10px;
-  }
-
-  .time-hour-count {
-    font-size: 10px;
   }
 
   .time-subslot {

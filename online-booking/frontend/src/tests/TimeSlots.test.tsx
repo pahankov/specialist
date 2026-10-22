@@ -86,10 +86,7 @@ describe('TimeSlots', () => {
     const groups = container.querySelectorAll('.time-hour-group');
     expect(groups).toHaveLength(4);
     expect(container.querySelectorAll('.time-subslot')).toHaveLength(16);
-    expect([...container.querySelectorAll('.time-hour-title')].map((el) => el.textContent)).toEqual(
-      ['12:00', '13:00', '14:00', '15:00'],
-    );
-    expect(container.querySelectorAll('.time-hour-count')[0]?.textContent).toContain('4 × 15 мин');
+    expect(container.querySelector('.time-hour-head')).toBeNull();
     expect(
       [...container.querySelectorAll('.time-subslot-time')].slice(0, 5).map((el) => el.textContent),
     ).toEqual(['12:00', '12:15', '12:30', '12:45', '13:00']);
