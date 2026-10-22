@@ -54,21 +54,26 @@ export function TimeSlots({
 
   const dateStr = formatDate(selectedDate);
   const maxSlot = SLOTS_PER_DAY(slotMinutes);
-  // Default window in slots. Days without a stored range stay inside this
-  // window; a preserved day's range is unioned in so its bookings never
-  // disappear. Never render past the applied end hour (e.g. not to midnight
-  // just because the slot count is higher in half/quarter-hour mode).
   const defaultStart = windowStartSlot ?? 0;
   const defaultEnd = windowEndSlot ?? maxSlot;
-  const daySchedule = {
-    start: Math.min(defaultStart, dayStartSlot ?? defaultStart),
-    end: Math.max(defaultEnd, dayEndSlot ?? defaultEnd),
-  };
-  // The day's own persisted range (when set) drives the ± stepper controls.
+  // The day's own persisted range (when set) drives both the ± stepper and
+  // the rendered list. The global window is only a fallback for days without
+  // their own range — otherwise granules added and then removed with the ±
+  // buttons would stay visible as inactive leftovers.
   const dayRange =
     dayStartSlot != null && dayEndSlot != null && dayEndSlot > dayStartSlot
       ? { start: dayStartSlot, end: dayEndSlot }
       : null;
+  const baseRange = dayRange ?? { start: defaultStart, end: defaultEnd };
+  // Never hide a live booking, even if it sits outside the stored day range
+  // (legacy data or a range that was trimmed before this rule existed).
+  const scheduledRange = getLiveAppointmentRange(appointments, selectedDate, slotMinutes);
+  const daySchedule = scheduledRange
+    ? {
+        start: Math.min(baseRange.start, scheduledRange.start),
+        end: Math.max(baseRange.end, scheduledRange.end),
+      }
+    : baseRange;
   const isDayPast = isPast(selectedDate);
   const allActive = checkAllActive(dateStr, daySchedule, activeHours);
 
@@ -179,6 +184,31 @@ export function TimeSlots({
       </div>
     </div>
   );
+}
+
+/** Slot range covered by live bookings on the selected day, if any. */
+function getLiveAppointmentRange(
+  appointments: Appointment[],
+  date: Date,
+  slotMinutes: 60 | 30 | 15,
+): { start: number; end: number } | null {
+  let start = Infinity;
+  let end = -Infinity;
+  for (const appointment of appointments) {
+    if (appointment.status === 'cancelled') continue;
+    const d = new Date(appointment.appointment_date);
+    if (Number.isNaN(d.getTime())) continue;
+    if (
+      d.getFullYear() !== date.getFullYear() ||
+      d.getMonth() !== date.getMonth() ||
+      d.getDate() !== date.getDate()
+    )
+      continue;
+    const slot = Math.round((d.getHours() * 60 + d.getMinutes()) / slotMinutes);
+    start = Math.min(start, slot);
+    end = Math.max(end, slot + appointmentSpanSlots(appointment, slotMinutes));
+  }
+  return Number.isFinite(start) && Number.isFinite(end) ? { start, end } : null;
 }
 
 function checkAllActive(

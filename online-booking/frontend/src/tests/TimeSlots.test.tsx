@@ -25,17 +25,27 @@ function renderTimeSlots(overrides: Record<string, unknown> = {}) {
 }
 
 describe('TimeSlots', () => {
-  it('renders every granule of the global window, including inactive edges', () => {
+  it('renders only the day range, hiding granules outside it', () => {
     const { container } = renderTimeSlots();
 
     const slots = container.querySelectorAll('.time-slot');
-    expect(slots).toHaveLength(3);
-    expect(container.querySelectorAll('.time-slot-time')[0]?.textContent).toBe('08:00');
-    expect(container.querySelectorAll('.time-slot-time')[1]?.textContent).toBe('09:00');
-    expect(container.querySelectorAll('.time-slot-time')[2]?.textContent).toBe('10:00');
-    // The two deactivated edge granules stay visible for reactivation.
-    expect(container.querySelectorAll('.slot-inactive')).toHaveLength(2);
+    expect(slots).toHaveLength(1);
+    expect(container.querySelector('.time-slot-time')?.textContent).toBe('10:00');
+    // The ± stepper removed the earlier/later granules: they must not linger
+    // as inactive rows from the global window.
+    expect(container.querySelectorAll('.slot-inactive')).toHaveLength(0);
     expect(container.querySelectorAll('.slot-active')).toHaveLength(1);
+  });
+
+  it('falls back to the applied window for a day without a stored range', () => {
+    const { container } = renderTimeSlots({
+      activeHours: {},
+      dayStartSlot: undefined,
+      dayEndSlot: undefined,
+    });
+
+    expect(container.querySelectorAll('.time-slot')).toHaveLength(3);
+    expect(container.querySelectorAll('.slot-inactive')).toHaveLength(3);
   });
 
   it('renders exactly the applied window when the day matches it', () => {

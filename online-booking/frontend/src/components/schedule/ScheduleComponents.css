@@ -409,10 +409,12 @@
     border-color 0.15s ease;
 }
 
-/* Compact booking action so four subgranules fit comfortably in one row. */
-.time-subslot .btn-book {
+/* Compact booking action so four subgranules fit comfortably in one row.
+ * Three classes are deliberate: shared `.btn.btn-sm` must not override it. */
+.time-subslot .btn.btn-book {
   padding: 3px 8px;
   font-size: 11px;
+  line-height: 1.2;
   flex-shrink: 0;
 }
 
