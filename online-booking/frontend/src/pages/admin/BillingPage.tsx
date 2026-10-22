@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { billingApi, type BillingSummary } from '../../api/client';
-import { EmptyState, Skeleton } from '../../components/common';
+import { ConfirmDialog, EmptyState, Skeleton } from '../../components/common';
 import { getApiErrorMessage } from '../../utils/apiError';
 import './BillingPage.css';
 
@@ -33,24 +33,66 @@ function BillingPage() {
   const [data, setData] = useState<BillingSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [prepaying, setPrepaying] = useState<1 | 12 | null>(null);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
-  const load = useCallback(async (quiet = false) => {
-    if (quiet) setRefreshing(true);
-    else setLoading(true);
-    try {
-      const response = await billingApi.my();
-      setData(response.data);
-    } catch (err) {
-      toast.error(getApiErrorMessage(err, 'Не удалось загрузить тариф и оплату'));
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+  const applyBilling = useCallback((next: BillingSummary) => {
+    setData(next);
+    // Keep the sidebar balance in sync without an extra API round-trip.
+    window.dispatchEvent(new CustomEvent('billing:updated', { detail: next }));
   }, []);
+
+  const load = useCallback(
+    async (quiet = false) => {
+      if (quiet) setRefreshing(true);
+      else setLoading(true);
+      try {
+        const response = await billingApi.my();
+        applyBilling(response.data);
+      } catch (err) {
+        toast.error(getApiErrorMessage(err, 'Не удалось загрузить тариф и оплату'));
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [applyBilling],
+  );
 
   useEffect(() => {
     load();
   }, [load]);
+
+  const requestPrepay = async (months: 1 | 12) => {
+    setPrepaying(months);
+    try {
+      const response = await billingApi.prepay(months);
+      applyBilling(response.data.billing);
+      toast.success(
+        months === 12 ? 'Счёт на годовую предоплату создан' : 'Счёт на предоплату создан',
+      );
+      document.getElementById('invoices')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Не удалось создать счёт на предоплату'));
+    } finally {
+      setPrepaying(null);
+    }
+  };
+
+  const cancelPrepay = async () => {
+    setCancelling(true);
+    try {
+      const response = await billingApi.cancelPrepay();
+      applyBilling(response.data.billing);
+      setCancelOpen(false);
+      toast.success('Заявка на предоплату отменена');
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Не удалось отменить заявку на предоплату'));
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   const copyReferral = async () => {
     if (!data) return;
@@ -91,7 +133,7 @@ function BillingPage() {
     100,
     (data.referral.qualified_count / data.referral.max_count) * 100,
   );
-  const openInvoices = data.invoices.filter((invoice) => invoice.status !== 'paid');
+  const openInvoices = data.invoices.filter((invoice) => invoice.status === 'open');
   const paidInvoices = data.invoices.filter((invoice) => invoice.status === 'paid');
 
   return (
@@ -100,12 +142,18 @@ function BillingPage() {
         <div>
           <h1>💳 Тариф и оплата</h1>
           <p className="billing-subtitle">
-            14 дней бесплатно, затем 250 ₽ × 2 месяца и 500 ₽/мес. Комиссия с записей — 0%.
+            14 дней бесплатно, затем 250 ₽ × 2 месяца и 500 ₽/мес. Годовая предоплата — −20%.
+            Комиссия с записей — 0%.
           </p>
         </div>
-        <button className="btn btn-secondary" onClick={() => load(true)} disabled={refreshing}>
-          {refreshing ? 'Обновляем…' : '↻ Обновить'}
-        </button>
+        <div className="billing-header-actions">
+          <Link to="/master-rules" className="btn btn-ghost">
+            Правила
+          </Link>
+          <button className="btn btn-secondary" onClick={() => load(true)} disabled={refreshing}>
+            {refreshing ? 'Обновляем…' : '↻ Обновить'}
+          </button>
+        </div>
       </div>
 
       {data.is_blocked && (
@@ -138,14 +186,21 @@ function BillingPage() {
           <div className={`billing-status billing-status-${statusTone(data.access_status)}`}>
             {data.access_status_label}
           </div>
-          {data.access_status === 'trial' ? (
+          {data.access_status === 'trial' && (
             <p className="billing-muted">
               Пробный период до {date(data.trial_ends_at)} · осталось {data.trial_days_left} дн.
             </p>
-          ) : (
-            <p className="billing-muted">
-              Следующий счёт: {date(data.next_payment_at)} на {money(data.next_payment_amount)}
+          )}
+          {data.prepaid_until ? (
+            <p className="billing-muted billing-prepaid-label">
+              Предоплачено до {date(data.prepaid_until)}
             </p>
+          ) : (
+            data.access_status !== 'trial' && (
+              <p className="billing-muted">
+                Следующий счёт: {date(data.next_payment_at)} на {money(data.next_payment_amount)}
+              </p>
+            )
           )}
         </div>
 
@@ -280,7 +335,75 @@ function BillingPage() {
             </p>
           </div>
         </div>
-        {data.invoices.length === 0 ? (
+
+        <div className="billing-prepay">
+          <div className="billing-prepay-head">
+            <div>
+              <h3>Оплатить заранее</h3>
+              <p className="billing-muted">
+                Предоплата зачисляется на баланс и автоматически закрывает следующие счета. Цена
+                года — минус 20% от суммы следующих 12 месячных счетов.
+              </p>
+            </div>
+            <Link to="/master-rules" className="billing-link">
+              Как это работает →
+            </Link>
+          </div>
+          <div className="billing-prepay-grid">
+            <button
+              type="button"
+              className="billing-prepay-option"
+              onClick={() => requestPrepay(1)}
+              disabled={!data.prepay.available || prepaying !== null}
+            >
+              <span className="billing-prepay-kicker">1 месяц</span>
+              <strong>{money(data.prepay.month.amount)}</strong>
+              <span className="billing-prepay-hint">До {date(data.prepay.month.ends_at)}</span>
+            </button>
+            <button
+              type="button"
+              className="billing-prepay-option billing-prepay-option-year"
+              onClick={() => requestPrepay(12)}
+              disabled={!data.prepay.available || prepaying !== null}
+            >
+              <span className="billing-prepay-kicker">
+                12 месяцев <span className="billing-prepay-discount">−20%</span>
+              </span>
+              <span className="billing-prepay-price">
+                <s>{money(data.prepay.year.base_amount)}</s>
+                <strong>{money(data.prepay.year.amount)}</strong>
+              </span>
+              <span className="billing-prepay-hint">
+                Выгода {money(data.prepay.year.base_amount - data.prepay.year.amount)} · до{' '}
+                {date(data.prepay.year.ends_at)}
+              </span>
+            </button>
+          </div>
+          {prepaying !== null && <p className="billing-muted">Создаём счёт на предоплату…</p>}
+          {!data.prepay.available && data.prepay.reason && (
+            <div className="billing-note">
+              {data.prepay.reason}
+              {data.prepay.open_invoice_id && (
+                <>
+                  {' '}
+                  <a href="#invoices" className="billing-link">
+                    Перейти к счёту
+                  </a>
+                  {' · '}
+                  <button
+                    type="button"
+                    className="billing-link billing-link-button"
+                    onClick={() => setCancelOpen(true)}
+                  >
+                    Отменить заявку
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        {openInvoices.length === 0 && paidInvoices.length === 0 ? (
           <EmptyState icon="🧾" title="Счетов пока нет" />
         ) : (
           <div className="billing-table-wrap">
@@ -298,8 +421,19 @@ function BillingPage() {
               <tbody>
                 {[...openInvoices, ...paidInvoices].map((invoice) => (
                   <tr key={invoice.id}>
-                    <td>Месяц {invoice.period_index}</td>
-                    <td>{money(invoice.amount)}</td>
+                    <td>
+                      {invoice.is_prepay
+                        ? `Предоплата · ${invoice.months ?? 1} мес.`
+                        : `Месяц ${invoice.period_index}`}
+                    </td>
+                    <td>
+                      {money(invoice.amount)}
+                      {invoice.is_prepay && invoice.base_amount ? (
+                        <span className="billing-muted billing-invoice-base">
+                          вместо {money(invoice.base_amount)}
+                        </span>
+                      ) : null}
+                    </td>
                     <td>{money(invoice.credits_applied)}</td>
                     <td>
                       <strong>{money(invoice.due_amount)}</strong>
@@ -357,8 +491,25 @@ function BillingPage() {
 
       <p className="billing-muted billing-footnote">
         Тариф: 14 дней бесплатно · 15-й день — 250 ₽ · 45-й день — 250 ₽ · с 75-го дня — 500 ₽/мес.
-        Комиссия с записей — 0%.
+        Годовая предоплата — минус 20%. Комиссия с записей — 0%.{' '}
+        <Link to="/master-rules" className="billing-link">
+          Правила тарифов, бонусов и рефералов
+        </Link>
+        .
       </p>
+
+      <ConfirmDialog
+        open={cancelOpen}
+        onClose={() => {
+          if (!cancelling) setCancelOpen(false);
+        }}
+        title="Отменить заявку на предоплату?"
+        message="Неоплаченный счёт будет отменён, и можно будет создать новую заявку. Если оплата уже отправлена, сначала свяжитесь с поддержкой."
+        confirmLabel={cancelling ? 'Отменяем…' : 'Да, отменить'}
+        onConfirm={cancelPrepay}
+        confirmDisabled={cancelling}
+        danger
+      />
     </div>
   );
 }

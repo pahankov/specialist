@@ -7,6 +7,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -17,11 +18,16 @@ from app.models.user import User, UserRole
 from app.services.audit import log_action
 from app.services.billing import (
     ACCESS_LABELS,
+    BillingValidationError,
+    PREPAY_KIND_MONTH,
+    PREPAY_KIND_YEAR,
     add_manual_credit,
     billing_overview,
+    create_prepayment,
     record_payment,
     serialize_billing,
 )
+from app.services.notifications import notify_user
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 
@@ -30,6 +36,10 @@ class PaymentRequest(BaseModel):
     amount: Optional[Decimal] = Field(default=None, ge=0)
     method: str = Field(default="manual", max_length=40)
     note: Optional[str] = Field(default=None, max_length=1000)
+
+
+class PrepayRequest(BaseModel):
+    months: int = Field(ge=1, le=12)
 
 
 class CreditRequest(BaseModel):
@@ -95,6 +105,92 @@ async def master_billing(
         raise HTTPException(status_code=404, detail="Мастер не найден")
     await db.commit()
     return result
+
+
+@router.post("/prepay")
+async def prepay(
+    data: PrepayRequest,
+    master: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create an optional 1- or 12-month prepayment invoice for the master."""
+    if master.role != UserRole.MASTER or master.master_profile is None:
+        raise HTTPException(status_code=400, detail="Доступно только мастеру")
+    try:
+        invoice, quote = await create_prepayment(
+            db, master.master_profile.id, data.months)
+    except BillingValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except IntegrityError as exc:
+        # Two tabs / double-clicks can race on the negative period index.
+        await db.rollback()
+        raise HTTPException(
+            status_code=409, detail="Счёт на предоплату уже создан") from exc
+    await log_action(
+        db, master.id, "billing.prepay_request", "invoice", invoice.id,
+        json.dumps({"months": data.months, "amount": str(invoice.amount)},
+                   ensure_ascii=False),
+    )
+    await db.commit()
+    billing = await serialize_billing(db, master.master_profile.id)
+    await db.commit()
+    return {
+        "ok": True,
+        "invoice_id": invoice.id,
+        "prepay": quote,
+        "billing": billing,
+    }
+
+
+@router.post("/prepay/cancel")
+async def cancel_prepayment(
+    master: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db),
+):
+    """Cancel the master's own unpaid prepayment request, if any."""
+    if master.role != UserRole.MASTER or master.master_profile is None:
+        raise HTTPException(status_code=400, detail="Доступно только мастеру")
+    invoice = (await db.execute(
+        select(BillingInvoice)
+        .where(
+            BillingInvoice.master_id == master.master_profile.id,
+            BillingInvoice.status == "open",
+            BillingInvoice.kind.in_((PREPAY_KIND_MONTH, PREPAY_KIND_YEAR)),
+        )
+        .order_by(BillingInvoice.id.desc())
+    )).scalars().first()
+    if invoice is None:
+        raise HTTPException(status_code=404, detail="Заявка на предоплату не найдена")
+    if Decimal(invoice.paid_amount or 0) > 0:
+        raise HTTPException(
+            status_code=400,
+            detail="По счёту уже есть оплата — отмена недоступна, свяжитесь с поддержкой",
+        )
+
+    now = datetime.now(timezone.utc)
+    invoice.status = "void"
+    invoice.updated_at = now
+    invoice.note = ((invoice.note or "") + "\nСчёт отменён мастером.").strip()
+    await log_action(
+        db, master.id, "billing.prepay_cancel", "invoice", invoice.id,
+    )
+    admin_ids = (await db.execute(
+        select(User.id).where(
+            User.role == UserRole.ADMIN,
+            User.is_active.is_(True),
+        )
+    )).scalars().all()
+    for admin_id in admin_ids:
+        await notify_user(
+            db, admin_id,
+            f"Мастер {master.name or 'без имени'} отменил заявку на предоплату "
+            f"({invoice.months or 1} мес.).",
+            audience="support", kind="billing_prepay", link="billing",
+        )
+    await db.commit()
+    billing = await serialize_billing(db, master.master_profile.id)
+    await db.commit()
+    return {"ok": True, "billing": billing}
 
 
 @router.post("/invoices/{invoice_id}/pay")

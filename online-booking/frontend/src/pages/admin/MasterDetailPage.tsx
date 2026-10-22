@@ -805,7 +805,7 @@ function MasterDetailPage() {
                       <table className="master-billing-table">
                         <thead>
                           <tr>
-                            <th>Месяц</th>
+                            <th>Период</th>
                             <th>Сумма</th>
                             <th>Бонусы</th>
                             <th>Оплачено</th>
@@ -818,8 +818,19 @@ function MasterDetailPage() {
                         <tbody>
                           {billing.invoices.map((invoice) => (
                             <tr key={invoice.id}>
-                              <td>{invoice.period_index}</td>
-                              <td>{money(invoice.amount)}</td>
+                              <td>
+                                {invoice.is_prepay
+                                  ? `Предоплата · ${invoice.months ?? 1} мес.`
+                                  : `Месяц ${invoice.period_index}`}
+                              </td>
+                              <td>
+                                {money(invoice.amount)}
+                                {invoice.is_prepay && invoice.base_amount ? (
+                                  <span className="master-billing-subnote">
+                                    кредит {money(invoice.base_amount)}
+                                  </span>
+                                ) : null}
+                              </td>
                               <td>{money(invoice.credits_applied)}</td>
                               <td>{money(invoice.paid_amount)}</td>
                               <td>
@@ -829,7 +840,11 @@ function MasterDetailPage() {
                               <td>
                                 <span
                                   className={`billing-admin-pill ${
-                                    invoice.status === 'paid' ? 'ok' : 'warn'
+                                    invoice.status === 'paid'
+                                      ? 'ok'
+                                      : invoice.status === 'void'
+                                        ? 'void'
+                                        : 'warn'
                                   }`}
                                 >
                                   {invoice.status_label}
@@ -853,7 +868,8 @@ function MasterDetailPage() {
                   )}
                   <p className="master-billing-hint">
                     Оплата подтверждается вручную. После отметки счёт закрывается, доступ
-                    восстанавливается в тот же день.
+                    восстанавливается в тот же день. Для предоплаты сумма зачисляется на баланс
+                    мастера и закрывает будущие месячные счета.
                   </p>
                 </section>
 
@@ -974,9 +990,15 @@ function MasterDetailPage() {
         title="Подтвердить оплату"
         message={
           invoiceToPay
-            ? `Отметить счёт за ${invoiceToPay.period_index}-й месяц на ${money(
-                invoiceToPay.due_amount,
-              )} оплаченным?`
+            ? invoiceToPay.is_prepay
+              ? `Отметить счёт на предоплату (${invoiceToPay.months ?? 1} мес.) на ${money(
+                  invoiceToPay.due_amount,
+                )} оплаченным? Будет начислен кредит ${money(
+                  invoiceToPay.base_amount ?? invoiceToPay.amount,
+                )} на будущие счета.`
+              : `Отметить счёт за ${invoiceToPay.period_index}-й месяц на ${money(
+                  invoiceToPay.due_amount,
+                )} оплаченным?`
             : undefined
         }
         confirmLabel={actionBusy ? 'Сохраняем…' : 'Подтвердить оплату'}

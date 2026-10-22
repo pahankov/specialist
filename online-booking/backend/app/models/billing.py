@@ -39,6 +39,10 @@ class MasterBillingAccount(Base):
     review_flag = Column(Boolean, nullable=False, default=False)
     # Set when >30% of prompted visits are unconfirmed. Cleared manually.
     bonus_blocked_until = Column(DateTime(timezone=True), nullable=True)
+    # End of the period covered by a confirmed prepayment. Display only:
+    # the actual money lives in a long-lived prepayment credit and is
+    # consumed by future monthly invoices through the regular ledger.
+    prepaid_until = Column(DateTime(timezone=True), nullable=True)
     last_processed_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=_now)
     updated_at = Column(DateTime(timezone=True), default=_now, onupdate=_now)
@@ -61,11 +65,20 @@ class BillingInvoice(Base):
         Integer, ForeignKey("master_profiles.id", ondelete="CASCADE"),
         nullable=False, index=True,
     )
-    # 1 = month 1 (250), 2 = month 2 (250), 3+ = 500.
+    # 1 = month 1 (250), 2 = month 2 (250), 3+ = 500. Negative indexes are
+    # prepayment invoices: they never enter the monthly ladder, are excluded
+    # from access checks, and turn into a prepayment credit when paid.
     period_index = Column(Integer, nullable=False)
     amount = Column(Numeric(10, 2), nullable=False)
+    # Sum of the monthly invoices covered by a prepayment, before the annual
+    # discount. Kept on the invoice so the exact credit can be recreated.
+    base_amount = Column(Numeric(10, 2), nullable=True)
     credits_applied = Column(Numeric(10, 2), nullable=False, default=0)
     paid_amount = Column(Numeric(10, 2), nullable=False, default=0)
+    # monthly | prepay_month | prepay_year
+    kind = Column(String(24), nullable=False, default="monthly",
+                  server_default="monthly", index=True)
+    months = Column(Integer, nullable=False, default=1, server_default="1")
     # open | paid | void
     status = Column(String(20), nullable=False, default="open", index=True)
     issue_at = Column(DateTime(timezone=True), nullable=False)

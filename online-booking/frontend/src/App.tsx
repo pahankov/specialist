@@ -1,7 +1,14 @@
 import { useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Toaster, toast } from 'sonner';
-import { HomePage, BookingPage, PrivacyPolicyPage, OfferPage, ReferralPage } from './pages/public';
+import {
+  HomePage,
+  BookingPage,
+  PrivacyPolicyPage,
+  OfferPage,
+  MasterRulesPage,
+  ReferralPage,
+} from './pages/public';
 import VkCallbackPage from './pages/public/VkCallbackPage';
 import YandexCallbackPage from './pages/public/YandexCallbackPage';
 import {
@@ -203,6 +210,7 @@ function App() {
           <Route path="/booking" element={<BookingPage />} />
           <Route path="/privacy" element={<PrivacyPolicyPage />} />
           <Route path="/offer" element={<OfferPage />} />
+          <Route path="/master-rules" element={<MasterRulesPage />} />
           <Route path="/r/:code" element={<ReferralPage />} />
           <Route path="/ref/:code" element={<ReferralPage />} />
           {/* VK ID OAuth landing: VK redirects here with ?code&device_id&state,

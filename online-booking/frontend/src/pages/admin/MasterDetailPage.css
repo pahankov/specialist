@@ -546,11 +546,24 @@
   color: #935700;
 }
 
+.billing-admin-pill.void {
+  background: #f1f3f6;
+  color: #6b7280;
+}
+
 .master-billing-hint {
   margin: 10px 0 0;
   color: #6b7280;
   font-size: 12px;
   line-height: 1.5;
+}
+
+.master-billing-subnote {
+  display: block;
+  margin-top: 2px;
+  color: #6b7280;
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 .master-billing-columns {

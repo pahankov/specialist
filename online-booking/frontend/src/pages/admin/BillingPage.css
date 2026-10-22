@@ -54,6 +54,13 @@
   color: #1c6b37;
 }
 
+.billing-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .billing-cards {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -126,6 +133,123 @@
 
 .billing-balance-credit strong {
   color: #1a7f45;
+}
+
+.billing-prepaid-label {
+  color: #1a7f45;
+  font-weight: 700;
+}
+
+.billing-prepay {
+  margin: 4px 0 20px;
+  padding: 16px;
+  border: 1px solid #e1e7f0;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #f8fbff 0%, #f6f8fc 55%, #fff8fb 100%);
+}
+
+.billing-prepay-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.billing-prepay-head h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.billing-prepay-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.billing-prepay-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid #dbe2ec;
+  border-radius: 12px;
+  background: #fff;
+  color: #334155;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s,
+    transform 0.2s;
+}
+
+.billing-prepay-option:hover:not(:disabled) {
+  border-color: #93b4e8;
+  box-shadow: 0 6px 18px rgba(37, 99, 235, 0.12);
+  transform: translateY(-1px);
+}
+
+.billing-prepay-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.billing-prepay-option-year {
+  border-color: #b9d2f6;
+  background: linear-gradient(135deg, #ffffff 0%, #f2f7ff 100%);
+}
+
+.billing-prepay-kicker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.billing-prepay-discount {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #dcfce7;
+  color: #15803d;
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+.billing-prepay-option strong {
+  color: #111827;
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+.billing-prepay-price {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.billing-prepay-price s {
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.billing-prepay-hint {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.billing-invoice-base {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
 }
 
 .billing-grid {
@@ -332,6 +456,14 @@
   text-decoration: underline;
 }
 
+.billing-link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
 .billing-footnote {
   padding-bottom: 12px;
   text-align: center;
@@ -355,6 +487,24 @@
   .billing-header {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .billing-header-actions {
+    width: 100%;
+  }
+
+  .billing-header-actions .btn {
+    flex: 1;
+    text-align: center;
+    justify-content: center;
+  }
+
+  .billing-prepay-head {
+    flex-direction: column;
+  }
+
+  .billing-prepay-grid {
+    grid-template-columns: 1fr;
   }
 
   .billing-banner {

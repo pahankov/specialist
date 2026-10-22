@@ -295,10 +295,12 @@ callback-странице редирект-флоу, дальше — `/auth/con
 | `GET` | `/admin/audit-logs?master_id=X` | Логи действий (фильтр по мастеру) |
 | `POST` | `/admin/dashboard/cache/clear` | Сброс кэша дашборда |
 
-### Billing & referrals (1.84.0)
+### Billing & referrals (1.87.0)
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
-| `GET` | `/api/v1/admin/billing/me` | Тариф, trial, баланс, счета, кредиты, бонус и рефералы текущего мастера |
+| `GET` | `/api/v1/admin/billing/me` | Тариф, trial, баланс, счета, кредиты, бонус, рефералы и котировки предоплаты текущего мастера |
+| `POST` | `/api/v1/admin/billing/prepay` | Создать необязательный счёт на предоплату (`months`: `1` или `12`); годовая — минус 20% от следующих 12 счетов |
+| `POST` | `/api/v1/admin/billing/prepay/cancel` | Отменить свою неоплаченную заявку на предоплату (частично оплаченную — нельзя) |
 | `GET` | `/api/v1/admin/billing/overview?search=&status=` | Все мастера для супер-админа: доступ, долг, кредит, флаг качества |
 | `GET` | `/api/v1/admin/billing/masters/{id}` | Детальный биллинг мастера |
 | `POST` | `/api/v1/admin/billing/invoices/{id}/pay` | Подтвердить ручную оплату (`amount?`, `method`, `note`); пересчитывает доступ |

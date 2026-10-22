@@ -1,6 +1,13 @@
 import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
-import { adminApi, authApi, cabinetApi, reviewsApi } from '../../api/client';
+import {
+  adminApi,
+  authApi,
+  billingApi,
+  cabinetApi,
+  reviewsApi,
+  type BillingSummary,
+} from '../../api/client';
 import {
   Breadcrumb,
   KeyboardShortcutsHint,
@@ -37,6 +44,13 @@ interface BaseLayoutProps {
 interface LayoutUser {
   id: number;
   name: string;
+}
+
+function formatBalance(value: number): string {
+  return `${Number(value ?? 0).toLocaleString('ru-RU', {
+    minimumFractionDigits: Number.isInteger(Number(value ?? 0)) ? 0 : 2,
+    maximumFractionDigits: 2,
+  })} ₽`;
 }
 
 function getLayoutUser(fallbackName: string): LayoutUser | null {
@@ -226,8 +240,27 @@ function BaseLayout({
     rating: number | null;
     reviews: number;
   } | null>(null);
+  const [masterBalance, setMasterBalance] = useState<{
+    due: number;
+    credit: number;
+    net: number;
+    prepaidUntil: string | null;
+  } | null>(null);
+
+  const applyBalance = useCallback((summary: BillingSummary) => {
+    setMasterBalance({
+      due: summary.balance.due,
+      credit: summary.balance.credit,
+      net: summary.balance.net,
+      prepaidUntil: summary.prepaid_until ?? null,
+    });
+  }, []);
+
   useEffect(() => {
-    if (role !== 'MASTER' || !inMasterSection) return;
+    if (role !== 'MASTER' || !inMasterSection) {
+      setMasterBalance(null);
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
@@ -250,6 +283,12 @@ function BaseLayout({
             reviews,
           });
         }
+        try {
+          const billing = await billingApi.my();
+          if (!cancelled) applyBalance(billing.data);
+        } catch {
+          /* balance stays hidden; the billing page has the full picture */
+        }
       } catch {
         /* sidebar works without meta */
       }
@@ -257,7 +296,18 @@ function BaseLayout({
     return () => {
       cancelled = true;
     };
-  }, [role, inMasterSection]);
+  }, [role, inMasterSection, applyBalance]);
+
+  // BillingPage dispatches the full summary after every load/payment so the
+  // sidebar does not need another expensive read-model request.
+  useEffect(() => {
+    const onBilling = (event: Event) => {
+      const detail = (event as CustomEvent<BillingSummary>).detail;
+      if (detail?.balance) applyBalance(detail);
+    };
+    window.addEventListener('billing:updated', onBilling);
+    return () => window.removeEventListener('billing:updated', onBilling);
+  }, [applyBalance]);
 
   // Drag-to-reorder nav (order persists per section in localStorage).
   const navSection = draftMode
@@ -374,6 +424,26 @@ function BaseLayout({
                 </Link>
               )}
             </div>
+          )}
+          {role === 'MASTER' && inMasterSection && masterBalance && !sidebarCollapsed && (
+            <Link
+              to="/admin/billing"
+              className={`sidebar-balance ${
+                masterBalance.net < 0
+                  ? 'sidebar-balance-negative'
+                  : masterBalance.net > 0
+                    ? 'sidebar-balance-positive'
+                    : ''
+              }`}
+              title={
+                masterBalance.prepaidUntil
+                  ? `Предоплачено до ${new Date(masterBalance.prepaidUntil).toLocaleDateString('ru-RU')}. К оплате: ${formatBalance(masterBalance.due)} · Кредиты: ${formatBalance(masterBalance.credit)}`
+                  : `К оплате: ${formatBalance(masterBalance.due)} · Кредиты и бонусы: ${formatBalance(masterBalance.credit)}`
+              }
+            >
+              <span className="sidebar-balance-label">Баланс</span>
+              <strong>{formatBalance(masterBalance.net)}</strong>
+            </Link>
           )}
         </div>
         <nav className="sidebar-nav">

@@ -508,6 +508,181 @@ class TestReferrals:
         assert "совпадают" in (referral.reject_reason or "")
 
 
+class TestPrepayment:
+    async def test_annual_prepay_quote_is_20_percent_off_next_12_months(
+            self, session):
+        from app.services.billing import create_prepayment
+
+        _user, mp, _account = await _mk_master(
+            session, "Prepay", "prepay@example.com")
+        invoice, quote = await create_prepayment(session, mp.id, 12, now=NOW)
+        assert quote["base_amount"] == 5500
+        assert quote["amount"] == 4400
+        assert quote["discount_percent"] == 20
+        assert invoice.kind == "prepay_year"
+        assert invoice.period_index == -1
+        assert invoice.months == 12
+        assert float(invoice.amount) == 4400
+        assert float(invoice.base_amount) == 5500
+        assert invoice.period_start.date() == (NOW + timedelta(days=15)).date()
+        assert invoice.period_end.date() == (NOW + timedelta(days=375)).date()
+
+    async def test_paid_annual_prepay_creates_credit_that_pays_future_invoices(
+            self, session):
+        from decimal import Decimal
+        from app.services.billing import (
+            create_prepayment, process_master, record_payment,
+            serialize_billing,
+        )
+
+        _user, mp, account = await _mk_master(
+            session, "PrepayPay", "prepay-pay@example.com")
+        invoice, _quote = await create_prepayment(session, mp.id, 12, now=NOW)
+        await record_payment(
+            session, invoice, amount=Decimal("4400"), method="manual",
+            now=NOW + timedelta(days=1))
+        await session.flush()
+
+        account = (await session.execute(
+            select(MasterBillingAccount).where(
+                MasterBillingAccount.master_id == mp.id)
+        )).scalar_one()
+        assert account.prepaid_until.date() == (NOW + timedelta(days=375)).date()
+        credit = (await session.execute(
+            select(BillingCredit).where(
+                BillingCredit.master_id == mp.id,
+                BillingCredit.source == "prepayment",
+            )
+        )).scalar_one()
+        assert float(credit.amount) == 5500
+        assert float(credit.remaining) == 5500
+
+        await process_master(session, mp.id, now=NOW + timedelta(days=16))
+        first = (await session.execute(
+            select(BillingInvoice).where(
+                BillingInvoice.master_id == mp.id,
+                BillingInvoice.period_index == 1,
+            )
+        )).scalar_one()
+        assert first.status == "paid"
+        assert float(first.credits_applied) == 250
+        assert float(credit.remaining) == 5250
+
+        data = await serialize_billing(
+            session, mp.id, now=NOW + timedelta(days=16))
+        assert data["prepaid_until"] is not None
+        assert data["next_payment_amount"] == 0
+        assert data["balance"]["due"] == 0
+        assert data["balance"]["credit"] == 5250
+        assert data["prepay"]["available"] is False
+
+    async def test_monthly_prepay_and_current_invoice_block(self, session):
+        from decimal import Decimal
+        from app.services.billing import (
+            BillingValidationError, create_prepayment, process_master,
+            record_payment,
+        )
+
+        _user, mp, _account = await _mk_master(
+            session, "PrepayMonth", "prepay-month@example.com")
+        invoice, quote = await create_prepayment(session, mp.id, 1, now=NOW)
+        assert quote["amount"] == 250
+        assert quote["discount_percent"] == 0
+        assert invoice.kind == "prepay_month"
+        await record_payment(
+            session, invoice, amount=Decimal("250"), method="manual",
+            now=NOW + timedelta(days=1))
+        await process_master(session, mp.id, now=NOW + timedelta(days=16))
+        monthly = (await session.execute(
+            select(BillingInvoice).where(
+                BillingInvoice.master_id == mp.id,
+                BillingInvoice.period_index == 1,
+            )
+        )).scalar_one()
+        assert monthly.status == "paid"
+
+        _user2, mp2, _account2 = await _mk_master(
+            session, "PrepayBlocked", "prepay-blocked@example.com")
+        await process_master(session, mp2.id, now=NOW + timedelta(days=22))
+        with pytest.raises(BillingValidationError):
+            await create_prepayment(
+                session, mp2.id, 1, now=NOW + timedelta(days=22))
+
+    async def test_prepay_endpoint_and_duplicate_guard(self, client, session):
+        from app.modules.auth.token import create_access_token
+
+        user, mp, account = await _mk_master(
+            session, "PrepayAPI", "prepay-api@example.com")
+        # The endpoint runs at real "now"; keep this master inside the trial
+        # so the quote is available and deterministic.
+        current = datetime.now(timezone.utc)
+        account.trial_started_at = current
+        account.trial_ends_at = current + timedelta(days=14)
+        account.billing_started_at = current
+        mp.trial_ends_at = account.trial_ends_at
+        await session.commit()
+        token = create_access_token({
+            "sub": str(user.id),
+            "role": user.role.value,
+            "name": user.name,
+            "last_name": user.last_name,
+            "is_admin": False,
+        })
+        headers = {"Authorization": f"Bearer {token}"}
+
+        response = await client.post(
+            "/api/v1/admin/billing/prepay",
+            headers=headers, json={"months": 12},
+        )
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        assert payload["invoice_id"] > 0
+        assert payload["prepay"]["amount"] == 4400
+        assert payload["billing"]["prepay"]["available"] is False
+
+        duplicate = await client.post(
+            "/api/v1/admin/billing/prepay",
+            headers=headers, json={"months": 12},
+        )
+        assert duplicate.status_code == 400
+        assert "уже выставлен" in duplicate.json()["detail"].lower()
+
+        cancelled = await client.post(
+            "/api/v1/admin/billing/prepay/cancel", headers=headers,
+        )
+        assert cancelled.status_code == 200, cancelled.text
+        assert cancelled.json()["billing"]["prepay"]["available"] is True
+        assert cancelled.json()["billing"]["invoices"][0]["status"] == "void"
+
+        second = await client.post(
+            "/api/v1/admin/billing/prepay",
+            headers=headers, json={"months": 1},
+        )
+        assert second.status_code == 200, second.text
+        assert second.json()["prepay"]["amount"] == 250
+
+    async def test_prepay_invoice_is_not_paid_by_bonus_credits(self, session):
+        from decimal import Decimal
+        from app.services.billing import apply_credits, create_prepayment
+
+        _user, mp, _account = await _mk_master(
+            session, "PrepayCredit", "prepay-credit@example.com")
+        session.add(BillingCredit(
+            master_id=mp.id, source="manual", source_ref="manual:test",
+            amount=Decimal("100"), remaining=Decimal("100"),
+            expires_at=NOW + timedelta(days=90), created_at=NOW,
+        ))
+        await session.flush()
+        invoice, _quote = await create_prepayment(session, mp.id, 1, now=NOW)
+        await apply_credits(session, mp.id, now=NOW + timedelta(days=1))
+        assert invoice.status == "open"
+        assert float(invoice.credits_applied) == 0
+        credit = (await session.execute(
+            select(BillingCredit).where(BillingCredit.master_id == mp.id)
+        )).scalar_one()
+        assert float(credit.remaining) == 100
+
+
 class TestBlockingAndPayment:
     async def test_unpaid_goes_readonly_and_payment_restores(self, session):
         from decimal import Decimal

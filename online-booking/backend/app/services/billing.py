@@ -5,8 +5,11 @@ Money rules (manual payments, no card gateway yet):
 - client bonus 25 ₽ per eligible client (max 10 / 250 ₽);
 - referral bonus 125 ₽ per qualified colleague (max 2 / 250 ₽);
 - credits are applied oldest-invoice-first and live for 90 days;
-- unpaid invoices put the cabinet into read-only after the due date and
-  pause it after 30 days; a recorded payment restores access immediately.
+- a master can prepay 1 month or 12 months (annual −20%). Prepayment creates
+  an optional invoice outside the monthly ladder; when an admin confirms it,
+  a long-lived credit is added and future monthly invoices consume it;
+- unpaid monthly invoices put the cabinet into read-only after the due date
+  and pause it after 30 days; a recorded payment restores access immediately.
 """
 from __future__ import annotations
 
@@ -53,6 +56,10 @@ REFERRAL_MAX = 2
 REFERRAL_CLICK_DAYS = 60
 REFERRAL_QUALIFY_BOOKINGS = 7
 CREDIT_TTL_DAYS = 90
+PREPAY_MONTHS = 12
+PREPAY_DISCOUNT_PERCENT = 20
+PREPAY_KIND_MONTH = "prepay_month"
+PREPAY_KIND_YEAR = "prepay_year"
 BLOCK_AFTER_DAYS = 0
 PAUSE_AFTER_DAYS = 30
 UNCONFIRMED_THRESHOLD = 0.30
@@ -83,6 +90,7 @@ CREDIT_LABELS = {
     "client_bonus": "Бонус за клиентов",
     "referral_bonus": "Бонус за реферала",
     "manual": "Ручное начисление",
+    "prepayment": "Предоплата",
 }
 
 REFERRAL_LABELS = {
@@ -118,6 +126,24 @@ def _due(invoice: BillingInvoice) -> Decimal:
         _money(invoice.amount) - _money(invoice.credits_applied)
         - _money(invoice.paid_amount),
     )
+
+
+def _is_prepay(invoice: BillingInvoice) -> bool:
+    """Prepayment invoices are optional top-ups, not monthly debt."""
+    return (invoice.kind or "monthly") != "monthly"
+
+
+def _normal_invoices(invoices: list[BillingInvoice]) -> list[BillingInvoice]:
+    return [invoice for invoice in invoices if not _is_prepay(invoice)]
+
+
+def _next_period_index(invoices: list[BillingInvoice]) -> int:
+    """Next monthly ladder index; negative prepayment rows are ignored."""
+    return max(
+        (invoice.period_index for invoice in invoices
+         if invoice.period_index > 0),
+        default=0,
+    ) + 1
 
 
 def _iso(value: Optional[datetime]) -> Optional[str]:
@@ -769,6 +795,180 @@ def _invoice_terms(
     return issue_at, due_at, due_at, amount
 
 
+class BillingValidationError(ValueError):
+    """A user-facing billing rule was violated (router turns it into 400)."""
+
+
+def _prepayment_quote(
+    account: MasterBillingAccount,
+    invoices: list[BillingInvoice],
+    credits: list[BillingCredit],
+    months: int,
+    now: datetime,
+) -> dict:
+    """Quote a monthly/annual prepayment without changing the ledger.
+
+    The price is the sum of the next N monthly invoices. Only the annual
+    option gets the 20% discount. A prepayment is optional: it does not
+    affect access and does not replace the normal monthly ladder until the
+    admin confirms the payment and the credit is created.
+    """
+    if months not in (1, PREPAY_MONTHS):
+        raise BillingValidationError("Можно оплатить 1 или 12 месяцев")
+
+    next_index = _next_period_index(invoices)
+    amounts = [
+        _invoice_terms(account, index)[3]
+        for index in range(next_index, next_index + months)
+    ]
+    base_amount = _money(sum(amounts, Decimal("0")))
+    discount = PREPAY_DISCOUNT_PERCENT if months == PREPAY_MONTHS else 0
+    amount = _money(
+        base_amount * (Decimal("100") - Decimal(discount)) / Decimal("100")
+    )
+    starts_at = _invoice_terms(account, next_index)[0]
+    ends_at = _invoice_terms(
+        account, next_index + months - 1)[0] + timedelta(days=30)
+
+    open_normal = [
+        invoice for invoice in _normal_invoices(invoices)
+        if invoice.status == "open" and _due(invoice) > 0
+    ]
+    open_prepay = next(
+        (invoice for invoice in invoices
+         if _is_prepay(invoice) and invoice.status == "open"),
+        None,
+    )
+    active_prepay = next(
+        (credit for credit in credits
+         if credit.source == "prepayment"
+         and _money(credit.remaining) > 0
+         and (credit.expires_at is None
+              or _aware(credit.expires_at) > now)),
+        None,
+    )
+
+    reason = None
+    if open_normal:
+        reason = "Сначала оплатите текущий счёт"
+    elif open_prepay is not None:
+        reason = "Счёт на предоплату уже выставлен"
+    elif active_prepay is not None:
+        reason = "Предоплата уже действует"
+
+    return {
+        "months": months,
+        "base_amount": float(base_amount),
+        "amount": float(amount),
+        "discount_percent": discount,
+        "starts_at": _iso(starts_at),
+        "ends_at": _iso(ends_at),
+        "period_index": next_index,
+        "available": reason is None,
+        "reason": reason,
+        "open_invoice_id": open_prepay.id if open_prepay else None,
+        "prepaid_until": _iso(account.prepaid_until) if active_prepay else None,
+    }
+
+
+async def create_prepayment(
+    db: AsyncSession, master_id: int, months: int,
+    now: Optional[datetime] = None,
+) -> tuple[BillingInvoice, dict]:
+    """Create an optional prepayment invoice (outside the monthly ladder)."""
+    now = _aware(now) or _now()
+    await process_master(db, master_id, now=now, notify=False)
+    master = (await db.execute(
+        select(MasterProfile)
+        .options(joinedload(MasterProfile.user))
+        .where(MasterProfile.id == master_id)
+    )).scalar_one_or_none()
+    if master is None or not is_billable_master(master):
+        raise BillingValidationError("Мастер не найден")
+    account = await ensure_account(db, master, now=now)
+    invoices = (await db.execute(
+        select(BillingInvoice).where(BillingInvoice.master_id == master_id)
+    )).scalars().all()
+    credits = (await db.execute(
+        select(BillingCredit).where(BillingCredit.master_id == master_id)
+    )).scalars().all()
+    quote = _prepayment_quote(account, invoices, credits, months, now)
+    if not quote["available"]:
+        raise BillingValidationError(quote["reason"] or "Предоплата недоступна")
+
+    next_index = quote["period_index"]
+    starts_at = _invoice_terms(account, next_index)[0]
+    last_issue = _invoice_terms(account, next_index + months - 1)[0]
+    ends_at = last_issue + timedelta(days=30)
+    due_at = max(now, starts_at) + timedelta(days=6)
+    kind = PREPAY_KIND_YEAR if months == PREPAY_MONTHS else PREPAY_KIND_MONTH
+    negative_index = min(
+        (invoice.period_index for invoice in invoices
+         if invoice.period_index < 0),
+        default=0,
+    ) - 1
+    note = (
+        f"Предоплата {months} мес. Базовая стоимость "
+        f"{_fmt_money(quote['base_amount'])}"
+        + (f", скидка {PREPAY_DISCOUNT_PERCENT}%, "
+           f"к оплате {_fmt_money(quote['amount'])}."
+           if months == PREPAY_MONTHS else ".")
+    )
+    invoice = BillingInvoice(
+        master_id=master_id,
+        period_index=negative_index,
+        amount=_money(quote["amount"]),
+        base_amount=_money(quote["base_amount"]),
+        credits_applied=Decimal("0"),
+        paid_amount=Decimal("0"),
+        kind=kind,
+        months=months,
+        status="open",
+        issue_at=now,
+        due_at=due_at,
+        block_at=due_at,
+        period_start=starts_at,
+        period_end=ends_at,
+        note=note,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(invoice)
+    await db.flush()
+
+    body = (
+        f"Счёт на предоплату {months} мес.: {_fmt_money(quote['amount'])}"
+        + (f" (скидка {PREPAY_DISCOUNT_PERCENT}% от "
+           f"{_fmt_money(quote['base_amount'])})"
+           if months == PREPAY_MONTHS else "")
+        + ".\nОплата подтверждается администратором вручную — после "
+        "подтверждения сумма будет зачислена на баланс и автоматически "
+        "закроет следующие счета."
+    )
+    await notify_user(
+        db, master.user_id, body,
+        audience="system", kind="billing_prepay", link="billing",
+    )
+    # The superadmin sees the request in the bell and can confirm it in the
+    # master's billing tab. Support already uses the same admin fan-out.
+    admin_ids = (await db.execute(
+        select(User.id).where(
+            User.role == UserRole.ADMIN,
+            User.is_active.is_(True),
+        )
+    )).scalars().all()
+    for admin_id in admin_ids:
+        await notify_user(
+            db, admin_id,
+            f"Мастер {master.user.name or 'без имени'} запросил предоплату "
+            f"на {months} мес.: {_fmt_money(quote['amount'])}.\n"
+            "Подтвердите оплату в биллинге мастера.",
+            audience="support", kind="billing_prepay", link="billing",
+        )
+    await db.flush()
+    return invoice, quote
+
+
 async def expire_credits(
     db: AsyncSession, master_id: int, now: Optional[datetime] = None,
 ) -> None:
@@ -809,6 +1009,10 @@ async def apply_credits(
         select(BillingInvoice).where(
             BillingInvoice.master_id == master_id,
             BillingInvoice.status == "open",
+            # Prepayment invoices are optional top-ups: bonuses and credits
+            # must never close them, otherwise a prepayment credit would be
+            # granted without a real payment.
+            func.coalesce(BillingInvoice.kind, "monthly") == "monthly",
         ).order_by(BillingInvoice.period_index.asc())
     )).scalars().all()
 
@@ -940,7 +1144,10 @@ async def process_master(
             BillingInvoice.status == "open",
         )
     )).scalars().all()
-    overdue = [inv for inv in invoices
+    # A pending prepayment invoice is optional and never blocks the cabinet:
+    # access is controlled only by the normal monthly ladder.
+    monthly_open = _normal_invoices(invoices)
+    overdue = [inv for inv in monthly_open
                if _due(inv) > 0 and now >= _aware(inv.block_at)]
     if now < _aware(account.trial_ends_at):
         status = ACCESS_TRIAL
@@ -1005,6 +1212,69 @@ async def process_master(
     }
 
 
+async def _grant_prepayment_credit(
+    db: AsyncSession, invoice: BillingInvoice, now: datetime,
+) -> Optional[BillingCredit]:
+    """Turn a fully paid prepayment invoice into a long-lived credit."""
+    if not _is_prepay(invoice) or invoice.status != "paid":
+        return None
+    existing = (await db.execute(
+        select(BillingCredit).where(
+            BillingCredit.source == "prepayment",
+            BillingCredit.source_ref == f"prepay:{invoice.id}",
+        )
+    )).scalar_one_or_none()
+    if existing is not None:
+        return existing
+
+    master = (await db.execute(
+        select(MasterProfile)
+        .options(joinedload(MasterProfile.user))
+        .where(MasterProfile.id == invoice.master_id)
+    )).scalar_one_or_none()
+    if master is None or not is_billable_master(master):
+        return None
+    account = await ensure_account(db, master, now=now)
+    months = max(1, int(invoice.months or 1))
+    amount = _money(invoice.base_amount or invoice.amount)
+    if amount <= 0:
+        return None
+    period_end = _aware(invoice.period_end) or (
+        now + timedelta(days=30 * months))
+    credit = BillingCredit(
+        master_id=invoice.master_id,
+        source="prepayment",
+        source_ref=f"prepay:{invoice.id}",
+        amount=amount,
+        remaining=amount,
+        # The prepayment credit must live through the entire covered period
+        # plus the regular 90-day grace window.
+        expires_at=period_end + timedelta(days=CREDIT_TTL_DAYS),
+        note=(
+            f"Предоплата {months} мес. Оплачено "
+            f"{_fmt_money(invoice.amount)}"
+            + (f", начислено {_fmt_money(amount)}"
+               if amount != _money(invoice.amount) else "")
+            + "."
+        ),
+        created_at=now,
+    )
+    db.add(credit)
+    previous = _aware(account.prepaid_until)
+    if previous is None or period_end > previous:
+        account.prepaid_until = period_end
+    account.updated_at = now
+    await db.flush()
+    await notify_user(
+        db, master.user_id,
+        f"Предоплата зачислена: {_fmt_money(amount)} на баланс.\n"
+        f"Сумма будет автоматически закрывать счета до "
+        f"{period_end.strftime('%d.%m.%Y')}.",
+        audience="system", kind="billing_prepay", link="billing",
+    )
+    return credit
+
+
 async def record_payment(
     db: AsyncSession,
     invoice: BillingInvoice,
@@ -1021,6 +1291,7 @@ async def record_payment(
     if due <= 0:
         invoice.status = "paid"
         invoice.paid_at = invoice.paid_at or now
+        await _grant_prepayment_credit(db, invoice, now)
         await db.flush()
         return invoice
     value = _money(amount) if amount is not None else due
@@ -1036,6 +1307,7 @@ async def record_payment(
         invoice.status = "paid"
         invoice.paid_at = now
         invoice.payment_method = method
+        await _grant_prepayment_credit(db, invoice, now)
     invoice.updated_at = now
     await db.flush()
     await process_master(db, invoice.master_id, now=now)
@@ -1159,21 +1431,43 @@ async def serialize_billing(
         })
 
     referral_credits = [c for c in credits if c.source == "referral_bonus"]
-    total_due = sum((_due(inv) for inv in invoices), Decimal("0"))
+    monthly_invoices = _normal_invoices(invoices)
+    total_due = sum((_due(inv) for inv in monthly_invoices), Decimal("0"))
     total_credit = sum((_money(c.remaining) for c in credits), Decimal("0"))
+    prepaid_until = _aware(account.prepaid_until)
+    prepaid_credit = next(
+        (credit for credit in credits
+         if credit.source == "prepayment"
+         and _money(credit.remaining) > 0
+         and (credit.expires_at is None
+              or _aware(credit.expires_at) > now)),
+        None,
+    )
+    prepaid_active = bool(
+        prepaid_until and prepaid_until > now and prepaid_credit)
     trial_end = _aware(account.trial_ends_at)
     days_left = max(0, (trial_end - now).days)
-    if now < trial_end:
+    if prepaid_active:
+        # The prepayment credit pays future monthly invoices automatically;
+        # there is nothing to pay manually until it runs out.
+        next_at = prepaid_until
+        next_amount = Decimal("0")
+    elif now < trial_end:
         next_at = trial_end + timedelta(days=1)
         next_amount = Decimal("250")
     else:
-        last_index = max((inv.period_index for inv in invoices), default=0)
-        next_at, _, _, next_amount = _invoice_terms(
-            account, max(1, last_index + 1))
+        next_index = _next_period_index(monthly_invoices)
+        next_at, _, _, next_amount = _invoice_terms(account, next_index)
         # If the next invoice is already generated, point one period ahead.
-        if any(inv.period_index == max(1, last_index + 1) for inv in invoices):
+        if any(inv.period_index == next_index for inv in monthly_invoices):
             next_at, _, _, next_amount = _invoice_terms(
-                account, max(1, last_index + 2))
+                account, next_index + 1)
+
+    month_quote = _prepayment_quote(
+        account, invoices, credits, 1, now)
+    year_quote = _prepayment_quote(
+        account, invoices, credits, PREPAY_MONTHS, now)
+    prepay_reason = month_quote["reason"] or year_quote["reason"]
 
     return {
         "master_id": master.id,
@@ -1193,20 +1487,35 @@ async def serialize_billing(
         "referral_link": f"/r/{account.referral_code}",
         "next_payment_at": _iso(next_at),
         "next_payment_amount": float(next_amount),
+        "prepaid_until": _iso(prepaid_until) if prepaid_active else None,
         "balance": {
             "due": float(_money(total_due)),
             "credit": float(_money(total_credit)),
             "net": float(_money(total_credit - total_due)),
         },
+        "prepay": {
+            "available": not prepay_reason,
+            "reason": prepay_reason,
+            "open_invoice_id": month_quote["open_invoice_id"],
+            "month": month_quote,
+            "year": year_quote,
+        },
         "invoices": [{
             "id": inv.id,
             "period_index": inv.period_index,
             "amount": float(_money(inv.amount)),
+            "base_amount": (
+                float(_money(inv.base_amount))
+                if inv.base_amount is not None else None
+            ),
             "credits_applied": float(_money(inv.credits_applied)),
             "paid_amount": float(_money(inv.paid_amount)),
             "due_amount": float(_due(inv)),
             "status": inv.status,
             "status_label": INVOICE_LABELS.get(inv.status, inv.status),
+            "kind": inv.kind or "monthly",
+            "months": inv.months or 1,
+            "is_prepay": _is_prepay(inv),
             "issue_at": _iso(inv.issue_at),
             "due_at": _iso(inv.due_at),
             "paid_at": _iso(inv.paid_at),
@@ -1279,7 +1588,8 @@ async def billing_overview(
             select(BillingCredit).where(
                 BillingCredit.master_id == master.id)
         )).scalars().all()
-        total_due = sum((_due(inv) for inv in invoices), Decimal("0"))
+        total_due = sum(
+            (_due(inv) for inv in _normal_invoices(invoices)), Decimal("0"))
         total_credit = sum((_money(c.remaining) for c in credits), Decimal("0"))
         rows.append({
             "master_id": master.id,

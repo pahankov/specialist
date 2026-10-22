@@ -9,6 +9,8 @@ function PublicFooter() {
       <span className="public-footer-links">
         <Link to="/offer">Оферта</Link>
         {' · '}
+        <Link to="/master-rules">Правила для мастеров</Link>
+        {' · '}
         <Link to="/privacy">Политика обработки ПДн</Link>
       </span>
     </footer>

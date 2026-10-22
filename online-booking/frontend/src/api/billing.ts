@@ -6,11 +6,15 @@ export interface BillingInvoice {
   id: number;
   period_index: number;
   amount: number;
+  base_amount?: number | null;
   credits_applied: number;
   paid_amount: number;
   due_amount: number;
   status: 'open' | 'paid' | 'void' | string;
   status_label: string;
+  kind?: 'monthly' | 'prepay_month' | 'prepay_year' | string;
+  months?: number;
+  is_prepay?: boolean;
   issue_at: string;
   due_at: string;
   paid_at?: string | null;
@@ -59,6 +63,20 @@ export interface ReferralRow {
   evaluated_at?: string | null;
 }
 
+export interface BillingPrepayQuote {
+  months: number;
+  base_amount: number;
+  amount: number;
+  discount_percent: number;
+  starts_at?: string | null;
+  ends_at?: string | null;
+  period_index: number;
+  available: boolean;
+  reason?: string | null;
+  open_invoice_id?: number | null;
+  prepaid_until?: string | null;
+}
+
 export interface BillingSummary {
   master_id: number;
   master_name: string;
@@ -75,7 +93,15 @@ export interface BillingSummary {
   referral_link: string;
   next_payment_at: string;
   next_payment_amount: number;
+  prepaid_until?: string | null;
   balance: { due: number; credit: number; net: number };
+  prepay: {
+    available: boolean;
+    reason?: string | null;
+    open_invoice_id?: number | null;
+    month: BillingPrepayQuote;
+    year: BillingPrepayQuote;
+  };
   invoices: BillingInvoice[];
   credits: BillingCredit[];
   client_bonus: ClientBonusInfo;
@@ -120,6 +146,19 @@ export interface BillingOverview {
 export const billingApi = {
   my() {
     return apiClient.get<BillingSummary>('/api/v1/admin/billing/me');
+  },
+  prepay(months: 1 | 12) {
+    return apiClient.post<{
+      ok: boolean;
+      invoice_id: number;
+      prepay: BillingPrepayQuote;
+      billing: BillingSummary;
+    }>('/api/v1/admin/billing/prepay', { months });
+  },
+  cancelPrepay() {
+    return apiClient.post<{ ok: boolean; billing: BillingSummary }>(
+      '/api/v1/admin/billing/prepay/cancel',
+    );
   },
   overview(params?: { search?: string; status?: string }) {
     return apiClient.get<BillingOverview>('/api/v1/admin/billing/overview', { params });

@@ -289,7 +289,7 @@ class TestBecomeMaster:
         )).scalars().all()
         welcome = next(n for n in note if n.text == MASTER_ACTIVATED_TEXT)
         assert welcome.audience == "system"
-        assert welcome.link == "profile"
+        assert welcome.link == "billing"
         assert welcome.sender_id is None
         assert "Кабинет мастера активирован" in welcome.text
 

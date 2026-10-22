@@ -447,8 +447,8 @@
 
 | Таблица | Назначение |
 |---------|------------|
-| `master_billing_accounts` | Trial-даты, статус доступа (`trial/active/readonly/paused/suspended`), реферальный код, флаги качества. 1:1 к `master_profiles` |
-| `billing_invoices` | Счета лестницы: 1–2-й месяц — 250 ₽, с 3-го — 500 ₽; issue/due/block, частичная оплата, кредиты |
+| `master_billing_accounts` | Trial-даты, статус доступа (`trial/active/readonly/paused/suspended`), реферальный код, флаги качества, `prepaid_until` (конец оплаченного предоплатой периода). 1:1 к `master_profiles` |
+| `billing_invoices` | Счета лестницы: 1–2-й месяц — 250 ₽, с 3-го — 500 ₽; issue/due/block, частичная оплата, кредиты. Отрицательные `period_index` — необязательная предоплата 1/12 мес. |
 | `billing_payments` | Подтверждённые администратором платежи (method, note, кто подтвердил, когда) |
 | `billing_credits` | Бонусы и ручные начисления с остатком и сроком 90 дней |
 | `billing_credit_applications` | Какая сумма каждого кредита ушла в какой счёт (один row на пару credit/invoice) |
@@ -456,7 +456,7 @@
 | `master_referrals` | Приглашение A→B, прогресс B, статус и сумма 125 ₽ |
 | `referral_clicks` | Одноразовые токены публичных ссылок `/r/:code`, срок 60 дней |
 
-**Индексы:** `ix_billing_accounts_status`, `ix_billing_invoices_master_status` (master_id, status), `ix_billing_credits_master_remaining` (master_id, remaining), `ix_master_referrals_referrer_status` (referrer_master_id, status); уникальные `master_billing_accounts.master_id`, `master_billing_accounts.referral_code`, `billing_invoices (master_id, period_index)`, `client_bonus_awards.master_id`, `referral_clicks.token`, `master_referrals.referred_user_id` и `master_referrals.referred_master_id`.
+**Индексы:** `ix_billing_accounts_status`, `ix_billing_invoices_kind`, `ix_billing_invoices_master_status` (master_id, status), `ix_billing_credits_master_remaining` (master_id, remaining), `ix_master_referrals_referrer_status` (referrer_master_id, status); уникальные `master_billing_accounts.master_id`, `master_billing_accounts.referral_code`, `billing_invoices (master_id, period_index)`, `client_bonus_awards.master_id`, `referral_clicks.token`, `master_referrals.referred_user_id` и `master_referrals.referred_master_id`.
 
 ---
 
@@ -574,8 +574,9 @@
 | 35 | 25a1b2c3d4ea | 24a1b2c3d4e9 | `email_codes` (одноразовые коды на почту: сброс пароля и подтверждение, 1.79.0) | 2026-10-19 |
 | 36 | 26a1b2c3d4eb | 25a1b2c3d4ea | `master_profiles.prefer_master_panel` (старт сразу в кабинете мастера) | 2026-10-20 |
 | 37 | 27b1c2d3e4f5 | 26a1b2c3d4eb | Биллинг 1.84.0: счета, платежи, кредиты, клиентские бонусы, рефералы; провенанс записей; напоминания о визите; перевод существующих мастеров на 14-дневный trial (кроме superuser id=1) | 2026-10-21 |
+| 38 | 28d3e4f5a6b7 | 27b1c2d3e4f5 | Предоплата 1.87.0: `billing_invoices.kind/months/base_amount`, `master_billing_accounts.prepaid_until`; годовая предоплата −20%, долгоживущий кредит | 2026-10-22 |
 
-**Head:** `27b1c2d3e4f5`
+**Head:** `28d3e4f5a6b7`
 
 > Старая цепочка из 12 миграций (`9a9c2edb` → `b2c3d4e5f6a7`) удалена после squash —
 > история сохранена в git (`git log -- alembic/versions/`). Прод-БД со старым head
