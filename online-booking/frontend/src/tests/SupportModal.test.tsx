@@ -54,9 +54,7 @@ describe('SupportModal', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Отправить' }));
     });
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Поддержка временно недоступна',
-    );
+    expect(await screen.findByRole('alert')).toHaveTextContent('Поддержка временно недоступна');
     expect(onClose).not.toHaveBeenCalled();
   });
 });

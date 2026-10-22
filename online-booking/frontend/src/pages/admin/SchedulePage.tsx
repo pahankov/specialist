@@ -171,9 +171,10 @@ function SchedulePage() {
   // Per-day overrides: the month mode above is the default, but a single day
   // can switch to its own grid. Its stored range/active keys live on that
   // day's grid, so both modes must be rescaled together.
-  const [daySlotMinutes, setDaySlotMinutes] = usePersistentState<
-    Record<string, 60 | 30 | 15>
-  >('schedule.daySlotMinutes', {});
+  const [daySlotMinutes, setDaySlotMinutes] = usePersistentState<Record<string, 60 | 30 | 15>>(
+    'schedule.daySlotMinutes',
+    {},
+  );
   const daySlotMinutesRef = useRef(daySlotMinutes);
   daySlotMinutesRef.current = daySlotMinutes;
   // Remember the previous granule size so that stored day ranges (slot
@@ -409,11 +410,7 @@ function SchedulePage() {
           const resp = await adminApi.getWorkingHours(masterParam);
           const existing = resp.data.find((h: WorkingHour) => h.schedule_date === dateStr);
           if (existing) {
-            const current = parseHourRangeToSlots(
-              existing.start_time,
-              existing.end_time,
-              dateMode,
-            );
+            const current = parseHourRangeToSlots(existing.start_time, existing.end_time, dateMode);
             const start = Math.min(current.startSlot, slot);
             const end = Math.max(current.endSlot, slot + 1);
             await adminApi.updateWorkingHour(existing.id, {
@@ -821,10 +818,7 @@ function SchedulePage() {
   const handleDaySlotMinutesChange = useCallback(
     (dateStr: string, nextMode: SlotMinutes) => {
       const currentGlobal = slotMinutesRef.current;
-      const prevMode = normalizeSlotMinutes(
-        daySlotMinutesRef.current[dateStr],
-        currentGlobal,
-      );
+      const prevMode = normalizeSlotMinutes(daySlotMinutesRef.current[dateStr], currentGlobal);
       if (prevMode === nextMode) return;
 
       setSchedule((current) => {
@@ -835,9 +829,7 @@ function SchedulePage() {
           [dateStr]: rescaleSlotRange(range, prevMode, nextMode),
         };
       });
-      setActiveHours((current) =>
-        rescaleDayActiveHours(current, dateStr, prevMode, nextMode),
-      );
+      setActiveHours((current) => rescaleDayActiveHours(current, dateStr, prevMode, nextMode));
       setDaySlotMinutes((current) => {
         const next = { ...current };
         if (nextMode === slotMinutesRef.current) delete next[dateStr];

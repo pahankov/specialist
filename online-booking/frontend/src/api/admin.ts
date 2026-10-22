@@ -389,11 +389,7 @@ export const adminApi = {
   applySchedule(data: ScheduleApplyPayload) {
     return apiClient.post<ScheduleApplyResult>('/api/v1/admin/working-hours/apply', data);
   },
-  resetMonth(data: {
-    master_id?: number;
-    range_start: string;
-    range_end: string;
-  }) {
+  resetMonth(data: { master_id?: number; range_start: string; range_end: string }) {
     return apiClient.delete<{
       master_id: number;
       range_start: string;

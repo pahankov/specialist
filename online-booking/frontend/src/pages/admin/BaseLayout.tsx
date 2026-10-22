@@ -1,7 +1,12 @@
 import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { adminApi, authApi, cabinetApi, reviewsApi } from '../../api/client';
-import { Breadcrumb, KeyboardShortcutsHint, NotificationBell, SupportModal } from '../../components/common';
+import {
+  Breadcrumb,
+  KeyboardShortcutsHint,
+  NotificationBell,
+  SupportModal,
+} from '../../components/common';
 import { getCookie, decodeJwtPayload, getUserRole, clearAuthCookies } from '../../utils/cookies';
 import { allowMasterDraftEntry } from '../../utils/masterDraftEntry';
 import { getImpersonation, stopImpersonation } from '../../utils/impersonation';

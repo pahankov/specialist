@@ -102,10 +102,7 @@ describe('TimeSlots', () => {
       [...container.querySelectorAll('.time-subslot-time')].slice(0, 5).map((el) => el.textContent),
     ).toEqual(['12:00', '12:15', '12:30', '12:45', '13:00']);
     expect(container.querySelector('.day-hours-slot-size')).toBeNull();
-    expect(screen.getByRole('button', { name: '15 мин' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    expect(screen.getByRole('button', { name: '15 мин' })).toHaveAttribute('aria-pressed', 'true');
     expect(container.querySelector('.day-hours-value')?.textContent).toBe('12:00');
   });
 
@@ -139,10 +136,7 @@ describe('TimeSlots', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '15 мин' }));
     expect(onSlotMinutesChange).toHaveBeenCalledWith(15);
-    expect(screen.getByRole('button', { name: '1 ч' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    expect(screen.getByRole('button', { name: '1 ч' })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('adds and removes edge granules through the stepper controls', async () => {

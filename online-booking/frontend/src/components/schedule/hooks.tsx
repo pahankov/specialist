@@ -1,8 +1,5 @@
 import type { Appointment, Client, DaySchedule, BookingFormState } from '../../api/types';
-import {
-  formatDate,
-  formatSlotTime,
-} from './helpers';
+import { formatDate, formatSlotTime } from './helpers';
 import { adminApi } from '../../api/client';
 
 export async function toggleDayWork(
