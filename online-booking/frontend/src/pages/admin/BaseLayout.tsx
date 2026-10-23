@@ -16,7 +16,12 @@ import {
 } from '../../components/common';
 import { getCookie, decodeJwtPayload, getUserRole, clearAuthCookies } from '../../utils/cookies';
 import { allowMasterDraftEntry } from '../../utils/masterDraftEntry';
-import { getImpersonation, stopImpersonation } from '../../utils/impersonation';
+import {
+  getImpersonation,
+  impersonationRoleLabel,
+  stopImpersonation,
+  type ImpersonationRole,
+} from '../../utils/impersonation';
 import { SUPER_PREFIX } from '../../utils/section';
 import { APP_VERSION } from '../../constants';
 import './AdminLayout.css';
@@ -98,6 +103,7 @@ function BaseLayout({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [impersonatedName, setImpersonatedName] = useState<string | null>(null);
+  const [impersonatedRole, setImpersonatedRole] = useState<ImpersonationRole | undefined>();
   const [unread, setUnread] = useState(0);
   const [supportOpen, setSupportOpen] = useState(false);
 
@@ -170,16 +176,21 @@ function BaseLayout({
   }, [location.pathname, refreshUnread]);
 
   const exitImpersonation = () => {
+    const state = getImpersonation();
     stopImpersonation();
     setImpersonatedName(null);
-    // Admin token restored → hard-land in the superadmin section
-    window.location.href = `${SUPER_PREFIX}/masters`;
+    setImpersonatedRole(undefined);
+    // Admin token restored → hard-land in the matching superadmin list.
+    window.location.href =
+      state?.targetRole === 'CLIENT' ? `${SUPER_PREFIX}/clients` : `${SUPER_PREFIX}/masters`;
   };
 
   useEffect(() => {
     const sync = () => {
+      const state = getImpersonation();
       setUser(getLayoutUser(userFallbackName));
-      setImpersonatedName(getImpersonation()?.masterName ?? null);
+      setImpersonatedName(state?.masterName ?? null);
+      setImpersonatedRole(state?.targetRole);
     };
     sync();
     // A profile name change re-mints the token — re-read it in place.
@@ -574,7 +585,8 @@ function BaseLayout({
         {impersonatedName !== null && (
           <div className="impersonation-banner" role="alert">
             <span>
-              👁 Вы смотрите глазами мастера <strong>{impersonatedName}</strong> (режим поддержки)
+              👁 Вы смотрите глазами {impersonationRoleLabel(impersonatedRole)}{' '}
+              <strong>{impersonatedName}</strong> (режим поддержки)
             </span>
             <button className="btn btn-sm btn-primary" onClick={exitImpersonation}>
               Выйти из режима

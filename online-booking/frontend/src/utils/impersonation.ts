@@ -1,15 +1,22 @@
-/** Impersonation state (support "view as master").
+/** Impersonation state (support "view as participant").
  *
  * The admin access token is parked in sessionStorage (tab-scoped: closing
- * the tab can never leak the elevated session), the master's token goes
+ * the tab can never leak the elevated session), the participant's token goes
  * into the regular access_token cookie consumed by the api client.
  */
 
 const KEY = 'impersonation';
 
+export type ImpersonationRole = 'MASTER' | 'CLIENT';
+
 export interface ImpersonationState {
   adminToken: string;
+  /** Display name of the participant (historical field name kept for
+   *  existing sessions/tests; it holds client names too). */
   masterName: string;
+  targetRole?: ImpersonationRole;
+  /** Section to open after leaving support mode. */
+  returnTo?: string;
 }
 
 function readState(): ImpersonationState | null {
@@ -29,13 +36,28 @@ export function getImpersonation(): ImpersonationState | null {
   return readState();
 }
 
+/** Landing route for an impersonated participant. */
+export function impersonationHome(role?: ImpersonationRole): string {
+  return role === 'CLIENT' ? '/cabinet' : '/admin/dashboard';
+}
+
+/** Russian noun for the support banner. */
+export function impersonationRoleLabel(role?: ImpersonationRole): string {
+  return role === 'CLIENT' ? 'клиента' : 'мастера';
+}
+
 export function startImpersonation(
   adminToken: string,
-  masterToken: string,
-  masterName: string,
+  targetToken: string,
+  targetName: string,
+  targetRole: ImpersonationRole = 'MASTER',
+  returnTo?: string,
 ): void {
-  sessionStorage.setItem(KEY, JSON.stringify({ adminToken, masterName }));
-  document.cookie = `access_token=${masterToken}; path=/; max-age=${30 * 60}`;
+  sessionStorage.setItem(
+    KEY,
+    JSON.stringify({ adminToken, masterName: targetName, targetRole, returnTo }),
+  );
+  document.cookie = `access_token=${targetToken}; path=/; max-age=${30 * 60}`;
 }
 
 export function stopImpersonation(): void {

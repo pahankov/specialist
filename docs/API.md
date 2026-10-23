@@ -284,6 +284,7 @@ callback-странице редирект-флоу, дальше — `/auth/con
 | `POST` | `/admin/bulk/unsuspend` | Массовая разблокировка |
 | `POST` | `/admin/masters/import` | Импорт мастеров из CSV |
 | `POST` | `/admin/masters/{id}/impersonate` | Вход от имени мастера (support view-as, пишется в аудит) |
+| `POST` | `/admin/users/{id}/impersonate` | Вход от имени любого участника: мастера или клиента (`users.id`, аудит) |
 | `PATCH` | `/admin/masters/{id}/password` | Сброс пароля мастера (+ отзыв сессий) |
 | `GET` | `/admin/masters/{id}/sessions` | Активные сессии (без значений токенов) |
 | `DELETE` | `/admin/masters/{id}/sessions` | Отозвать все сессии мастера |
@@ -294,6 +295,12 @@ callback-странице редирект-флоу, дальше — `/auth/con
 | `DELETE` | `/admin/reviews/{id}` | Удалить отзыв |
 | `GET` | `/admin/audit-logs?master_id=X` | Логи действий (фильтр по мастеру) |
 | `POST` | `/admin/dashboard/cache/clear` | Сброс кэша дашборда |
+
+### P&L (superadmin)
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| `GET` | `/admin/pnl/report?date_from=&date_to=` | Отчёт за период: доходы, расходы, прибыль, маржа и разбивка по статьям; без дат — текущий месяц |
+| `GET` | `/admin/pnl/categories?kind=INCOME` | Справочник статей; `kind` = `INCOME` или `EXPENSE` |
 
 ### Billing & referrals (1.88.0)
 | Метод | Endpoint | Описание |

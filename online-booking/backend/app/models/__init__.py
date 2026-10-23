@@ -16,6 +16,7 @@ from app.models.otp_code import OtpCode
 from app.models.notification import Notification
 from app.models.notification_broadcast import NotificationBroadcast
 from app.models.notification_preference import NotificationPreference
+from app.models.pnl import PnlCategory, PnlExpense, PnlIncome
 from app.models.service_bundle import ServiceBundle
 from app.models.master_hidden_client import MasterHiddenClient, DELETED_CLIENT_NAME
 from app.models.billing import (

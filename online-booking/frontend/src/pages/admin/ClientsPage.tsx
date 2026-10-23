@@ -7,6 +7,8 @@ import type { Client, Master } from '../../api/types';
 import { PHONE_PLACEHOLDER, EMAIL_PLACEHOLDER } from '../../constants';
 import { isCompletePhone } from '../../components/common/PhoneInput';
 import { getApiErrorMessage, getApiErrorStatus } from '../../utils/apiError';
+import { getCookie } from '../../utils/cookies';
+import { impersonationHome, startImpersonation } from '../../utils/impersonation';
 import { goLogin } from '../../utils/redirect';
 import { downloadCsv } from '../../api/export';
 import { usePersistentState } from '../../utils/persistentState';
@@ -125,6 +127,19 @@ function ClientsPage() {
       fetchData();
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'Не удалось изменить статус'));
+    }
+  };
+
+  /** Support view-as-client: swap the admin token for the client's token. */
+  const handleImpersonate = async (client: Client) => {
+    try {
+      const { data } = await superAdminApi.impersonateUser(client.id);
+      startImpersonation(getCookie('access_token') ?? '', data.access_token, data.name, 'CLIENT');
+      toast.success(`Вы вошли как ${data.name}`);
+      navigate(data.redirect || impersonationHome(data.role));
+      window.location.reload();
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'Не удалось войти от имени клиента'));
     }
   };
 
@@ -561,21 +576,31 @@ function ClientsPage() {
                 </Tooltip>
               )}
               {isSuperSection && (
-                <Tooltip
-                  content={
-                    c.is_active === false
-                      ? 'Включить аккаунт (сейчас выключен)'
-                      : 'Выключить аккаунт (сейчас активен)'
-                  }
-                  position="top"
-                >
-                  <button
-                    className={`btn btn-sm ${c.is_active === false ? 'btn-danger' : 'btn-ghost'}`}
-                    onClick={() => handleToggleActive(c.id)}
+                <>
+                  <Tooltip
+                    content={
+                      c.is_active === false
+                        ? 'Включить аккаунт (сейчас выключен)'
+                        : 'Выключить аккаунт (сейчас активен)'
+                    }
+                    position="top"
                   >
-                    {c.is_active === false ? '🔒' : '🔓'}
-                  </button>
-                </Tooltip>
+                    <button
+                      className={`btn btn-sm ${c.is_active === false ? 'btn-danger' : 'btn-ghost'}`}
+                      onClick={() => handleToggleActive(c.id)}
+                    >
+                      {c.is_active === false ? '🔒' : '🔓'}
+                    </button>
+                  </Tooltip>
+                  <Tooltip content="Войти как клиент (поддержка)" position="top">
+                    <button
+                      className="btn btn-sm btn-secondary"
+                      onClick={() => handleImpersonate(c)}
+                    >
+                      👁
+                    </button>
+                  </Tooltip>
+                </>
               )}
               <Tooltip content="Редактировать">
                 <button className="btn btn-sm btn-edit" onClick={() => handleEdit(c)}>

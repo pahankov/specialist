@@ -8,7 +8,9 @@ import type {
   BulkResult,
   AuditLogList,
   ImportResult,
+  ImpersonationResponse,
   PaginatedResponse,
+  PnlReport,
 } from './types';
 
 // ─── SuperAdmin API ────────────────────────────────────────────────
@@ -74,6 +76,17 @@ export const superAdminApi = {
   },
   getMasterStats(id: number, params?: { date_from?: string; date_to?: string }) {
     return apiClient.get<AdminStats>(`/api/v1/admin/masters/${id}/stats`, { params });
+  },
+
+  // P&L: company income, expenses, profit and margin by period.
+  getPnlReport(params?: { date_from?: string; date_to?: string }) {
+    return apiClient.get<PnlReport>('/api/v1/admin/pnl/report', { params });
+  },
+  getPnlCategories(kind?: 'INCOME' | 'EXPENSE') {
+    return apiClient.get<{ id: number; name: string; kind: string; is_active: boolean }[]>(
+      '/api/v1/admin/pnl/categories',
+      { params: kind ? { kind } : undefined },
+    );
   },
 
   // Global stats
@@ -147,9 +160,11 @@ export const superAdminApi = {
 
   // Security actions (support)
   impersonateMaster(masterId: number) {
-    return apiClient.post<{ access_token: string; user_id: number; name: string }>(
-      `/api/v1/admin/masters/${masterId}/impersonate`,
-    );
+    return apiClient.post<ImpersonationResponse>(`/api/v1/admin/masters/${masterId}/impersonate`);
+  },
+  /** Generic participant impersonation by users.id (masters and clients). */
+  impersonateUser(userId: number) {
+    return apiClient.post<ImpersonationResponse>(`/api/v1/admin/users/${userId}/impersonate`);
   },
   resetMasterPassword(masterId: number, password: string) {
     return apiClient.patch(`/api/v1/admin/masters/${masterId}/password`, { password });

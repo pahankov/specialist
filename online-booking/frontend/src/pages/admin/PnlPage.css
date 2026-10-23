@@ -1,0 +1,286 @@
+.pnl-page {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.pnl-page .page-header h1 {
+  margin: 0;
+  font-size: 24px;
+  color: #1a1a2e;
+}
+
+.pnl-page .page-header p {
+  margin: 4px 0 0;
+  color: #999;
+  font-size: 14px;
+}
+
+/* ─── Period filter ─────────────────────────────────────────────── */
+
+.pnl-filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(160px, 220px)) auto;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 16px;
+}
+
+.pnl-filter-actions {
+  display: flex;
+  align-items: flex-end;
+}
+
+.pnl-page .btn.pnl-reset {
+  height: 38px;
+  padding: 0 16px;
+  border: 2px solid #c7d2fe;
+  border-radius: 8px;
+  background: #eef2ff;
+  color: #4338ca;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pnl-page .btn.pnl-reset:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.pnl-filter-hint {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #999;
+  font-size: 12px;
+}
+
+.pnl-error {
+  margin-bottom: 16px;
+}
+
+/* ─── Summary cards ─────────────────────────────────────────────── */
+
+.pnl-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+  transition: opacity 0.15s;
+}
+
+.pnl-summary-grid.pnl-loading {
+  opacity: 0.55;
+}
+
+.pnl-card {
+  text-align: center;
+  padding: 22px 18px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid #eef0f4;
+  box-shadow: 0 1px 3px rgba(20, 25, 60, 0.05);
+}
+
+.pnl-card-icon {
+  font-size: 28px;
+  margin-bottom: 8px;
+}
+
+.pnl-card-value {
+  font-size: 30px;
+  font-weight: 700;
+  color: #1a1a2e;
+  line-height: 1.15;
+  margin-bottom: 4px;
+  word-break: break-word;
+}
+
+.pnl-card-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #555;
+}
+
+.pnl-card-sub {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #999;
+}
+
+.pnl-card.pnl-income {
+  border-top: 4px solid #4caf50;
+}
+
+.pnl-card.pnl-expense {
+  border-top: 4px solid #ef5350;
+}
+
+.pnl-card.pnl-profit {
+  border-top: 4px solid #5c6bc0;
+}
+
+.pnl-card.pnl-margin {
+  border-top: 4px solid #26a69a;
+}
+
+.pnl-card.negative .pnl-card-value {
+  color: #c62828;
+}
+
+/* ─── Empty note ────────────────────────────────────────────────── */
+
+.pnl-empty-note {
+  margin-bottom: 20px;
+}
+
+.pnl-empty-note .empty-state {
+  padding: 20px;
+}
+
+/* ─── Breakdown tables ──────────────────────────────────────────── */
+
+.pnl-tables {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 16px;
+}
+
+.pnl-table-card {
+  padding: 16px;
+}
+
+.pnl-table-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.pnl-table-header h2 {
+  margin: 0;
+  font-size: 16px;
+  color: #1a1a2e;
+}
+
+.pnl-count {
+  padding: 3px 10px;
+  border-radius: 12px;
+  background: #eef2ff;
+  color: #4338ca;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.pnl-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.pnl-table th {
+  padding: 8px 10px;
+  border-bottom: 2px solid #e8eaf0;
+  color: #888;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.pnl-table td {
+  padding: 10px;
+  border-bottom: 1px solid #f2f3f7;
+  font-size: 14px;
+  color: #333;
+}
+
+.pnl-table .pnl-category {
+  font-weight: 500;
+}
+
+.pnl-table .pnl-amount {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.pnl-table th.pnl-amount {
+  text-align: right;
+}
+
+.pnl-table .pnl-share {
+  width: 42%;
+  text-align: right;
+}
+
+.pnl-table th.pnl-share {
+  text-align: right;
+}
+
+.pnl-share-cell {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.pnl-share-track {
+  flex: 1;
+  max-width: 110px;
+  height: 6px;
+  border-radius: 3px;
+  background: #eef0f4;
+  overflow: hidden;
+}
+
+.pnl-share-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: #7986cb;
+}
+
+.pnl-empty-row {
+  padding: 18px 10px !important;
+  color: #999 !important;
+  text-align: center;
+}
+
+.pnl-table-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 2px solid #e8eaf0;
+  font-size: 14px;
+  color: #555;
+}
+
+.pnl-table-total strong {
+  font-size: 16px;
+  color: #1a1a2e;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 640px) {
+  .pnl-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .pnl-filter-actions {
+    align-items: stretch;
+  }
+
+  .pnl-page .btn.pnl-reset {
+    width: 100%;
+  }
+
+  .pnl-card-value {
+    font-size: 24px;
+  }
+
+  .pnl-tables {
+    grid-template-columns: 1fr;
+  }
+}

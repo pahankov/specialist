@@ -10,8 +10,8 @@ from app.dependencies.auth import require_super_admin
 from app.models.master_profile import MasterProfile
 from app.models.refresh_token import RefreshToken
 from app.models.user import User, UserRole
-from app.utils.tokens import create_access_token  # utils, not modules.auth (no module→module import)
 from app.services.audit import log_action
+from app.services.impersonation import impersonate_user
 from app.utils.security import hash_password, validate_password_strength
 from app.logging_config import get_logger
 
@@ -63,25 +63,8 @@ async def impersonate_master(
     Target must be an active non-admin user.
     """
     user, _profile = await _get_master_user(db, master_id)
-    _forbid_admin_target(user)
-    if not user.is_active:
-        raise HTTPException(status_code=403, detail="Пользователь заблокирован")
-
-    token = create_access_token({
-        "sub": str(user.id),
-        "role": user.role.value,
-        "name": user.name,
-        "last_name": user.last_name,
-        "is_admin": False,
-        "impersonated_by": admin.id,
-    })
-    await log_action(
-        db, admin.id, "impersonate", "user", user.id,
-        f"Вход от имени {user.email}", level="warning",
-    )
-    await db.commit()
-    logger.warning("Impersonation: admin %s entered master %s", admin.id, user.id)
-    return {"access_token": token, "user_id": user.id, "name": user.name}
+    # Shared service: one token/audit/landing contract for masters and clients.
+    return await impersonate_user(db, admin, user)
 
 
 @router.patch("/{master_id}/password")

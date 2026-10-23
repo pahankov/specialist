@@ -2,6 +2,40 @@
 
 export type UserRole = 'master' | 'client' | 'admin';
 
+/** Token swap returned by /admin/.../impersonate. */
+export interface ImpersonationResponse {
+  access_token: string;
+  token_type: string;
+  user_id: number;
+  name: string;
+  role: 'MASTER' | 'CLIENT';
+  redirect: string;
+}
+
+/** One P&L category line; zero amount means "no data for the period". */
+export interface PnlCategoryTotal {
+  category_id: number;
+  name: string;
+  amount: number;
+  share: number;
+}
+
+/** Period P&L report from /admin/pnl/report. */
+export interface PnlReport {
+  date_from: string;
+  date_to: string;
+  currency: string;
+  revenue: number;
+  expenses: number;
+  profit: number;
+  margin: number;
+  income_count: number;
+  expense_count: number;
+  has_data: boolean;
+  revenue_by_category: PnlCategoryTotal[];
+  expenses_by_category: PnlCategoryTotal[];
+}
+
 export interface User {
   id: number;
   name: string;

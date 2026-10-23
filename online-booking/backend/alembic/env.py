@@ -37,6 +37,7 @@ from app.models.billing import (  # noqa: F401
     MasterReferral,
     ReferralClick,
 )
+from app.models.pnl import PnlCategory, PnlExpense, PnlIncome  # noqa: F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

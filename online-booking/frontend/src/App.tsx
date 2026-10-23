@@ -33,6 +33,7 @@ const MastersPage = lazy(() => import('./pages/admin/MastersPage'));
 const MasterDetailPage = lazy(() => import('./pages/admin/MasterDetailPage'));
 const LogsPage = lazy(() => import('./pages/admin/LogsPage'));
 const RevenuePage = lazy(() => import('./pages/admin/RevenuePage'));
+const PnlPage = lazy(() => import('./pages/admin/PnlPage'));
 const NotificationsPage = lazy(() => import('./pages/admin/NotificationsPage'));
 const ProfilePage = lazy(() => import('./pages/admin/ProfilePage'));
 
@@ -394,6 +395,14 @@ function App() {
               element={
                 <Suspense fallback={<PageLoader />}>
                   <RevenuePage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="pnl"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <PnlPage />
                 </Suspense>
               }
             />

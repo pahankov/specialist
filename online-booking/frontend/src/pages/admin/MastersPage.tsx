@@ -22,14 +22,14 @@ import {
   PASSWORD_EDIT_PLACEHOLDER,
   TELEGRAM_PLACEHOLDER,
 } from '../../constants';
-import { useSectionPrefix, ADMIN_PREFIX } from '../../utils/section';
+import { useSectionPrefix } from '../../utils/section';
 import { usePersistentState } from '../../utils/persistentState';
 import { useAdminSort } from '../../utils/useAdminSort';
 import '../../styles/tables.css';
 import { getApiErrorMessage } from '../../utils/apiError';
 import { downloadCsv } from '../../api/export';
 import { getCookie } from '../../utils/cookies';
-import { startImpersonation } from '../../utils/impersonation';
+import { impersonationHome, startImpersonation } from '../../utils/impersonation';
 import './MastersPage.css';
 
 /** «Имя Фамилия» при наличии: legacy-строки хранят фамилию в name, свежие —
@@ -235,10 +235,10 @@ function MastersPage() {
     try {
       const { data } = await superAdminApi.impersonateMaster(master.id);
       const adminToken = getCookie('access_token') ?? '';
-      startImpersonation(adminToken, data.access_token, data.name);
+      startImpersonation(adminToken, data.access_token, data.name, 'MASTER');
       toast.success(`Вы вошли как ${data.name}`);
       // Impersonation drops into the MASTER section with the master's token
-      navigate(`${ADMIN_PREFIX}/dashboard`);
+      navigate(data.redirect || impersonationHome(data.role));
       window.location.reload();
     } catch (err: unknown) {
       toast.error(handleError(err));

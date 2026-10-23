@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   isImpersonating,
   getImpersonation,
+  impersonationHome,
+  impersonationRoleLabel,
   startImpersonation,
   stopImpersonation,
 } from '../utils/impersonation';
@@ -25,6 +27,21 @@ describe('impersonation', () => {
     stopImpersonation();
 
     expect(isImpersonating()).toBe(false);
+    expect(document.cookie).toContain('access_token=ADMIN');
+  });
+
+  it('tracks the client role and landing route', () => {
+    document.cookie = 'access_token=ADMIN; path=/';
+    startImpersonation('ADMIN', 'CLIENT', 'Anna', 'CLIENT', '/super/clients');
+
+    expect(getImpersonation()?.targetRole).toBe('CLIENT');
+    expect(getImpersonation()?.returnTo).toBe('/super/clients');
+    expect(impersonationHome('CLIENT')).toBe('/cabinet');
+    expect(impersonationHome('MASTER')).toBe('/admin/dashboard');
+    expect(impersonationRoleLabel('CLIENT')).toBe('клиента');
+    expect(impersonationRoleLabel('MASTER')).toBe('мастера');
+
+    stopImpersonation();
     expect(document.cookie).toContain('access_token=ADMIN');
   });
 

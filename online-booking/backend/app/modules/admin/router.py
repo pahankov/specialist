@@ -11,6 +11,7 @@ from app.modules.admin.appointments import router as appointments_router
 from app.modules.admin.services import router as services_router
 from app.modules.admin.bundles import router as bundles_router
 from app.modules.admin.clients import router as clients_router
+from app.modules.admin.users import router as users_router
 from app.modules.admin.working_hours import router as working_hours_router
 from app.modules.admin.audit import router as audit_router
 from app.modules.admin.export import router as export_router
@@ -23,6 +24,7 @@ from app.modules.admin.changelog import router as changelog_router
 from app.modules.admin.notifications import router as notifications_router
 from app.modules.admin.profile import router as profile_router
 from app.modules.admin.coupons import router as coupons_router
+from app.modules.admin.pnl import router as pnl_router
 from app.modules.billing import router as billing_router
 
 router.include_router(dashboard_router)
@@ -30,6 +32,7 @@ router.include_router(appointments_router)
 router.include_router(services_router)
 router.include_router(bundles_router)
 router.include_router(clients_router)
+router.include_router(users_router)
 router.include_router(working_hours_router)
 router.include_router(blocked_slots_router)
 router.include_router(bulk_router)  # Register before masters_router to avoid path conflicts
@@ -42,4 +45,5 @@ router.include_router(changelog_router)
 router.include_router(notifications_router)
 router.include_router(profile_router)
 router.include_router(coupons_router)
+router.include_router(pnl_router)
 router.include_router(billing_router)

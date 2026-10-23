@@ -11,8 +11,8 @@ import type { AuditLogEntry } from '../../api/types';
 import { ConfirmDialog, Skeleton, EmptyState, Modal } from '../../components/common';
 import { getApiErrorMessage } from '../../utils/apiError';
 import { getCookie } from '../../utils/cookies';
-import { startImpersonation } from '../../utils/impersonation';
-import { useSectionPrefix, ADMIN_PREFIX } from '../../utils/section';
+import { impersonationHome, startImpersonation } from '../../utils/impersonation';
+import { useSectionPrefix } from '../../utils/section';
 import './MasterDetailPage.css';
 import { statusLabels } from '../../constants/statusLabels';
 
@@ -244,9 +244,9 @@ function MasterDetailPage() {
     try {
       const { data } = await superAdminApi.impersonateMaster(master.id);
       const adminToken = getCookie('access_token') ?? '';
-      startImpersonation(adminToken, data.access_token, data.name);
+      startImpersonation(adminToken, data.access_token, data.name, 'MASTER');
       toast.success(`Вы вошли как ${data.name}`);
-      navigate(`${ADMIN_PREFIX}/dashboard`);
+      navigate(data.redirect || impersonationHome(data.role));
       window.location.reload();
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'Не удалось войти от имени мастера'));
