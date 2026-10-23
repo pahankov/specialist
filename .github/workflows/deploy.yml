@@ -44,7 +44,9 @@ jobs:
           exit "$status"
 
   deploy:
-    needs: [test, backend-tests-postgres]
+    # `needs` can only reference jobs from THIS workflow. The PostgreSQL job
+    # lives in ci.yml and runs on the same push, but cannot gate this job.
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read
