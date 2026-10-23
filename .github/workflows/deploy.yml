@@ -179,6 +179,12 @@ jobs:
             # pg_dump does not understand SQLAlchemy driver suffixes.
             PG_URL=$(printf '%s' "$DATABASE_URL" | sed -E 's#^postgresql\+[a-z0-9_]+://#postgresql://#')
 
+            # Alembic imports app.database and needs an async driver. The
+            # GitHub Secret may be a plain postgresql:// URL for pg_dump,
+            # so normalize it for every Python process below.
+            DATABASE_URL=$(printf '%s' "$DATABASE_URL" | sed -E 's#^postgresql(\+[a-z0-9_]+)?://#postgresql+asyncpg://#')
+            export DATABASE_URL
+
             # Backup database BEFORE any changes
             echo "=== DATABASE BACKUP ==="
             pg_dump "$PG_URL" > /tmp/db-backup-$(date +%Y%m%d-%H%M%S).sql 2>/dev/null || echo "[WARN] Backup skipped (pg_dump not available)"

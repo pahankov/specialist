@@ -12,6 +12,11 @@ cd "$BACKEND_DIR"
 # read ONLY that key from the server .env (never `source` the whole file).
 if [ -z "${DATABASE_URL:-}" ] && [ -f "$BACKEND_DIR/.env" ]; then
   DATABASE_URL=$(sed -E -n 's/^[[:space:]]*(export[[:space:]]+)?DATABASE_URL[[:space:]]*=[[:space:]]*//p' "$BACKEND_DIR/.env" | tail -n 1 | sed -e "s/^[\"']//" -e "s/[\"']$//")
+fi
+# Alembic imports app.database and needs an async driver even if .env or an
+# operator supplied a plain postgresql:// URL.
+if [ -n "${DATABASE_URL:-}" ]; then
+  DATABASE_URL=$(printf '%s' "$DATABASE_URL" | sed -E 's#^postgresql(\+[a-z0-9_]+)?://#postgresql+asyncpg://#')
   export DATABASE_URL
 fi
 
