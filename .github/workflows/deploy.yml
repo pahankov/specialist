@@ -169,10 +169,12 @@ jobs:
               echo "ERROR: DATABASE_URL is empty and not found in $ENV_FILE"
               exit 1
             fi
-            case "$DATABASE_URL" in
-              postgresql*) export DATABASE_URL; echo "DATABASE_URL resolved: [masked]" ;;
-              *) echo "ERROR: DATABASE_URL must be a PostgreSQL URL"; exit 1 ;;
-            esac
+            # Keep this a single command: appleboy/ssh-action with
+            # script_stop injects an exit check after every line, and a
+            # multi-line `case` puts it before the first pattern.
+            if ! printf '%s' "$DATABASE_URL" | grep -q '^postgresql'; then echo "ERROR: DATABASE_URL must be a PostgreSQL URL"; exit 1; fi
+            export DATABASE_URL
+            echo "DATABASE_URL resolved: [masked]"
 
             # pg_dump does not understand SQLAlchemy driver suffixes.
             PG_URL=$(printf '%s' "$DATABASE_URL" | sed -E 's#^postgresql\+[a-z0-9_]+://#postgresql://#')
