@@ -42,6 +42,8 @@
 4. Проверь прод: `curl https://beauty-specialist.ru/api/v1/cities/search/?q=...`.
 5. Старый ключ отзови в кабинете провайдера.
 
+Подробные сценарии и проверки: [MAX_BOT.md](MAX_BOT.md) и [VK_APP.md](VK_APP.md).
+
 ## MAX bot: серверная настройка (один раз)
 
 ```bash
