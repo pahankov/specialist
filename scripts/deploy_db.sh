@@ -5,16 +5,43 @@
 set -e
 
 ROOT="${1:?usage: bash scripts/deploy_db.sh /var/www/beauty-specialist}"
-cd "$ROOT/online-booking/backend"
+BACKEND_DIR="$ROOT/online-booking/backend"
+cd "$BACKEND_DIR"
 
-# Fix schema mismatches BEFORE migrations (uses file in current directory)
-sudo -u postgres psql -d online_booking -f fix_all_tables.sql || echo "[WARN] Schema fix failed, continuing..."
+# Resolve DATABASE_URL the same way the deploy does: exported env wins, else
+# read ONLY that key from the server .env (never `source` the whole file).
+if [ -z "${DATABASE_URL:-}" ] && [ -f "$BACKEND_DIR/.env" ]; then
+  DATABASE_URL=$(sed -E -n 's/^[[:space:]]*(export[[:space:]]+)?DATABASE_URL[[:space:]]*=[[:space:]]*//p' "$BACKEND_DIR/.env" | tail -n 1 | sed -e "s/^[\"']//" -e "s/[\"']$//")
+  export DATABASE_URL
+fi
+
+# Derive the local database name from the URL instead of hardcoding
+# `online_booking`: staging copies and renamed prod DBs must work too.
+DB_NAME=""
+if [ -n "${DATABASE_URL:-}" ]; then
+  DB_NAME="${DATABASE_URL%%\?*}"
+  DB_NAME="${DB_NAME%%#*}"
+  DB_NAME="${DB_NAME##*/}"
+fi
+if [ -z "$DB_NAME" ]; then
+  DB_NAME=online_booking
+  echo "[WARN] DATABASE_URL has no database name; falling back to $DB_NAME"
+fi
+if ! printf '%s' "$DB_NAME" | grep -Eq '^[A-Za-z0-9_]+$'; then
+  echo "ERROR: unsafe database name derived from DATABASE_URL: $DB_NAME"
+  exit 1
+fi
+echo "Target database: $DB_NAME"
+
+# Fix schema mismatches BEFORE migrations (absolute path: the script may be
+# invoked from any working directory).
+sudo -u postgres psql -d "$DB_NAME" -f "$BACKEND_DIR/fix_all_tables.sql" || echo "[WARN] Schema fix failed, continuing..."
 
 # Fix table ownership (tables created by postgres, migrations run as specialist)
 # Single-table ALTER fails every new migration otherwise (see DEPLOYMENT_RULES#5)
 echo "=== FIX TABLE OWNERSHIP ==="
-for tbl in users master_profiles client_profiles services appointments working_hours blocked_slots reviews refresh_tokens audit_logs countries cities otp_codes notifications; do
-  sudo -u postgres psql -d online_booking -c "ALTER TABLE ${tbl} OWNER TO specialist;" 2>/dev/null || echo "[WARN] Ownership fix skipped for ${tbl}"
+for tbl in users master_profiles client_profiles services appointments working_hours blocked_slots reviews refresh_tokens audit_logs countries cities otp_codes notifications notification_preferences pnl_categories pnl_incomes pnl_expenses; do
+  sudo -u postgres psql -d "$DB_NAME" -c "ALTER TABLE ${tbl} OWNER TO specialist;" 2>/dev/null || echo "[WARN] Ownership fix skipped for ${tbl}"
 done
 echo "=== OWNERSHIP DONE ==="
 
@@ -28,10 +55,10 @@ echo "=== OWNERSHIP DONE ==="
 # where the old files no longer exist ("Can't locate revision").
 # So delete the version row first, then stamp the empty table.
 echo "=== ALEMBIC ==="
-OLD_HEAD=$(sudo -u postgres psql -d online_booking -tAc "SELECT version_num FROM alembic_version" 2>/dev/null | tr -d '[:space:]' || true)
+OLD_HEAD=$(sudo -u postgres psql -d "$DB_NAME" -tAc "SELECT version_num FROM alembic_version" 2>/dev/null | tr -d '[:space:]' || true)
 if [ "$OLD_HEAD" = "b2c3d4e5f6a7" ]; then
   echo "Old migration chain detected - resetting version to squashed baseline..."
-  sudo -u postgres psql -d online_booking -c "DELETE FROM alembic_version;"
+  sudo -u postgres psql -d "$DB_NAME" -c "DELETE FROM alembic_version;"
   DATABASE_URL="${DATABASE_URL}" alembic stamp 5280b944554f
 fi
 DATABASE_URL="${DATABASE_URL}" alembic upgrade head

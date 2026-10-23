@@ -6,10 +6,17 @@ on:
   pull_request:
     branches: [main, develop]
 
+# A newer push makes an in-flight CI run obsolete; deploy never uses this
+# group, so cancellation here cannot interrupt production.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   backend-tests:
     name: Backend Tests (SQLite)
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     env:
       RATE_LIMIT_DISABLED: "true"
       # Test-only JWT secrets (.env is gitignored by design; fail-closed
@@ -68,6 +75,7 @@ jobs:
   backend-tests-postgres:
     name: Backend Tests (PostgreSQL)
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     services:
       postgres:
         image: postgres:16-alpine
@@ -118,13 +126,14 @@ jobs:
   frontend-lint:
     name: Frontend Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: "npm"
           cache-dependency-path: online-booking/frontend/package-lock.json
 
@@ -156,6 +165,7 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: [backend-tests, frontend-lint]
     steps:
       - uses: actions/checkout@v4
@@ -163,7 +173,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: "npm"
           cache-dependency-path: online-booking/frontend/package-lock.json
 

@@ -56,7 +56,9 @@ class TestTariffs:
         assert body["tariff"] == "trial"
         assert body["trial_ends_at"] is not None
         ends = body["trial_ends_at"][:10]
-        expect = (date.today() + timedelta(days=14)).isoformat()
+        # trial_ends_at is stamped in UTC; date.today() is local and is one
+        # day ahead of UTC in MSK between 00:00 and 03:00.
+        expect = (datetime.now(timezone.utc).date() + timedelta(days=14)).isoformat()
         assert ends == expect
 
     async def test_migration_backfills_existing(self, session):

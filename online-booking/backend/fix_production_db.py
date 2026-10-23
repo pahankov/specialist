@@ -15,8 +15,16 @@ Environment:
 """
 import sys
 import os
+from pathlib import Path
+
+from dotenv import load_dotenv
 
 sys.path.insert(0, os.path.dirname(__file__))
+
+# Pydantic reads .env into Settings only; this script also reads
+# SUPERUSER_EMAIL/PASSWORD through os.getenv, so load the file explicitly.
+# override=False keeps GitHub Secrets / exported env authoritative.
+load_dotenv(Path(__file__).resolve().parent / ".env", override=False)
 
 from app.database import AsyncSessionLocal
 from app.models.user import User, UserRole
