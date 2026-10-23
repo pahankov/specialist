@@ -230,3 +230,91 @@
   display: flex;
   flex-direction: column;
 }
+
+/* Notification delivery settings. */
+.notify-section {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.notify-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #444;
+  margin-bottom: 10px;
+}
+
+.notify-toggle {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 8px 0;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.notify-toggle > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.notify-channel {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border: 1px solid #eee;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.notify-channel.disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+
+.notify-channel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.notify-channel-name {
+  font-weight: 600;
+}
+
+.notify-channel-hint {
+  font-size: 12px;
+  color: #777;
+  line-height: 1.4;
+}
+
+.notify-select {
+  margin-bottom: 16px;
+}
+
+.notify-select label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #444;
+}
+
+.notify-select select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+  background: #fff;
+  margin-bottom: 6px;
+}
+
+.notify-card .btn.btn-primary {
+  width: auto;
+}

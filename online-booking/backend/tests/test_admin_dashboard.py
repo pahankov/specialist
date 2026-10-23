@@ -19,13 +19,16 @@ class TestAdminDashboard:
         assert isinstance(data["recent_appointments"], list)
         assert isinstance(data["upcoming_appointments"], list)
 
-    async def test_dashboard_with_data(self, client, super_admin_headers, test_service_data):
+    async def test_dashboard_with_data(
+        self, client, session, super_admin_headers, created_master_id, test_service_data
+    ):
         """Dashboard reflects actual data."""
-        # Create service
-        service_resp = await client.post(
-            "/api/v1/services/", json={**test_service_data, "master_id": 1}, headers=super_admin_headers
-        )
-        service_id = service_resp.json()["id"]
+        # Public POST /services/ is master-only (own profile), so seed the
+        # service directly — the dashboard only needs data present.
+        from app.models.service import Service
+
+        session.add(Service(master_id=created_master_id, **test_service_data))
+        await session.commit()
 
         resp = await client.get("/api/v1/admin/dashboard", headers=super_admin_headers)
         assert resp.status_code == 200

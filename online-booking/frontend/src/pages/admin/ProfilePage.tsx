@@ -19,7 +19,12 @@ import { clearAuthCookies, decodeJwtPayload, getCookie } from '../../utils/cooki
 import { imageUploadError } from '../../utils/imageUpload';
 import { capitalizeWords, splitFullName } from '../../utils/names';
 import { MasterReviews } from '../../components/reviews';
-import { BindingsCard, PasswordCard, ContactsCard } from '../../components/profile';
+import {
+  BindingsCard,
+  PasswordCard,
+  ContactsCard,
+  NotificationSettingsCard,
+} from '../../components/profile';
 import type { ContactsApi } from '../../components/profile/ContactsCard';
 import LoginModal from '../../components/LoginModal';
 import './ProfilePage.css';
@@ -560,6 +565,8 @@ function ProfilePage({ mode = 'master' }: ProfilePageProps) {
 
         <ContactsCard contacts={contacts} onChanged={refreshAuthFlags} api={ADMIN_CONTACTS_API} />
 
+        <NotificationSettingsCard />
+
         {/* MAX link roundtrip: login code flow, then refresh in place. */}
         {maxLinkOpen && (
           <LoginModal
@@ -926,6 +933,8 @@ function ProfilePage({ mode = 'master' }: ProfilePageProps) {
         onChanged={refreshAuthFlags}
         api={isDraft ? undefined : ADMIN_CONTACTS_API}
       />
+
+      <NotificationSettingsCard />
 
       {!isDraft && (
         <>

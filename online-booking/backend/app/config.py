@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     ALLOWED_ORIGINS: str = "http://localhost:3000"
     APP_ENV: str = "development"
 
+    # Sentry — error tracking (empty = disabled)
+    SENTRY_DSN: str = ""
+
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
 
@@ -104,6 +107,14 @@ class Settings(BaseSettings):
     # the frontend keeps the plain redirect button.
     YANDEX_SUGGEST_REDIRECT_URI: str = ""
 
+    # Public site URL used in external notification links (email / MAX / VK).
+    PUBLIC_BASE_URL: str = "https://beauty-specialist.ru"
+    # VK community access token for user messages (messages.send). VK ID
+    # login does not grant messaging permission by itself: a user must allow
+    # messages from the community. Empty = VK delivery unavailable.
+    VK_NOTIFY_TOKEN: str = ""
+    VK_API_VERSION: str = "5.199"
+
     # DaData (address suggestions; secret never leaves the backend proxy)
     DADATA_API_KEY: str = ""
     DADATA_SECRET: str = ""
@@ -161,6 +172,11 @@ class Settings(BaseSettings):
     def smtp_enabled(self) -> bool:
         """Outgoing email available iff the sender account is configured."""
         return bool(self.SMTP_USER and self.SMTP_PASSWORD)
+
+    @property
+    def vk_notify_enabled(self) -> bool:
+        """VK user messages available iff a community token is configured."""
+        return bool(self.VK_NOTIFY_TOKEN)
 
     @property
     def smtp_from_email(self) -> str:

@@ -71,6 +71,7 @@ class User(Base):
     # the name when it is empty or was itself set by a social login — a name
     # a human entered is never overwritten.
     name_source = Column(String(16), nullable=True)
+    last_login_provider = Column(String(16), nullable=True)
     # Legal consent proof (152-ФЗ + offer): stamped at registration when the
     # user checks the consent box. NULL = registered before consent tracking
     # (e.g. OTP/MAX auto-created accounts) — consent unknown.

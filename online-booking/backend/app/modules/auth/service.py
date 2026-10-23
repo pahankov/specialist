@@ -152,6 +152,7 @@ async def login_master(email: str, password: str, db: AsyncSession) -> tuple[str
         )
 
     _reject_master_password_login(user)
+    user.last_login_provider = "email"
 
     access_token = create_access_token({
         "sub": str(user.id),
@@ -253,6 +254,7 @@ async def verify_otp(phone: str, code: str, db: AsyncSession) -> tuple[str, User
 
     # An existing MASTER must use a social binding; OTP is not a social login.
     _reject_master_password_login(user)
+    user.last_login_provider = "phone"
 
     access_token = create_access_token({
         "sub": str(user.id),
@@ -292,6 +294,8 @@ async def login_client_legacy(phone: str, db: AsyncSession) -> tuple[str, User]:
         )
 
     _reject_master_password_login(user)
+    user.last_login_provider = "phone"
+    await db.commit()
 
     access_token = create_access_token({
         "sub": str(user.id),
@@ -331,6 +335,7 @@ async def _create_password_account(
         phone=None if is_email else value,
         hashed_password=hash_password(password),
         role=UserRole.CLIENT,
+        last_login_provider="email" if is_email else "phone",
         consent_at=datetime.now(dt_timezone.utc),
         consent_policy_version=POLICY_VERSION,
         consent_offer_version=OFFER_VERSION,
@@ -428,6 +433,7 @@ async def login_unified(
         )
 
     _reject_master_password_login(user)
+    user.last_login_provider = "email" if is_email else "phone"
 
     access_token = create_access_token({
         "sub": str(user.id),
@@ -534,6 +540,7 @@ async def register_unified(
         phone=phone,
         hashed_password=hash_password(password),
         role=UserRole.CLIENT,
+        last_login_provider="phone",
         consent_at=(datetime.now(dt_timezone.utc) if consent else None),
         consent_policy_version=(POLICY_VERSION if consent else None),
         consent_offer_version=(OFFER_VERSION if consent else None),

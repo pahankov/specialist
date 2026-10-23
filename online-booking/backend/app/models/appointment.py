@@ -38,6 +38,8 @@ class Appointment(Base):
     visit_confirmation_status = Column(String(16), nullable=True, index=True)
     visit_prompt_sent_at = Column(DateTime(timezone=True), nullable=True)
     visit_confirmation_at = Column(DateTime(timezone=True), nullable=True)
+    reminder_24h_sent_at = Column(DateTime(timezone=True), nullable=True)
+    reminder_2h_sent_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc))

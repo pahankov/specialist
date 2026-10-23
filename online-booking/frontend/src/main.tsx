@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
+import { QueryProvider } from './lib/query-client';
 import App from './App';
 import './index.css';
 
@@ -15,7 +16,9 @@ window.__BUILD_ID__ = __BUILD_ID__;
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <App />
+      <QueryProvider>
+        <App />
+      </QueryProvider>
     </BrowserRouter>
   </React.StrictMode>,
 );

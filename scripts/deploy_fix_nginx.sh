@@ -22,11 +22,18 @@ server {
     ssl_certificate /etc/letsencrypt/live/beauty-specialist.ru/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/beauty-specialist.ru/privkey.pem;
 
+    # Security headers
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
     root /var/www/beauty-specialist/frontend/dist;
     index index.html;
 
+    # Hashed assets (Vite) — cache permanently, immutable
     location ~* \.(js|css)$ {
-        add_header Cache-Control "no-cache, no-store, must-revalidate";
+        add_header Cache-Control "public, max-age=31536000, immutable";
         add_header Pragma "no-cache";
         add_header Expires "0";
         expires -1;

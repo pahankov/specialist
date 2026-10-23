@@ -15,6 +15,8 @@
     "format": "prettier --write src/"
   },
   "dependencies": {
+    "@tanstack/query-core": "^5.104.5",
+    "@tanstack/react-query": "^5.104.5",
     "@tanstack/react-table": "^8.21.3",
     "@vkid/sdk": "^2.6.9",
     "axios": "^1.7.9",

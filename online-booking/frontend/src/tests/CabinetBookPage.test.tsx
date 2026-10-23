@@ -140,7 +140,7 @@ describe('CabinetBookPage', () => {
     }
     fireEvent.click(
       await screen.findByText(String(future.getDate()), {
-        selector: '.calendar-day-number',
+        selector: '.calendar-day:not(.other-month) .calendar-day-number',
       }),
     );
     const bookButtons = await screen.findAllByText('+ Записаться');
@@ -185,7 +185,7 @@ describe('CabinetBookPage', () => {
     }
     fireEvent.click(
       await screen.findByText(String(future.getDate()), {
-        selector: '.calendar-day-number',
+        selector: '.calendar-day:not(.other-month) .calendar-day-number',
       }),
     );
     const bookButtons = await screen.findAllByText('+ Записаться');
@@ -233,7 +233,7 @@ describe('CabinetBookPage', () => {
     }
     fireEvent.click(
       await screen.findByText(String(future.getDate()), {
-        selector: '.calendar-day-number',
+        selector: '.calendar-day:not(.other-month) .calendar-day-number',
       }),
     );
     const bookButtons = await screen.findAllByText('+ Записаться');

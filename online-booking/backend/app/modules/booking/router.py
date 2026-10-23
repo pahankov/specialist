@@ -174,7 +174,11 @@ async def get_available_slots(
     date: str = Query(...),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get available time slots for a service on a given date."""
+    """Get available time slots for a service on a given date.
+
+    Uses the master's own work window (work_start_hour / work_end_hour)
+    from MasterProfile instead of a hardcoded 10-18 range.
+    """
     logger.info("Запрос слотов: мастер=%s, услуга=%s, дата=%s", master_id, service_id, date)
 
     service_result = await db.execute(select(Service).where(Service.id == service_id))
@@ -184,11 +188,20 @@ async def get_available_slots(
         logger.warning("Услуга не найдена: id=%s", service_id)
         raise HTTPException(status_code=404, detail="Service not found")
 
+    # Read master's work window from profile (defaults 08:00-22:00)
+    master_result = await db.execute(
+        select(MasterProfile).where(MasterProfile.id == master_id)
+    )
+    master_profile = master_result.scalar_one_or_none()
+    if master_profile is None:
+        logger.warning("Мастер не найден: id=%s", master_id)
+        raise HTTPException(status_code=404, detail="Master not found")
+
+    start_hour = master_profile.work_start_hour if master_profile.work_start_hour is not None else 8
+    end_hour = master_profile.work_end_hour if master_profile.work_end_hour is not None else 22
+
     slots = []
     appointment_datetime = datetime.fromisoformat(date)
-    start_hour = 10
-    end_hour = 18
-
     current_time = appointment_datetime.replace(hour=start_hour, minute=0, second=0, microsecond=0)
     end_time = appointment_datetime.replace(hour=end_hour, minute=0, second=0, microsecond=0)
 

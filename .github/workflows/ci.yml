@@ -8,7 +8,7 @@ on:
 
 jobs:
   backend-tests:
-    name: Backend Tests
+    name: Backend Tests (SQLite)
     runs-on: ubuntu-latest
     env:
       RATE_LIMIT_DISABLED: "true"
@@ -64,6 +64,56 @@ jobs:
             exit 1
           fi
           echo "start.ps1 is pure ASCII"
+
+  backend-tests-postgres:
+    name: Backend Tests (PostgreSQL)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: online_booking_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      RATE_LIMIT_DISABLED: "true"
+      DATABASE_URL: "postgresql+asyncpg://postgres:postgres@localhost:5432/online_booking_test"
+      SECRET_KEY: "ci-test-secret-key-not-for-production-01"
+      REFRESH_SECRET_KEY: "ci-test-refresh-key-not-for-production-01"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          cd online-booking/backend
+          pip install -r requirements.txt
+
+      - name: Run critical tests with PostgreSQL
+        # These tests cover auth, services CRUD, and booking — the areas most
+        # sensitive to PostgreSQL-specific behavior (types, constraints).
+        # tee keeps the full log; PIPESTATUS keeps pytest's exit code.
+        run: |
+          cd online-booking/backend
+          set +e
+          python -m pytest tests/test_services.py tests/test_booking_auth.py tests/test_appointments.py tests/test_auth.py tests/test_auth_dependencies.py -v --tb=short 2>&1 | tee pytest-pg-output.txt
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            echo "=== FAILED TESTS ==="
+            grep -E "^(FAILED|ERROR) " pytest-pg-output.txt | head -30 || true
+          fi
+          exit "$status"
 
   frontend-lint:
     name: Frontend Lint

@@ -6,8 +6,10 @@ from typing import List
 
 from app.database import get_db
 from app.models.service import Service
+from app.models.user import User
 from app.schemas.service import ServiceCreate
 from app.logging_config import get_logger
+from app.dependencies.auth import require_master
 
 logger = get_logger(__name__)
 
@@ -61,11 +63,14 @@ async def get_service(service_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/", response_model=dict, status_code=201)
-async def create_service(service: ServiceCreate, db: AsyncSession = Depends(get_db)):
-    if service.master_id is None:
-        raise HTTPException(status_code=422, detail="master_id is required")
+async def create_service(
+    service: ServiceCreate,
+    master: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a service for the authenticated master's own profile."""
     new_service = Service(
-        master_id=service.master_id,
+        master_id=master.master_profile.id,
         name=service.name,
         description=service.description,
         duration_minutes=service.duration_minutes,
@@ -83,11 +88,24 @@ async def create_service(service: ServiceCreate, db: AsyncSession = Depends(get_
 
 
 @router.delete("/{service_id}", status_code=204)
-async def delete_service(service_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Service).where(Service.id == service_id))
+async def delete_service(
+    service_id: int,
+    master: User = Depends(require_master),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a service owned by the authenticated master."""
+    result = await db.execute(
+        select(Service).where(
+            Service.id == service_id,
+            Service.master_id == master.master_profile.id,
+        )
+    )
     service = result.scalar_one_or_none()
     if not service:
+        logger.warning("Service not found or not owned: service_id=%s, master_id=%s",
+                       service_id, master.master_profile.id)
         raise HTTPException(status_code=404, detail="Service not found")
     await db.delete(service)
     await db.commit()
+    logger.info("Service deleted: id=%s, master_id=%s", service_id, master.master_profile.id)
     return None

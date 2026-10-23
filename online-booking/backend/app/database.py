@@ -49,12 +49,27 @@ def _safe_db_url(url: str) -> str:
 
 logger.info("Database URL: %s", _safe_db_url(db_url))
 
-engine = create_async_engine(
-    db_url,
-    echo=False,  # Disable SQL query logging — use SQLAlchemy logger instead
+# Connection pooling: tuned for production PostgreSQL (1 vCPU, 1 GB RAM).
+# pool_size=5, max_overflow=10 → up to 15 concurrent connections.
+# pool_recycle=1800s (30 min) prevents stale connections.
+# SQLite doesn't need pooling — use a single connection.
+_is_postgres = "postgres" in db_url
+
+_engine_kwargs = {
+    "echo": False,  # Disable SQL query logging — use SQLAlchemy logger instead
     # SQLite-specific: enable WAL mode for better concurrency
-    connect_args={"check_same_thread": False} if "sqlite" in db_url else {},
-)
+    "connect_args": {"check_same_thread": False} if "sqlite" in db_url else {},
+}
+if _is_postgres:
+    # PostgreSQL connection pool: 5 + 10 overflow = up to 15 connections.
+    _engine_kwargs.update(
+        pool_size=5,
+        max_overflow=10,
+        pool_recycle=1800,  # 30 minutes
+        pool_pre_ping=True,
+    )
+
+engine = create_async_engine(db_url, **_engine_kwargs)
 
 # Configure SQLAlchemy logger separately — only show slow queries or errors
 sqlalchemy_logger = logging.getLogger("sqlalchemy")

@@ -79,6 +79,49 @@ export interface Bundle {
 
 // ─── Client cabinet API ────────────────────────────────────────────
 
+export interface NotificationChannelSetting {
+  bound: boolean;
+  available: boolean;
+  enabled: boolean;
+  value?: string | null;
+}
+
+export interface NotificationSettings {
+  instant_enabled: boolean;
+  reminders_enabled: boolean;
+  preferred_channel: 'auto' | 'max' | 'vk' | 'email' | 'bell';
+  master_digest_enabled: boolean;
+  digest_lead_minutes: number;
+  last_login_provider?: string | null;
+  is_master: boolean;
+  is_admin: boolean;
+  channels: {
+    max: NotificationChannelSetting;
+    vk: NotificationChannelSetting;
+    email: NotificationChannelSetting;
+  };
+}
+
+export interface NotificationSettingsUpdate {
+  instant_enabled?: boolean;
+  reminders_enabled?: boolean;
+  max_enabled?: boolean;
+  vk_enabled?: boolean;
+  email_enabled?: boolean;
+  preferred_channel?: NotificationSettings['preferred_channel'];
+  master_digest_enabled?: boolean;
+  digest_lead_minutes?: number;
+}
+
+export const notificationsApi = {
+  getSettings() {
+    return apiClient.get<NotificationSettings>('/api/v1/notifications/settings');
+  },
+  updateSettings(data: NotificationSettingsUpdate) {
+    return apiClient.patch<NotificationSettings>('/api/v1/notifications/settings', data);
+  },
+};
+
 export const cabinetApi = {
   me() {
     return apiClient.get<ClientMe>('/api/v1/client/me');

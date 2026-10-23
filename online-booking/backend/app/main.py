@@ -9,6 +9,7 @@ from app.logging_config import setup_logging, get_logger
 from app.middleware.rate_limit import limiter, wire_rate_limit
 from app.middleware.request_logging import RequestLoggingMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
+from app.middleware.sentry import init_sentry, SentryMiddleware
 import asyncio
 import traceback
 
@@ -28,11 +29,15 @@ from app.modules.vkauth import router as vk_router
 from app.modules.yandexauth import router as yandex_router
 from app.modules.referral import router as referral_router
 from app.modules.support import router as support_router
+from app.modules.notifications import router as notifications_router
 
 # Инициализация логирования (LOG_LEVEL из env, иначе INFO в проде / DEBUG локально)
 setup_logging(settings.log_level)
 logger = get_logger(__name__)
 logger.info("Инициализация приложения %s", settings.APP_NAME)
+
+# Sentry — error tracking (disabled when SENTRY_DSN is empty)
+init_sentry(settings.SENTRY_DSN, settings.APP_NAME, settings.APP_ENV)
 
 
 async def lifespan(app: FastAPI):
@@ -50,6 +55,13 @@ async def lifespan(app: FastAPI):
     from app.services.billing import billing_loop
     billing_task = asyncio.create_task(billing_loop())
     logger.info("Billing/visit-prompt loop started")
+    from app.services.notification_dispatch import notification_dispatch_loop
+    dispatch_task = asyncio.create_task(notification_dispatch_loop())
+    logger.info("Notification dispatch loop started")
+    from app.services.reminders import master_digest_loop, reminders_loop
+    reminders_task = asyncio.create_task(reminders_loop())
+    digest_task = asyncio.create_task(master_digest_loop())
+    logger.info("Reminder and master digest loops started")
     from app.services.max_webhook_guard import max_webhook_guard_loop
     max_task = None
     if settings.max_enabled and settings.MAX_WEBHOOK_URL:
@@ -60,11 +72,17 @@ async def lifespan(app: FastAPI):
     yield
     auto_task.cancel()
     billing_task.cancel()
+    dispatch_task.cancel()
+    reminders_task.cancel()
+    digest_task.cancel()
     if max_task:
         max_task.cancel()
 
 
 # ─── App creation ─────────────────────────────────────────────
+
+# Disable Swagger docs/redoc in production — API surface is not public info.
+_docs_enabled = settings.APP_ENV != "production"
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -87,6 +105,8 @@ app = FastAPI(
     },
     license_info={"name": "MIT"},
     lifespan=lifespan,
+    docs_url="/docs" if _docs_enabled else None,
+    redoc_url="/redoc" if _docs_enabled else None,
 )
 
 # ─── Custom validation handlers (user-friendly error messages) ───
@@ -152,12 +172,15 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # ─── Middleware ────────────────────────────────────────────────
 # ORDER MATTERS (Starlette: FIRST added = outermost):
-# 1. Security headers first — every response carries them, including
+# 1. Sentry — captures ALL exceptions before any middleware
+# 2. Security headers first — every response carries them, including
 #    429s and unhandled 500s.
-# 2. CORS second — preflights are answered here and never reach the
+# 3. CORS second — preflights are answered here and never reach the
 #    limiter (no budget consumed); 429s flow back out through CORS.
-# 3. SlowAPI third — budget enforced for real requests only.
-# 4. Request logging last (innermost) — wraps the handler closely.
+# 4. SlowAPI third — budget enforced for real requests only.
+# 5. Request logging last (innermost) — wraps the handler closely.
+app.add_middleware(SentryMiddleware)
+
 app.add_middleware(SecurityHeadersMiddleware)
 
 app.add_middleware(
@@ -216,6 +239,8 @@ app.include_router(review_router, prefix="/api/v1/reviews", tags=["reviews"])
 app.include_router(client_router, prefix="/api/v1/client", tags=["client"])
 app.include_router(referral_router, prefix="/api/v1/referrals", tags=["referrals"])
 app.include_router(support_router, prefix="/api/v1/support", tags=["support"])
+app.include_router(notifications_router, prefix="/api/v1/notifications",
+                   tags=["notifications"])
 app.include_router(admin_router)  # admin endpoints (User model, modules/admin/)
 app.include_router(dadata_router, prefix="/api/dadata")  # DAData address autocomplete proxy
 app.include_router(max_webhook_router, prefix="/api/max", tags=["max-webhook"])

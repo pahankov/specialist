@@ -27,6 +27,9 @@ slowapi==0.1.10
 twilio>=9.0.0
 aiohttp>=3.9.0
 
+# Monitoring
+sentry-sdk[fastapi]==2.20.0
+
 # Testing
 pytest==8.3.4
 httpx==0.28.1

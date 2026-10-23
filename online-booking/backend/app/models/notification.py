@@ -33,6 +33,9 @@ class Notification(Base):
         nullable=True, index=True,
     )
     is_read = Column(Boolean, default=False, nullable=False)
+    external_sent_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    external_channel = Column(String(16), nullable=True)
+    external_error = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     read_at = Column(DateTime(timezone=True), nullable=True)
     resolved_at = Column(DateTime(timezone=True), nullable=True)

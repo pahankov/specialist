@@ -5,7 +5,12 @@ import { authApi, cabinetApi, type ClientMe } from '../../api/client';
 import apiClient from '../../api/http';
 import { AddressSelect, BackendImg, ConfirmDialog, Modal, Skeleton } from '../../components/common';
 import LoginModal from '../../components/LoginModal';
-import { BindingsCard, ContactsCard, PasswordCard } from '../../components/profile';
+import {
+  BindingsCard,
+  ContactsCard,
+  NotificationSettingsCard,
+  PasswordCard,
+} from '../../components/profile';
 import type { CityOption } from '../../components/common/CitySelect';
 import { getApiErrorMessage } from '../../utils/apiError';
 import { clearAuthCookies } from '../../utils/cookies';
@@ -224,6 +229,8 @@ function ClientProfilePage() {
         hasPassword={me?.has_password}
         hasEmail={(me?.contacts ?? []).some((c) => c.contact_type === 'email')}
       />
+
+      <NotificationSettingsCard />
 
       {/* Save sits at the bottom (owner's ask): outside the form element,
           wired to it through the HTML form= attribute. */}

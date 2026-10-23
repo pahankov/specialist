@@ -186,6 +186,7 @@ async def resolve_social_user(
             last_name=(last or None),
             role=UserRole.CLIENT,
             hashed_password=None,  # social-only auth (same as OTP/MAX paths)
+            last_login_provider=provider,
             avatar_url=avatar_url,
             # name came from the provider: a later social login may refresh
             # it, a human edit ("user") will not be overwritten.
@@ -240,6 +241,9 @@ async def resolve_social_user(
             avatar_url=avatar_url,
         )
         changed = changed or merged
+        if user.last_login_provider != provider:
+            user.last_login_provider = provider
+            changed = True
         if consent and user.consent_at is None:
             # Backfill consent for accounts created before consent tracking.
             user.consent_at = now

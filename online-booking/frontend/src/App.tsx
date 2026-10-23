@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Toaster, toast } from 'sonner';
 import {
@@ -11,37 +11,37 @@ import {
 } from './pages/public';
 import VkCallbackPage from './pages/public/VkCallbackPage';
 import YandexCallbackPage from './pages/public/YandexCallbackPage';
-import {
-  AdminLayout,
-  MasterDraftLayout,
-  MasterDraftLockedPage,
-  DashboardPage,
-  AppointmentsPage,
-  ServicesPage,
-  ClientsPage,
-  SchedulePage,
-  BillingPage,
-  SuperBillingPage,
-} from './pages/admin';
+import { AdminLayout, MasterDraftLayout, MasterDraftLockedPage } from './pages/admin';
 import SuperAdminLayout from './pages/admin/SuperAdminLayout';
-import MastersPage from './pages/admin/MastersPage';
-import MasterDetailPage from './pages/admin/MasterDetailPage';
-import LogsPage from './pages/admin/LogsPage';
-import RevenuePage from './pages/admin/RevenuePage';
-import NotificationsPage from './pages/admin/NotificationsPage';
-import ProfilePage from './pages/admin/ProfilePage';
-import CabinetPage from './pages/cabinet/CabinetPage';
-import CabinetBookPage from './pages/cabinet/CabinetBookPage';
-import CabinetNotificationsPage from './pages/cabinet/CabinetNotificationsPage';
-import ClientCouponsPage from './pages/cabinet/ClientCouponsPage';
-import ClientProfilePage from './pages/cabinet/ClientProfilePage';
-import ClientLayout from './pages/cabinet/ClientLayout';
+import { PageLoader } from './lib/lazy-pages';
 import ErrorBoundary from './components/ErrorBoundary';
 import { getCookie, decodeJwtPayload, getUserRole } from './utils/cookies';
 import { allowMasterDraftEntry, isMasterDraftEntryAllowed } from './utils/masterDraftEntry';
 import { ADMIN_PREFIX, SUPER_PREFIX } from './utils/section';
 import { referralApi } from './api/client';
 import './App.css';
+
+// ─── Lazy-loaded pages (code-split) ────────────────────────────
+const DashboardPage = lazy(() => import('./pages/admin/DashboardPage'));
+const AppointmentsPage = lazy(() => import('./pages/admin/AppointmentsPage'));
+const ServicesPage = lazy(() => import('./pages/admin/ServicesPage'));
+const ClientsPage = lazy(() => import('./pages/admin/ClientsPage'));
+const SchedulePage = lazy(() => import('./pages/admin/SchedulePage'));
+const BillingPage = lazy(() => import('./pages/admin/BillingPage'));
+const SuperBillingPage = lazy(() => import('./pages/admin/SuperBillingPage'));
+const MastersPage = lazy(() => import('./pages/admin/MastersPage'));
+const MasterDetailPage = lazy(() => import('./pages/admin/MasterDetailPage'));
+const LogsPage = lazy(() => import('./pages/admin/LogsPage'));
+const RevenuePage = lazy(() => import('./pages/admin/RevenuePage'));
+const NotificationsPage = lazy(() => import('./pages/admin/NotificationsPage'));
+const ProfilePage = lazy(() => import('./pages/admin/ProfilePage'));
+
+const CabinetPage = lazy(() => import('./pages/cabinet/CabinetPage'));
+const CabinetBookPage = lazy(() => import('./pages/cabinet/CabinetBookPage'));
+const CabinetNotificationsPage = lazy(() => import('./pages/cabinet/CabinetNotificationsPage'));
+const ClientCouponsPage = lazy(() => import('./pages/cabinet/ClientCouponsPage'));
+const ClientProfilePage = lazy(() => import('./pages/cabinet/ClientProfilePage'));
+const ClientLayout = lazy(() => import('./pages/cabinet/ClientLayout'));
 
 function getIsAuthenticated() {
   return getCookie('access_token') !== null;
@@ -74,7 +74,6 @@ function RequireSuperAdmin({ children }: { children: React.ReactNode }) {
 function RequireMasterSection({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   if (!getIsAuthenticated()) {
-    // Guests bounce to home, which opens login and continues to `from`.
     return <Navigate to="/" replace state={{ from: location.pathname + location.search }} />;
   }
   if (getIsAdmin()) {
@@ -103,10 +102,6 @@ function RequireMasterDraft({ children }: { children: React.ReactNode }) {
   if (role !== 'CLIENT') {
     return <Navigate to="/cabinet" replace />;
   }
-  // The draft is entered only through «Стать мастером» (or its legacy
-  // redirect). This in-memory ticket deliberately dies on a full reload:
-  // browser history state used to survive reloads and re-opened the master
-  // shell for an inactive client on phone startup.
   if (!isMasterDraftEntryAllowed()) {
     return <Navigate to="/cabinet" replace />;
   }
@@ -128,7 +123,6 @@ function LegacyMasterDraftEntry() {
 function RequireClient({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   if (!getIsAuthenticated()) {
-    // Guests bounce to home, which opens login and continues to `from`.
     return <Navigate to="/" replace state={{ from: location.pathname + location.search }} />;
   }
   if (getIsAdmin()) {
@@ -139,7 +133,6 @@ function RequireClient({ children }: { children: React.ReactNode }) {
 
 // Master navigation (section /admin). Profile sits second: settings and
 // own reviews at hand, daily flow (records/services/schedule) right below.
-// Order is draggable per user (persisted), this is only the fresh default.
 const masterNavItems = [
   { path: `${ADMIN_PREFIX}/dashboard`, label: '📊 Обзор' },
   { path: `${ADMIN_PREFIX}/profile`, label: '👤 Профиль' },
@@ -151,7 +144,6 @@ const masterNavItems = [
   { path: `${ADMIN_PREFIX}/notifications`, label: '🔔 Уведомления' },
 ];
 
-// Same master cabinet, but only the profile works until self-activation.
 const DRAFT_MASTER_ROOT = `${ADMIN_PREFIX}/become-master`;
 const masterDraftNavItems = [
   { path: DRAFT_MASTER_ROOT, label: '👤 Профиль' },
@@ -189,8 +181,6 @@ function App() {
           }
         })
         .catch((err: unknown) => {
-          // Keep the invitation for a retry when the server was unreachable
-          // or the access token had expired; invalid links stay consumed.
           const status = (err as { response?: { status?: number } }).response?.status;
           if (!status || status === 401 || status === 429 || status >= 500) {
             localStorage.setItem(REFERRAL_CLICK_KEY, raw);
@@ -205,7 +195,7 @@ function App() {
     <ErrorBoundary>
       <div className={`app ${isAdminRoute ? 'admin-app' : 'public-app'}`}>
         <Routes>
-          {/* Public routes */}
+          {/* Public routes (eager — loaded on first paint) */}
           <Route path="/" element={<HomePage />} />
           <Route path="/booking" element={<BookingPage />} />
           <Route path="/privacy" element={<PrivacyPolicyPage />} />
@@ -213,40 +203,82 @@ function App() {
           <Route path="/master-rules" element={<MasterRulesPage />} />
           <Route path="/r/:code" element={<ReferralPage />} />
           <Route path="/ref/:code" element={<ReferralPage />} />
-          {/* VK ID OAuth landing: VK redirects here with ?code&device_id&state,
-              the code is exchanged server-side, then we land by role. */}
           <Route path="/auth/vk/callback" element={<VkCallbackPage />} />
-          {/* Yandex OAuth landing: Yandex redirects here with ?code&state,
-              the code is exchanged server-side, then we land by role. */}
           <Route path="/auth/yandex/callback" element={<YandexCallbackPage />} />
+
+          {/* Client cabinet (lazy) */}
           <Route
             path="/cabinet"
             element={
               <RequireClient>
-                <ClientLayout />
+                <Suspense fallback={<PageLoader />}>
+                  <ClientLayout />
+                </Suspense>
               </RequireClient>
             }
           >
-            <Route index element={<CabinetPage />} />
-            <Route path="book" element={<CabinetBookPage />} />
-            <Route path="coupons" element={<ClientCouponsPage />} />
-            <Route path="notifications" element={<CabinetNotificationsPage />} />
-            <Route path="profile" element={<ClientProfilePage />} />
-            {/* Old bookmarks go to the real (inactive) master shell. */}
+            <Route
+              index
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <CabinetPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="book"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <CabinetBookPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="coupons"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <ClientCouponsPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="notifications"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <CabinetNotificationsPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="profile"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <ClientProfilePage />
+                </Suspense>
+              }
+            />
             <Route path="become-master" element={<LegacyMasterDraftEntry />} />
           </Route>
 
-          {/* Inactive master cabinet: full master shell for a CLIENT who is
-              filling the draft. The backend role stays CLIENT until activation. */}
+          {/* Inactive master cabinet (lazy) */}
           <Route
             path={DRAFT_MASTER_ROOT}
             element={
               <RequireMasterDraft>
-                <MasterDraftLayout navItems={masterDraftNavItems} />
+                <Suspense fallback={<PageLoader />}>
+                  <MasterDraftLayout navItems={masterDraftNavItems} />
+                </Suspense>
               </RequireMasterDraft>
             }
           >
-            <Route index element={<ProfilePage mode="draft" />} />
+            <Route
+              index
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <ProfilePage mode="draft" />
+                </Suspense>
+              }
+            />
             <Route path="dashboard" element={<MasterDraftLockedPage title="Обзор" />} />
             <Route path="appointments" element={<MasterDraftLockedPage title="Мои записи" />} />
             <Route path="services" element={<MasterDraftLockedPage title="Мои услуги" />} />
@@ -259,49 +291,184 @@ function App() {
           <Route path="/admin/login" element={<Navigate to="/" replace />} />
           <Route path="/super/login" element={<Navigate to="/" replace />} />
 
-          {/* Master section */}
+          {/* Master section (lazy pages) */}
           <Route
             path="/admin"
             element={
               <RequireMasterSection>
-                <AdminLayout navItems={masterNavItems} />
+                <Suspense fallback={<PageLoader />}>
+                  <AdminLayout navItems={masterNavItems} />
+                </Suspense>
               </RequireMasterSection>
             }
           >
             <Route index element={<Navigate to="/admin/dashboard" replace />} />
-            <Route path="dashboard" element={<DashboardPage />} />
-            <Route path="appointments" element={<AppointmentsPage />} />
-            <Route path="services" element={<ServicesPage />} />
-            <Route path="clients" element={<ClientsPage />} />
-            <Route path="schedule" element={<SchedulePage />} />
-            <Route path="billing" element={<BillingPage />} />
-            <Route path="notifications" element={<NotificationsPage />} />
-            <Route path="profile" element={<ProfilePage />} />
+            <Route
+              path="dashboard"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <DashboardPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="appointments"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <AppointmentsPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="services"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <ServicesPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="clients"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <ClientsPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="schedule"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <SchedulePage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="billing"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <BillingPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="notifications"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <NotificationsPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="profile"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <ProfilePage />
+                </Suspense>
+              }
+            />
           </Route>
 
-          {/* Superadmin section: own layout, own nav, own URLs */}
+          {/* Superadmin section (lazy pages) */}
           <Route
             path="/super"
             element={
               <RequireSuperAdmin>
-                <SuperAdminLayout />
+                <Suspense fallback={<PageLoader />}>
+                  <SuperAdminLayout />
+                </Suspense>
               </RequireSuperAdmin>
             }
           >
             <Route index element={<Navigate to="/super/dashboard" replace />} />
-            <Route path="dashboard" element={<DashboardPage />} />
-            <Route path="revenue" element={<RevenuePage />} />
-            <Route path="billing" element={<SuperBillingPage />} />
-            <Route path="masters" element={<MastersPage />} />
-            <Route path="masters/:id" element={<MasterDetailPage />} />
-            <Route path="appointments" element={<AppointmentsPage />} />
-            <Route path="clients" element={<ClientsPage />} />
-            <Route path="schedule" element={<SchedulePage />} />
-            <Route path="notifications" element={<NotificationsPage />} />
-            <Route path="logs" element={<LogsPage />} />
-            {/* Super's own profile: bindings + password + contacts (slim
-                variant of the master profile — master blocks stay off). */}
-            <Route path="profile" element={<ProfilePage />} />
+            <Route
+              path="dashboard"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <DashboardPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="revenue"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <RevenuePage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="billing"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <SuperBillingPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="masters"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <MastersPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="masters/:id"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <MasterDetailPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="appointments"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <AppointmentsPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="clients"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <ClientsPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="schedule"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <SchedulePage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="notifications"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <NotificationsPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="logs"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <LogsPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="profile"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <ProfilePage />
+                </Suspense>
+              }
+            />
           </Route>
 
           {/* Catch all */}

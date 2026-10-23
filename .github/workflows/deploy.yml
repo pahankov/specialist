@@ -44,7 +44,7 @@ jobs:
           exit "$status"
 
   deploy:
-    needs: test
+    needs: [test, backend-tests-postgres]
     runs-on: ubuntu-latest
     permissions:
       contents: read

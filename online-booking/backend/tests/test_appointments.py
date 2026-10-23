@@ -6,18 +6,43 @@ from datetime import datetime, timedelta
 class TestPublicBooking:
     """Tests for POST /api/v1/appointments/public"""
 
-    async def test_public_booking_success(self, client, test_master_data, test_service_data):
+    async def test_public_booking_success(
+        self, client, session, test_master_data, test_service_data
+    ):
         """Client can book a public appointment."""
-        # Register master + create service
+        from app.models.user import User, UserRole
+        from app.models.master_profile import MasterProfile
+        from app.utils.security import hash_password
+        from app.modules.auth.token import create_access_token
+        from app.models.service import Service
+
+        # Register master
         await client.post("/api/v1/auth/register", json=test_master_data)
-        service_resp = await client.post(
-            "/api/v1/services/", json={**test_service_data, "master_id": 1}
+
+        # Get user and create service directly in DB (auth required for POST /services/)
+        from sqlalchemy import select
+        user = (await session.execute(
+            select(User).where(User.email == test_master_data["email"])
+        )).scalar_one()
+        mp = (await session.execute(
+            select(MasterProfile).where(MasterProfile.user_id == user.id)
+        )).scalar_one()
+
+        service = Service(
+            master_id=mp.id,
+            name=test_service_data["name"],
+            description=test_service_data["description"],
+            duration_minutes=test_service_data["duration_minutes"],
+            price=test_service_data["price"],
         )
-        service_id = service_resp.json()["id"]
+        session.add(service)
+        await session.flush()
+        await session.refresh(service)
+        service_id = service.id
 
         future_date = (datetime.now() + timedelta(days=7)).isoformat()
         booking_data = {
-            "master_id": 1,
+            "master_id": mp.id,
             "service_id": service_id,
             "client_name": "Public Client",
             "client_phone": "+79998887766",
@@ -27,7 +52,7 @@ class TestPublicBooking:
         assert resp.status_code == 201
         data = resp.json()
         assert data["status"] == "pending"
-        assert data["master_id"] == 1
+        assert data["master_id"] == mp.id
         assert data["service_id"] == service_id
         assert "client_id" in data
 
@@ -56,17 +81,40 @@ class TestPublicBooking:
         })
         assert resp.status_code == 404
 
-    async def test_public_booking_creates_client_if_new(self, client, test_master_data, test_service_data):
+    async def test_public_booking_creates_client_if_new(
+        self, client, session, test_master_data, test_service_data
+    ):
         """Public booking creates a new client record."""
+        from app.models.user import User, UserRole
+        from app.models.master_profile import MasterProfile
+        from app.utils.security import hash_password
+        from app.models.service import Service
+        from sqlalchemy import select
+
         await client.post("/api/v1/auth/register", json=test_master_data)
-        service_resp = await client.post(
-            "/api/v1/services/", json={**test_service_data, "master_id": 1}
+
+        user = (await session.execute(
+            select(User).where(User.email == test_master_data["email"])
+        )).scalar_one()
+        mp = (await session.execute(
+            select(MasterProfile).where(MasterProfile.user_id == user.id)
+        )).scalar_one()
+
+        service = Service(
+            master_id=mp.id,
+            name=test_service_data["name"],
+            description=test_service_data["description"],
+            duration_minutes=test_service_data["duration_minutes"],
+            price=test_service_data["price"],
         )
-        service_id = service_resp.json()["id"]
+        session.add(service)
+        await session.flush()
+        await session.refresh(service)
+        service_id = service.id
 
         future_date = (datetime.now() + timedelta(days=7)).isoformat()
         resp = await client.post("/api/v1/appointments/public", json={
-            "master_id": 1,
+            "master_id": mp.id,
             "service_id": service_id,
             "client_name": "New Client",
             "client_phone": "+79991234567",
@@ -90,18 +138,39 @@ class TestGetAppointments:
         assert resp.status_code == 200
         assert resp.json() == []
 
-    async def test_get_appointments_with_data(self, client, auth_headers, test_master_data, test_service_data):
+    async def test_get_appointments_with_data(
+        self, client, session, auth_headers, test_master_data, test_service_data
+    ):
         """Returns appointments for authenticated master."""
-        # Create service first
-        service_resp = await client.post(
-            "/api/v1/services/", json={**test_service_data, "master_id": 1}
+        from app.models.user import User
+        from app.models.master_profile import MasterProfile
+        from app.models.service import Service
+        from sqlalchemy import select
+
+        # Get master and create service in DB
+        user = (await session.execute(
+            select(User).where(User.email == test_master_data["email"])
+        )).scalar_one()
+        mp = (await session.execute(
+            select(MasterProfile).where(MasterProfile.user_id == user.id)
+        )).scalar_one()
+
+        service = Service(
+            master_id=mp.id,
+            name=test_service_data["name"],
+            description=test_service_data["description"],
+            duration_minutes=test_service_data["duration_minutes"],
+            price=test_service_data["price"],
         )
-        service_id = service_resp.json()["id"]
+        session.add(service)
+        await session.flush()
+        await session.refresh(service)
+        service_id = service.id
 
         future_date = (datetime.now() + timedelta(days=7)).isoformat()
         # Create appointment via admin endpoint (authenticated)
         await client.post("/api/v1/admin/appointments", json={
-            "master_id": 1,
+            "master_id": mp.id,
             "service_id": service_id,
             "client_name": "Test",
             "client_phone": "+79990001111",
@@ -116,18 +185,40 @@ class TestGetAppointments:
 class TestCreateAppointment:
     """Tests for POST /api/v1/appointments/"""
 
-    async def test_create_appointment_success(self, client, auth_headers, test_master_data, test_service_data):
+    async def test_create_appointment_success(
+        self, client, session, auth_headers, test_master_data, test_service_data
+    ):
         """Authenticated master can create appointment."""
-        # Register master first
+        from app.models.user import User
+        from app.models.master_profile import MasterProfile
+        from app.models.service import Service
+        from sqlalchemy import select
+
         await client.post("/api/v1/auth/register", json=test_master_data)
-        service_resp = await client.post(
-            "/api/v1/services/", json={**test_service_data, "master_id": 1}
+
+        user = (await session.execute(
+            select(User).where(User.email == test_master_data["email"])
+        )).scalar_one()
+        mp = (await session.execute(
+            select(MasterProfile).where(MasterProfile.user_id == user.id)
+        )).scalar_one()
+
+        service = Service(
+            master_id=mp.id,
+            name=test_service_data["name"],
+            description=test_service_data["description"],
+            duration_minutes=test_service_data["duration_minutes"],
+            price=test_service_data["price"],
         )
-        service_id = service_resp.json()["id"]
+        session.add(service)
+        await session.flush()
+        await session.refresh(service)
+        service_id = service.id
+
         future_date = (datetime.now() + timedelta(days=7)).isoformat()
 
         resp = await client.post("/api/v1/appointments/", json={
-            "master_id": 1,
+            "master_id": mp.id,
             "service_id": service_id,
             "client_name": "Client Name",
             "client_phone": "+79991110000",
@@ -151,18 +242,40 @@ class TestCreateAppointment:
 class TestDeleteAppointment:
     """Tests for DELETE /api/v1/appointments/{id}"""
 
-    async def test_delete_appointment(self, client, auth_headers, test_master_data, test_service_data):
+    async def test_delete_appointment(
+        self, client, session, auth_headers, test_master_data, test_service_data
+    ):
         """Authenticated master can delete appointment."""
-        # Register master + create service + create appointment
+        from app.models.user import User
+        from app.models.master_profile import MasterProfile
+        from app.models.service import Service
+        from sqlalchemy import select
+
         await client.post("/api/v1/auth/register", json=test_master_data)
-        service_resp = await client.post(
-            "/api/v1/services/", json={**test_service_data, "master_id": 1}
+
+        user = (await session.execute(
+            select(User).where(User.email == test_master_data["email"])
+        )).scalar_one()
+        mp = (await session.execute(
+            select(MasterProfile).where(MasterProfile.user_id == user.id)
+        )).scalar_one()
+
+        service = Service(
+            master_id=mp.id,
+            name=test_service_data["name"],
+            description=test_service_data["description"],
+            duration_minutes=test_service_data["duration_minutes"],
+            price=test_service_data["price"],
         )
-        service_id = service_resp.json()["id"]
+        session.add(service)
+        await session.flush()
+        await session.refresh(service)
+        service_id = service.id
+
         future_date = (datetime.now() + timedelta(days=7)).isoformat()
 
         create_resp = await client.post("/api/v1/appointments/", json={
-            "master_id": 1,
+            "master_id": mp.id,
             "service_id": service_id,
             "client_name": "To Delete",
             "client_phone": "+79992223344",
@@ -170,7 +283,9 @@ class TestDeleteAppointment:
         }, headers=auth_headers)
         appt_id = create_resp.json()["id"]
 
-        delete_resp = await client.delete(f"/api/v1/appointments/{appt_id}", headers=auth_headers)
+        delete_resp = await client.delete(
+            f"/api/v1/appointments/{appt_id}", headers=auth_headers
+        )
         assert delete_resp.status_code == 204
 
         # Verify deleted
