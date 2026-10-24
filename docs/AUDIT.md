@@ -11,6 +11,7 @@
 | Ревизия после security-фикса | `1890479` |
 | Ревизия после booking-фикса | `aed3bd7` |
 | Ревизия после deploy-фикса | `c711ec8` |
+| Ревизия после security-фикса 2 | `904c06d` |
 | Ветка | `main` |
 | Область | backend, frontend, БД/миграции, CI/CD, deploy, зависимости, документация, гигиена репозитория |
 | Метод | статический разбор кода, grep-метрики, тесты, `tsc`, ESLint, npm/pip audit, разбор workflow и deploy-логов, production smoke |
@@ -88,7 +89,7 @@
 
 | Область | P0 | P1 | P2 | P3 | Всего | Исправлено |
 |---|---:|---:|---:|---:|---:|---:|
-| Безопасность | 1 | 5 | 3 | 1 | 10 | 4 |
+| Безопасность | 1 | 5 | 3 | 1 | 10 | 5 |
 | Корректность данных | 0 | 5 | 4 | 0 | 9 | 4 |
 | Деплой и инфраструктура | 0 | 6 | 4 | 0 | 10 | 3 |
 | Производительность | 0 | 0 | 6 | 1 | 7 | 0 |
@@ -96,7 +97,7 @@
 | Тесты | 0 | 0 | 2 | 1 | 3 | 0 |
 | Зависимости, docs, гигиена | 0 | 0 | 3 | 2 | 5 | 0 |
 | Инцидент-респонс | 2 | 2 | 1 | 0 | 5 | 0 |
-| **Итого** | **3** | **18** | **32** | **7** | **60** | **11** |
+| **Итого** | **3** | **18** | **32** | **7** | **60** | **12** |
 
 > На момент аудита P0 было 3: один код-фикс уже закрыт (`SEC-01`), два пункта инцидент-респонса остаются (`IR-01`, `IR-02`).
 
@@ -154,8 +155,8 @@
 | SEC-02 | P1 | Нет счётчика неудачных OTP; `SMS_MAX_ATTEMPTS` не используется | `auth/service.py::verify_otp`, `config.py` | перебор 6-значного кода | ✅ fixed |
 | SEC-03 | P1 | Имперсонация живёт 24 часа | `services/impersonation.py` | украденный support-токен долго действует | ✅ fixed |
 | SEC-04 | P1 | Refresh не проверяет `is_active`/`deleted_at` | `auth/router.py::refresh_token` | заблокированный пользователь продлевает сессию | ✅ fixed |
-| SEC-05 | P1 | Rate limit in-memory и только по IP; Redis не подключён | `middleware/rate_limit.py` | обход при нескольких процессах; нет лимитов на аккаунт | ⬜ open |
-| SEC-06 | P1 | DaData — открытый платный прокси без auth/allowlist | `modules/dadata/router.py` | расход ключа, открытый платный прокси | ⬜ open |
+| SEC-05 | P1 | Rate limit in-memory и только по IP; Redis не подключён | `middleware/rate_limit.py` | обход при нескольких процессах; нет лимитов на аккаунт | 🟨 in progress |
+| SEC-06 | P1 | DaData — открытый платный прокси без auth/allowlist | `modules/dadata/router.py` | расход ключа, открытый платный прокси | ✅ fixed |
 | SEC-07 | P2 | Телефоны/email пишутся в INFO-логи | `auth/router.py`, `auth/service.py` | PII в логах, риск по 152-ФЗ | ⬜ open |
 | SEC-08 | P2 | Нет CSP; access token читается из JS; cookie имперсонации без `Secure`/`SameSite` | `security_headers.py`, `utils/cookies.ts`, `utils/impersonation.ts` | XSS-поверхность, ослабленная cookie | ⬜ open |
 | SEC-09 | P3 | Личная почта в коде | `services/client_visibility.py` | утечка контакта, сложно менять | ⬜ open |
@@ -345,7 +346,7 @@
 | 4 | DATA-01 + DATA-02 | нет двойных записей, корректные конфликты | 1–2 дня |
 | 5 | DEP-01 + DEP-03 | deploy не выкатывает чужой commit и не стартует до миграций | 0,5–1 день |
 
-**Рекомендация:** этап 1 закрыт. Следующий пакет — SEC-05 (Redis rate limit) и SEC-06 (DaData), затем DEP-05 (PG-гейт) и DEP-02 (restore/rollback). IR-01/IR-02 остаются за владельцем инфраструктуры.
+**Рекомендация:** SEC-06 закрыт, Redis rate limit подключён (SEC-05 остался только account-лимит). Следующий пакет — DEP-05 (PG-гейт), DEP-02 (restore/rollback), затем DATA-08 и оставшиеся P1. IR-01/IR-02 остаются за владельцем инфраструктуры.
 
 ---
 
@@ -358,6 +359,7 @@
 | 2026-10-24 | SEC-02/03/04 | `1890479` | OTP: счётчик ошибок, сжигание кода, ротация старых SMS-кодов, `hmac.compare_digest`; имперсонация 15 минут; refresh блокирует inactive/deleted | 17 targeted tests, `alembic upgrade head` на чистой SQLite, `alembic heads` = `6c4d5e6f7081` | ✅ fixed |
 | 2026-10-24 | DATA-01/02/03/05 | `aed3bd7` | Бронирование сериализовано блокировкой мастера; конфликт использует снапшот длительности и нижнюю границу; админское создание валидирует услугу/конфликт; выручка считается по снапшоту и включает комплексы | 24 admin appointment tests, 13 dashboard tests, 20 booking/client tests | ✅ fixed |
 | 2026-10-24 | DEP-01/02/03/06 | `c711ec8` | Deploy выкатывает точный `github.sha` с проверкой `rev-parse`; backend больше не рестартует до миграций; health-check ждёт `/health` и проверяет nginx; бэкап перенесён в `/var/backups`, пустой/упавший `pg_dump` останавливает деплой, retention 14 дней | YAML разобран, shell-синтаксис проверен статически; проверка на следующем deploy | DEP-01/03/06 ✅ fixed, DEP-02 🟨 (restore/rollback остаётся) |
+| 2026-10-24 | SEC-05/06 | `904c06d` | slowapi использует Redis в production (fallback в memory), storage настраивается через `RATE_LIMIT_STORAGE_URI`; DaData-прокси ограничен allowlist `suggest/address`, лимитом 30/min и валидацией query/count | 14 targeted tests; Redis-путь покрыт unit-тестами выбора storage | SEC-06 ✅ fixed, SEC-05 🟨 (лимиты на аккаунт остаются) |
 
 ---
 
