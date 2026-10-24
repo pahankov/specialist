@@ -143,7 +143,7 @@ jobs:
         run: |
           cd online-booking/backend
           test -n "$TEST_DATABASE_URL"
-          python -m pytest tests/test_services.py tests/test_booking_auth.py tests/test_appointments.py tests/test_auth.py tests/test_auth_dependencies.py tests/test_booking_flow.py tests/test_client_booking.py tests/test_admin_appointments.py tests/test_admin_dashboard.py -v --tb=short
+          python -m pytest tests/test_services.py tests/test_booking_auth.py tests/test_appointments.py tests/test_auth.py tests/test_auth_dependencies.py tests/test_booking_flow.py tests/test_client_booking.py tests/test_admin_appointments.py tests/test_admin_dashboard.py tests/test_otp_security.py -v --tb=short
 
   deploy:
     needs: [test, frontend, postgres]

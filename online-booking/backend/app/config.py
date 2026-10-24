@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     SMS_PROVIDER: str = "fake"  # "fake" | "twilio" | "smsc"
     SMS_CODE_TTL_SECONDS: int = 300  # 5 minutes
     SMS_MAX_ATTEMPTS: int = 3
+    # Per-phone send limit works across workers (DB-backed), unlike the
+    # IP limiter: one number cannot be spammed from many IPs.
+    OTP_MAX_SENDS_PER_PHONE: int = 5
+    OTP_SEND_WINDOW_MINUTES: int = 15
 
     # Twilio (if SMS_PROVIDER=twilio)
     TWILIO_ACCOUNT_SID: str = ""

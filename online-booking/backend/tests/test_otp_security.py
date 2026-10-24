@@ -74,3 +74,27 @@ class TestOtpAttempts:
         )).scalars().all()
         assert len(rows) == 2
         assert sum(1 for row in rows if not row.is_used) == 1
+
+    async def test_per_phone_send_quota(self, session, monkeypatch):
+        """SMS budget is protected per phone, not only per source IP."""
+        class _FakeSender:
+            async def send(self, phone: str, code: str) -> bool:
+                return True
+
+        monkeypatch.setattr(
+            "app.services.sms.provider.get_sms_provider",
+            lambda: _FakeSender(),
+        )
+        monkeypatch.setattr(settings, "OTP_MAX_SENDS_PER_PHONE", 2)
+
+        await send_otp(PHONE, session)
+        await send_otp(PHONE, session)
+
+        with pytest.raises(HTTPException) as exc:
+            await send_otp(PHONE, session)
+        assert exc.value.status_code == 429
+
+        rows = (await session.execute(
+            select(OtpCode).where(OtpCode.phone == PHONE)
+        )).scalars().all()
+        assert len(rows) == 2

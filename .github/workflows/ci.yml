@@ -116,7 +116,7 @@ jobs:
         run: |
           cd online-booking/backend
           set +e
-          python -m pytest tests/test_services.py tests/test_booking_auth.py tests/test_appointments.py tests/test_auth.py tests/test_auth_dependencies.py -v --tb=short 2>&1 | tee pytest-pg-output.txt
+          python -m pytest tests/test_services.py tests/test_booking_auth.py tests/test_appointments.py tests/test_auth.py tests/test_auth_dependencies.py tests/test_otp_security.py -v --tb=short 2>&1 | tee pytest-pg-output.txt
           status=${PIPESTATUS[0]}
           if [ "$status" -ne 0 ]; then
             echo "=== FAILED TESTS ==="

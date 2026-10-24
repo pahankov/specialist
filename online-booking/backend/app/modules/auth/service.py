@@ -3,7 +3,7 @@
 Updated to use the unified User model with role-based access.
 """
 from fastapi import HTTPException, status
-from sqlalchemy import update
+from sqlalchemy import func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from typing import Optional
@@ -177,7 +177,26 @@ async def login_master(email: str, password: str, db: AsyncSession) -> tuple[str
 
 async def send_otp(phone: str, db: AsyncSession) -> None:
     """Send OTP code to phone. Creates OtpCode record."""
-    logger.info("Запрос OTP на номер: %s", phone)
+    logger.info("Отправка OTP на номер: %s", phone)
+
+    # DB-backed per-phone quota: the IP limiter alone lets an attacker rotate
+    # IPs and burn SMS budget on one number.
+    window_start = datetime.now(dt_timezone.utc) - timedelta(
+        minutes=settings.OTP_SEND_WINDOW_MINUTES
+    )
+    recent_sends = await db.scalar(
+        select(func.count(OtpCode.id)).where(
+            OtpCode.phone == phone,
+            OtpCode.channel == "sms",
+            OtpCode.created_at >= window_start,
+        )
+    )
+    if (recent_sends or 0) >= settings.OTP_MAX_SENDS_PER_PHONE:
+        logger.warning("OTP send limit reached: phone=%s", phone)
+        raise HTTPException(
+            status_code=429,
+            detail="Слишком много запросов кода. Попробуйте позже.",
+        )
 
     # Generate 6-digit numeric code (VerifyOtpRequest.validate_code requires isdigit)
     code = f"{secrets.randbelow(1_000_000):06d}"
