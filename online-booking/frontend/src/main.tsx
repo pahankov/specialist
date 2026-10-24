@@ -15,7 +15,7 @@ window.__BUILD_ID__ = __BUILD_ID__;
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+    <BrowserRouter>
       <QueryProvider>
         <App />
       </QueryProvider>

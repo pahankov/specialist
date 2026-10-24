@@ -74,7 +74,11 @@ export async function toggleDayWork(
       }
     }
   } catch (err) {
+    // Do not return optimistic state on a failed write: the calendar would
+    // show a working day that does not exist on the server.
     console.error('Failed to sync working hours:', err);
+    setError('Не удалось сохранить расписание. Изменения не применены.');
+    return null;
   }
 
   return { newSchedule, newActiveHours };
