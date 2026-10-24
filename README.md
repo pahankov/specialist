@@ -18,6 +18,7 @@
 | [docs/MAX_BOT.md](docs/MAX_BOT.md) | MAX: бот, вход по коду, уведомления и план мини-приложения |
 | [docs/VK_APP.md](docs/VK_APP.md) | VK ID: приложение, вход по PKCE, привязка и уведомления |
 | [docs/BACKLOG.md](docs/BACKLOG.md) | Отложенное: несрочные задачи с контекстом |
+| [docs/AUDIT.md](docs/AUDIT.md) | Живой аудит: находки, P0-инцидент, статусы и план исправлений |
 
 ---
 
