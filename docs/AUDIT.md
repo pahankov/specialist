@@ -13,6 +13,7 @@
 | Ревизия после deploy-фикса | `c711ec8` |
 | Ревизия после security-фикса 2 | `904c06d` |
 | Ревизия после frontend-фикса | `dd2d993` |
+| Ревизия после deploy-гейтов | `b5b9b21`, `179f4ee` |
 | Ветка | `main` |
 | Область | backend, frontend, БД/миграции, CI/CD, deploy, зависимости, документация, гигиена репозитория |
 | Метод | статический разбор кода, grep-метрики, тесты, `tsc`, ESLint, npm/pip audit, разбор workflow и deploy-логов, production smoke |
@@ -92,13 +93,13 @@
 |---|---:|---:|---:|---:|---:|---:|
 | Безопасность | 1 | 5 | 3 | 1 | 10 | 5 |
 | Корректность данных | 0 | 5 | 4 | 0 | 9 | 5 |
-| Деплой и инфраструктура | 0 | 6 | 4 | 0 | 10 | 4 |
+| Деплой и инфраструктура | 0 | 6 | 4 | 0 | 10 | 7 |
 | Производительность | 0 | 0 | 6 | 1 | 7 | 0 |
 | Архитектура и чистота | 0 | 0 | 9 | 2 | 11 | 0 |
 | Тесты | 0 | 0 | 2 | 1 | 3 | 0 |
 | Зависимости, docs, гигиена | 0 | 0 | 3 | 2 | 5 | 0 |
 | Инцидент-респонс | 2 | 2 | 1 | 0 | 5 | 0 |
-| **Итого** | **3** | **18** | **32** | **7** | **60** | **14** |
+| **Итого** | **3** | **18** | **32** | **7** | **60** | **17** |
 
 > На момент аудита P0 было 3: один код-фикс уже закрыт (`SEC-01`), два пункта инцидент-респонса остаются (`IR-01`, `IR-02`).
 
@@ -202,10 +203,10 @@
 | ID | P | Находка | Где | Влияние | Статус |
 |---|---|---|---|---|---|
 | DEP-01 | P1 | Deploy не сверяет `HEAD` с `github.sha`, делает `fetch main` + `reset FETCH_HEAD` | `.github/workflows/deploy.yml` | можно выкатить непротестированный commit | ✅ fixed |
-| DEP-02 | P1 | Бэкап в `/tmp` с `\|\| echo`, без проверки/retention/restore; rollback нет | `deploy.yml`, `scripts/deploy_db.sh` | нет гарантии восстановления | 🟨 in progress |
+| DEP-02 | P1 | Бэкап в `/tmp` с `\|\| echo`, без проверки/retention/restore; rollback нет | `deploy.yml`, `scripts/deploy_db.sh` | нет гарантии восстановления | ✅ fixed |
 | DEP-03 | P1 | Backend рестартует до миграций | `scripts/deploy_setup.sh` | новый код на старой схеме | ✅ fixed |
-| DEP-04 | P1 | `fix_all_tables.sql` выполняется каждый deploy, содержит `DROP COLUMN`, ошибки глушатся | `deploy.yml`, `scripts/deploy_db.sh` | риск разрушения схемы | ⬜ open |
-| DEP-05 | P1 | PostgreSQL-тесты не входят в `needs` deploy | `.github/workflows/ci.yml`, `deploy.yml` | деплой может пройти без PG-гейта | ⬜ open |
+| DEP-04 | P1 | `fix_all_tables.sql` выполняется каждый deploy, содержит `DROP COLUMN`, ошибки глушатся | `deploy.yml`, `scripts/deploy_db.sh` | риск разрушения схемы | ✅ fixed |
+| DEP-05 | P1 | PostgreSQL-тесты не входят в `needs` deploy | `.github/workflows/ci.yml`, `deploy.yml` | деплой может пройти без PG-гейта | ✅ fixed |
 | DEP-06 | P2 | Health-check только `systemctl is-active` | `scripts/deploy_finalize.sh` | сервис активен, но API/БД мертвы | ✅ fixed |
 | DEP-07 | P1 | `npm audit --omit=dev`: 1 high (`follow-redirects`) + 2 moderate (`react-router`) | `package-lock.json` | известные уязвимости в prod | ✅ fixed |
 | DEP-08 | P2 | Токен в git URL, захардкожен IP, actions на тегах | `deploy.yml` | утечка токена/непредсказуемость CI | ⬜ open |
@@ -318,8 +319,8 @@
 
 ### Этап 2 — надёжность и производительность (2–4 недели)
 
-- DEP-02 (restore/rollback), DEP-04, DEP-05, DEP-07…DEP-10.
-- DATA-04, DATA-06…DATA-09.
+- DEP-08…DEP-10.
+- DATA-04, DATA-06, DATA-07, DATA-09.
 - PERF-01…PERF-07.
 - SEC-05…SEC-10.
 - OPS-01…OPS-03.
@@ -347,7 +348,7 @@
 | 4 | DATA-01 + DATA-02 | нет двойных записей, корректные конфликты | 1–2 дня |
 | 5 | DEP-01 + DEP-03 | deploy не выкатывает чужой commit и не стартует до миграций | 0,5–1 день |
 
-**Рекомендация:** DATA-08 и DEP-07 закрыты, Redis rate limit подключён (SEC-05 остался только account-лимит). Следующий пакет — DEP-05 (PG-гейт), DEP-02 (restore/rollback), DEP-04 (заморозка `fix_all_tables.sql`). IR-01/IR-02 остаются за владельцем инфраструктуры.
+**Рекомендация:** все P1-код-пункты, кроме SEC-05 (account-лимит), закрыты; деплой гейтится SQLite, PostgreSQL, frontend и health-check. Следующий пакет — SEC-05 account-лимит и P2-надёжность (DATA-04/06/07/09, PERF, DEP-08…DEP-10). IR-01/IR-02 остаются за владельцем инфраструктуры.
 
 ---
 
@@ -362,6 +363,7 @@
 | 2026-10-24 | DEP-01/02/03/06 | `c711ec8` | Deploy выкатывает точный `github.sha` с проверкой `rev-parse`; backend больше не рестартует до миграций; health-check ждёт `/health` и проверяет nginx; бэкап перенесён в `/var/backups`, пустой/упавший `pg_dump` останавливает деплой, retention 14 дней | YAML разобран, shell-синтаксис проверен статически; проверка на следующем deploy | DEP-01/03/06 ✅ fixed, DEP-02 🟨 (restore/rollback остаётся) |
 | 2026-10-24 | SEC-05/06 | `904c06d` | slowapi использует Redis в production (fallback в memory), storage настраивается через `RATE_LIMIT_STORAGE_URI`; DaData-прокси ограничен allowlist `suggest/address`, лимитом 30/min и валидацией query/count | 14 targeted tests; Redis-путь покрыт unit-тестами выбора storage | SEC-06 ✅ fixed, SEC-05 🟨 (лимиты на аккаунт остаются) |
 | 2026-10-24 | DATA-08, DEP-07 | `dd2d993` | Ошибка сохранения расписания больше не применяет оптимистичное состояние; `react-router-dom` обновлён до 7.18.4 (закрыт open redirect), `follow-redirects` до 1.16.1 | tsc, eslint, prettier, build, 283 vitest tests; `npm audit --omit=dev` = 0 | ✅ fixed |
+| 2026-10-24 | DEP-02/04/05 | `b5b9b21`, `179f4ee` | PG-тесты реально используют PostgreSQL через `TEST_DATABASE_URL` и входят в `needs` deploy; `fix_all_tables.sql` заморожен и убран из регулярного деплоя; добавлена инструкция restore/rollback | CI 448 success, Deploy 404 success (PostgreSQL Gate, Frontend Gate, deploy); 103 critical tests на PG | ✅ fixed |
 
 ---
 
@@ -376,7 +378,7 @@
 | ESLint warnings | 43 | ≤ 10 | 43 |
 | npm prod: high / moderate | 1 / 2 | 0 / 0 | 1 / 2 |
 | Открытых P0 (код + инцидент) | 3 | 0 | 2 (IR-01/02) |
-| Открытых P1 | 18 | 0 | 6 |
+| Открытых P1 | 18 | 0 | 3 |
 | Время backend suite (локально, Windows) | ~27 мин | ≤ 10 мин | ~27 мин |
 | Index JS | 547 КБ / 168 КБ gzip | ≤ 450 КБ | 547 КБ |
 
