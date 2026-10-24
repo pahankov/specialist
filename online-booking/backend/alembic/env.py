@@ -49,7 +49,10 @@ config = context.config
 db_url = os.environ.get("DATABASE_URL") or config.get_main_option("sqlalchemy.url")
 if db_url:
     db_url = db_url.replace("+asyncpg", "+psycopg2").replace("+aiosqlite", "")
-    config.set_main_option("sqlalchemy.url", db_url)
+    # configparser interpolates "%" in config values, but passwords may be
+    # percent-encoded (e.g. "%40" for "@"). Escape them before storing; every
+    # configparser read below turns "%%" back into "%".
+    config.set_main_option("sqlalchemy.url", db_url.replace("%", "%%"))
 
 # Interpret the config file for Python logging.
 if config.config_file_name is not None:
