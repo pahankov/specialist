@@ -92,25 +92,10 @@ check_and_fix_schema() {
         return
     fi
 
-    # PostgreSQL — проверяем и исправляем
-    info "Проверка схемы PostgreSQL..."
-
-    # Используем comprehensive SQL скрипт
-    FIX_SCHEMA_FILE="$BACKEND_DIR/fix_all_tables.sql"
-    if [ ! -f "$FIX_SCHEMA_FILE" ]; then
-        error "Файл fix_all_tables.sql не найден: $FIX_SCHEMA_FILE"
-        exit 1
-    fi
-
-    info "Применяю исправления схемы ($FIX_SCHEMA_FILE)..."
-    sudo -u postgres psql -d online_booking -f "$FIX_SCHEMA_FILE" 2>&1 | while read line; do
-        if [[ "$line" == *"ERROR"* ]]; then
-            warn "$line"
-        else
-            echo "  $line"
-        fi
-    done
-    success "Схема БД проверена и исправлена"
+    # PostgreSQL — схема управляется только Alembic.
+    # fix_all_tables.sql заморожен: содержит DROP COLUMN и предназначен
+    # только для ручного аварийного восстановления, не для деплоя.
+    info "Схема PostgreSQL управляется Alembic (fix_all_tables.sql пропущен)"
 }
 
 check_and_fix_schema

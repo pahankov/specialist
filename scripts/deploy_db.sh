@@ -38,9 +38,11 @@ if ! printf '%s' "$DB_NAME" | grep -Eq '^[A-Za-z0-9_]+$'; then
 fi
 echo "Target database: $DB_NAME"
 
-# Fix schema mismatches BEFORE migrations (absolute path: the script may be
-# invoked from any working directory).
-sudo -u postgres psql -d "$DB_NAME" -f "$BACKEND_DIR/fix_all_tables.sql" || echo "[WARN] Schema fix failed, continuing..."
+# fix_all_tables.sql is FROZEN: it contains DROP COLUMN and runs destructive
+# DDL against production. The schema is managed by Alembic only; the file is
+# kept for manual emergency recovery, never for routine deploys.
+echo "=== SCHEMA FIX (SKIPPED) ==="
+echo "fix_all_tables.sql is manual-only; schema changes go through Alembic"
 
 # Fix table ownership (tables created by postgres, migrations run as specialist)
 # Single-table ALTER fails every new migration otherwise (see DEPLOYMENT_RULES#5)
@@ -52,8 +54,8 @@ echo "=== OWNERSHIP DONE ==="
 
 # Squash (1.13.0): single baseline 5280b944554f replaced the 12-file chain.
 # A prod DB stamped at the old head carries the same schema the backend
-# already runs on (plus idempotent fix_all_tables.sql above), so mark it
-# as baseline and `upgrade head` becomes a no-op. Fresh DBs have no
+# already runs on, so mark it as baseline and `upgrade head` becomes a
+# no-op. Fresh DBs have no
 # alembic_version row -> plain `upgrade head` builds everything.
 # NOTE: plain `alembic stamp X` does NOT work here — it tries to resolve
 # the DB's current revision (b2c3d4e5f6a7) in the versions directory,
