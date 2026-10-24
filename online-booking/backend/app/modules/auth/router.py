@@ -259,6 +259,18 @@ async def refresh_token(request: Request, db: AsyncSession = Depends(get_db)):
         logger.warning("Token refresh: user not found: user_id=%s", user_id)
         raise HTTPException(status_code=401, detail="User not found")
 
+    # A blocked or self-deleted account must not be able to extend its
+    # session by rotating a refresh token.
+    if not user.is_active or user.deleted_at is not None:
+        stored_token.is_revoked = True
+        stored_token.revoked_at = datetime.now(dt_timezone.utc)
+        await db.commit()
+        logger.warning(
+            "Token refresh: inactive/deleted user rejected: user_id=%s, active=%s, deleted=%s",
+            user_id, user.is_active, user.deleted_at is not None,
+        )
+        raise HTTPException(status_code=401, detail="Аккаунт недоступен")
+
     stored_token.is_revoked = True
     stored_token.revoked_at = datetime.now(dt_timezone.utc)
 

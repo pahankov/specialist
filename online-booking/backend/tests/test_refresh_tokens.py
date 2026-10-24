@@ -44,6 +44,46 @@ class TestRefreshToken:
         resp = await client.post("/api/v1/auth/refresh")
         assert resp.status_code == 401
 
+    async def test_refresh_inactive_user_rejected(
+        self, client, session, test_master_data,
+    ):
+        """A blocked account cannot extend its session via refresh."""
+        user, old_refresh = await _register_with_refresh(
+            client, session, test_master_data)
+        user.is_active = False
+        await session.commit()
+
+        resp = await client.post(
+            "/api/v1/auth/refresh",
+            cookies={"refresh_token": old_refresh},
+        )
+        assert resp.status_code == 401
+        assert "access_token" not in resp.text
+
+        from sqlalchemy import select
+        from app.models.refresh_token import RefreshToken
+
+        stored = (await session.execute(
+            select(RefreshToken).where(RefreshToken.token == old_refresh)
+        )).scalar_one()
+        assert stored.is_revoked is True
+
+    async def test_refresh_deleted_user_rejected(
+        self, client, session, test_master_data,
+    ):
+        """A self-deleted account cannot extend its session via refresh."""
+        user, old_refresh = await _register_with_refresh(
+            client, session, test_master_data)
+        user.deleted_at = datetime.now(dt_timezone.utc)
+        await session.commit()
+
+        resp = await client.post(
+            "/api/v1/auth/refresh",
+            cookies={"refresh_token": old_refresh},
+        )
+        assert resp.status_code == 401
+        assert "access_token" not in resp.text
+
     async def test_refresh_token_invalid_type(self, client, session):
         """Refresh fails with access token as refresh token."""
         user, _ = await _register_with_refresh(client, session, {

@@ -1,4 +1,6 @@
 """Superadmin impersonation of any participant (master or client)."""
+from datetime import datetime, timezone as dt_timezone
+
 import jwt
 
 from app.config import settings
@@ -64,6 +66,14 @@ class TestParticipantImpersonation:
         assert payload["role"] == "CLIENT"
         assert payload["is_admin"] is False
         assert payload["impersonated_by"] is not None
+
+        # Support sessions must be short-lived, not the regular 24h window.
+        now = datetime.now(dt_timezone.utc).timestamp()
+        assert payload["exp"] > now
+        assert payload["exp"] <= (
+            now + settings.IMPERSONATION_TOKEN_EXPIRE_MINUTES * 60 + 5
+        )
+        assert payload["exp"] < now + 60 * 60
 
         me = await client.get(
             "/api/v1/client/me",

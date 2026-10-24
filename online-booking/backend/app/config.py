@@ -25,9 +25,12 @@ class Settings(BaseSettings):
     SECRET_KEY: str = ""
     REFRESH_SECRET_KEY: str = ""
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
+    # Support sessions are intentionally short-lived: a leaked impersonation
+    # token must not stay valid for the regular 24-hour access-token window.
+    IMPERSONATION_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     ALGORITHM: str = "HS256"
-    APP_NAME: str = "Online Booking API"
+    APP_NAME: str = "Beauty Specialist API"
     DEBUG: bool = True
     # Logging: explicit level wins, otherwise INFO in production, DEBUG locally
     LOG_LEVEL: str = ""

@@ -11,9 +11,12 @@ validation, audit logging and the landing route live here so the legacy
 ``/admin/masters/{id}/impersonate`` and the generic
 ``/admin/users/{id}/impersonate`` endpoints cannot drift apart.
 """
+from datetime import timedelta
+
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.logging_config import get_logger
 from app.models.user import User, UserRole
 from app.services.audit import log_action
@@ -46,14 +49,19 @@ async def impersonate_user(
     if not target.is_active:
         raise HTTPException(status_code=403, detail="Пользователь заблокирован")
 
-    token = create_access_token({
-        "sub": str(target.id),
-        "role": target.role.value,
-        "name": target.name,
-        "last_name": target.last_name,
-        "is_admin": False,
-        "impersonated_by": admin.id,
-    })
+    token = create_access_token(
+        {
+            "sub": str(target.id),
+            "role": target.role.value,
+            "name": target.name,
+            "last_name": target.last_name,
+            "is_admin": False,
+            "impersonated_by": admin.id,
+        },
+        expires_delta=timedelta(
+            minutes=max(1, settings.IMPERSONATION_TOKEN_EXPIRE_MINUTES)
+        ),
+    )
     await log_action(
         db, admin.id, "impersonate", "user", target.id,
         f"Вход от имени {target.email or target.phone or target.id}",

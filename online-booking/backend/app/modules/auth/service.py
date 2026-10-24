@@ -39,6 +39,7 @@ from app.utils.security import (
 )
 from app.utils.tokens import create_access_token, create_refresh_token_payload
 from datetime import datetime, timezone as dt_timezone, timedelta
+import hmac
 import secrets
 import jwt
 
@@ -185,11 +186,24 @@ async def send_otp(phone: str, db: AsyncSession) -> None:
     code_hash = hash_otp_code(code)
     expires_at = datetime.now(dt_timezone.utc) + timedelta(minutes=5)
 
+    # A new SMS code supersedes every older unused SMS code for this number.
+    # Without this, burning the latest code could fall back to an older one.
+    await db.execute(
+        update(OtpCode)
+        .where(
+            OtpCode.phone == phone,
+            OtpCode.channel == "sms",
+            OtpCode.is_used == False,  # noqa: E712
+        )
+        .values(is_used=True)
+    )
+
     otp = OtpCode(
         phone=phone,
         code_hash=code_hash,
         expires_at=expires_at,
         is_used=False,
+        attempts=0,
     )
     db.add(otp)
     await db.commit()
@@ -221,7 +235,26 @@ async def verify_otp(phone: str, code: str, db: AsyncSession) -> tuple[str, User
     if datetime.now(dt_timezone.utc).replace(tzinfo=None) > otp.expires_at:
         raise HTTPException(status_code=410, detail="Код истёк. Запросите новый.")
 
-    if hash_otp_code(code) != otp.code_hash:
+    if not hmac.compare_digest(hash_otp_code(code), otp.code_hash):
+        otp.attempts = (otp.attempts or 0) + 1
+        max_attempts = max(1, settings.SMS_MAX_ATTEMPTS)
+        if otp.attempts >= max_attempts:
+            # Burn the code: even the correct value must no longer work.
+            otp.is_used = True
+            await db.commit()
+            logger.warning(
+                "OTP burned after %s failed attempts: phone=%s",
+                otp.attempts, phone,
+            )
+            raise HTTPException(
+                status_code=429,
+                detail="Слишком много попыток. Запросите новый код.",
+            )
+        await db.commit()
+        logger.warning(
+            "Неверный OTP (%s/%s): phone=%s",
+            otp.attempts, max_attempts, phone,
+        )
         raise HTTPException(status_code=400, detail="Неверный код")
 
     # Mark as used

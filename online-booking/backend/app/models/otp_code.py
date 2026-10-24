@@ -18,6 +18,9 @@ class OtpCode(Base):
     code_hash = Column(String(255), nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     is_used = Column(Boolean, default=False, nullable=False)
+    # Wrong-code counter. The code is burned after settings.SMS_MAX_ATTEMPTS
+    # failures, so a 6-digit OTP cannot be brute-forced.
+    attempts = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     # Auth channel: 'sms' (code typed on site) or 'max' (code delivered to MAX dialog).
     # For 'max', max_user_id being set means the bot delivered a code for the

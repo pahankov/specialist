@@ -1,4 +1,4 @@
-"""Online Booking API — main application entry point."""
+"""Beauty Specialist API — main application entry point."""
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -219,7 +219,7 @@ async def health_check():
     ```json
     {
       "status": "ok",
-      "app": "Online Booking API"
+      "app": "Beauty Specialist API"
     }
     ```
     """
