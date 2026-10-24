@@ -17,7 +17,7 @@ from app.models.master_profile import MasterProfile
 from app.models.city import City
 from app.models.refresh_token import RefreshToken
 from app.models.country import Country
-from app.schemas.user import UserCreate, UserLoginByEmail, UserLoginByPhone
+from app.schemas.user import UserCreate, UserLoginByEmail
 from app.schemas.otp import SendOtpRequest, VerifyOtpRequest, OtpResponse
 from app.schemas.auth import (
     ChangePasswordRequest,
@@ -148,23 +148,6 @@ async def login(request: Request, response: Response, req: UserLoginByEmail, db:
         raise
     except Exception as e:
         logger.error("Login failed (unexpected): email=%s, error=%s", req.email, e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Ошибка авторизации")
-
-
-@router.post("/client/login", response_model=TokenResponse)
-@limiter.limit("10/minute")
-async def client_login(request: Request, req: UserLoginByPhone, db: AsyncSession = Depends(get_db)):
-    """Legacy client login by phone (no password)."""
-    logger.info("Client login attempt by phone: %s", req.phone)
-    try:
-        access_token, user = await service.login_client_legacy(req.phone, db)
-        logger.info("Client login successful: user_id=%s, phone=%s", user.id, user.phone)
-        return {"access_token": access_token, "token_type": "bearer"}
-    except HTTPException:
-        logger.warning("Client login failed: phone=%s", req.phone)
-        raise
-    except Exception as e:
-        logger.error("Client login failed (unexpected): phone=%s, error=%s", req.phone, e, exc_info=True)
         raise HTTPException(status_code=500, detail="Ошибка авторизации")
 
 

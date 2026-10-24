@@ -13,7 +13,7 @@ from app.models.client_profile import ClientProfile
 from app.models.refresh_token import RefreshToken
 from app.models.otp_code import OtpCode
 from app.models.user_contact import UserContact
-from app.schemas.user import UserCreate, UserLoginByEmail, UserLoginByPhone
+from app.schemas.user import UserCreate, UserLoginByEmail
 from app.schemas.otp import SendOtpRequest
 from app.services.names import name_fields as _name_fields
 from app.services.master_landing import master_landing_preference
@@ -270,41 +270,6 @@ async def verify_otp(phone: str, code: str, db: AsyncSession) -> tuple[str, User
     await db.commit()
 
     logger.info("Клиент успешно вошёл через OTP: %s", phone)
-    return access_token, user
-
-
-# ─── Legacy compatibility ────────────────────────────────────────────
-
-async def login_client_legacy(phone: str, db: AsyncSession) -> tuple[str, User]:
-    """Legacy client login by phone (no password). Returns (access_token, user)."""
-    logger.info("Запрос на вход клиента (legacy): %s", phone)
-
-    result = await db.execute(select(User).where(User.phone == phone))
-    user = result.scalar_one_or_none()
-
-    if not user:
-        logger.warning("Клиент не найден: %s", phone)
-        raise HTTPException(status_code=404, detail="Клиент не найден")
-
-    if user.is_active is False:
-        logger.warning("Вход заблокированного клиента: %s", phone)
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Аккаунт заблокирован. Обратитесь к администратору."
-        )
-
-    _reject_master_password_login(user)
-    user.last_login_provider = "phone"
-    await db.commit()
-
-    access_token = create_access_token({
-        "sub": str(user.id),
-        "role": user.role.value,
-        "name": user.name,
-        "last_name": user.last_name,
-        "prefer_master": await master_landing_preference(db, user),
-    })
-    logger.info("Клиент успешно вошёл в систему: %s", phone)
     return access_token, user
 
 

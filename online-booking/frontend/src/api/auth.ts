@@ -164,8 +164,6 @@ export const authApi = {
     role: string;
     city_id?: number;
   }) => apiClient.post('/api/v1/auth/register', data),
-  clientLogin: (phone: string) =>
-    apiClient.post<LoginResponse>('/api/v1/auth/client/login', { phone }),
   sendOtp: (phone: string) => apiClient.post('/api/v1/auth/send-otp', { phone }),
   verifyOtp: (phone: string, code: string) =>
     apiClient.post<LoginResponse>('/api/v1/auth/verify-otp', { phone, code }),

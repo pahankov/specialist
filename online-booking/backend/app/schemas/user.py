@@ -40,15 +40,6 @@ class UserLoginByEmail(BaseModel):
     password: str
 
 
-class UserLoginByPhone(BaseModel):
-    phone: str
-
-    @field_validator('phone')
-    @classmethod
-    def validate_phone(cls, v: str) -> str:
-        return normalize_phone(v)
-
-
 class UserUpdate(BaseModel):
     name: Optional[str] = None
     city_id: Optional[int] = None

@@ -24,6 +24,7 @@ Environment:
     DATABASE_URL - PostgreSQL connection string (reads from .env if not set)
     SUPERUSER_EMAIL - admin login (required to create, optional to update)
     SUPERUSER_PASSWORD - admin password (required to create or rotate)
+    SUPERUSER_PHONE - optional contact phone for a newly created admin
 """
 import sys
 import os
@@ -98,7 +99,7 @@ async def ensure_superuser(session, email: str, password: str | None) -> User:
             name=SUPERUSER_NAME,
             email=email,
             hashed_password=hash_password(password),
-            phone="+79615202311",
+            phone=os.getenv("SUPERUSER_PHONE") or None,
             role=UserRole.ADMIN,
             city_id=None,
             is_active=True,

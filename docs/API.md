@@ -25,7 +25,6 @@
 | `POST` | `/api/v1/auth/password/reset` | Новый пароль по коду из письма + авто-вход: access_token + cookies; мастеру — 400; успех подтверждает почту (`verified_via="code"`), все прежние сессии отзываются; 10/min |
 | `POST` | `/api/v1/auth/refresh` | Обновление access token (refresh token rotation) |
 | `POST` | `/api/v1/auth/logout` | Выход (очистка cookies) |
-| `POST` | `/api/v1/auth/client/login` | Legacy вход клиента по телефону |
 
 ### MAX chat-bot auth (SMS-style; бот @se14458556_bot)
 | Метод | Endpoint | Описание |

@@ -59,6 +59,18 @@ class TestRegisterMaster:
         assert resp.status_code == 201
 
 
+class TestLegacyPhoneLoginRemoved:
+    """Phone alone must never mint a token (removed legacy takeover path)."""
+
+    async def test_phone_only_login_endpoint_is_gone(self, client):
+        resp = await client.post(
+            "/api/v1/auth/client/login",
+            json={"phone": "+79990000000"},
+        )
+        assert resp.status_code == 404
+        assert "access_token" not in resp.text
+
+
 class TestLogin:
     """Tests for POST /api/v1/auth/login"""
 
