@@ -126,6 +126,7 @@ jobs:
           command_timeout: 30m
           script: |
             set -e
+            set -o pipefail
             cd /var/www/beauty-specialist
 
             # Fix permissions
@@ -140,20 +141,32 @@ jobs:
 
             # Fetch via GITHUB_TOKEN (runner IP is not fail2ban-banned,
             # no server-side git auth needed). Token is masked in logs.
-            # Do NOT persist it in .git/config — fetch by URL, reset to FETCH_HEAD.
+            # Do NOT persist it in .git/config — fetch by URL.
+            EXPECTED_SHA="${{ github.sha }}"
             echo "=== FETCH VIA TOKEN ==="
             if ! git fetch "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/pahankov/specialist.git" main; then
               echo "ERROR: token fetch failed. Check repo private + token permissions (contents=read)."
               exit 1
             fi
-            git reset --hard FETCH_HEAD
+            if ! git cat-file -e "${EXPECTED_SHA}^{commit}" 2>/dev/null; then
+              echo "ERROR: expected commit $EXPECTED_SHA was not fetched"
+              exit 1
+            fi
+            # Deploy exactly the commit this workflow tested, not a newer
+            # main tip that appeared while the run was queued.
+            git reset --hard "$EXPECTED_SHA"
             git clean -fd
+            ACTUAL_SHA=$(git rev-parse HEAD)
+            if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
+              echo "ERROR: deployed commit mismatch: $ACTUAL_SHA != $EXPECTED_SHA"
+              exit 1
+            fi
 
             # Verify deployed commit
             echo "=== DEPLOYED COMMIT ==="
             git log -1 --oneline
             echo "=== EXPECTED COMMIT ==="
-            echo "${{ github.sha }}"
+            echo "$EXPECTED_SHA"
             echo "========================"
 
             # Resolve DATABASE_URL: GitHub Secret wins, else read ONLY that key
@@ -185,9 +198,26 @@ jobs:
             DATABASE_URL=$(printf '%s' "$DATABASE_URL" | sed -E 's#^postgresql(\+[a-z0-9_]+)?://#postgresql+asyncpg://#')
             export DATABASE_URL
 
-            # Backup database BEFORE any changes
+            # Backup database BEFORE any changes. A failed/empty backup must
+            # stop the deploy: without it there is no rollback path.
             echo "=== DATABASE BACKUP ==="
-            pg_dump "$PG_URL" > /tmp/db-backup-$(date +%Y%m%d-%H%M%S).sql 2>/dev/null || echo "[WARN] Backup skipped (pg_dump not available)"
+            if ! command -v pg_dump >/dev/null 2>&1; then
+              echo "ERROR: pg_dump is not installed; refusing to deploy without a backup"
+              exit 1
+            fi
+            BACKUP_DIR=/var/backups/beauty-specialist
+            BACKUP_FILE="$BACKUP_DIR/db-$(date +%Y%m%d-%H%M%S).sql"
+            sudo mkdir -p "$BACKUP_DIR"
+            if ! pg_dump "$PG_URL" | sudo tee "$BACKUP_FILE" >/dev/null; then
+              echo "ERROR: pg_dump failed; deploy stopped"
+              exit 1
+            fi
+            if ! sudo test -s "$BACKUP_FILE"; then
+              echo "ERROR: backup file is empty: $BACKUP_FILE"
+              exit 1
+            fi
+            sudo find "$BACKUP_DIR" -name 'db-*.sql' -type f -mtime +14 -delete || true
+            echo "Backup written: $BACKUP_FILE"
             echo "=== BACKUP DONE ==="
 
             # Ensure deploy scripts exist (may have Windows line endings)

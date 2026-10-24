@@ -21,6 +21,8 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target' | sudo tee /etc/systemd/system/beauty-backend.service > /dev/null
 sudo systemctl daemon-reload
-sudo systemctl restart beauty-backend
+# Do NOT restart here: migrations and frontend build still have to run.
+# Restarting now would serve new code against the old schema. The restart
+# happens in deploy_finalize.sh after alembic has finished.
 SCRIPT
 sudo bash /tmp/_deploy_unit.sh

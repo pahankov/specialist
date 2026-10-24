@@ -29,18 +29,28 @@ bash "$ROOT/scripts/deploy_fix_nginx.sh"
 sudo systemctl restart beauty-backend
 sudo systemctl restart nginx
 
-# Wait for backend
-sleep 5
-
-# Check backend is running and listening
+# Wait for the API to answer, not just for systemd to report "active".
 echo "=== BACKEND CHECK ==="
 (systemctl status beauty-backend --no-pager 2>&1 | head -10) || true
 (ss -tlnp | grep 8000) || echo "Port 8000 NOT listening"
 
-# Simple health check — just verify service is active
-if systemctl is-active --quiet beauty-backend; then
-    echo "=== DEPLOYMENT SUCCESSFUL ==="
-else
-    echo "ERROR: beauty-backend service is not active!"
+HEALTH_OK=0
+for _ in $(seq 1 12); do
+    if curl -fsS --max-time 3 http://127.0.0.1:8000/health 2>/dev/null | grep -q '"status":"ok"'; then
+        HEALTH_OK=1
+        break
+    fi
+    sleep 5
+done
+
+if [ "$HEALTH_OK" -ne 1 ]; then
+    echo "ERROR: /health did not return status=ok after 60s"
     exit 1
 fi
+
+if ! systemctl is-active --quiet nginx; then
+    echo "ERROR: nginx service is not active!"
+    exit 1
+fi
+
+echo "=== DEPLOYMENT SUCCESSFUL ==="
