@@ -12,6 +12,16 @@ import os
 from functools import wraps
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from app.config import settings
+
+
+def _storage_uri() -> str:
+    """Shared limiter state in production, isolated memory in development."""
+    if settings.RATE_LIMIT_STORAGE_URI.strip():
+        return settings.RATE_LIMIT_STORAGE_URI.strip()
+    if settings.APP_ENV == "production":
+        return settings.REDIS_URL
+    return "memory://"
 
 
 class _NoOpLimiter:
@@ -45,7 +55,13 @@ else:
     # and answers them), but dev StrictMode double-fires every effect, so 60
     # was tripping on ordinary navigation. Auth endpoints override to 10/min
     # on handlers.
-    limiter = Limiter(key_func=get_remote_address, default_limits=["120/minute"])
+    limiter = Limiter(
+        key_func=get_remote_address,
+        default_limits=["120/minute"],
+        storage_uri=_storage_uri(),
+        # Redis outage must degrade to per-process limits, not break the API.
+        in_memory_fallback_enabled=True,
+    )
 
 
 def wire_rate_limit(app):

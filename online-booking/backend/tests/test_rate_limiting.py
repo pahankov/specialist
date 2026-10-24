@@ -5,8 +5,9 @@ slowapi uses decorators (@limiter.limit) instead of manual is_allowed() calls.
 """
 import pytest
 from httpx import AsyncClient, ASGITransport
+from app.config import settings
 from app.main import app
-from app.middleware.rate_limit import limiter
+from app.middleware.rate_limit import _storage_uri, limiter
 
 
 @pytest.fixture
@@ -34,3 +35,19 @@ class TestRateLimitMiddleware:
     async def test_limiter_is_configured(self):
         """Verify slowapi limiter is properly configured."""
         assert limiter is not None
+
+    def test_storage_uri_memory_in_development(self, monkeypatch):
+        monkeypatch.setattr(settings, "APP_ENV", "development")
+        monkeypatch.setattr(settings, "RATE_LIMIT_STORAGE_URI", "")
+        assert _storage_uri() == "memory://"
+
+    def test_storage_uri_redis_in_production(self, monkeypatch):
+        monkeypatch.setattr(settings, "APP_ENV", "production")
+        monkeypatch.setattr(settings, "RATE_LIMIT_STORAGE_URI", "")
+        monkeypatch.setattr(settings, "REDIS_URL", "redis://redis:6379/2")
+        assert _storage_uri() == "redis://redis:6379/2"
+
+    def test_storage_uri_explicit_override(self, monkeypatch):
+        monkeypatch.setattr(settings, "APP_ENV", "development")
+        monkeypatch.setattr(settings, "RATE_LIMIT_STORAGE_URI", "redis://custom:6379/3")
+        assert _storage_uri() == "redis://custom:6379/3"

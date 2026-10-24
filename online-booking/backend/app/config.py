@@ -42,6 +42,8 @@ class Settings(BaseSettings):
 
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
+    # slowapi storage. Empty = memory in dev, REDIS_URL in production.
+    RATE_LIMIT_STORAGE_URI: str = ""
 
     # SMS settings
     SMS_PROVIDER: str = "fake"  # "fake" | "twilio" | "smsc"

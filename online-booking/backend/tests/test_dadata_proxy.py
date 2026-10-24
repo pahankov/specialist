@@ -81,6 +81,34 @@ class TestDadataProxy:
         assert resp.status_code == 503
         assert len(_FakeClient.instances) == before
 
+    async def test_unknown_method_rejected(self, client):
+        """Proxy allowlist blocks methods the frontend never uses."""
+        before = len(_FakeClient.instances)
+        resp = await client.post("/api/dadata/suggest/party", json={"query": "x"})
+        assert resp.status_code == 404
+        assert len(_FakeClient.instances) == before
+
+    async def test_unsupported_field_rejected(self, client):
+        before = len(_FakeClient.instances)
+        resp = await client.post(
+            "/api/dadata/suggest/address",
+            json={"query": "x", "secret_key": "leak"},
+        )
+        assert resp.status_code == 400
+        assert len(_FakeClient.instances) == before
+
+    async def test_query_length_and_count_limited(self, client):
+        too_long = await client.post(
+            "/api/dadata/suggest/address",
+            json={"query": "x" * 201},
+        )
+        assert too_long.status_code == 400
+        bad_count = await client.post(
+            "/api/dadata/suggest/address",
+            json={"query": "x", "count": 1000},
+        )
+        assert bad_count.status_code == 400
+
     async def test_502_on_upstream_error(self, client, monkeypatch):
         """Upstream failure -> 502 (was bare re-raise -> 500)."""
 
