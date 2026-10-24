@@ -532,8 +532,11 @@ async def book_my_appointment(
 
     profile = await get_or_create_profile(db, user)
 
+    # Serialize concurrent bookings for one master: the row lock is held
+    # until commit, so the second request sees the first appointment.
     mp = (await db.execute(
         select(MasterProfile).where(MasterProfile.id == data.master_id)
+        .with_for_update()
     )).scalar_one_or_none()
     if mp is None:
         raise HTTPException(status_code=404, detail="Мастер не найден")

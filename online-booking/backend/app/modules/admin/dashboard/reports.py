@@ -139,43 +139,49 @@ async def get_revenue_breakdown(
         # Superadmin can filter by specific master
         base_conditions.append(Appointment.master_id == master_id)
 
+    # Revenue must use the booking-time snapshot, not the current live price.
+    # Bundles have service_id=NULL, so the join is outer and the name falls
+    # back to the bundle snapshot.
+    revenue = func.coalesce(Appointment.price, Service.price, 0)
+    item_name = func.coalesce(Service.name, Appointment.bundle_name, "Комплекс")
+
     # Build query based on grouping
     if by_master:
         # Group by master
         query = (
             select(
                 _MasterUser.name.label('name'),
-                func.sum(Service.price).label('revenue'),
+                func.sum(revenue).label('revenue'),
                 func.count(Appointment.id).label('count')
             )
             .select_from(Appointment)
-            .join(Service, Appointment.service_id == Service.id)
+            .outerjoin(Service, Appointment.service_id == Service.id)
             .join(MasterProfile, Appointment.master_id == MasterProfile.id)
             .join(_MasterUser, MasterProfile.user_id == _MasterUser.id)
             .where(*base_conditions)
             .group_by(_MasterUser.name)
-            .order_by(func.sum(Service.price).desc())
+            .order_by(func.sum(revenue).desc())
         )
     elif by_service:
-        # Group by service
+        # Group by service or bundle snapshot
         query = (
             select(
-                Service.name.label('name'),
-                func.sum(Service.price).label('revenue'),
+                item_name.label('name'),
+                func.sum(revenue).label('revenue'),
                 func.count(Appointment.id).label('count')
             )
             .select_from(Appointment)
-            .join(Service, Appointment.service_id == Service.id)
+            .outerjoin(Service, Appointment.service_id == Service.id)
             .where(*base_conditions)
-            .group_by(Service.id, Service.name)
-            .order_by(func.sum(Service.price).desc())
+            .group_by(item_name)
+            .order_by(func.sum(revenue).desc())
         )
     else:
         # Overall revenue
         total_result = await db.execute(
-            select(func.sum(Service.price))
+            select(func.sum(revenue))
             .select_from(Appointment)
-            .join(Service, Appointment.service_id == Service.id)
+            .outerjoin(Service, Appointment.service_id == Service.id)
             .where(*base_conditions)
         )
         total_revenue = float(total_result.scalar() or 0)

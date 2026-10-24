@@ -101,6 +101,43 @@ class TestAdminCreateAppointment:
         # Returns 403 or 422 (validation) depending on implementation
         assert resp.status_code in (403, 422)
 
+    async def test_direct_create_snapshots_price_and_rejects_conflict(
+        self, client, session, auth_headers, test_service_data,
+    ):
+        """Direct create validates the service, snapshots facts, blocks overlap."""
+        from sqlalchemy import select
+        from app.models.appointment import Appointment
+
+        service_resp = await client.post(
+            "/api/v1/services/", json={**test_service_data, "master_id": 1},
+            headers=auth_headers,
+        )
+        service_id = service_resp.json()["id"]
+        day = (datetime.now() + timedelta(days=8)).replace(
+            hour=13, minute=0, second=0, microsecond=0)
+
+        first = await client.post("/api/v1/admin/appointments", json={
+            "master_id": 1, "service_id": service_id,
+            "client_name": "Snapshot Client",
+            "client_phone": "+79995550001",
+            "appointment_date": day.isoformat(),
+        }, headers=auth_headers)
+        assert first.status_code == 201, first.text
+
+        stored = (await session.execute(
+            select(Appointment).where(Appointment.id == first.json()["id"])
+        )).scalar_one()
+        assert float(stored.price) == pytest.approx(2500.0)
+        assert stored.duration_minutes == 60
+
+        clash = await client.post("/api/v1/admin/appointments", json={
+            "master_id": 1, "service_id": service_id,
+            "client_name": "Clash Client",
+            "client_phone": "+79995550002",
+            "appointment_date": day.isoformat(),
+        }, headers=auth_headers)
+        assert clash.status_code == 409, clash.text
+
 
 class TestAdminConfirmAppointment:
     """Tests for PATCH /api/v1/admin/appointments/{id}/confirm"""
@@ -434,13 +471,13 @@ class TestMarkNoShow:
             "appointment_date": future_date,
         }, headers=auth_headers)
 
-        # Second appointment (same client, same phone)
+        # Second appointment (same client, same phone, non-overlapping slot)
         appt2_resp = await client.post("/api/v1/admin/appointments", json={
             "master_id": 1,
             "service_id": service_id,
             "client_name": "Repeat No-Show",
             "client_phone": "+79998880008",
-            "appointment_date": future_date,
+            "appointment_date": (datetime.now() + timedelta(days=8)).isoformat(),
         }, headers=auth_headers)
 
         # Mark first as no-show

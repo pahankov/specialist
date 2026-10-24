@@ -23,15 +23,18 @@ async def find_conflict(
     """First live appointment overlapping [start, start+duration), if any."""
     end = start_naive + timedelta(minutes=duration_minutes)
     # Bundle rows have service_id=NULL: outer join + duration snapshot.
+    # The lower bound keeps the index range small instead of scanning all
+    # historical appointments; no real beauty service lasts longer than a day.
     candidates = (await db.execute(
         select(Appointment,
-               func.coalesce(Service.duration_minutes,
-                             Appointment.duration_minutes))
+               func.coalesce(Appointment.duration_minutes,
+                             Service.duration_minutes))
         .outerjoin(Service, Appointment.service_id == Service.id)
         .where(
             Appointment.master_id == master_profile_id,
             Appointment.status != "cancelled",
             Appointment.appointment_date < end,
+            Appointment.appointment_date >= start_naive - timedelta(days=1),
         )
     )).all()
     for existing, dur in candidates:

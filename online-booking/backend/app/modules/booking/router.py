@@ -62,6 +62,19 @@ async def create_appointment(
                        master.master_profile.id, appointment.master_id)
         raise HTTPException(status_code=403, detail="Not your master")
 
+    # Lock the master and validate the service + time before touching users.
+    from app.services.booking import find_conflict, resolve_booking_item
+    mp = (await db.execute(
+        select(MasterProfile).where(MasterProfile.id == appointment.master_id)
+        .with_for_update()
+    )).scalar_one_or_none()
+    if mp is None or mp.user_id != master.id:
+        raise HTTPException(status_code=403, detail="Not your master")
+    appt_dt = appointment.appointment_date.replace(tzinfo=None)
+    item = await resolve_booking_item(db, mp.id, appointment.service_id)
+    if await find_conflict(db, mp.id, appt_dt, item["duration_minutes"]):
+        raise HTTPException(status_code=409, detail="Это время уже занято")
+
     # Check or create client. A dual-role master booking by own phone
     # reuses their account (profile attached on the fly) instead of
     # cloning a second user row for the same phone number.
@@ -98,19 +111,22 @@ async def create_appointment(
         from app.services.clients import get_or_create_profile
         client = await get_or_create_profile(db, new_user)
 
-    # Create appointment
+    # Create appointment with booking-time snapshots.
     new_appointment = Appointment(
         master_id=appointment.master_id,
-        service_id=appointment.service_id,
+        service_id=item["service_id"],
         client_id=client.id,
-        appointment_date=appointment.appointment_date,
+        duration_minutes=item["duration_minutes"],
+        price=item["price"],
+        discount_label=item.get("discount_label") or None,
+        appointment_date=appt_dt,
         status="confirmed",
         created_by_role="master",
         created_by_user_id=master.id,
     )
 
     db.add(new_appointment)
-    await db.flush()
+    await db.commit()
     await db.refresh(new_appointment)
 
     logger.info("Запись создана: id=%s, мастер=%s", new_appointment.id, master.master_profile.id)
@@ -230,7 +246,7 @@ async def public_booking(request: Request, booking: PublicBookingCreate, db: Asy
             MasterProfile.is_active == True,
             MasterProfile.status == "active",
             User.role == UserRole.MASTER,
-        )
+        ).with_for_update()
     )
     master_profile = master_result.scalar_one_or_none()
     if not master_profile:

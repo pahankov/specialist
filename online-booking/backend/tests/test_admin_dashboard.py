@@ -252,3 +252,64 @@ class TestGlobalDashboardTopClients:
         assert isinstance(top, list) and len(top) >= 1
         assert top[0]["name"] == "GlobalC"
         assert top[0]["spent"] == 3000.0
+
+class TestRevenueBreakdownSnapshots:
+    """Revenue uses appointment snapshots and includes bundle bookings."""
+
+    async def test_uses_booking_price_and_includes_bundles(
+        self, client, session, auth_headers,
+    ):
+        from app.models.appointment import Appointment
+        from app.models.client_profile import ClientProfile
+        from app.models.master_profile import MasterProfile
+        from app.models.service import Service
+        from app.models.user import User, UserRole
+        from sqlalchemy import select
+
+        mp = (await session.execute(select(MasterProfile))).scalar_one()
+        svc = Service(master_id=mp.id, name="Snapshot Service",
+                      duration_minutes=60, price=2000, is_active=True)
+        session.add(svc)
+        await session.flush()
+        cu = User(name="RevenueC", email="revenuec@example.com",
+                  phone="+79990009801", role=UserRole.CLIENT)
+        session.add(cu)
+        await session.flush()
+        cp = ClientProfile(user_id=cu.id)
+        session.add(cp)
+        await session.flush()
+        now = datetime.now()
+        session.add_all([
+            Appointment(master_id=mp.id, service_id=svc.id, client_id=cp.id,
+                        duration_minutes=60, price=1500,
+                        appointment_date=now, status="completed"),
+            Appointment(master_id=mp.id, service_id=None, client_id=cp.id,
+                        bundle_name="Snapshot Bundle", duration_minutes=90,
+                        price=5000, appointment_date=now, status="completed"),
+        ])
+        await session.commit()
+
+        # A later price change must not rewrite historical revenue.
+        svc.price = 9999
+        await session.commit()
+
+        resp = await client.get(
+            "/api/v1/admin/revenue-breakdown", headers=auth_headers)
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["total_revenue"] == pytest.approx(6500.0)
+
+        resp = await client.get(
+            "/api/v1/admin/revenue-breakdown",
+            params={"by_service": True}, headers=auth_headers)
+        assert resp.status_code == 200, resp.text
+        rows = {row["name"]: row["revenue"] for row in resp.json()["breakdown"]}
+        assert rows["Snapshot Service"] == pytest.approx(1500.0)
+        assert rows["Snapshot Bundle"] == pytest.approx(5000.0)
+
+        resp = await client.get(
+            "/api/v1/admin/revenue-breakdown",
+            params={"by_master": True}, headers=auth_headers)
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["total_revenue"] == pytest.approx(6500.0)
+        assert data["breakdown"][0]["count"] == 2

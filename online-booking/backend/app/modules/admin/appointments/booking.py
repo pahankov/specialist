@@ -45,7 +45,8 @@ async def _find_or_create_client(
         await db.flush()
         from app.services.clients import get_or_create_profile
         client_profile = await get_or_create_profile(db, user)
-        await db.commit()
+        # Flush-only: the caller owns the transaction and may still reject
+        # the booking (conflict/invalid service) without creating a user.
         await db.refresh(user)
         await db.refresh(client_profile)
         return user, client_profile
@@ -68,16 +69,26 @@ async def create_appointment(
     """Create a new appointment."""
     result = await db.execute(
         select(MasterProfile).where(MasterProfile.user_id == master.id)
+        .with_for_update()
     )
     mp = result.scalar_one_or_none()
     if not mp or data.master_id != mp.id:
         raise HTTPException(status_code=403, detail="Not your master")
+
+    from app.services.booking import find_conflict, resolve_booking_item
+    appt_dt = data.appointment_date.replace(tzinfo=None)
+    item = await resolve_booking_item(db, mp.id, data.service_id)
+    if await find_conflict(db, mp.id, appt_dt, item["duration_minutes"]):
+        raise HTTPException(status_code=409, detail="Это время уже занято")
+
     client, profile = await _find_or_create_client(
         db, data.client_phone, data.client_name, created_by=master.id,
         city_id=master.city_id)
     new_appointment = Appointment(
-        master_id=data.master_id, service_id=data.service_id, client_id=profile.id,
-        appointment_date=data.appointment_date, status="pending", notes=data.notes,
+        master_id=data.master_id, service_id=item["service_id"],
+        client_id=profile.id, duration_minutes=item["duration_minutes"],
+        price=item["price"], discount_label=item.get("discount_label") or None,
+        appointment_date=appt_dt, status="pending", notes=data.notes,
         created_by_role=("admin" if master.role == UserRole.ADMIN else "master"),
         created_by_user_id=master.id,
     )
@@ -106,6 +117,7 @@ async def book_appointment(
             raise HTTPException(status_code=400, detail="Укажите мастера (master_id)")
         result = await db.execute(
             select(MasterProfile).where(MasterProfile.id == data.master_id)
+            .with_for_update()
         )
         mp = result.scalar_one_or_none()
         if not mp:
@@ -113,6 +125,7 @@ async def book_appointment(
     else:
         result = await db.execute(
             select(MasterProfile).where(MasterProfile.user_id == master.id)
+            .with_for_update()
         )
         mp = result.scalar_one_or_none()
         if not mp:
