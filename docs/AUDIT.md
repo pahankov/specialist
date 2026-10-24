@@ -15,6 +15,7 @@
 | Ревизия после frontend-фикса | `dd2d993` |
 | Ревизия после deploy-гейтов | `b5b9b21`, `179f4ee` |
 | Ревизия после OTP-квоты | `0d1fce2` |
+| Ревизия после PG-времени | `4b1aef6` |
 | Ветка | `main` |
 | Область | backend, frontend, БД/миграции, CI/CD, deploy, зависимости, документация, гигиена репозитория |
 | Метод | статический разбор кода, grep-метрики, тесты, `tsc`, ESLint, npm/pip audit, разбор workflow и deploy-логов, production smoke |
@@ -92,15 +93,15 @@
 
 | Область | P0 | P1 | P2 | P3 | Всего | Исправлено |
 |---|---:|---:|---:|---:|---:|---:|
-| Безопасность | 1 | 5 | 3 | 1 | 10 | 6 |
-| Корректность данных | 0 | 5 | 4 | 0 | 9 | 5 |
+| Безопасность | 1 | 6 | 3 | 1 | 11 | 7 |
+| Корректность данных | 0 | 6 | 4 | 0 | 10 | 6 |
 | Деплой и инфраструктура | 0 | 6 | 4 | 0 | 10 | 7 |
 | Производительность | 0 | 0 | 6 | 1 | 7 | 0 |
 | Архитектура и чистота | 0 | 0 | 9 | 2 | 11 | 0 |
 | Тесты | 0 | 0 | 2 | 1 | 3 | 0 |
 | Зависимости, docs, гигиена | 0 | 0 | 3 | 2 | 5 | 0 |
 | Инцидент-респонс | 2 | 2 | 1 | 0 | 5 | 0 |
-| **Итого** | **3** | **18** | **32** | **7** | **60** | **18** |
+| **Итого** | **3** | **20** | **32** | **7** | **62** | **20** |
 
 > На момент аудита P0 было 3: один код-фикс уже закрыт (`SEC-01`), два пункта инцидент-респонса остаются (`IR-01`, `IR-02`).
 
@@ -164,6 +165,7 @@
 | SEC-08 | P2 | Нет CSP; access token читается из JS; cookie имперсонации без `Secure`/`SameSite` | `security_headers.py`, `utils/cookies.ts`, `utils/impersonation.ts` | XSS-поверхность, ослабленная cookie | ⬜ open |
 | SEC-09 | P3 | Личная почта в коде | `services/client_visibility.py` | утечка контакта, сложно менять | ⬜ open |
 | SEC-10 | P2 | Нет проверки same-origin для post-login redirect | `utils/redirect.ts`, `LoginModal.tsx` | open redirect | ⬜ open |
+| SEC-11 | P1 | `verify_otp` сравнивает naive `now` с aware `expires_at`; на PostgreSQL вход падает с `TypeError` | `auth/service.py::verify_otp` | OTP-вход не работает на PG | ✅ fixed |
 
 ### План по P1-безопасности
 
@@ -172,6 +174,7 @@
 - **SEC-04:** проверять `is_active` и `deleted_at` при refresh; тест на заблокированного пользователя.
 - **SEC-05:** подключить Redis storage для slowapi; отдельные ключи для refresh/logout/OTP по аккаунту; тест на несколько процессов/воркеров.
 - **SEC-06:** auth, allowlist методов/путей, rate limit, кэш, общий `httpx.AsyncClient` с таймаутом.
+- **SEC-11:** `expires_at` нормализуется до aware UTC перед сравнением; PG-гейт запускает `test_otp_security.py`.
 
 ---
 
@@ -188,6 +191,7 @@
 | DATA-07 | P2 | CSV собирается f-string без экранирования | `services/export_tasks.py` | битый CSV, formula injection | ⬜ open |
 | DATA-08 | P1 | Расписание применяет новое состояние даже при ошибке API | `components/schedule/hooks.tsx` | пользователь видит несуществующий рабочий день | ✅ fixed |
 | DATA-09 | P2 | Dashboard возвращает `null`; ClientsPage без error-state; Skeleton игнорирует height | `DashboardPage.tsx`, `ClientsPage.tsx`, `Skeleton.tsx` | пустой экран/неверный UI | ⬜ open |
+| DATA-10 | P1 | Naive `appointment_date`/`BlockedSlot` в `timestamptz` смещаются на часовой пояс процесса (asyncpg); на MSK-хосте запись 14:00 читается как 11:00 | `models/appointment.py`, `models/blocked_slot.py` | брони/пересечения сдвинуты на часы | ✅ fixed |
 
 ### План по P1-данным
 
@@ -195,6 +199,7 @@
 - **DATA-02:** добавить нижнюю границу по времени и индексы; использовать `Appointment.duration_minutes` как снапшот, `Service.duration_minutes` — только fallback.
 - **DATA-03:** свести создание записи в один `appointment_service`, использовать его в public/client/admin; тест на конфликт и чужую услугу.
 - **DATA-05:** считать по `Appointment.price`/bundle-снапшотам и скидкам; добавить тест на комплекс и изменённую цену услуги.
+- **DATA-10:** `NaiveUTCDateTime` привязывает naive wall-clock к UTC при записи и возвращает naive при чтении; поведение не зависит от TZ хоста. Для старых сдвинутых строк нужна отдельная data-миграция, если production-хост был не в UTC.
 - **DATA-08:** mutation с rollback + toast; тест на ошибку API.
 
 ---
@@ -366,6 +371,7 @@
 | 2026-10-24 | DATA-08, DEP-07 | `dd2d993` | Ошибка сохранения расписания больше не применяет оптимистичное состояние; `react-router-dom` обновлён до 7.18.4 (закрыт open redirect), `follow-redirects` до 1.16.1 | tsc, eslint, prettier, build, 283 vitest tests; `npm audit --omit=dev` = 0 | ✅ fixed |
 | 2026-10-24 | DEP-02/04/05 | `b5b9b21`, `179f4ee` | PG-тесты реально используют PostgreSQL через `TEST_DATABASE_URL` и входят в `needs` deploy; `fix_all_tables.sql` заморожен и убран из регулярного деплоя; добавлена инструкция restore/rollback | CI 448 success, Deploy 404 success (PostgreSQL Gate, Frontend Gate, deploy); 103 critical tests на PG | ✅ fixed |
 | 2026-10-24 | SEC-05 | `0d1fce2` | Redis storage для slowapi в production; OTP-отправка ограничена по номеру (5 за 15 минут) на уровне БД, поэтому обход IP-лимита не помогает | 9 targeted tests; PG-гейт включает `test_otp_security.py` | ✅ fixed |
+| 2026-10-24 | SEC-11, DATA-10 | `4b1aef6` | `verify_otp` сравнивает aware `expires_at` без падения на PG; для `appointment_date` и `BlockedSlot` добавлен `NaiveUTCDateTime`, который фиксирует wall-clock значение независимо от TZ процесса/БД | PG-гейт 106 passed локально (pgserver, MSK-хост) и SQLite targeted 52 passed; SEC-05 quota test входит в оба гейта | ✅ fixed |
 
 ---
 
@@ -380,7 +386,7 @@
 | ESLint warnings | 43 | ≤ 10 | 43 |
 | npm prod: high / moderate | 1 / 2 | 0 / 0 | 1 / 2 |
 | Открытых P0 (код + инцидент) | 3 | 0 | 2 (IR-01/02) |
-| Открытых P1 | 18 | 0 | 2 |
+| Открытых P1 | 20 | 0 | 2 |
 | Время backend suite (локально, Windows) | ~27 мин | ≤ 10 мин | ~27 мин |
 | Index JS | 547 КБ / 168 КБ gzip | ≤ 450 КБ | 547 КБ |
 
