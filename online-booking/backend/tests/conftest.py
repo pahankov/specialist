@@ -12,10 +12,15 @@ import tempfile
 import uuid
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 
 from app.main import app
 from app.database import Base, get_db
+
+# When set, run the suite against real PostgreSQL (CI job). Without it every
+# test gets a throwaway SQLite file, which hides PG-specific behavior.
+PG_TEST_URL = os.getenv("TEST_DATABASE_URL", "").strip()
 
 
 @pytest.fixture(scope="session")
@@ -25,10 +30,23 @@ def anyio_backend():
 
 @pytest_asyncio.fixture(scope="function")
 async def engine():
-    """Create test database engine with unique file for each test."""
+    """Create an isolated test database for each test.
+
+    PostgreSQL mode drops/recreates the schema objects so tests see a clean
+    database without relying on SQLite semantics.
+    """
+    if PG_TEST_URL:
+        engine = create_async_engine(PG_TEST_URL, echo=False, poolclass=NullPool)
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+            await conn.run_sync(Base.metadata.create_all)
+        yield engine
+        await engine.dispose()
+        return
+
     db_file = tempfile.mktemp(suffix=f"_{uuid.uuid4().hex[:8]}.db")
     db_url = f"sqlite+aiosqlite:///{db_file}"
-    
+
     engine = create_async_engine(db_url, echo=False)
     # Use connect() instead of begin() to avoid transaction issues with DDL
     async with engine.connect() as conn:

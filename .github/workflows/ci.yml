@@ -93,6 +93,7 @@ jobs:
     env:
       RATE_LIMIT_DISABLED: "true"
       DATABASE_URL: "postgresql+asyncpg://postgres:postgres@localhost:5432/online_booking_test"
+      TEST_DATABASE_URL: "postgresql+asyncpg://postgres:postgres@localhost:5432/online_booking_test"
       SECRET_KEY: "ci-test-secret-key-not-for-production-01"
       REFRESH_SECRET_KEY: "ci-test-refresh-key-not-for-production-01"
     steps:

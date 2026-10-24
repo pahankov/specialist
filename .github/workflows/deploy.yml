@@ -98,10 +98,55 @@ jobs:
           cd online-booking/frontend
           npm run build
 
+  postgres:
+    # `needs` can only reference jobs from THIS workflow, so the PostgreSQL
+    # gate is duplicated from ci.yml. Without it a deploy could ship after
+    # only the SQLite suite passed.
+    name: PostgreSQL Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: online_booking_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      RATE_LIMIT_DISABLED: "true"
+      DATABASE_URL: "postgresql+asyncpg://postgres:postgres@localhost:5432/online_booking_test"
+      TEST_DATABASE_URL: "postgresql+asyncpg://postgres:postgres@localhost:5432/online_booking_test"
+      SECRET_KEY: "ci-test-secret-key-not-for-production-01"
+      REFRESH_SECRET_KEY: "ci-test-refresh-key-not-for-production-01"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          cd online-booking/backend
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-cov httpx aiosqlite
+
+      - name: Run critical tests on PostgreSQL
+        run: |
+          cd online-booking/backend
+          test -n "$TEST_DATABASE_URL"
+          python -m pytest tests/test_services.py tests/test_booking_auth.py tests/test_appointments.py tests/test_auth.py tests/test_auth_dependencies.py tests/test_booking_flow.py tests/test_client_booking.py tests/test_admin_appointments.py tests/test_admin_dashboard.py -v --tb=short
+
   deploy:
-    # `needs` can only reference jobs from THIS workflow. The PostgreSQL job
-    # lives in ci.yml and runs on the same push, but cannot gate this job.
-    needs: [test, frontend]
+    needs: [test, frontend, postgres]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
