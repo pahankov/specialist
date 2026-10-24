@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text, Inde
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from app.database import Base
+from app.models.types import NaiveUTCDateTime
 
 
 class BlockedSlot(Base):
@@ -12,8 +13,8 @@ class BlockedSlot(Base):
 
     id = Column(Integer, primary_key=True)
     master_id = Column(Integer, ForeignKey("master_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
-    start_dt = Column(DateTime(timezone=True), nullable=False)
-    end_dt = Column(DateTime(timezone=True), nullable=False)
+    start_dt = Column(NaiveUTCDateTime(), nullable=False)
+    end_dt = Column(NaiveUTCDateTime(), nullable=False)
     reason = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),

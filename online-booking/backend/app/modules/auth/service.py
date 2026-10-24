@@ -251,7 +251,10 @@ async def verify_otp(phone: str, code: str, db: AsyncSession) -> tuple[str, User
     if not otp:
         raise HTTPException(status_code=400, detail="Код не найден. Запросите новый.")
 
-    if datetime.now(dt_timezone.utc).replace(tzinfo=None) > otp.expires_at:
+    expires_at = otp.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=dt_timezone.utc)
+    if datetime.now(dt_timezone.utc) > expires_at:
         raise HTTPException(status_code=410, detail="Код истёк. Запросите новый.")
 
     if not hmac.compare_digest(hash_otp_code(code), otp.code_hash):

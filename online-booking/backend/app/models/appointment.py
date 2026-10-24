@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text, Inde
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from app.database import Base
+from app.models.types import NaiveUTCDateTime
 
 
 class Appointment(Base):
@@ -26,7 +27,7 @@ class Appointment(Base):
     price = Column(Numeric(10, 2), nullable=True)
     # Discount provenance snapshot ("-20%", "-500 ₽", "купон XXXX −200 ₽").
     discount_label = Column(String(200), nullable=True)
-    appointment_date = Column(DateTime(timezone=True), nullable=False, index=True)
+    appointment_date = Column(NaiveUTCDateTime(), nullable=False, index=True)
     status = Column(String(20), default="pending", index=True)
     notes = Column(Text)
     # Who created the booking: client | master | admin | public | system.
