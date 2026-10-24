@@ -14,6 +14,7 @@
 | Ревизия после security-фикса 2 | `904c06d` |
 | Ревизия после frontend-фикса | `dd2d993` |
 | Ревизия после deploy-гейтов | `b5b9b21`, `179f4ee` |
+| Ревизия после OTP-квоты | `0d1fce2` |
 | Ветка | `main` |
 | Область | backend, frontend, БД/миграции, CI/CD, deploy, зависимости, документация, гигиена репозитория |
 | Метод | статический разбор кода, grep-метрики, тесты, `tsc`, ESLint, npm/pip audit, разбор workflow и deploy-логов, production smoke |
@@ -91,7 +92,7 @@
 
 | Область | P0 | P1 | P2 | P3 | Всего | Исправлено |
 |---|---:|---:|---:|---:|---:|---:|
-| Безопасность | 1 | 5 | 3 | 1 | 10 | 5 |
+| Безопасность | 1 | 5 | 3 | 1 | 10 | 6 |
 | Корректность данных | 0 | 5 | 4 | 0 | 9 | 5 |
 | Деплой и инфраструктура | 0 | 6 | 4 | 0 | 10 | 7 |
 | Производительность | 0 | 0 | 6 | 1 | 7 | 0 |
@@ -99,7 +100,7 @@
 | Тесты | 0 | 0 | 2 | 1 | 3 | 0 |
 | Зависимости, docs, гигиена | 0 | 0 | 3 | 2 | 5 | 0 |
 | Инцидент-респонс | 2 | 2 | 1 | 0 | 5 | 0 |
-| **Итого** | **3** | **18** | **32** | **7** | **60** | **17** |
+| **Итого** | **3** | **18** | **32** | **7** | **60** | **18** |
 
 > На момент аудита P0 было 3: один код-фикс уже закрыт (`SEC-01`), два пункта инцидент-респонса остаются (`IR-01`, `IR-02`).
 
@@ -157,7 +158,7 @@
 | SEC-02 | P1 | Нет счётчика неудачных OTP; `SMS_MAX_ATTEMPTS` не используется | `auth/service.py::verify_otp`, `config.py` | перебор 6-значного кода | ✅ fixed |
 | SEC-03 | P1 | Имперсонация живёт 24 часа | `services/impersonation.py` | украденный support-токен долго действует | ✅ fixed |
 | SEC-04 | P1 | Refresh не проверяет `is_active`/`deleted_at` | `auth/router.py::refresh_token` | заблокированный пользователь продлевает сессию | ✅ fixed |
-| SEC-05 | P1 | Rate limit in-memory и только по IP; Redis не подключён | `middleware/rate_limit.py` | обход при нескольких процессах; нет лимитов на аккаунт | 🟨 in progress |
+| SEC-05 | P1 | Rate limit in-memory и только по IP; Redis не подключён | `middleware/rate_limit.py` | обход при нескольких процессах; нет лимитов на аккаунт | ✅ fixed |
 | SEC-06 | P1 | DaData — открытый платный прокси без auth/allowlist | `modules/dadata/router.py` | расход ключа, открытый платный прокси | ✅ fixed |
 | SEC-07 | P2 | Телефоны/email пишутся в INFO-логи | `auth/router.py`, `auth/service.py` | PII в логах, риск по 152-ФЗ | ⬜ open |
 | SEC-08 | P2 | Нет CSP; access token читается из JS; cookie имперсонации без `Secure`/`SameSite` | `security_headers.py`, `utils/cookies.ts`, `utils/impersonation.ts` | XSS-поверхность, ослабленная cookie | ⬜ open |
@@ -322,7 +323,7 @@
 - DEP-08…DEP-10.
 - DATA-04, DATA-06, DATA-07, DATA-09.
 - PERF-01…PERF-07.
-- SEC-05…SEC-10.
+- SEC-07…SEC-10.
 - OPS-01…OPS-03.
 - TEST-01/TEST-02.
 
@@ -348,7 +349,7 @@
 | 4 | DATA-01 + DATA-02 | нет двойных записей, корректные конфликты | 1–2 дня |
 | 5 | DEP-01 + DEP-03 | deploy не выкатывает чужой commit и не стартует до миграций | 0,5–1 день |
 
-**Рекомендация:** все P1-код-пункты, кроме SEC-05 (account-лимит), закрыты; деплой гейтится SQLite, PostgreSQL, frontend и health-check. Следующий пакет — SEC-05 account-лимит и P2-надёжность (DATA-04/06/07/09, PERF, DEP-08…DEP-10). IR-01/IR-02 остаются за владельцем инфраструктуры.
+**Рекомендация:** все P1-код-пункты закрыты; деплой гейтится SQLite, PostgreSQL, frontend и health-check. Открыты только IR-01/IR-02 (нужен доступ владельца к серверу/БД) и P2-надёжность (DATA-04/06/07/09, PERF, DEP-08…DEP-10, SEC-07…SEC-10).
 
 ---
 
@@ -364,6 +365,7 @@
 | 2026-10-24 | SEC-05/06 | `904c06d` | slowapi использует Redis в production (fallback в memory), storage настраивается через `RATE_LIMIT_STORAGE_URI`; DaData-прокси ограничен allowlist `suggest/address`, лимитом 30/min и валидацией query/count | 14 targeted tests; Redis-путь покрыт unit-тестами выбора storage | SEC-06 ✅ fixed, SEC-05 🟨 (лимиты на аккаунт остаются) |
 | 2026-10-24 | DATA-08, DEP-07 | `dd2d993` | Ошибка сохранения расписания больше не применяет оптимистичное состояние; `react-router-dom` обновлён до 7.18.4 (закрыт open redirect), `follow-redirects` до 1.16.1 | tsc, eslint, prettier, build, 283 vitest tests; `npm audit --omit=dev` = 0 | ✅ fixed |
 | 2026-10-24 | DEP-02/04/05 | `b5b9b21`, `179f4ee` | PG-тесты реально используют PostgreSQL через `TEST_DATABASE_URL` и входят в `needs` deploy; `fix_all_tables.sql` заморожен и убран из регулярного деплоя; добавлена инструкция restore/rollback | CI 448 success, Deploy 404 success (PostgreSQL Gate, Frontend Gate, deploy); 103 critical tests на PG | ✅ fixed |
+| 2026-10-24 | SEC-05 | `0d1fce2` | Redis storage для slowapi в production; OTP-отправка ограничена по номеру (5 за 15 минут) на уровне БД, поэтому обход IP-лимита не помогает | 9 targeted tests; PG-гейт включает `test_otp_security.py` | ✅ fixed |
 
 ---
 
@@ -378,7 +380,7 @@
 | ESLint warnings | 43 | ≤ 10 | 43 |
 | npm prod: high / moderate | 1 / 2 | 0 / 0 | 1 / 2 |
 | Открытых P0 (код + инцидент) | 3 | 0 | 2 (IR-01/02) |
-| Открытых P1 | 18 | 0 | 3 |
+| Открытых P1 | 18 | 0 | 2 |
 | Время backend suite (локально, Windows) | ~27 мин | ≤ 10 мин | ~27 мин |
 | Index JS | 547 КБ / 168 КБ gzip | ≤ 450 КБ | 547 КБ |
 
